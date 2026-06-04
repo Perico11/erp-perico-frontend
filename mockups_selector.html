@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5 Opciones - Selector de Ingredientes Lab</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #F5F4F2; color: #1A1815; padding: 24px; }
+  h1 { font-size: 20px; font-weight: 700; margin-bottom: 24px; color: #7C3AED; }
+  .mockup { background: #fff; border: 1.5px solid #E8E6E1; border-radius: 12px; padding: 20px; margin-bottom: 28px; max-width: 700px; }
+  .mockup-label { font-size: 14px; font-weight: 700; color: #7C3AED; margin-bottom: 4px; letter-spacing: -.02em; }
+  .mockup-desc { font-size: 11px; color: #6B6560; margin-bottom: 14px; }
+  .search { width: 100%; padding: 8px 12px; font-size: 13px; border: 1.5px solid #E8E6E1; border-radius: 8px; margin-bottom: 10px; outline: none; }
+
+  /* ── V1: Acordeón colapsable ── */
+  .v1-cat { margin-bottom: 4px; }
+  .v1-header { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 700; }
+  .v1-header .arrow { font-size: 9px; transition: transform .15s; }
+  .v1-header .count { font-size: 11px; font-weight: 600; opacity: .7; margin-left: auto; }
+  .v1-header .sel { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #7C3AED22; color: #7C3AED; margin-left: 6px; }
+  .v1-body { padding: 4px 12px 8px; }
+  .v1-row { display: flex; align-items: center; gap: 8px; padding: 5px 4px; border-radius: 4px; font-size: 12px; cursor: pointer; }
+  .v1-row:hover { background: #f5f5f5; }
+  .v1-check { width: 16px; height: 16px; border-radius: 4px; border: 2px solid #ccc; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .v1-check.on { background: #7C3AED; border-color: #7C3AED; }
+  .v1-check.on::after { content: '✓'; color: #fff; font-size: 10px; font-weight: 700; }
+  .v1-price { font-size: 10px; color: #999; margin-left: auto; }
+  .resina { background: #EDE9FE; color: #6D28D9; border: 1.5px solid #C4B5FD; }
+  .pigmento { background: #FEF3C7; color: #92400E; border: 1.5px solid #FCD34D; }
+  .carga { background: #E0E7FF; color: #3730A3; border: 1.5px solid #A5B4FC; }
+  .aditivo { background: #D1FAE5; color: #065F46; border: 1.5px solid #6EE7B7; }
+  .solvente { background: #DBEAFE; color: #1E40AF; border: 1.5px solid #93C5FD; }
+  .v1-body-resina { background: #EDE9FE44; border: 1.5px solid #C4B5FD; border-top: none; border-radius: 0 0 8px 8px; }
+  .v1-body-pigmento { background: #FEF3C744; border: 1.5px solid #FCD34D; border-top: none; border-radius: 0 0 8px 8px; }
+
+  /* ── V2: Grid de tarjetas ── */
+  .v2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .v2-card { border-radius: 10px; padding: 12px; }
+  .v2-card-title { font-size: 12px; font-weight: 700; margin-bottom: 8px; display: flex; justify-content: space-between; }
+  .v2-item { display: flex; align-items: center; gap: 6px; padding: 4px 2px; font-size: 11px; cursor: pointer; }
+
+  /* ── V3: Tabs horizontales ── */
+  .v3-tabs { display: flex; gap: 0; border-bottom: 2px solid #E8E6E1; margin-bottom: 12px; overflow-x: auto; }
+  .v3-tab { padding: 8px 16px; font-size: 12px; font-weight: 600; color: #6B6560; border: none; background: none; cursor: pointer; border-bottom: 2.5px solid transparent; margin-bottom: -2px; white-space: nowrap; }
+  .v3-tab.active { color: #7C3AED; border-bottom-color: #7C3AED; font-weight: 700; }
+  .v3-tab .badge { font-size: 10px; background: #7C3AED; color: #fff; padding: 1px 6px; border-radius: 8px; margin-left: 4px; }
+  .v3-list { max-height: 180px; overflow-y: auto; }
+  .v3-row { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 6px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0; }
+  .v3-row:hover { background: #F9F8F6; }
+
+  /* ── V4: Doble panel (catálogo | seleccionados) ── */
+  .v4-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .v4-panel { border: 1.5px solid #E8E6E1; border-radius: 10px; overflow: hidden; }
+  .v4-panel-title { font-size: 12px; font-weight: 700; padding: 10px 14px; background: #F9F8F6; border-bottom: 1px solid #E8E6E1; }
+  .v4-panel-body { max-height: 200px; overflow-y: auto; padding: 4px 0; }
+  .v4-cat-label { font-size: 10px; font-weight: 700; color: #999; text-transform: uppercase; letter-spacing: .06em; padding: 6px 14px 2px; }
+  .v4-item { display: flex; align-items: center; gap: 8px; padding: 5px 14px; font-size: 12px; cursor: pointer; }
+  .v4-item:hover { background: #F5F4F2; }
+  .v4-item .add { margin-left: auto; color: #7C3AED; font-weight: 700; font-size: 16px; }
+  .v4-item .remove { margin-left: auto; color: #DC2626; font-weight: 700; font-size: 14px; }
+  .v4-right .v4-item { background: #EDE9FE33; margin: 2px 6px; border-radius: 6px; }
+
+  /* ── V5: Chips + filtro por categoría ── */
+  .v5-filters { display: flex; gap: 5px; margin-bottom: 10px; flex-wrap: wrap; }
+  .v5-filter { padding: 5px 12px; font-size: 11px; font-weight: 600; border-radius: 20px; border: 1.5px solid #E8E6E1; background: #fff; cursor: pointer; }
+  .v5-filter.active { background: #7C3AED; color: #fff; border-color: #7C3AED; }
+  .v5-chips { display: flex; flex-wrap: wrap; gap: 6px; max-height: 220px; overflow-y: auto; padding: 4px 0; }
+  .v5-chip { display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; font-size: 11px; font-weight: 500; border-radius: 20px; cursor: pointer; border: 1.5px solid; transition: all .12s; }
+  .v5-chip.sel { font-weight: 700; }
+  .v5-chip .check { font-size: 9px; }
+  .v5-selected-bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 12px; background: #7C3AED11; border-radius: 8px; margin-bottom: 10px; }
+  .v5-sel-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; font-size: 11px; font-weight: 600; border-radius: 16px; background: #7C3AED; color: #fff; }
+  .v5-sel-chip .x { cursor: pointer; opacity: .7; margin-left: 2px; }
+</style>
+</head>
+<body>
+
+<h1>5 Opciones Visuales — Selector de Ingredientes Laboratorio</h1>
+
+<!-- ═══════════ VERSIÓN 1: Acordeón colapsable ═══════════ -->
+<div class="mockup">
+  <div class="mockup-label">V1 — Acordeon colapsable por categoria</div>
+  <div class="mockup-desc">Secciones que se abren/cierran. Checkboxes dentro. Color por tipo. Compacto.</div>
+  <input class="search" placeholder="Buscar materia prima..." value="">
+
+  <div class="v1-cat">
+    <div class="v1-header resina" style="border-radius: 8px 8px 0 0;">
+      <span class="arrow">▼</span> Resinas y Ligantes <span class="count">12 MPs</span> <span class="sel">3 sel.</span>
+    </div>
+    <div class="v1-body v1-body-resina">
+      <div class="v1-row"><div class="v1-check on"></div> W-5916 <span class="v1-price">$32.40/kg</span></div>
+      <div class="v1-row"><div class="v1-check on"></div> W-4535-V <span class="v1-price">$28.10/kg</span></div>
+      <div class="v1-row"><div class="v1-check"></div> EMULSION <span class="v1-price">$15.20/kg</span></div>
+      <div class="v1-row"><div class="v1-check on"></div> ESAPLAST G12 <span class="v1-price">$22.50/kg</span></div>
+      <div class="v1-row"><div class="v1-check"></div> REOTAN HS <span class="v1-price">$35.00/kg</span></div>
+    </div>
+  </div>
+  <div class="v1-cat">
+    <div class="v1-header pigmento">
+      <span class="arrow">▶</span> Pigmentos y Colorantes <span class="count">8 MPs</span> <span class="sel">1 sel.</span>
+    </div>
+  </div>
+  <div class="v1-cat">
+    <div class="v1-header carga">
+      <span class="arrow">▶</span> Cargas y Extensores <span class="count">9 MPs</span>
+    </div>
+  </div>
+  <div class="v1-cat">
+    <div class="v1-header aditivo">
+      <span class="arrow">▶</span> Aditivos <span class="count">15 MPs</span>
+    </div>
+  </div>
+  <div class="v1-cat">
+    <div class="v1-header solvente">
+      <span class="arrow">▶</span> Solventes y Agua <span class="count">3 MPs</span> <span class="sel">1 sel.</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ VERSIÓN 2: Grid de tarjetas ═══════════ -->
+<div class="mockup">
+  <div class="mockup-label">V2 — Grid de tarjetas (todo visible)</div>
+  <div class="mockup-desc">2 columnas, todas las categorias abiertas. Ves todo sin clicks extra.</div>
+  <input class="search" placeholder="Buscar materia prima..." value="">
+
+  <div class="v2-grid">
+    <div class="v2-card resina">
+      <div class="v2-card-title">Resinas y Ligantes <span style="font-size:10px;opacity:.6">12 MPs</span></div>
+      <div class="v2-item"><div class="v1-check on"></div> W-5916 <span class="v1-price">$32.40/kg</span></div>
+      <div class="v2-item"><div class="v1-check on"></div> W-4535-V <span class="v1-price">$28.10/kg</span></div>
+      <div class="v2-item"><div class="v1-check"></div> EMULSION <span class="v1-price">$15.20/kg</span></div>
+      <div class="v2-item"><div class="v1-check"></div> ESAPLAST G12 <span class="v1-price">$22.50/kg</span></div>
+    </div>
+    <div class="v2-card pigmento">
+      <div class="v2-card-title">Pigmentos y Colorantes <span style="font-size:10px;opacity:.6">8 MPs</span></div>
+      <div class="v2-item"><div class="v1-check on"></div> DIOXIDO TITANIO R2196+ <span class="v1-price">$42/kg</span></div>
+      <div class="v2-item"><div class="v1-check"></div> AMARELO NEOPRINT <span class="v1-price">$38/kg</span></div>
+      <div class="v2-item"><div class="v1-check"></div> BAYFERROX-120 <span class="v1-price">$28/kg</span></div>
+    </div>
+    <div class="v2-card carga">
+      <div class="v2-card-title">Cargas y Extensores <span style="font-size:10px;opacity:.6">9 MPs</span></div>
+      <div class="v2-item"><div class="v1-check on"></div> BARITA BLANCA 90 <span class="v1-price">$8/kg</span></div>
+      <div class="v2-item"><div class="v1-check"></div> GLOMAXX LL <span class="v1-price">$12/kg</span></div>
+      <div class="v2-item"><div class="v1-check"></div> OMYACARB 1-SJ <span class="v1-price">$5/kg</span></div>
+    </div>
+    <div class="v2-card aditivo">
+      <div class="v2-card-title">Aditivos <span style="font-size:10px;opacity:.6">15 MPs</span></div>
+      <div class="v2-item"><div class="v1-check"></div> BYK-381 <span class="v1-price">$95/kg</span></div>
+      <div class="v2-item"><div class="v1-check"></div> DISPEX AA-4144 <span class="v1-price">$78/kg</span></div>
+      <div class="v2-item"><div class="v1-check on"></div> HALOX 550 WF <span class="v1-price">$62/kg</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ VERSIÓN 3: Tabs horizontales ═══════════ -->
+<div class="mockup">
+  <div class="mockup-label">V3 — Tabs horizontales por categoria</div>
+  <div class="mockup-desc">Pills arriba para cambiar categoria. Lista limpia abajo. Enfocado, sin ruido.</div>
+  <input class="search" placeholder="Buscar materia prima..." value="">
+
+  <div class="v3-tabs">
+    <button class="v3-tab active">Resinas <span class="badge">3</span></button>
+    <button class="v3-tab">Pigmentos <span class="badge" style="background:#92400E">1</span></button>
+    <button class="v3-tab">Cargas</button>
+    <button class="v3-tab">Aditivos <span class="badge" style="background:#065F46">1</span></button>
+    <button class="v3-tab">Solventes <span class="badge" style="background:#1E40AF">1</span></button>
+    <button class="v3-tab">Biocidas</button>
+    <button class="v3-tab" style="color:#9A3412">Lab</button>
+  </div>
+  <div class="v3-list">
+    <div class="v3-row" style="background:#EDE9FE44"><div class="v1-check on"></div> <b>W-5916</b> <span style="font-size:10px;color:#999;margin-left:auto">d=1.05 &nbsp; $32.40/kg</span></div>
+    <div class="v3-row" style="background:#EDE9FE44"><div class="v1-check on"></div> <b>W-4535-V</b> <span style="font-size:10px;color:#999;margin-left:auto">d=1.02 &nbsp; $28.10/kg</span></div>
+    <div class="v3-row"><div class="v1-check"></div> EMULSION <span style="font-size:10px;color:#999;margin-left:auto">d=1.01 &nbsp; $15.20/kg</span></div>
+    <div class="v3-row" style="background:#EDE9FE44"><div class="v1-check on"></div> <b>ESAPLAST G12</b> <span style="font-size:10px;color:#999;margin-left:auto">d=1.08 &nbsp; $22.50/kg</span></div>
+    <div class="v3-row"><div class="v1-check"></div> ESAPLAST G12 (PARAF. CLORADA) <span style="font-size:10px;color:#999;margin-left:auto">$24.80/kg</span></div>
+    <div class="v3-row"><div class="v1-check"></div> REOTAN HS <span style="font-size:10px;color:#999;margin-left:auto">d=1.03 &nbsp; $35.00/kg</span></div>
+    <div class="v3-row"><div class="v1-check"></div> RESINA GR-C77D <span style="font-size:10px;color:#999;margin-left:auto">$41.20/kg</span></div>
+  </div>
+  <div style="font-size:11px; color:#999; text-align:center; margin-top:8px;">12 MPs en Resinas y Ligantes · 3 seleccionadas</div>
+</div>
+
+<!-- ═══════════ VERSIÓN 4: Doble panel ═══════════ -->
+<div class="mockup">
+  <div class="mockup-label">V4 — Panel dual (Catalogo ← → Seleccionados)</div>
+  <div class="mockup-desc">Izquierda: catalogo por categorias para agregar. Derecha: los que ya seleccionaste con boton quitar.</div>
+  <input class="search" placeholder="Buscar materia prima..." value="">
+
+  <div class="v4-wrap">
+    <div class="v4-panel">
+      <div class="v4-panel-title">📦 Catalogo de MPs</div>
+      <div class="v4-panel-body">
+        <div class="v4-cat-label">Resinas y Ligantes</div>
+        <div class="v4-item">EMULSION <span class="add">+</span></div>
+        <div class="v4-item">REOTAN HS <span class="add">+</span></div>
+        <div class="v4-item">RESINA GR-C77D <span class="add">+</span></div>
+        <div class="v4-cat-label">Pigmentos</div>
+        <div class="v4-item">AMARELO NEOPRINT D-5X <span class="add">+</span></div>
+        <div class="v4-item">BAYFERROX - 120 <span class="add">+</span></div>
+        <div class="v4-cat-label">Cargas y Extensores</div>
+        <div class="v4-item">GLOMAXX LL <span class="add">+</span></div>
+        <div class="v4-item">OMYACARB 1-SJ <span class="add">+</span></div>
+      </div>
+    </div>
+    <div class="v4-panel v4-right">
+      <div class="v4-panel-title" style="background:#EDE9FE; color:#6D28D9;">✓ Seleccionados (6)</div>
+      <div class="v4-panel-body">
+        <div class="v4-item"><b>W-5916</b> <span style="font-size:10px;color:#999">Resina</span> <span class="remove">×</span></div>
+        <div class="v4-item"><b>W-4535-V</b> <span style="font-size:10px;color:#999">Resina</span> <span class="remove">×</span></div>
+        <div class="v4-item"><b>ESAPLAST G12</b> <span style="font-size:10px;color:#999">Resina</span> <span class="remove">×</span></div>
+        <div class="v4-item"><b>DIOXIDO TITANIO R2196+</b> <span style="font-size:10px;color:#999">Pigmento</span> <span class="remove">×</span></div>
+        <div class="v4-item"><b>BARITA BLANCA 90</b> <span style="font-size:10px;color:#999">Carga</span> <span class="remove">×</span></div>
+        <div class="v4-item"><b>AGUA</b> <span style="font-size:10px;color:#999">Solvente</span> <span class="remove">×</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ VERSIÓN 5: Chips con filtro ═══════════ -->
+<div class="mockup">
+  <div class="mockup-label">V5 — Chips coloreados + filtro por categoria + barra de seleccionados</div>
+  <div class="mockup-desc">Barra superior con seleccionados (quitables). Pills de filtro. Chips por cada MP con color de categoria.</div>
+  <input class="search" placeholder="Buscar materia prima..." value="">
+
+  <div class="v5-selected-bar">
+    <div class="v5-sel-chip">W-5916 <span class="x">×</span></div>
+    <div class="v5-sel-chip">W-4535-V <span class="x">×</span></div>
+    <div class="v5-sel-chip">ESAPLAST G12 <span class="x">×</span></div>
+    <div class="v5-sel-chip">DIOXIDO TITANIO <span class="x">×</span></div>
+    <div class="v5-sel-chip">BARITA BLANCA <span class="x">×</span></div>
+    <div class="v5-sel-chip">AGUA <span class="x">×</span></div>
+  </div>
+
+  <div class="v5-filters">
+    <span class="v5-filter active">Todas</span>
+    <span class="v5-filter" style="border-color:#C4B5FD;color:#6D28D9">Resinas</span>
+    <span class="v5-filter" style="border-color:#FCD34D;color:#92400E">Pigmentos</span>
+    <span class="v5-filter" style="border-color:#A5B4FC;color:#3730A3">Cargas</span>
+    <span class="v5-filter" style="border-color:#6EE7B7;color:#065F46">Aditivos</span>
+    <span class="v5-filter" style="border-color:#93C5FD;color:#1E40AF">Solventes</span>
+    <span class="v5-filter" style="border-color:#F9A8D4;color:#9D174D">Biocidas</span>
+    <span class="v5-filter" style="border-color:#FDBA74;color:#9A3412">Lab</span>
+  </div>
+
+  <div class="v5-chips">
+    <span class="v5-chip sel" style="background:#EDE9FE;color:#6D28D9;border-color:#C4B5FD"><span class="check">✓</span> W-5916</span>
+    <span class="v5-chip sel" style="background:#EDE9FE;color:#6D28D9;border-color:#C4B5FD"><span class="check">✓</span> W-4535-V</span>
+    <span class="v5-chip" style="background:#fff;color:#6D28D9;border-color:#C4B5FD">EMULSION</span>
+    <span class="v5-chip sel" style="background:#EDE9FE;color:#6D28D9;border-color:#C4B5FD"><span class="check">✓</span> ESAPLAST G12</span>
+    <span class="v5-chip" style="background:#fff;color:#6D28D9;border-color:#C4B5FD">REOTAN HS</span>
+    <span class="v5-chip sel" style="background:#FEF3C7;color:#92400E;border-color:#FCD34D"><span class="check">✓</span> DIOXIDO TITANIO</span>
+    <span class="v5-chip" style="background:#fff;color:#92400E;border-color:#FCD34D">AMARELO NEOPRINT</span>
+    <span class="v5-chip" style="background:#fff;color:#92400E;border-color:#FCD34D">BAYFERROX-120</span>
+    <span class="v5-chip" style="background:#fff;color:#92400E;border-color:#FCD34D">GLITTER ROSE</span>
+    <span class="v5-chip sel" style="background:#E0E7FF;color:#3730A3;border-color:#A5B4FC"><span class="check">✓</span> BARITA BLANCA</span>
+    <span class="v5-chip" style="background:#fff;color:#3730A3;border-color:#A5B4FC">GLOMAXX LL</span>
+    <span class="v5-chip" style="background:#fff;color:#3730A3;border-color:#A5B4FC">OMYACARB 1-SJ</span>
+    <span class="v5-chip" style="background:#fff;color:#065F46;border-color:#6EE7B7">BYK-381</span>
+    <span class="v5-chip" style="background:#fff;color:#065F46;border-color:#6EE7B7">DISPEX AA-4144</span>
+    <span class="v5-chip" style="background:#fff;color:#065F46;border-color:#6EE7B7">HALOX 550 WF</span>
+    <span class="v5-chip sel" style="background:#DBEAFE;color:#1E40AF;border-color:#93C5FD"><span class="check">✓</span> AGUA</span>
+    <span class="v5-chip" style="background:#fff;color:#1E40AF;border-color:#93C5FD">ALCOHOL ISOPROPILICO</span>
+  </div>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,466 @@
+@import "tailwindcss";
+
+/* ═══ Light Premium — CSS Variables (source of truth) ═══ */
+:root {
+  --lp-brand-50: #EFF6FF;
+  --lp-brand-100: #DBEAFE;
+  --lp-brand-200: #BFDBFE;
+  --lp-brand-500: #3B82F6;
+  --lp-brand-600: #2563EB;
+  --lp-brand-700: #1D4ED8;
+  --lp-brand-800: #1E40AF;
+  --lp-bg-base: #FAFAF8;
+  --lp-bg-raised: #FFFFFF;
+  --lp-bg-sunken: #F5F4F0;
+  --lp-text-primary: #1A1815;
+  --lp-text-secondary: #5A5550;
+  --lp-text-tertiary: #6B6560;
+  --lp-border-subtle: #E8E6DE;
+  --lp-border-strong: #D1CEC6;
+  --lp-success-50: #F0FDF4;
+  --lp-success-100: #DCFCE7;
+  --lp-success-500: #22C55E;
+  --lp-success-600: #16A34A;
+  --lp-success-700: #15803D;
+  --lp-warning-50: #FFFBEB;
+  --lp-warning-100: #FEF3C7;
+  --lp-warning-500: #F59E0B;
+  --lp-warning-600: #D97706;
+  --lp-warning-700: #B45309;
+  --lp-danger-50: #FEF2F2;
+  --lp-danger-100: #FEE2E2;
+  --lp-danger-500: #EF4444;
+  --lp-danger-600: #DC2626;
+  --lp-danger-700: #B91C1C;
+  --lp-info-50: #EFF6FF;
+  --lp-info-600: #2563EB;
+  --lp-font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --lp-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --lp-radius: 14px;
+  --lp-radius-sm: 8px;
+
+  /* ═══ Apple Design System (rediseño 2026) ═══
+     Tokens nuevos para el rediseño Apple-style. Coexisten con los anteriores
+     para migración gradual sin romper nada. */
+
+  /* Radius escalonado (Apple usa 4-8-12-16-22-999 para distintos niveles) */
+  --lp-radius-xs: 6px;
+  --lp-radius-md: 12px;
+  --lp-radius-lg: 16px;
+  --lp-radius-xl: 22px;
+  --lp-radius-pill: 999px;
+
+  /* Sombras Apple-style — sutiles, con un poco de spread para "depth" */
+  --lp-shadow-xs: 0 1px 2px rgba(26,24,21,0.04);
+  --lp-shadow-sm: 0 1px 3px rgba(26,24,21,0.06), 0 1px 2px rgba(26,24,21,0.04);
+  --lp-shadow-md: 0 4px 14px rgba(26,24,21,0.06), 0 1px 3px rgba(26,24,21,0.04);
+  --lp-shadow-lg: 0 10px 30px rgba(26,24,21,0.08), 0 2px 6px rgba(26,24,21,0.04);
+  --lp-shadow-xl: 0 20px 50px rgba(26,24,21,0.12), 0 4px 14px rgba(26,24,21,0.06);
+  --lp-shadow-glass: 0 -10px 40px rgba(0,0,0,0.12);
+
+  /* Categorías tinted (Health-style) — bg suave + color principal por ámbito.
+     Cada ámbito tiene su par bg/fg para que cards y íconos sean coherentes. */
+  --lp-cat-inventario-bg: #EFF6FF;
+  --lp-cat-inventario-fg: #185FA5;
+  --lp-cat-inventario-tint: rgba(24,95,165,0.12);
+
+  --lp-cat-produccion-bg: #FFFBEB;
+  --lp-cat-produccion-fg: #B45309;
+  --lp-cat-produccion-tint: rgba(180,83,9,0.12);
+
+  --lp-cat-compras-bg: #FAECE7;
+  --lp-cat-compras-fg: #993C1D;
+  --lp-cat-compras-tint: rgba(153,60,29,0.12);
+
+  --lp-cat-alertas-bg: #FEF2F2;
+  --lp-cat-alertas-fg: #DC2626;
+  --lp-cat-alertas-tint: rgba(220,38,38,0.12);
+
+  --lp-cat-calidad-bg: #F0FDF4;
+  --lp-cat-calidad-fg: #15803D;
+  --lp-cat-calidad-tint: rgba(21,128,61,0.12);
+
+  --lp-cat-admin-bg: #EDE9FE;
+  --lp-cat-admin-fg: #5B21B6;
+  --lp-cat-admin-tint: rgba(91,33,182,0.12);
+
+  --lp-cat-neutro-bg: #F1EFE8;
+  --lp-cat-neutro-fg: #5A5550;
+  --lp-cat-neutro-tint: rgba(90,85,80,0.10);
+
+  /* Focus ring (Stripe-style — anillo tinted suave) */
+  --lp-focus-ring: 0 0 0 4px rgba(24,95,165,0.15);
+  --lp-focus-ring-danger: 0 0 0 4px rgba(220,38,38,0.15);
+
+  /* Glass backgrounds (translúcidos para overlays y nav) */
+  --lp-glass-bg: rgba(255,255,255,0.82);
+  --lp-glass-border: rgba(26,24,21,0.08);
+}
+
+/* ═══ Tailwind v4 theme mapping ═══ */
+@theme {
+  --color-lp-brand-50: var(--lp-brand-50);
+  --color-lp-brand-100: var(--lp-brand-100);
+  --color-lp-brand-200: var(--lp-brand-200);
+  --color-lp-brand-500: var(--lp-brand-500);
+  --color-lp-brand-600: var(--lp-brand-600);
+  --color-lp-brand-700: var(--lp-brand-700);
+  --color-lp-brand-800: var(--lp-brand-800);
+  --color-lp-bg-base: var(--lp-bg-base);
+  --color-lp-bg-raised: var(--lp-bg-raised);
+  --color-lp-bg-sunken: var(--lp-bg-sunken);
+  --color-lp-text-primary: var(--lp-text-primary);
+  --color-lp-text-secondary: var(--lp-text-secondary);
+  --color-lp-text-tertiary: var(--lp-text-tertiary);
+  --color-lp-border-subtle: var(--lp-border-subtle);
+  --color-lp-border-strong: var(--lp-border-strong);
+  --color-lp-success-50: var(--lp-success-50);
+  --color-lp-success-600: var(--lp-success-600);
+  --color-lp-warning-50: var(--lp-warning-50);
+  --color-lp-warning-600: var(--lp-warning-600);
+  --color-lp-danger-50: var(--lp-danger-50);
+  --color-lp-danger-600: var(--lp-danger-600);
+  --color-lp-danger-700: var(--lp-danger-700);
+  --font-lp-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
+  --font-lp-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* Apple — mapeo de tokens nuevos */
+  --color-lp-cat-inventario-bg: var(--lp-cat-inventario-bg);
+  --color-lp-cat-inventario-fg: var(--lp-cat-inventario-fg);
+  --color-lp-cat-produccion-bg: var(--lp-cat-produccion-bg);
+  --color-lp-cat-produccion-fg: var(--lp-cat-produccion-fg);
+  --color-lp-cat-compras-bg: var(--lp-cat-compras-bg);
+  --color-lp-cat-compras-fg: var(--lp-cat-compras-fg);
+  --color-lp-cat-alertas-bg: var(--lp-cat-alertas-bg);
+  --color-lp-cat-alertas-fg: var(--lp-cat-alertas-fg);
+  --color-lp-cat-calidad-bg: var(--lp-cat-calidad-bg);
+  --color-lp-cat-calidad-fg: var(--lp-cat-calidad-fg);
+  --color-lp-cat-admin-bg: var(--lp-cat-admin-bg);
+  --color-lp-cat-admin-fg: var(--lp-cat-admin-fg);
+  --color-lp-cat-neutro-bg: var(--lp-cat-neutro-bg);
+  --color-lp-cat-neutro-fg: var(--lp-cat-neutro-fg);
+  --radius-lp-pill: var(--lp-radius-pill);
+  --radius-lp-md: var(--lp-radius-md);
+  --radius-lp-lg: var(--lp-radius-lg);
+  --radius-lp-xl: var(--lp-radius-xl);
+}
+
+/* ═══ Base Styles ═══ */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%;
+  max-width: 100vw;
+  /* clip es más estricto que hidden: previene desbordes incluso con position:fixed/sticky */
+  overflow-x: clip;
+  overflow-x: hidden;       /* fallback para navegadores viejos */
+  overscroll-behavior-x: none;
+  /* Solo permitir scroll vertical, bloquear pan horizontal del teclado iOS */
+  touch-action: pan-y;
+  position: relative;
+}
+#root {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+  overflow-x: hidden;
+  position: relative;
+}
+/* Fix universal: ningún elemento puede tener min-content más ancho que su contenedor.
+   Esto previene el bug clásico de flex/grid donde un hijo con texto largo
+   o un input con valor largo expande el flex item y causa overflow horizontal. */
+* {
+  min-width: 0;
+}
+/* NOTA IMPORTANTE: NO usar `contain: layout` en body — eso crea un
+   contenedor de contención que ANCLA todos los `position: fixed` al body
+   en lugar del viewport, haciendo que el bottom nav solo aparezca al
+   final del scroll. El overflow-x: clip ya previene el desborde lateral
+   sin necesidad de contain. */
+
+/* Asegurar que cualquier input dentro de la app no fuerce overflow */
+input, select, textarea, button {
+  max-width: 100%;
+  box-sizing: border-box;
+}
+/* Imágenes y videos siempre responsive */
+img, video, svg, canvas, iframe {
+  max-width: 100%;
+  height: auto;
+}
+
+body {
+  background: var(--lp-bg-base);
+  color: var(--lp-text-primary);
+  font-family: var(--lp-font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
+}
+
+/* ═══ Scrollbar ═══ */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--lp-border-strong); border-radius: 3px; }
+
+/* ═══ Safe area bottom (móvil) ═══ */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+
+/* ═══ Scrollbar hide (bottom nav) ═══ */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* ═══ Sub-pestañas con scroll horizontal (PageTabs) ═══
+   Oculta scrollbar para que el componente se vea limpio en móvil.
+   El usuario aún puede deslizar lateralmente con el dedo. */
+.page-tabs-scroll::-webkit-scrollbar { display: none; }
+.page-tabs-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+.segmented-scroll::-webkit-scrollbar { display: none; }
+
+/* ═══ Wrapper de scroll horizontal para tablas anchas en móvil ═══
+   Las tablas con muchas columnas no caben en pantallas ≤480px.
+   Envolver con <div class="table-scroll"> permite que el usuario
+   deslice horizontalmente sin romper el layout de la página. */
+.table-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  margin: 0 -4px;     /* compensa el margen lateral mínimo */
+  padding: 0 4px;
+  border-radius: var(--lp-radius);
+}
+.table-scroll::-webkit-scrollbar { height: 6px; }
+.table-scroll::-webkit-scrollbar-thumb { background: var(--lp-border-subtle); border-radius: 3px; }
+/* Garantiza que la tabla NO se comprima — usa min-content para que respete
+   sus columnas naturales y el wrapper haga scroll. */
+.table-scroll > table { min-width: max-content; }
+
+/* ═══ Forzar pipelines anchos (Trazabilidad) a tener scroll horizontal ═══ */
+.pipeline-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+}
+.pipeline-scroll::-webkit-scrollbar { height: 6px; }
+.pipeline-scroll::-webkit-scrollbar-thumb { background: var(--lp-border-subtle); border-radius: 3px; }
+
+/* ═══ TopBar — logo responsive ═══
+   Desktop (>768px): muestra horizontal, oculta icono.
+   Móvil (≤768px): muestra solo icono, oculta horizontal. */
+.topbar-logo-mobile { display: none !important; }
+@media (max-width: 768px) {
+  .topbar-logo-desktop { display: none !important; }
+  .topbar-logo-mobile { display: block !important; }
+}
+
+/* ═══ Login — pantalla completa en móvil ═══ */
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  background: #fff;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.08);
+  overflow: hidden;
+  box-sizing: border-box;
+  margin: clamp(8px, 3vw, 24px);
+}
+@media (max-width: 480px) {
+  .login-card {
+    margin: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    max-width: 100vw !important;
+    min-height: 100dvh;
+    display: flex !important;
+    flex-direction: column;
+    justify-content: center;
+  }
+}
+
+/* ═══ Animation ═══ */
+@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: fadeIn 0.2s ease-out; }
+
+/* ═══ iOS Safari / Chrome Autofill detection hack ═══
+   Sin animation-name asignada al estado :-webkit-autofill, los navegadores
+   WebKit/Blink no disparan el evento `animationstart` cuando rellenan un campo.
+   Con este 1ms animation triggereamos animationstart → JS sincroniza state. */
+@keyframes onAutoFillStart { from {} to {} }
+@keyframes onAutoFillCancel { from {} to {} }
+input:-webkit-autofill {
+  animation-name: onAutoFillStart;
+  animation-duration: 1ms;
+}
+input:not(:-webkit-autofill) {
+  animation-name: onAutoFillCancel;
+  animation-duration: 1ms;
+}
+
+/* ═══ Spinner ═══ */
+@keyframes spin { to { transform: rotate(360deg); } }
+.lp-spinner {
+  width: 32px; height: 32px;
+  border: 3px solid var(--lp-brand-200);
+  border-top-color: var(--lp-brand-600);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+/* ═══ Font import ═══ */
+@font-face {
+  font-family: 'DM Sans';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('https://fonts.gstatic.com/s/dmsans/v15/rP2tp2ywxg089UriI5-g4vlH9VoD8CmcqZG40F9JadbnoEwAkpFhRQ.woff2') format('woff2');
+}
+
+/* ═══ Responsive Layout ═══ */
+.sidebar-desktop { display: none !important; }
+/* ═══ Bottom Nav — estilo iOS Apple (frosted glass, altura justa) ═══
+   - Pegada al borde inferior siempre (bottom: 0)
+   - Fondo translúcido con backdrop-filter blur — efecto vidrio esmerilado tipo iOS
+   - Padding-bottom: solo safe-area en PWA, +20px extra en iOS Safari no-PWA
+     (suficiente para que iconos suban sobre la barra del navegador sin verse altísima)
+   - Sin hueco visible: aunque el fondo es translúcido, el blur difumina lo que pasa
+     detrás de modo que se ve premium y no se distingue contenido scrolleado */
+.bottom-nav-mobile {
+  display: flex;
+  position: fixed !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  z-index: 1000 !important;
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: saturate(180%) blur(22px);
+  backdrop-filter: saturate(180%) blur(22px);
+  border-top: 0.5px solid rgba(26, 24, 21, 0.08);
+  padding-bottom: max(env(safe-area-inset-bottom, 0px), 8px);
+  /* Aceleración GPU para que el reposicionamiento sea instantáneo */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+/* Fallback: si el navegador NO soporta backdrop-filter, usar fondo opaco para
+   que no se transparente el contenido. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bottom-nav-mobile {
+    background: var(--lp-bg-raised);
+  }
+}
+.main-content {
+  margin-left: 0;
+  /* Padding inferior = altura del bottom-nav (56px) + safe-area */
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+.topbar-right-mobile { display: flex; }
+
+/* iOS Safari NO-standalone: la barra del navegador tapa los últimos ~80px.
+   Inflamos el padding-bottom 20px (no 60px como antes) — suficiente para que los
+   iconos no queden tapados cuando la barra de Safari está visible, sin verse
+   "extremadamente alta". Cuando el usuario scrollea, Safari oculta su barra
+   automáticamente y la nav se ve perfecta hasta el borde. */
+@media (display-mode: browser) {
+  @supports (-webkit-touch-callout: none) {
+    .bottom-nav-mobile {
+      padding-bottom: calc(max(env(safe-area-inset-bottom, 0px), 8px) + 20px) !important;
+    }
+    .main-content {
+      padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+  }
+}
+
+/* Cuando la app está instalada como PWA (standalone), todo es full-screen normal */
+@media (display-mode: standalone) {
+  /* nada extra que hacer — env(safe-area-inset-*) ya cubre todo correctamente */
+}
+
+/* Donut row: mobile = acordeón, desktop = fila */
+.donut-row-mobile { display: block; margin-bottom: 16px; }
+.donut-row-desktop { display: none !important; }
+
+@media (min-width: 1024px) {
+  .sidebar-desktop { display: flex !important; }
+  .bottom-nav-mobile { display: none !important; }
+  .main-content { margin-left: 240px; padding-bottom: 16px; }
+  .topbar-right-mobile { display: none !important; }
+  .donut-row-mobile { display: none !important; }
+  .donut-row-desktop { display: flex !important; }
+}
+
+/* ═══ Mobile-first optimizations ═══ */
+@media (max-width: 1023px) {
+  /* Touch targets mínimos 44px — Apple Human Interface Guidelines + Google Material.
+     Excluye botones marcados con .compact-btn (tabs, pills internos, iconos en row densos). */
+  button:not(.compact-btn):not(.tab-btn):not([data-compact]),
+  a[role="button"]:not(.compact-btn),
+  input[type="button"],
+  input[type="submit"] {
+    min-height: 44px;
+  }
+
+  /* Inputs y selects con tamaño apropiado para tap */
+  input[type="text"],
+  input[type="number"],
+  input[type="password"],
+  input[type="email"],
+  input[type="tel"],
+  textarea,
+  select {
+    font-size: 16px; /* Evita zoom automático en iOS al hacer focus */
+    min-height: 44px;
+  }
+
+  /* Tablas con scroll horizontal optimizado */
+  .table-mobile-scroll,
+  table {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Smooth scroll natural */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Reducir padding excesivo en móvil para aprovechar pantalla */
+  .main-content > div {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+  }
+
+  /* Topbar más compacto */
+  .topbar-right-mobile span {
+    display: none; /* Oculta el nombre de usuario en móvil para ahorrar espacio */
+  }
+
+  /* Modales: full-screen en móvil para no perder área util */
+  .modal-mobile-fullscreen {
+    border-radius: 0 !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    height: 100vh !important;
+    max-height: 100vh !important;
+  }
+}
+
+/* ═══ Performance: scroll behavior + GPU acceleration ═══ */
+.bottom-nav-mobile { will-change: transform; }
+.sidebar-desktop { will-change: transform; }
+
+/* Animación cuando entra contenido (suave, sin jerky) */
+@media (prefers-reduced-motion: no-preference) {
+  .main-content > div { animation: pageIn .2s ease-out; }
+  @keyframes pageIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+}
+
+/* Reducir motion para usuarios que lo prefieren */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}

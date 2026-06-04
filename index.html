@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="es-MX">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no, interactive-widget=resizes-content" />
+    <title>Pinturas El Perico — ERP</title>
+    <meta name="description" content="Sistema ERP de Pinturas El Perico — gestión de fórmulas, producción, inventario y compras." />
+
+    <!-- Forzar al navegador a NO cachear este HTML — los assets sí (tienen hash en filename) -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <!-- Favicon SVG (escala perfecto a 16/32/48 px sin perder detalle).
+         Apunta a /logos/el-perico-icono.svg que es el archivo "fuente única"
+         para favicon + apple-touch-icon. Si en el futuro lo cambias, solo
+         reemplaza ese SVG. -->
+    <link rel="icon" type="image/svg+xml" href="/logos/el-perico-icono.svg" />
+    <!-- Fallback PNG para navegadores que no soportan SVG favicon (Safari iOS <12, IE) -->
+    <link rel="alternate icon" type="image/png" sizes="192x192" href="/logos/el-perico-icono.png" />
+
+    <!-- PWA manifest — permite "Añadir a inicio" y la app se abre fullscreen sin URL bar -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- iOS / Apple touch icon — usa el icono LIMPIO (sin texto), iOS lo redondea por sí solo.
+         Múltiples tamaños para que iOS elija el mejor según el dispositivo (iPad, iPhone, etc).
+         NOTA: iOS no soporta SVG en apple-touch-icon todavía → usamos PNG. -->
+    <link rel="apple-touch-icon" href="/logos/el-perico-icono.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/logos/el-perico-icono.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/logos/el-perico-icono.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/logos/el-perico-icono.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/logos/el-perico-icono.png" />
+    <meta name="apple-mobile-web-app-title" content="El Perico" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- black-translucent: cuando la app esté instalada como PWA, el TopBar
+         cubre el área del Dynamic Island/notch (full-screen real) -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Color de tema (barra del navegador móvil cuando NO está en modo PWA) -->
+    <meta name="theme-color" content="#FAFAF8" />
+
+    <!-- Open Graph para compartir el link -->
+    <meta property="og:title" content="Pinturas El Perico — ERP" />
+    <meta property="og:description" content="Sistema interno de producción y operaciones." />
+    <meta property="og:image" content="/logos/el-perico-horizontal.png" />
+    <meta property="og:type" content="website" />
+
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         CIRCUIT BREAKER anti-loop de reload — debe correr ANTES de main.jsx
+         Si la página se recarga >3 veces en <10 segundos, asumimos que hay
+         un SW viejo causando loop infinito. Tiramos TODOS los SW + caches
+         de forma síncrona y mostramos un mensaje al usuario.
+         ═══════════════════════════════════════════════════════════════ -->
+    <script>
+      (function() {
+        try {
+          var KEY = 'pp_reload_guard';
+          var WINDOW_MS = 10000; // 10 segundos
+          var MAX_RELOADS = 3;
+          var now = Date.now();
+          var data;
+          try { data = JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch (e) { data = null; }
+          if (!data || (now - data.first) > WINDOW_MS) {
+            data = { count: 1, first: now };
+          } else {
+            data.count++;
+          }
+          sessionStorage.setItem(KEY, JSON.stringify(data));
+
+          if (data.count > MAX_RELOADS) {
+            // ¡LOOP DETECTADO! Romper el ciclo agresivamente
+            console.error('[CIRCUIT-BREAKER] Loop de reload detectado (' + data.count + ' reloads en ' + (now - data.first) + 'ms). Desregistrando SW...');
+            sessionStorage.removeItem(KEY);
+            // Bloquear cualquier reload futuro durante 5 segundos
+            sessionStorage.setItem('pp_reload_blocked_until', String(now + 5000));
+
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker.getRegistrations().then(function(regs) {
+                return Promise.all(regs.map(function(r) { return r.unregister(); }));
+              }).catch(function(){});
+            }
+            if ('caches' in window) {
+              caches.keys().then(function(keys) {
+                return Promise.all(keys.map(function(k) { return caches.delete(k); }));
+              }).catch(function(){});
+            }
+
+            // Reemplazar el contenido de body con un mensaje al usuario
+            document.addEventListener('DOMContentLoaded', function() {
+              document.body.innerHTML = '<div style="font-family:system-ui,sans-serif;padding:40px;max-width:520px;margin:40px auto;background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08);text-align:center"><h2 style="margin:0 0 12px;color:#1A1815">⚠️ Limpieza en curso</h2><p style="color:#5A5550;line-height:1.5;margin:0 0 20px">Detectamos un problema con la caché del navegador. Lo limpiamos automáticamente.</p><p style="color:#6B6560;font-size:14px;margin:0 0 24px">Por favor cierra y vuelve a abrir el navegador, luego entra a <strong>sistema.pinturaselperico.com</strong> de nuevo.</p><button onclick="sessionStorage.clear();localStorage.removeItem(\'pp_token\');location.href=\'/\'" style="background:#2563EB;color:#fff;border:none;padding:14px 24px;border-radius:10px;font-size:15px;font-weight:600;cursor:pointer">Continuar</button></div>';
+            });
+
+            // Evitar que main.jsx se cargue (bloquea todo el flujo)
+            window.stop && window.stop();
+            return;
+          }
+
+          // Limpieza preventiva: si tenemos SW residual de versiones viejas,
+          // desregistrarlo SIN reload (idempotente).
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function(regs) {
+              regs.forEach(function(r) { r.unregister().catch(function(){}); });
+            }).catch(function(){});
+          }
+        } catch (e) {
+          console.warn('[CIRCUIT-BREAKER] error:', e);
+        }
+      })();
+    </script>
+
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
