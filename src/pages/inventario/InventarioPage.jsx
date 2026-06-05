@@ -628,6 +628,9 @@ export default function InventarioPage() {
   };
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'mp');
   const [mpSubtab, setMpSubtab] = useState(searchParams.get('mp') || 'stock'); /* stock | costos | maestro */
+  /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
+     'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
+  const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
   const [activeFilter, setActiveFilter] = useState(searchParams.get('filter') || 'todos');
   const { query, debouncedQuery, setQuery } = useSearch(200);
   const [showRecepcion, setShowRecepcion] = useState(false);
@@ -641,14 +644,17 @@ export default function InventarioPage() {
   const { data: invData, loading: invLoading, reload: reloadInv } = useApiData(() => api.getInventario(), [], 8000);
   const { data: maestroData } = useApiData(() => api.getMaestroMP(), [], 15000);
   const { data: envData, reload: reloadEnv } = useApiData(() => api.getEnvases(), [], 15000);
+  /* W3: stock PT desglosado por ubicación física (desde trazabilidad) */
+  const { data: ptUbiData, reload: reloadPtUbi } = useApiData(() => api.getPTPorUbicacion(), [], 15000);
 
   /* FIX jun 2026 (K1): InventarioPage solo polleaba cada 8s. Cualquier
      movimiento (recepción MP, ajuste por conteo, descuento por producción)
      tardaba hasta 8s en aparecer. Realtime cierra el gap. */
   useRealtimeSync({
-    onInventario: () => reloadInv(),
-    onEnvases:    () => reloadEnv(),
-    onPrecios:    () => reloadInv(),
+    onInventario:   () => { reloadInv(); reloadPtUbi(); },
+    onEnvases:      () => reloadEnv(),
+    onPrecios:      () => reloadInv(),
+    onTrazabilidad: () => reloadPtUbi(), /* W3: sublotes mueven ubicación → refrescar tabla */
   });
 
   const inventory = invData?.data || {};
@@ -670,7 +676,9 @@ export default function InventarioPage() {
     else if (action === 'sustituir') setSustituirMP(mp);
   }, []);
 
-  /* Role-based tab visibility */
+  /* Role-based tab visibility.
+     W3: PT visible para Josué (almacen) — necesita ver lo que tiene Fábrica
+     para pedir producto terminado. Solo recolector queda sin PT. */
   const rol = user?.rol || '';
   const hideMP = rol === 'almacen' || rol === 'recolector';
   const hidePT = rol === 'recolector';
@@ -1088,87 +1096,129 @@ export default function InventarioPage() {
         {/* ════════ TAB: PRODUCTO TERMINADO ════════ */}
         {activeTab === 'pt' && (
           <>
-            <div style={S.kpiGrid}>
-              <div style={S.kpi('var(--lp-brand-600)', activeFilter === 'todos', true)}
-                onClick={() => handleKpiClick('todos')}>
-                <div style={S.kpiLabel}>Total PT</div>
-                <div style={S.kpiValue}>{ptKpi.total}</div>
-                {activeFilter === 'todos' && <div style={S.kpiHint}>Mostrando todos</div>}
-              </div>
-              <div style={S.kpi('var(--lp-success-600)', activeFilter === 'ok', true)}
-                onClick={() => handleKpiClick('ok')}>
-                <div style={S.kpiLabel}>Stock OK</div>
-                <div style={S.kpiValue}>{ptKpi.ok}</div>
-                {activeFilter === 'ok' && <div style={S.kpiHint}>Filtro activo</div>}
-              </div>
-              <div style={S.kpi('var(--lp-warning-600)', activeFilter === 'bajo', true)}
-                onClick={() => handleKpiClick('bajo')}>
-                <div style={S.kpiLabel}>Stock Bajo</div>
-                <div style={S.kpiValue}>{ptKpi.bajo}</div>
-                {activeFilter === 'bajo' && <div style={S.kpiHint}>Filtro activo</div>}
-              </div>
-              <div style={S.kpi('var(--lp-danger-600)', activeFilter === 'sin', true)}
-                onClick={() => handleKpiClick('sin')}>
-                <div style={S.kpiLabel}>Sin Stock</div>
-                <div style={S.kpiValue}>{ptKpi.sin}</div>
-                {activeFilter === 'sin' && <div style={S.kpiHint}>Filtro activo</div>}
-              </div>
-            </div>
-
-            {activeFilter !== 'todos' && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-                padding: '8px 14px', background: 'var(--lp-brand-50)', borderRadius: 8,
-                fontSize: 12, color: 'var(--lp-brand-700)', fontWeight: 600,
-              }}>
-                Filtrando: {activeFilter === 'ok' ? 'Stock OK' : activeFilter === 'bajo' ? 'Stock Bajo' : 'Sin Stock'}
-                ({filteredPT.length} de {ptItems.length})
-                <button style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--lp-brand-600)', fontWeight: 600, fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}
-                  onClick={() => handleKpiClick('todos')}>✕ Limpiar</button>
-              </div>
-            )}
-
-            <div style={S.toolbar}>
-              <input type="text" style={S.search} placeholder="Buscar producto terminado..."
-                value={query} onChange={e => setQuery(e.target.value)} />
-              {canEditMP && (
+            {/* W3 (jun 2026) — Pills de sub-vista por ubicación física.
+                Total: usa el agregado de inv.pt (igual que antes).
+                Fábrica: solo sublotes con ub=fabrica (lo que Enrique tiene aquí).
+                Terán:   solo sublotes con ub=teran (lo que Josué tiene allá). */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+              {[
+                { id: 'total',   label: 'Total combinado', hint: 'Suma fábrica + Terán' },
+                { id: 'fabrica', label: 'Stock Fábrica',    hint: 'Lo que tiene Enrique aquí' },
+                { id: 'teran',   label: 'Stock Terán',      hint: 'Lo que tiene Josué allá' },
+              ].map(p => (
                 <button
-                  style={S.btnAdd}
-                  onClick={() => setShowAgregarPT(true)}
-                  title="Agregar inventario inicial de producto terminado (individual o masivo)"
-                >+ Agregar PT</button>
-              )}
-              <ImportExportPrint
-                exportUrl={() => api.urlExportInv('pt', activeFilter)}
-                printUrl={() => api.urlPrintInv('pt', activeFilter)}
-                permisos={{ import: false }}
-              />
-            </div>
-
-            <div style={S.section}>
-              <div style={S.sectionHeader('var(--lp-success-100)', 'var(--lp-success-700)')}>
-                📦 Producto Terminado
-                <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>{filteredPT.length}</span>
-              </div>
-              {filteredPT.map(item => (
-                <PTRow
-                  key={item.nombre}
-                  item={item}
-                  canEdit={canEditMP}
-                  canPedir={canPedirPT}
-                  onSave={handleSavePT}
-                  onPedir={handlePedirPT}
-                />
+                  key={p.id}
+                  onClick={() => setPtSubtab(p.id)}
+                  title={p.hint}
+                  style={{
+                    padding: '8px 14px', minHeight: 36, borderRadius: 999,
+                    border: ptSubtab === p.id ? '1.5px solid var(--lp-brand-600)' : '1.5px solid var(--lp-border-subtle)',
+                    background: ptSubtab === p.id ? 'var(--lp-brand-50)' : 'var(--lp-bg-raised)',
+                    color: ptSubtab === p.id ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+                    fontWeight: ptSubtab === p.id ? 700 : 500,
+                    fontSize: 13, cursor: 'pointer',
+                    fontFamily: 'var(--lp-font-sans)',
+                  }}
+                >{p.label}</button>
               ))}
             </div>
 
-            {filteredPT.length === 0 && (
-              <div style={S.empty}>
-                {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` :
-                  activeFilter !== 'todos' ? 'Sin productos en esta categoría' :
-                  'Sin productos terminados'}
+            {/* Vista TOTAL — mantiene comportamiento original con inv.pt */}
+            {ptSubtab === 'total' && (<>
+              <div style={S.kpiGrid}>
+                <div style={S.kpi('var(--lp-brand-600)', activeFilter === 'todos', true)}
+                  onClick={() => handleKpiClick('todos')}>
+                  <div style={S.kpiLabel}>Total PT</div>
+                  <div style={S.kpiValue}>{ptKpi.total}</div>
+                  {activeFilter === 'todos' && <div style={S.kpiHint}>Mostrando todos</div>}
+                </div>
+                <div style={S.kpi('var(--lp-success-600)', activeFilter === 'ok', true)}
+                  onClick={() => handleKpiClick('ok')}>
+                  <div style={S.kpiLabel}>Stock OK</div>
+                  <div style={S.kpiValue}>{ptKpi.ok}</div>
+                  {activeFilter === 'ok' && <div style={S.kpiHint}>Filtro activo</div>}
+                </div>
+                <div style={S.kpi('var(--lp-warning-600)', activeFilter === 'bajo', true)}
+                  onClick={() => handleKpiClick('bajo')}>
+                  <div style={S.kpiLabel}>Stock Bajo</div>
+                  <div style={S.kpiValue}>{ptKpi.bajo}</div>
+                  {activeFilter === 'bajo' && <div style={S.kpiHint}>Filtro activo</div>}
+                </div>
+                <div style={S.kpi('var(--lp-danger-600)', activeFilter === 'sin', true)}
+                  onClick={() => handleKpiClick('sin')}>
+                  <div style={S.kpiLabel}>Sin Stock</div>
+                  <div style={S.kpiValue}>{ptKpi.sin}</div>
+                  {activeFilter === 'sin' && <div style={S.kpiHint}>Filtro activo</div>}
+                </div>
               </div>
+
+              {activeFilter !== 'todos' && (
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
+                  padding: '8px 14px', background: 'var(--lp-brand-50)', borderRadius: 8,
+                  fontSize: 12, color: 'var(--lp-brand-700)', fontWeight: 600,
+                }}>
+                  Filtrando: {activeFilter === 'ok' ? 'Stock OK' : activeFilter === 'bajo' ? 'Stock Bajo' : 'Sin Stock'}
+                  ({filteredPT.length} de {ptItems.length})
+                  <button style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
+                    color: 'var(--lp-brand-600)', fontWeight: 600, fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}
+                    onClick={() => handleKpiClick('todos')}>✕ Limpiar</button>
+                </div>
+              )}
+
+              <div style={S.toolbar}>
+                <input type="text" style={S.search} placeholder="Buscar producto terminado..."
+                  value={query} onChange={e => setQuery(e.target.value)} />
+                {canEditMP && (
+                  <button
+                    style={S.btnAdd}
+                    onClick={() => setShowAgregarPT(true)}
+                    title="Agregar inventario inicial de producto terminado (individual o masivo)"
+                  >+ Agregar PT</button>
+                )}
+                <ImportExportPrint
+                  exportUrl={() => api.urlExportInv('pt', activeFilter)}
+                  printUrl={() => api.urlPrintInv('pt', activeFilter)}
+                  permisos={{ import: false }}
+                />
+              </div>
+
+              <div style={S.section}>
+                <div style={S.sectionHeader('var(--lp-success-100)', 'var(--lp-success-700)')}>
+                  Producto Terminado (agregado)
+                  <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>{filteredPT.length}</span>
+                </div>
+                {filteredPT.map(item => (
+                  <PTRow
+                    key={item.nombre}
+                    item={item}
+                    canEdit={canEditMP}
+                    canPedir={canPedirPT}
+                    onSave={handleSavePT}
+                    onPedir={handlePedirPT}
+                  />
+                ))}
+              </div>
+
+              {filteredPT.length === 0 && (
+                <div style={S.empty}>
+                  {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` :
+                    activeFilter !== 'todos' ? 'Sin productos en esta categoría' :
+                    'Sin productos terminados'}
+                </div>
+              )}
+            </>)}
+
+            {/* Vista FÁBRICA o TERÁN — desde /api/inventario/pt-por-ubicacion */}
+            {(ptSubtab === 'fabrica' || ptSubtab === 'teran') && (
+              <PTUbicacionView
+                ubicacion={ptSubtab}
+                data={ptUbiData?.data || ptUbiData}
+                query={query}
+                onQuery={setQuery}
+                canPedir={canPedirPT}
+                onPedir={handlePedirPT}
+              />
             )}
           </>
         )}
@@ -1243,6 +1293,177 @@ export default function InventarioPage() {
         <div style={S.toast('ok')}>
           <span style={{ marginRight: 8 }}>✓</span>
           {toastMsg}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Componente PTUbicacionView — Sprint W3 (jun 2026)
+   Desglose de Producto Terminado físicamente en fábrica o en Terán.
+   Datos vienen de /api/inventario/pt-por-ubicacion calculado server-side
+   desde trazabilidad.json (fuente de verdad para ubicación física).
+   ═══════════════════════════════════════════════════════════════════ */
+function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir }) {
+  const bucket = data?.[ubicacion] || {};
+  const productos = Object.entries(bucket)
+    .filter(([nombre]) => {
+      if (!query) return true;
+      return nombre.toLowerCase().includes(query.toLowerCase());
+    })
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  /* Totales agregados */
+  const totales = productos.reduce((acc, [, d]) => {
+    acc.cubeta += d.cubeta || 0;
+    acc.galon  += d.galon  || 0;
+    acc.litro  += d.litro  || 0;
+    acc.tote   += d.tote   || 0;
+    acc.litros += d.totalLitros || 0;
+    return acc;
+  }, { cubeta: 0, galon: 0, litro: 0, tote: 0, litros: 0 });
+
+  const esFabrica = ubicacion === 'fabrica';
+  const acentColor = esFabrica ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
+  const acentBg    = esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)';
+
+  return (
+    <>
+      {/* Mini KPIs del totalizado */}
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
+        gap: 10, marginBottom: 14,
+      }}>
+        {[
+          { label: 'Productos',  v: productos.length },
+          { label: 'Cubetas',    v: totales.cubeta },
+          { label: 'Galones',    v: totales.galon },
+          { label: 'Litros',     v: totales.litro },
+          { label: 'TOTEs',      v: totales.tote },
+          { label: 'Litros tot', v: Math.round(totales.litros) },
+        ].map(k => (
+          <div key={k.label} style={{
+            background: 'var(--lp-bg-raised)',
+            border: '1.5px solid var(--lp-border-subtle)',
+            borderTop: `3px solid ${acentColor}`,
+            borderRadius: 'var(--lp-radius-sm)',
+            padding: '12px 14px', textAlign: 'center',
+          }}>
+            <div style={{
+              fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+              color: 'var(--lp-text-tertiary)', letterSpacing: '.05em',
+            }}>{k.label}</div>
+            <div style={{
+              fontSize: 22, fontWeight: 700, fontFamily: 'var(--lp-font-mono)',
+              color: 'var(--lp-text-primary)', marginTop: 4,
+            }}>{k.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Nota explicativa según ubicación */}
+      <div style={{
+        padding: '10px 14px', background: acentBg, borderRadius: 8,
+        fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 14,
+        lineHeight: 1.5,
+      }}>
+        {esFabrica
+          ? 'Stock físicamente en planta de fábrica — sublotes envasados que aún no han sido recogidos por Luis para llevar a Terán.'
+          : 'Stock físicamente en almacén Terán — sublotes que ya fueron entregados por Luis y recibidos por Josué.'}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder={`Buscar en ${esFabrica ? 'fábrica' : 'Terán'}…`}
+          value={query}
+          onChange={e => onQuery(e.target.value)}
+          style={{
+            flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
+            border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
+            fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
+          }}
+        />
+      </div>
+
+      {productos.length === 0 ? (
+        <div style={{
+          padding: '40px 20px', textAlign: 'center',
+          color: 'var(--lp-text-tertiary)', fontSize: 14,
+        }}>
+          {query
+            ? `Sin resultados en ${esFabrica ? 'fábrica' : 'Terán'} para "${query}"`
+            : `Sin producto terminado en ${esFabrica ? 'fábrica' : 'Terán'}.`}
+        </div>
+      ) : (
+        <div style={{
+          background: 'var(--lp-bg-raised)',
+          border: '1.5px solid var(--lp-border-subtle)',
+          borderRadius: 'var(--lp-radius-md)', overflow: 'hidden',
+        }}>
+          {/* Header de tabla */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 100px 110px',
+            padding: '10px 14px',
+            background: 'var(--lp-bg-sunken)',
+            fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+            color: 'var(--lp-text-tertiary)', letterSpacing: '.05em',
+            borderBottom: '1px solid var(--lp-border-subtle)',
+          }}>
+            <span>Producto</span>
+            <span style={{ textAlign: 'right' }}>Cub</span>
+            <span style={{ textAlign: 'right' }}>Gal</span>
+            <span style={{ textAlign: 'right' }}>Lt</span>
+            <span style={{ textAlign: 'right' }}>TOTE</span>
+            <span style={{ textAlign: 'right' }}>Litros</span>
+            <span style={{ textAlign: 'right' }}>Acción</span>
+          </div>
+          {/* Filas */}
+          {productos.map(([nombre, d]) => (
+            <div key={nombre} style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 100px 110px',
+              padding: '12px 14px',
+              borderBottom: '1px solid var(--lp-border-subtle)',
+              fontSize: 13, alignItems: 'center',
+            }}>
+              <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{nombre}</span>
+              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
+              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
+              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
+              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
+              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)' }}>{Math.round(d.totalLitros || 0)}</span>
+              <span style={{ textAlign: 'right' }}>
+                {canPedir && (
+                  <button
+                    onClick={() => onPedir(nombre)}
+                    title={esFabrica
+                      ? 'Pedir producción para reponer en fábrica'
+                      : 'Pedir reposición a fábrica'}
+                    style={{
+                      padding: '6px 10px', borderRadius: 6,
+                      border: `1px solid ${acentColor}`,
+                      background: 'transparent',
+                      color: acentColor,
+                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      fontFamily: 'var(--lp-font-sans)',
+                    }}
+                  >Pedir</button>
+                )}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {data?.timestamp && (
+        <div style={{
+          marginTop: 12, fontSize: 11, color: 'var(--lp-text-tertiary)',
+          textAlign: 'right',
+        }}>
+          Actualizado: {new Date(data.timestamp).toLocaleTimeString('es-MX')}
         </div>
       )}
     </>

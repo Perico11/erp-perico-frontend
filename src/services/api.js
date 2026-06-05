@@ -97,6 +97,7 @@ const api = {
 
   /* ── Inventario ── */
   getInventario: () => request('GET', '/api/inventario'),
+  getPTPorUbicacion: () => request('GET', '/api/inventario/pt-por-ubicacion'),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
      Más seguro que el overwrite completo de POST /api/inventario que es solo admin. */
   /* Ajuste individual de MP (qty + min) con candado: necesita sesión de conteo
