@@ -198,6 +198,27 @@ function pipelineIndex(estado) {
   return idx >= 0 ? idx : -1;
 }
 
+/* Z7 (jun 2026): tiempo relativo legible para la bitácora */
+function _tiempoRelativo(fechaISO) {
+  if (!fechaISO) return '';
+  try {
+    const t = new Date(fechaISO).getTime();
+    const diff = Date.now() - t;
+    if (diff < 0) return '';
+    const min = Math.floor(diff / 60000);
+    if (min < 1) return 'ahora';
+    if (min < 60) return `hace ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `hace ${h} h`;
+    const d = Math.floor(h / 24);
+    if (d < 7) return `hace ${d} día${d === 1 ? '' : 's'}`;
+    const sem = Math.floor(d / 7);
+    if (sem < 5) return `hace ${sem} sem`;
+    const mes = Math.floor(d / 30);
+    return `hace ${mes} mes${mes === 1 ? '' : 'es'}`;
+  } catch { return ''; }
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    LoteHistorialTimeline — Sprint S (jun 2026).
    Trazabilidad INDIVIDUAL del lote, dentro de su propia card.
@@ -259,12 +280,16 @@ function LoteHistorialTimeline({ lote }) {
         Trazabilidad de este lote
       </div>
 
-      {/* Mini-pipeline horizontal del lote */}
+      {/* Z7 (jun 2026): mini-pipeline horizontal del lote — más compacto.
+          Antes minWidth:580 forzaba scroll en móvil; ahora 360 para que
+          quepa en 375px con margen y solo scrollea cuando todos los pasos
+          tienen labels largos. Iconos más chicos (26→26 sin cambio) pero
+          padding mejor. */}
       <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
-        <div style={{ display: 'flex', gap: 0, minWidth: 580, position: 'relative', padding: '6px 4px' }}>
+        <div style={{ display: 'flex', gap: 0, minWidth: 360, position: 'relative', padding: '6px 4px' }}>
           {/* Línea de fondo */}
           <div style={{
-            position: 'absolute', top: 17, left: 24, right: 24, height: 2,
+            position: 'absolute', top: 18, left: 20, right: 20, height: 2,
             background: 'var(--lp-border-subtle)', zIndex: 0,
           }}>
             <div style={{
@@ -285,20 +310,25 @@ function LoteHistorialTimeline({ lote }) {
             const fg = current || done ? '#fff' : optional ? 'var(--lp-text-disabled)' : 'var(--lp-text-tertiary)';
             const border = optional ? '1.5px dashed var(--lp-border-default)' : 'none';
             return (
-              <div key={step.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 1, minWidth: 60 }}>
+              <div key={step.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 1, minWidth: 48 }}>
                 <div style={{
-                  width: 32, height: 32, borderRadius: '50%',
+                  width: current ? 34 : 28, height: current ? 34 : 28, borderRadius: '50%',
                   background: bg, color: fg, border,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 14, marginBottom: 4,
                   boxShadow: current ? '0 0 0 4px var(--lp-brand-100)' : 'none',
+                  transition: 'all .2s',
                 }}>
-                  {ICONS[step.icon]}
+                  {done ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                  ) : ICONS[step.icon]}
                 </div>
                 <span style={{
                   fontSize: 9.5, fontWeight: current ? 700 : 500,
                   color: current ? 'var(--lp-brand-700)' : done ? 'var(--lp-success-700)' : 'var(--lp-text-tertiary)',
-                  textAlign: 'center', maxWidth: 60, lineHeight: 1.2,
+                  textAlign: 'center', maxWidth: 62, lineHeight: 1.2,
                 }}>{step.label}</span>
               </div>
             );
@@ -339,6 +369,14 @@ function LoteHistorialTimeline({ lote }) {
                     <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
                       {ev.fecha?.slice(0, 10)} {ev.fecha?.slice(11, 16)} · {ev.usuario}
                     </span>
+                    {(() => {
+                      const rel = _tiempoRelativo(ev.fecha);
+                      return rel ? (
+                        <span style={{ fontSize: 10, color: 'var(--lp-text-disabled)', fontStyle: 'italic' }}>
+                          {rel}
+                        </span>
+                      ) : null;
+                    })()}
                   </div>
                   {ev.nota && (
                     <div style={{ fontSize: 11, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{ev.nota}</div>
@@ -385,7 +423,10 @@ function LoteCard({ lote }) {
             <span style={S.badge(est.bg, est.fg)}>{est.label}</span>
             {hasTotes && <span style={S.badge('#EDE9FE', '#7C3AED')}>2 fases</span>}
           </div>
-          <span style={{ fontSize: 10, color: 'var(--lp-text-disabled)', transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none' }}>&#9654;</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+            style={{ color: 'var(--lp-text-disabled)', transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none', flexShrink: 0 }}>
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
         </div>
         <div style={S.productName}>{lote.producto || lote.formula || lote.nombre || '—'}</div>
         {lote.ordenCodigo && (

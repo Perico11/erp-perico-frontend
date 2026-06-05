@@ -50,6 +50,33 @@ const S = {
     fontFamily: 'var(--lp-font-sans)', minHeight: 52,
     boxShadow: '0 4px 12px rgba(34,139,75,.25)',
   },
+  /* ── Z6 (jun 2026): scanner como HERO cuando hay sublotes esperando ── */
+  scanHero: (activo) => ({
+    position: 'sticky',
+    top: 'calc(56px + env(safe-area-inset-top, 0px))',
+    zIndex: 5,
+    width: '100%',
+    display: 'flex', alignItems: 'center', gap: 16,
+    padding: '18px 20px', borderRadius: 16, border: 'none',
+    background: activo
+      ? 'linear-gradient(135deg, var(--lp-success-600), var(--lp-success-700))'
+      : 'var(--lp-bg-raised)',
+    color: activo ? '#fff' : 'var(--lp-text-secondary)',
+    cursor: 'pointer', fontFamily: 'inherit', minHeight: 84,
+    boxShadow: activo ? '0 8px 28px rgba(22,163,74,.32)' : '0 1px 3px rgba(0,0,0,.04)',
+    marginTop: 12, marginBottom: 16,
+    border: activo ? 'none' : '1.5px solid var(--lp-border-subtle)',
+    textAlign: 'left', animation: activo ? 'lpPulse 2.4s ease-in-out infinite' : 'none',
+  }),
+  scanHeroIcon: (activo) => ({
+    width: 52, height: 52, borderRadius: 14,
+    background: activo ? 'rgba(255,255,255,.18)' : 'var(--lp-bg-sunken)',
+    color: activo ? '#fff' : 'var(--lp-text-tertiary)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flexShrink: 0,
+  }),
+  scanHeroTitle: { fontSize: 17, fontWeight: 800, lineHeight: 1.15 },
+  scanHeroSub: { fontSize: 12, fontWeight: 500, opacity: .88, marginTop: 3 },
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   search: {
     flex: 1, minWidth: 200, padding: '10px 14px',
@@ -449,25 +476,45 @@ export default function AlmacenRecepcionPage() {
     <div>
       <TopBar title="Recepción Almacén Terán" />
       <div style={S.wrap}>
-        {/* Scanner siempre visible — el flujo principal de Josué */}
-        {canAct && (
-          <div style={S.scanBar}>
+        {/* Z6 (jun 2026): Scanner como HERO con jerarquía clara.
+            Cuando hay sublotes en camino: gradiente verde + pulse + título
+            urgente con el conteo. Cuando no hay nada esperando: discreto,
+            sin animación, recordando que sigue disponible. */}
+        {canAct && (() => {
+          const haySublotesEnCamino = totales.enCamino > 0;
+          return (
             <button
-              style={S.scanBtn}
+              type="button"
+              style={S.scanHero(haySublotesEnCamino)}
               onClick={() => setScanning(true)}
-              aria-label="Escanear QR de sublote para recibir"
+              aria-label={haySublotesEnCamino
+                ? `Escanear QR — ${totales.enCamino} sublote(s) esperando recepción`
+                : 'Escanear QR de sublote'}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-                <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-                <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-                <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-                <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-                <rect x="7" y="7" width="10" height="10" rx="1"/>
-              </svg>
-              Escanear QR para recibir
+              <span style={S.scanHeroIcon(haySublotesEnCamino)}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
+                  <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
+                  <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
+                  <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
+                  <rect x="7" y="7" width="10" height="10" rx="1"/>
+                </svg>
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <div style={S.scanHeroTitle}>
+                  {haySublotesEnCamino
+                    ? `${totales.enCamino} sublote(s) en camino`
+                    : 'Escanear QR de sublote'}
+                </div>
+                <div style={S.scanHeroSub}>
+                  {haySublotesEnCamino
+                    ? 'Toca para escanear y confirmar recepción en Terán'
+                    : 'Sin recepciones pendientes — toca cuando llegue Luis'}
+                </div>
+              </span>
             </button>
-          </div>
-        )}
+          );
+        })()}
 
         {/* KPIs */}
         <div style={S.metric}>
@@ -489,7 +536,11 @@ export default function AlmacenRecepcionPage() {
         {totesActivos.length > 0 && (
           <div style={S.toteBuffer}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#7C3AED', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 18 }}>🛢️</span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                <path d="M3 5v14a9 3 0 0 0 18 0V5"/>
+                <path d="M3 12a9 3 0 0 0 18 0"/>
+              </svg>
               TOTEs activos · buffer de granel
             </div>
             <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 12 }}>

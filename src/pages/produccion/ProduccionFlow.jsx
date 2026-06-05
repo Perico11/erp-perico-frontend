@@ -10,6 +10,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import SecureView from '../../components/SecureView';
+import PruebaBadge from '../../components/ui/PruebaBadge';
 
 const fmtTimer = (s) => {
   const m = Math.floor(s / 60);
@@ -33,6 +34,28 @@ const S = {
   prog: { background: 'var(--lp-bg-sunken)', borderRadius: 8, height: 8, overflow: 'hidden', marginBottom: 6 },
   progBar: (pct, color) => ({ height: '100%', width: pct + '%', background: color, borderRadius: 8, transition: 'width .4s' }),
   pasoLbl: { fontSize: 11, color: 'var(--lp-text-tertiary)', textAlign: 'right', marginBottom: 12 },
+
+  /* ── Z5 (jun 2026): stepper visual guided-tour ────────────────────── */
+  stepper: {
+    display: 'flex', alignItems: 'center', gap: 0,
+    padding: '4px 2px 12px',
+    overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+  },
+  stepperDot: (st /* 'done' | 'current' | 'pending' */, color) => ({
+    width: st === 'current' ? 28 : 16, height: st === 'current' ? 28 : 16,
+    borderRadius: '50%',
+    background: st === 'pending' ? 'var(--lp-bg-sunken)' : color,
+    border: st === 'pending' ? '1.5px solid var(--lp-border-default)' : 'none',
+    boxShadow: st === 'current' ? `0 0 0 5px ${color}22` : 'none',
+    color: '#fff', fontSize: 11, fontWeight: 800, fontFamily: 'var(--lp-font-mono)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    flex: '0 0 auto', transition: 'all .2s',
+  }),
+  stepperLine: (done, color) => ({
+    flex: 1, height: 2,
+    background: done ? color : 'var(--lp-border-subtle)',
+    minWidth: 8, transition: 'background .2s',
+  }),
 
   card: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
           borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 12 },
@@ -565,21 +588,52 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
       {/* HEADER */}
       <div style={S.header}>
         <div>
-          <div style={S.title}>
-            {productoNombre}
-            {item.esPrueba && <span style={{ marginLeft:10, fontSize:11, color:'var(--lp-warning-600)', fontWeight:700 }}>🧪 PRUEBA</span>}
+          <div style={{ ...S.title, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span>{productoNombre}</span>
+            {item.esPrueba && <PruebaBadge size="sm" />}
           </div>
-          <div style={S.meta}>
-            {tipo === 'pedido' ? 'Pedido' : 'Orden'} {item.codigo} · {item.cantidad} cubetas
-            {savedAt && <span style={{ marginLeft:10, color:'var(--lp-success-600)' }}>✓ guardado</span>}
+          <div style={{ ...S.meta, display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <span>{tipo === 'pedido' ? 'Pedido' : 'Orden'} {item.codigo} · {item.cantidad} cubetas</span>
+            {savedAt && (
+              <span style={{ display:'inline-flex', alignItems:'center', gap:4, color:'var(--lp-success-600)', fontWeight:600 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                guardado
+              </span>
+            )}
           </div>
         </div>
         <button style={S.btn('ghost')} onClick={onClose}>Cerrar</button>
       </div>
 
-      {/* PROGRESS BAR */}
-      <div style={S.prog}><div style={S.progBar(pct, stepColor)} /></div>
-      <div style={S.pasoLbl}>Paso {curStep + 1} de {total}</div>
+      {/* Z5: STEPPER VISUAL guided-tour — chips numerados si ≤10 pasos,
+          si > 10 fallback a barra de progreso clásica (legibilidad). */}
+      {total > 0 && total <= 10 ? (
+        <div style={S.stepper} role="progressbar" aria-valuenow={curStep + 1} aria-valuemin={1} aria-valuemax={total}>
+          {steps.map((sp, i) => {
+            const st = i < curStep ? 'done' : i === curStep ? 'current' : 'pending';
+            const c = TYPE_COLOR[sp.type] || TYPE_COLOR.prep;
+            const nodes = [];
+            nodes.push(
+              <div key={'d_' + i} style={S.stepperDot(st, c)} title={sp.titulo}>
+                {st === 'done' ? (
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                ) : (i + 1)}
+              </div>
+            );
+            if (i < total - 1) nodes.push(<div key={'l_' + i} style={S.stepperLine(i < curStep, c)} />);
+            return nodes;
+          })}
+        </div>
+      ) : (
+        <>
+          <div style={S.prog}><div style={S.progBar(pct, stepColor)} /></div>
+          <div style={S.pasoLbl}>Paso {curStep + 1} de {total}</div>
+        </>
+      )}
 
       {/* ERROR INLINE */}
       {error && (
