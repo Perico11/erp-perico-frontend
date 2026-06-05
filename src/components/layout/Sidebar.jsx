@@ -5,6 +5,7 @@ import api from '../../services/api';
 import useConfirm from '../../hooks/useConfirm';
 import humanizeError from '../../utils/humanizeError';
 import CountBadge from '../ui/CountBadge';
+import ThemeToggle from '../ui/ThemeToggle';
 import { usePedidosNotif } from '../../context/PedidosNotifContext';
 
 const icons = {
@@ -195,20 +196,26 @@ export default function Sidebar() {
             </div>
           </>
         )}
-        <button
-          style={{ ...S.footerWrap, background: 'none', border: 'none', padding: 0, width: '100%', cursor: 'pointer', textAlign: 'left' }}
-          onClick={() => setMenuOpen(o => !o)}
-          title="Menú de usuario"
-        >
-          <div style={S.avatar}>{user?.nombre?.charAt(0) || '?'}</div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={S.footerName}>{user?.nombre || 'Usuario'}</div>
-            <div style={S.footerRol}>{user?.rol || ''}</div>
-          </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--lp-text-tertiary)', transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} aria-hidden="true">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </button>
+        {/* Fila: avatar/menú (flex:1) + toggle de tema. HANDOFF jun 2026:
+            en escritorio el TopBar derecho se oculta, así que el toggle de
+            modo claro/oscuro vive aquí en el footer del sidebar. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            style={{ ...S.footerWrap, background: 'none', border: 'none', padding: 0, flex: 1, minWidth: 0, cursor: 'pointer', textAlign: 'left' }}
+            onClick={() => setMenuOpen(o => !o)}
+            title="Menú de usuario"
+          >
+            <div style={S.avatar}>{user?.nombre?.charAt(0) || '?'}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={S.footerName}>{user?.nombre || 'Usuario'}</div>
+              <div style={S.footerRol}>{user?.rol || ''}</div>
+            </div>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" style={{ color: 'var(--lp-text-tertiary)', transform: menuOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s' }} aria-hidden="true">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+          <ThemeToggle style={{ width: 36, height: 36, minWidth: 36, minHeight: 36, padding: 0, borderRadius: 'var(--lp-radius-sm)', flexShrink: 0 }} />
+        </div>
       </div>
     </aside>
   );
