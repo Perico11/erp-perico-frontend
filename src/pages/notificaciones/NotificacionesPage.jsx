@@ -72,6 +72,7 @@ const TECH_LABELS = {
   qc_hold: 'QC en espera',
   costo_faltante: 'Costo no definido',
   conteo_varianza: 'Varianza en conteo',
+  conteo_pendiente_aprobacion: 'Conteo por aprobar',
   lote_en_camino: 'Lote en camino',
   devolucion: 'Devolución registrada',
 };
@@ -126,11 +127,16 @@ export default function NotificacionesPage() {
     onInventario: () => reload(),
     onOc: () => reload(),
     onTrazabilidad: () => reload(),
+    /* Conteo finalizado/aprobado → refrescar la bandeja del admin al instante
+       (el pendiente de aprobación aparece/desaparece sin esperar el polling). */
+    onCycleCount: () => reload(),
   });
 
-  /* Click en card → navega a la pantalla relevante según el área de la alerta */
+  /* Click en card → navega a la pantalla relevante. Prioridad: ruta explícita
+     que mande el backend (ej. conteo pendiente → '/conteo' para aprobar), luego
+     el mapa por área, y como último recurso el home. */
   const handleCardClick = (notif) => {
-    const ruta = AREA_ROUTE[notif.area];
+    const ruta = notif.ruta || AREA_ROUTE[notif.area];
     if (ruta) navigate(ruta);
     else navigate('/');
   };
