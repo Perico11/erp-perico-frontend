@@ -310,11 +310,29 @@ function RecepcionModal({ mpList, onClose, onSuccess }) {
 }
 
 /* ── MP Row component (with optional editing) ── */
-function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction }) {
+/* AD1 (jun 2026): resalta coincidencias del buscador en un texto */
+function resaltar(texto, query) {
+  if (!query) return texto;
+  const t = String(texto);
+  const idx = t.toLowerCase().indexOf(query.toLowerCase());
+  if (idx < 0) return texto;
+  return (
+    <>
+      {t.slice(0, idx)}
+      <mark style={{ background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)', borderRadius: 3, padding: '0 1px' }}>
+        {t.slice(idx, idx + query.length)}
+      </mark>
+      {t.slice(idx + query.length)}
+    </>
+  );
+}
+
+function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction, query }) {
   const { mp, inv, pct, maestro } = item;
   const [editing, setEditing] = useState(false);
   const [editQty, setEditQty] = useState(inv.qty || 0);
   const [editMin, setEditMin] = useState(inv.min || 0);
+  const [motivo, setMotivo] = useState('');
   const [saving, setSaving] = useState(false);
 
   const qty = inv.qty || 0;
@@ -323,11 +341,16 @@ function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction }) {
   const qtyColor = qty <= 0 ? 'var(--lp-danger-600)' : pct <= 100 ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
   const prov = maestro?.proveedor?.principal;
 
+  /* AD1: motivo obligatorio (≥3 chars) para auditoría del ajuste */
+  const puedeGuardar = motivo.trim().length >= 3;
+
   const handleSave = async () => {
+    if (!puedeGuardar) return;
     setSaving(true);
     try {
-      await onSave(mp, parseFloat(editQty) || 0, parseFloat(editMin) || 0);
+      await onSave(mp, parseFloat(editQty) || 0, parseFloat(editMin) || 0, motivo.trim());
       setEditing(false);
+      setMotivo('');
     } catch (e) {
       console.error('Save error:', e);
     } finally {
@@ -335,61 +358,67 @@ function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction }) {
     }
   };
 
+  if (editing) {
+    /* AD1: panel de "Ajustar existencia" — cantidad, mínimo y MOTIVO obligatorio */
+    return (
+      <div style={{ ...S.row, flexDirection: 'column', alignItems: 'stretch', gap: 8, background: 'var(--lp-bg-sunken)', borderRadius: 'var(--lp-radius-sm)', padding: '10px 12px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' }}>Ajustar existencia · {mp}</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>Cantidad
+            <input type="number" step="0.1" min="0" style={{ ...S.editInput, marginLeft: 6 }} value={editQty} onChange={e => setEditQty(e.target.value)} autoFocus />
+          </label>
+          <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>Mínimo
+            <input type="number" step="0.1" min="0" style={{ ...S.editInput, width: 60, marginLeft: 6 }} value={editMin} onChange={e => setEditMin(e.target.value)} />
+          </label>
+        </div>
+        <input
+          type="text"
+          style={{ ...S.editInput, width: '100%', boxSizing: 'border-box' }}
+          value={motivo}
+          onChange={e => setMotivo(e.target.value)}
+          placeholder="Motivo del ajuste (obligatorio) — ej: merma, conteo físico, corrección"
+          maxLength={120}
+        />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button style={{ ...S.saveBtn, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)' }} onClick={() => { setEditing(false); setMotivo(''); }}>Cancelar</button>
+          <button style={{ ...S.saveBtn, opacity: puedeGuardar && !saving ? 1 : 0.5 }} onClick={handleSave} disabled={!puedeGuardar || saving}>
+            {saving ? 'Guardando…' : 'Guardar ajuste'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.row}>
       <div style={S.rowName}>
-        {mp}
+        {resaltar(mp, query)}
         {prov && <div style={S.provSub}>{prov}</div>}
       </div>
-      {editing ? (
-        <>
-          <input
-            type="number" step="0.1" min="0"
-            style={S.editInput}
-            value={editQty}
-            onChange={e => setEditQty(e.target.value)}
-            autoFocus
-          />
-          <input
-            type="number" step="0.1" min="0"
-            style={{ ...S.editInput, width: 55 }}
-            value={editMin}
-            onChange={e => setEditMin(e.target.value)}
-            title="Mínimo"
-          />
-          <button style={S.saveBtn} onClick={handleSave} disabled={saving}>
-            {saving ? '...' : '✓'}
-          </button>
-          <button
-            style={{ ...S.saveBtn, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' }}
-            onClick={() => setEditing(false)}
-          >✕</button>
-        </>
-      ) : (
-        <>
-          <div
-            style={{ ...S.rowQty(qtyColor), ...(canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}) }}
-            onClick={() => { if (canEdit) { setEditQty(qty); setEditMin(inv.min || 0); setEditing(true); } }}
-            title={canEdit ? 'Click para editar' : ''}
-          >
-            {qty.toFixed(1)}
-          </div>
-          <div style={S.rowUnit}>kg</div>
-          <span style={S.badge(badgeType)}>{badgeText}</span>
-          {canDelete && (
-            <MPActionsMenu mp={mp} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
-          )}
-        </>
-      )}
+      <>
+        <div
+          style={{ ...S.rowQty(qtyColor), ...(canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}) }}
+          onClick={() => { if (canEdit) { setEditQty(qty); setEditMin(inv.min || 0); setMotivo(''); setEditing(true); } }}
+          title={canEdit ? 'Click para ajustar existencia' : ''}
+        >
+          {qty.toFixed(1)}
+        </div>
+        <div style={S.rowUnit}>kg</div>
+        <span style={S.badge(badgeType)}>{badgeText}</span>
+        {canDelete && (
+          <MPActionsMenu mp={mp} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
+        )}
+      </>
     </div>
   );
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
-function PTRow({ item, canEdit, canPedir, onSave, onPedir }) {
+function PTRow({ item, canEdit, canPedir, onSave, onPedir, query }) {
   const { nombre, inv, pct } = item;
   const [editing, setEditing] = useState(false);
   const [editQty, setEditQty] = useState(inv.qty || 0);
+  const [motivo, setMotivo] = useState('');
   const [saving, setSaving] = useState(false);
   const qty = inv.qty || 0;
   const badgeType = qty <= 0 ? 'err' : pct <= 100 ? 'warn' : 'ok';
@@ -397,15 +426,18 @@ function PTRow({ item, canEdit, canPedir, onSave, onPedir }) {
   const qtyColor = qty <= 0 ? 'var(--lp-danger-600)' : pct <= 100 ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
   /* Mostrar CTA solo si stock bajo o agotado y el usuario puede crear pedidos */
   const mostrarCTAPedir = canPedir && (qty <= 0 || pct <= 100);
+  const puedeGuardar = motivo.trim().length >= 3;
 
   const handleSave = async () => {
+    if (!puedeGuardar) return;
     setSaving(true);
     try {
       /* parseFloat para decimales (PT puede ser 0.5 cubetas en pruebas).
-         Si el handler lanza error (rol no permitido, validación server), NO
-         cerramos el editor — el usuario ya vio el alert y puede corregir. */
-      await onSave(nombre, parseFloat(editQty) || 0);
+         AD1: pasa el motivo capturado para auditoría. Si el handler lanza
+         error (rol no permitido, validación server), NO cerramos el editor. */
+      await onSave(nombre, parseFloat(editQty) || 0, motivo.trim());
       setEditing(false);
+      setMotivo('');
     } catch (e) {
       /* Mantener editor abierto para reintentar. El alert ya lo mostró el handler. */
     } finally {
@@ -413,23 +445,32 @@ function PTRow({ item, canEdit, canPedir, onSave, onPedir }) {
     }
   };
 
+  if (editing) {
+    return (
+      <div style={{ ...S.row, flexDirection: 'column', alignItems: 'stretch', gap: 8, background: 'var(--lp-bg-sunken)', borderRadius: 'var(--lp-radius-sm)', padding: '10px 12px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' }}>Ajustar existencia · {nombre}</div>
+        <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>Cantidad (cubetas)
+          <input type="number" inputMode="decimal" min="0" step="0.1" style={{ ...S.editInput, marginLeft: 6 }} value={editQty} onChange={e => setEditQty(e.target.value)} autoFocus />
+        </label>
+        <input type="text" style={{ ...S.editInput, width: '100%', boxSizing: 'border-box' }} value={motivo} onChange={e => setMotivo(e.target.value)}
+          placeholder="Motivo del ajuste (obligatorio) — ej: merma, conteo físico, corrección" maxLength={120} />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button style={{ ...S.saveBtn, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)' }} onClick={() => { setEditing(false); setMotivo(''); }}>Cancelar</button>
+          <button style={{ ...S.saveBtn, opacity: puedeGuardar && !saving ? 1 : 0.5 }} onClick={handleSave} disabled={!puedeGuardar || saving}>{saving ? 'Guardando…' : 'Guardar ajuste'}</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={S.row}>
-      <div style={S.rowName}>{nombre}</div>
-      {editing ? (
-        <>
-          <input type="number" inputMode="decimal" min="0" step="0.1" style={S.editInput} value={editQty}
-            onChange={e => setEditQty(e.target.value)} autoFocus />
-          <button style={S.saveBtn} onClick={handleSave} disabled={saving}>{saving ? '...' : '✓'}</button>
-          <button style={{ ...S.saveBtn, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' }}
-            onClick={() => setEditing(false)}>✕</button>
-        </>
-      ) : (
+      <div style={S.rowName}>{resaltar(nombre, query)}</div>
+      {(
         <>
           <div
             style={{ ...S.rowQty(qtyColor), ...(canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}) }}
-            onClick={() => { if (canEdit) { setEditQty(qty); setEditing(true); } }}
-            title={canEdit ? 'Click para editar' : ''}
+            onClick={() => { if (canEdit) { setEditQty(qty); setMotivo(''); setEditing(true); } }}
+            title={canEdit ? 'Click para ajustar existencia' : ''}
           >{qty}</div>
           <div style={S.rowUnit}>cub.</div>
           <span style={S.badge(badgeType)}>{badgeText}</span>
@@ -865,11 +906,12 @@ export default function InventarioPage() {
     }
   }, [reloadInv, confirm]);
 
-  const handleSaveMP = useCallback(async (mp, newQty, newMin) => {
-    /* Recibe el código del modal (TOTP o admin); el backend lo prueba contra ambos.
-       Primer intento sin código → backend devuelve AJUSTE_BLOQUEADO y reintenta. */
+  const handleSaveMP = useCallback(async (mp, newQty, newMin, motivo) => {
+    /* AD1 (jun 2026): el motivo lo captura el usuario en el panel "Ajustar
+       existencia" y se manda al backend para auditoría (antes era hardcodeado).
+       Recibe el código del modal (TOTP o admin); el backend lo prueba contra ambos. */
     await ajustarConCandado(
-      (codigo) => api.ajusteMP(mp, newQty, newMin, 'Edición inline desde Inventario',
+      (codigo) => api.ajusteMP(mp, newQty, newMin, motivo || 'Ajuste manual de inventario',
         codigo ? { codigoAutorizacion: codigo } : {}),
       mp
     );
@@ -877,13 +919,13 @@ export default function InventarioPage() {
 
   /* Ajuste inline PT — pasa por ajustarConCandado: backend exige sesión de conteo
      activa, código TOTP propio o código universal del admin. */
-  const handleSavePT = useCallback(async (nombre, newQty, newMin) => {
+  const handleSavePT = useCallback(async (nombre, newQty, motivo) => {
     const minActual = inventory?.pt?.[nombre]?.min;
     await ajustarConCandado(
       (codigo) => api.ajustePT(
         nombre, newQty,
-        newMin !== undefined ? newMin : minActual,
-        'Ajuste inline desde Inventario PT',
+        minActual,
+        motivo || 'Ajuste manual de PT',
         codigo ? { codigoAutorizacion: codigo } : {}
       ),
       nombre
@@ -1063,6 +1105,7 @@ export default function InventarioPage() {
                       mpsDisponibles={mpsDisponibles}
                       onSave={handleSaveMP}
                       onAction={handleMPAction}
+                      query={debouncedQuery}
                     />
                   ))}
                 </div>
@@ -1076,7 +1119,7 @@ export default function InventarioPage() {
                   <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>{mpGrouped.uncategorized.length}</span>
                 </div>
                 {mpGrouped.uncategorized.map(item => (
-                  <MPRow key={item.mp} item={item} canEdit={canEditMP} onSave={handleSaveMP} />
+                  <MPRow key={item.mp} item={item} canEdit={canEditMP} onSave={handleSaveMP} query={debouncedQuery} />
                 ))}
               </div>
             )}
@@ -1196,6 +1239,7 @@ export default function InventarioPage() {
                     canPedir={canPedirPT}
                     onSave={handleSavePT}
                     onPedir={handlePedirPT}
+                    query={debouncedQuery}
                   />
                 ))}
               </div>
