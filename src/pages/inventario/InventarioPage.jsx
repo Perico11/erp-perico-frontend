@@ -141,6 +141,17 @@ const S = {
   cardNums: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 },
   numEx: (c) => ({ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: c || 'var(--lp-text-primary)' }),
   numMin: { color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' },
+  /* ── Card móvil 1:1 ERP Móvil.html (sin barra, sin lápiz, sin menú) ── */
+  mCard: (clickable) => ({
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 16, padding: '14px 16px', marginBottom: 10,
+    cursor: clickable ? 'pointer' : 'default',
+  }),
+  mTop: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 },
+  mName: { fontSize: 14.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  mNums: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 13 },
+  mQty: (crit) => ({ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: crit ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }),
+  mMin: { fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' },
   chip: (on) => ({
     height: 36, padding: '0 14px', borderRadius: 10, cursor: 'pointer',
     fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600,
@@ -169,10 +180,10 @@ const S = {
     color: on ? '#fff' : 'var(--lp-text-secondary)',
   }),
   subRow: { display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 14px', flexWrap: 'wrap' },
-  /* Cluster de acciones de la sub-fila: a la derecha en escritorio, fila propia en móvil */
+  /* Cluster de acciones de la sub-fila: a la derecha en escritorio */
   actionsCluster: (desktop) => ({
     display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
-    marginLeft: desktop ? 'auto' : 0, width: desktop ? 'auto' : '100%',
+    marginLeft: desktop ? 'auto' : 0,
   }),
   tablewrap: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse' },
@@ -442,85 +453,44 @@ function resaltar(texto, query) {
   );
 }
 
-function MPRow({ item, canEdit, canDelete, mpsDisponibles, onAdjust, onAction, query }) {
+function MPRow({ item, canEdit, onAdjust, query }) {
   const { mp, inv, pct, maestro } = item;
   const qty = inv.qty || 0;
   const sev = sevOf(qty, pct);
-  const barPct = Math.max(4, Math.min(100, (inv.min || 0) > 0 ? (qty / inv.min * 100) : 100));
   const prov = maestro?.proveedor?.principal;
-
   return (
-    <div style={S.cardRow} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
-      <div style={S.cardTop}>
-        <span style={S.cardName}>
+    <div style={S.mCard(canEdit)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
+      role={canEdit ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); }}>
+      <div style={S.mTop}>
+        <span style={S.mName}>
           {resaltar(mp, query)}
-          {prov && <span style={{ ...S.provSub, marginLeft: 6 }}>· {prov}</span>}
+          {prov && <span style={{ ...S.provSub, fontWeight: 400 }}> · {prov}</span>}
         </span>
-        <span style={S.estBadge(sev.color)}>{sev.label}</span>
-        {canEdit && (
-          <button type="button" style={S.pencilBtn} onClick={() => onAdjust(item)} aria-label="Ajustar existencia" title="Ajustar existencia">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-          </button>
-        )}
-        {canDelete && (
-          <MPActionsMenu mp={mp} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
-        )}
+        <EstadoBadge qty={qty} pct={pct} />
       </div>
-      <div style={S.sevBar}><div style={S.sevFill(barPct, sev.color)} /></div>
-      <div style={S.cardNums}>
-        <span
-          style={{ ...S.numEx(sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
-          onClick={() => { if (canEdit) onAdjust(item); }}
-          title={canEdit ? 'Ajustar existencia' : ''}
-        >{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} kg</span>
-        <span style={S.numMin}>mín {(inv.min || 0).toLocaleString('es-MX')} kg</span>
+      <div style={S.mNums}>
+        <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} kg</span>
+        <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} kg</span>
       </div>
     </div>
   );
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
-function PTRow({ item, canEdit, canPedir, onAdjust, onPedir, query }) {
+function PTRow({ item, canEdit, onAdjust, query }) {
   const { nombre, inv, pct } = item;
   const qty = inv.qty || 0;
   const sev = sevOf(qty, pct);
-  const barPct = Math.max(4, Math.min(100, (inv.min || 0) > 0 ? (qty / inv.min * 100) : 100));
-  const mostrarCTAPedir = canPedir && (qty <= 0 || pct <= 100);
-
   return (
-    <div style={S.cardRow} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
-      <div style={S.cardTop}>
-        <span style={S.cardName}>{resaltar(nombre, query)}</span>
-        <span style={S.estBadge(sev.color)}>{sev.label}</span>
-        {canEdit && (
-          <button type="button" style={S.pencilBtn} onClick={() => onAdjust(item)} aria-label="Ajustar existencia" title="Ajustar existencia">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
-          </button>
-        )}
+    <div style={S.mCard(canEdit)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
+      role={canEdit ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); }}>
+      <div style={S.mTop}>
+        <span style={S.mName}>{resaltar(nombre, query)}</span>
+        <EstadoBadge qty={qty} pct={pct} />
       </div>
-      <div style={S.sevBar}><div style={S.sevFill(barPct, sev.color)} /></div>
-      <div style={S.cardNums}>
-        <span
-          style={{ ...S.numEx(sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
-          onClick={() => { if (canEdit) onAdjust(item); }}
-          title={canEdit ? 'Ajustar existencia' : ''}
-        >{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={S.numMin}>mín {(inv.min || 0).toLocaleString('es-MX')} cub</span>
-          {mostrarCTAPedir && (
-            <button
-              type="button"
-              data-id="inventario.btn.pedir-pt" data-rol="admin,almacen,tecnico"
-              onClick={() => onPedir(nombre)}
-              title={`Levantar pedido de reposición de ${nombre}`}
-              style={{
-                padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8,
-                border: 'none', cursor: 'pointer', background: 'var(--lp-brand-600)',
-                color: '#fff', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', minHeight: 32,
-              }}
-            >+ Pedir</button>
-          )}
-        </span>
+      <div style={S.mNums}>
+        <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
+        <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} cub</span>
       </div>
     </div>
   );
@@ -722,7 +692,7 @@ function EstadoBadge({ qty, pct }) {
 
 /* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
    Conserva el candado: el onSave del padre pasa por ajustarConCandado. */
-function AjusteSheet({ item, isDesktop, onClose, onSave }) {
+function AjusteSheet({ item, isDesktop, onClose, onSave, onEliminar, onSustituir, onPedir }) {
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [motivo, setMotivo] = useState('');
   const [saving, setSaving] = useState(false);
@@ -763,6 +733,30 @@ function AjusteSheet({ item, isDesktop, onClose, onSave }) {
             {saving ? 'Guardando…' : 'Guardar'}
           </button>
         </div>
+
+        {/* Acciones secundarias: Pedir (PT) · Sustituir/Eliminar (MP, admin) */}
+        {(onPedir || onSustituir || onEliminar) && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--lp-border-subtle)', flexWrap: 'wrap' }}>
+            {onPedir && (
+              <button type="button" data-id="inventario.btn.pedir-pt" data-rol="admin,almacen,tecnico" onClick={onPedir}
+                style={{ flex: 1, minHeight: 44, borderRadius: 12, border: '1px solid color-mix(in srgb, var(--lp-brand-600) 40%, transparent)', background: 'transparent', color: 'var(--lp-brand-700)', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                + Pedir reposición
+              </button>
+            )}
+            {onSustituir && (
+              <button type="button" data-id="inventario.btn.sustituir-mp" data-rol="admin" onClick={onSustituir}
+                style={{ flex: 1, minHeight: 44, borderRadius: 12, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Sustituir
+              </button>
+            )}
+            {onEliminar && (
+              <button type="button" data-id="inventario.btn.eliminar-mp" data-rol="admin" onClick={onEliminar}
+                style={{ flex: 1, minHeight: 44, borderRadius: 12, border: '1px solid color-mix(in srgb, var(--lp-danger-600) 40%, transparent)', background: 'transparent', color: 'var(--lp-danger-600)', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                Eliminar
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1185,7 +1179,7 @@ export default function InventarioPage() {
       <TopBar title="Inventarios" />
       <div style={S.wrap}>
         <div style={S.h1}>Inventario</div>
-        <div style={S.psub}>Materia prima y producto terminado</div>
+        <div style={S.psub}>{isDesktop ? 'Materia prima y producto terminado' : 'MP y PT'}</div>
 
         {/* Toolbar: búsqueda + pills MP / PT / Envases (móvil = apiladas) */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
@@ -1214,17 +1208,19 @@ export default function InventarioPage() {
               </div>
               {mpSubtab === 'stock' && (
                 <div style={S.actionsCluster(isDesktop)}>
-                  <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
+                  {isDesktop && <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />}
                   {canRecibirMP && (
                     <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
                   )}
-                  <ImportExportPrint
-                    exportUrl={() => api.urlExportInv('mp', activeFilter)}
-                    printUrl={() => api.urlPrintInv('mp', activeFilter)}
-                    importEndpoint={canEditMP ? (api.urlImportInv && api.urlImportInv()) : null}
-                    onImported={() => reloadInv()}
-                    permisos={{ import: canEditMP }}
-                  />
+                  {isDesktop && (
+                    <ImportExportPrint
+                      exportUrl={() => api.urlExportInv('mp', activeFilter)}
+                      printUrl={() => api.urlPrintInv('mp', activeFilter)}
+                      importEndpoint={canEditMP ? (api.urlImportInv && api.urlImportInv()) : null}
+                      onImported={() => reloadInv()}
+                      permisos={{ import: canEditMP }}
+                    />
+                  )}
                 </div>
               )}
             </div>
@@ -1244,8 +1240,7 @@ export default function InventarioPage() {
             ) : (
               <div>
                 {filteredMP.map(item => (
-                  <MPRow key={item.mp} item={item} canEdit={canEditMP} canDelete={canDeleteMP}
-                    mpsDisponibles={mpsDisponibles} onAdjust={handleAdjustMP} onAction={handleMPAction} query={debouncedQuery} />
+                  <MPRow key={item.mp} item={item} canEdit={canEditMP} onAdjust={handleAdjustMP} query={debouncedQuery} />
                 ))}
               </div>
             )}
@@ -1271,11 +1266,11 @@ export default function InventarioPage() {
               </div>
               {ptSubtab === 'total' && (
                 <div style={S.actionsCluster(isDesktop)}>
-                  <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
+                  {isDesktop && <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />}
                   {canEditMP && (
                     <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
                   )}
-                  <ImportExportPrint exportUrl={() => api.urlExportInv('pt', activeFilter)} printUrl={() => api.urlPrintInv('pt', activeFilter)} permisos={{ import: false }} />
+                  {isDesktop && <ImportExportPrint exportUrl={() => api.urlExportInv('pt', activeFilter)} printUrl={() => api.urlPrintInv('pt', activeFilter)} permisos={{ import: false }} />}
                 </div>
               )}
             </div>
@@ -1292,8 +1287,7 @@ export default function InventarioPage() {
               ) : (
                 <div>
                   {filteredPT.map(item => (
-                    <PTRow key={item.nombre} item={item} canEdit={canEditMP} canPedir={canPedirPT}
-                      onAdjust={handleAdjustPT} onPedir={handlePedirPT} query={debouncedQuery} />
+                    <PTRow key={item.nombre} item={item} canEdit={canEditMP} onAdjust={handleAdjustPT} query={debouncedQuery} />
                   ))}
                 </div>
               )
@@ -1385,6 +1379,12 @@ export default function InventarioPage() {
           isDesktop={isDesktop}
           onClose={() => setAjusteItem(null)}
           onSave={handleAjusteSave}
+          onPedir={ajusteItem.tipo === 'pt' && canPedirPT && (ajusteItem.qty <= 0 || (ajusteItem.min > 0 && ajusteItem.qty <= ajusteItem.min))
+            ? () => { const n = ajusteItem.nombre; setAjusteItem(null); handlePedirPT(n); } : null}
+          onSustituir={ajusteItem.tipo === 'mp' && canDeleteMP
+            ? () => { const n = ajusteItem.nombre; setAjusteItem(null); setSustituirMP(n); } : null}
+          onEliminar={ajusteItem.tipo === 'mp' && canDeleteMP
+            ? () => { const n = ajusteItem.nombre; setAjusteItem(null); setEliminarMP(n); } : null}
         />
       )}
 
