@@ -358,7 +358,7 @@ const S = {
     marginBottom: 'calc(64px + env(safe-area-inset-bottom, 0px))',
   },
   handle: {
-    width: 38, height: 4, background: '#d4d1cc',
+    width: 38, height: 4, background: 'var(--lp-border-strong)',
     borderRadius: 3, margin: '0 auto 8px',
   },
   sheetHeader: {
