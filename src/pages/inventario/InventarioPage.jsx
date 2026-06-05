@@ -1369,7 +1369,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
         lineHeight: 1.5,
       }}>
         {esFabrica
-          ? 'Stock físicamente en planta de fábrica — sublotes envasados que aún no han sido recogidos por Luis para llevar a Terán.'
+          ? 'Stock físicamente en planta de fábrica — sublotes envasados que aún no han sido recogidos por Luis para llevar a Terán. También incluye PT histórico cargado manualmente o de producciones previas a la trazabilidad por lote (marcado con etiqueta "sin lote").'
           : 'Stock físicamente en almacén Terán — sublotes que ya fueron entregados por Luis y recibidos por Josué.'}
       </div>
 
@@ -1421,40 +1421,61 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
             <span style={{ textAlign: 'right' }}>Acción</span>
           </div>
           {/* Filas */}
-          {productos.map(([nombre, d]) => (
-            <div key={nombre} style={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 100px 110px',
-              padding: '12px 14px',
-              borderBottom: '1px solid var(--lp-border-subtle)',
-              fontSize: 13, alignItems: 'center',
-            }}>
-              <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{nombre}</span>
-              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
-              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
-              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
-              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
-              <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)' }}>{Math.round(d.totalLitros || 0)}</span>
-              <span style={{ textAlign: 'right' }}>
-                {canPedir && (
-                  <button
-                    onClick={() => onPedir(nombre)}
-                    title={esFabrica
-                      ? 'Pedir producción para reponer en fábrica'
-                      : 'Pedir reposición a fábrica'}
-                    style={{
-                      padding: '6px 10px', borderRadius: 6,
-                      border: `1px solid ${acentColor}`,
-                      background: 'transparent',
-                      color: acentColor,
-                      fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      fontFamily: 'var(--lp-font-sans)',
-                    }}
-                  >Pedir</button>
-                )}
-              </span>
-            </div>
-          ))}
+          {productos.map(([nombre, d]) => {
+            const tieneResidual = (d.residual || 0) > 0;
+            const todoResidual = tieneResidual && (d.sublotes || 0) === 0;
+            return (
+              <div key={nombre} style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 100px 110px',
+                padding: '12px 14px',
+                borderBottom: '1px solid var(--lp-border-subtle)',
+                fontSize: 13, alignItems: 'center',
+              }}>
+                <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {nombre}
+                  {tieneResidual && (
+                    <span
+                      title={todoResidual
+                        ? 'Stock cargado manualmente o de producciones previas a la trazabilidad — no se puede mover a Terán por el flujo de sublotes/QR.'
+                        : `${Math.round(d.residual)} cub sin lote (cargado manual / pre-trazabilidad). El resto sí está trackeado.`}
+                      style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                        background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)',
+                        border: '1px solid var(--lp-border-subtle)',
+                        textTransform: 'uppercase', letterSpacing: '.04em',
+                      }}
+                    >
+                      {todoResidual ? 'sin lote' : `+${Math.round(d.residual)} sin lote`}
+                    </span>
+                  )}
+                </span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)' }}>{Math.round(d.totalLitros || 0)}</span>
+                <span style={{ textAlign: 'right' }}>
+                  {canPedir && (
+                    <button
+                      onClick={() => onPedir(nombre)}
+                      title={esFabrica
+                        ? 'Pedir producción para reponer en fábrica'
+                        : 'Pedir reposición a fábrica'}
+                      style={{
+                        padding: '6px 10px', borderRadius: 6,
+                        border: `1px solid ${acentColor}`,
+                        background: 'transparent',
+                        color: acentColor,
+                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        fontFamily: 'var(--lp-font-sans)',
+                      }}
+                    >Pedir</button>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
 
