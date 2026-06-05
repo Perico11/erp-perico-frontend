@@ -641,17 +641,22 @@ function VistaRecolector({ kpis, pendientes, enCamino, scannerOpen, setScannerOp
     },
     scanBtn: (active) => ({
       width: '100%',
-      padding: '22px 24px', borderRadius: 16, border: 'none',
+      padding: '24px 24px', borderRadius: 18, border: 'none',
       background: active
         ? 'linear-gradient(135deg, var(--lp-brand-600), var(--lp-brand-700))'
         : 'var(--lp-bg-sunken)',
       color: active ? '#fff' : 'var(--lp-text-tertiary)',
-      fontSize: 18, fontWeight: 700, cursor: active ? 'pointer' : 'not-allowed',
-      fontFamily: 'var(--lp-font-sans)', minHeight: 72,
-      boxShadow: active ? '0 8px 24px rgba(143,107,77,.30)' : 'none',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12,
+      fontSize: 19, fontWeight: 800, cursor: active ? 'pointer' : 'not-allowed',
+      fontFamily: 'var(--lp-font-sans)', minHeight: 84,
+      boxShadow: active ? '0 8px 28px rgba(37,99,235,.32)' : 'none',
+      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
       marginBottom: 14,
+      /* Z4 (jun 2026): pulse sutil cuando hay pendientes — refuerza CTA */
+      animation: active ? 'lpPulse 2.4s ease-in-out infinite' : 'none',
     }),
+    scanBtnSub: {
+      fontSize: 12, fontWeight: 600, opacity: .85, letterSpacing: '.02em',
+    },
     cargaHeader: {
       width: '100%', display: 'flex', alignItems: 'center',
       justifyContent: 'space-between', cursor: 'pointer',
@@ -734,21 +739,25 @@ function VistaRecolector({ kpis, pendientes, enCamino, scannerOpen, setScannerOp
           )}
         </div>
 
-        {/* ─── BLOQUE 2: Botón Escanear ─── */}
+        {/* ─── BLOQUE 2: Botón Escanear (CTA dominante tipo delivery app) ───
+            Z4 (jun 2026): label contextual — "Voy por él" cuando hay pendientes,
+            "Escanear QR" cuando no. La frase "Voy por él" es la del owner
+            y se usa también en banners de notif (consistencia léxica). */}
         <button
           style={styles.scanBtn(pend > 0)}
           disabled={pend === 0}
           onClick={() => setScannerOpen(true)}
-          aria-label="Escanear QR de lote"
+          aria-label={pend > 0 ? 'Voy por él · Escanear QR de lote' : 'Escanear QR de lote'}
         >
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
             <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
             <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
             <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
             <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
             <rect x="7" y="7" width="10" height="10" rx="1"/>
           </svg>
-          Escanear QR
+          {pend > 0 ? 'Voy por él' : 'Escanear QR'}
+          {pend > 0 && <span style={styles.scanBtnSub}>Toca para escanear el QR del lote</span>}
         </button>
 
         {/* ─── BLOQUE 3: Llevo conmigo (colapsable) ─── */}

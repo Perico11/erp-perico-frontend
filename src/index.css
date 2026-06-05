@@ -454,6 +454,14 @@ input:not(:-webkit-autofill) {
     from { opacity: 0; transform: translateY(4px); }
     to   { opacity: 1; transform: translateY(0); }
   }
+
+  /* Z4 (jun 2026): pulse sutil para CTAs urgentes (botón "Voy por él"
+     de Luis cuando hay sublotes esperando). El glow simula respiración
+     sin ser molesto. La regla prefers-reduced-motion abajo lo anula. */
+  @keyframes lpPulse {
+    0%, 100% { box-shadow: 0 8px 28px rgba(37,99,235,.32); }
+    50%      { box-shadow: 0 10px 36px rgba(37,99,235,.55); }
+  }
 }
 
 /* Reducir motion para usuarios que lo prefieren */

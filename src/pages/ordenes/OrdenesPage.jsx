@@ -1182,20 +1182,89 @@ export default function OrdenesPage() {
                       {searchQ ? `No se encontró "${searchQ}"` : 'Crea una nueva orden para comenzar.'}
                     </div>
                   </div>
-                ) : (
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-                    gap: 12,
-                  }}>
-                  {filteredActivas.map(o => (
-                    <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
-                      onChangeStatus={handleChangeStatus} onDelete={handleDelete}
-                      onProducir={handleProducir}
-                      onIrPedido={(ord) => navigate('/pedidos' + (ord.pedidoId ? '?focus=' + encodeURIComponent(ord.pedidoId) : ''))} />
-                  ))}
-                  </div>
-                )}
+                ) : (() => {
+                  /* Z3 (jun 2026): agrupar activas por fase de producción
+                     para que el operario vea de un vistazo "tengo 3 en QC,
+                     5 produciendo, 2 envasando". Antes era grid plana de
+                     20 cards mezcladas sin jerarquía. Las cards siguen
+                     siendo el mismo componente OrdenCard — solo cambia
+                     el layout exterior. */
+                  const FASES = [
+                    { key: 'pendientes',  label: 'Pendientes de iniciar',  estados: ['pendiente','aceptado','en_proceso'] },
+                    { key: 'produciendo', label: 'En producción',           estados: ['en_produccion','produccion'] },
+                    { key: 'qc',          label: 'Control de calidad',     estados: ['qc_hold','qc_aprobado','qc'] },
+                    { key: 'envasando',   label: 'Envasado / transporte',  estados: ['en_envasado','envasado','en_recoleccion','en_camino'] },
+                    { key: 'listas',      label: 'Listas / entregadas',    estados: ['en_almacen','entregado','terminada','entregada'] },
+                  ];
+                  const porFase = {};
+                  FASES.forEach(f => { porFase[f.key] = []; });
+                  const otras = [];
+                  filteredActivas.forEach(o => {
+                    const est = (o.estado || '').toLowerCase();
+                    const fase = FASES.find(f => f.estados.includes(est));
+                    if (fase) porFase[fase.key].push(o);
+                    else otras.push(o);
+                  });
+                  return (
+                    <>
+                      {FASES.filter(f => porFase[f.key].length > 0).map(f => (
+                        <div key={f.key} style={{ marginBottom: 18 }}>
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            fontSize: 11, fontWeight: 800, color: 'var(--lp-text-secondary)',
+                            textTransform: 'uppercase', letterSpacing: '.06em',
+                            margin: '0 0 8px 2px',
+                          }}>
+                            <span>{f.label}</span>
+                            <span style={{
+                              background: 'var(--lp-brand-100)',
+                              color: 'var(--lp-brand-700)',
+                              borderRadius: 10, padding: '1px 8px',
+                              fontFamily: 'var(--lp-font-mono)', fontSize: 11,
+                            }}>{porFase[f.key].length}</span>
+                          </div>
+                          <div style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
+                            gap: 12,
+                          }}>
+                            {porFase[f.key].map(o => (
+                              <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
+                                onChangeStatus={handleChangeStatus} onDelete={handleDelete}
+                                onProducir={handleProducir}
+                                onIrPedido={(ord) => navigate('/pedidos' + (ord.pedidoId ? '?focus=' + encodeURIComponent(ord.pedidoId) : ''))} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                      {otras.length > 0 && (
+                        <div style={{ marginBottom: 18 }}>
+                          <div style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            fontSize: 11, fontWeight: 800, color: 'var(--lp-text-tertiary)',
+                            textTransform: 'uppercase', letterSpacing: '.06em',
+                            margin: '0 0 8px 2px',
+                          }}>
+                            <span>Otros estados</span>
+                            <span style={{
+                              background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)',
+                              borderRadius: 10, padding: '1px 8px',
+                              fontFamily: 'var(--lp-font-mono)', fontSize: 11,
+                            }}>{otras.length}</span>
+                          </div>
+                          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))', gap:12 }}>
+                            {otras.map(o => (
+                              <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
+                                onChangeStatus={handleChangeStatus} onDelete={handleDelete}
+                                onProducir={handleProducir}
+                                onIrPedido={(ord) => navigate('/pedidos' + (ord.pedidoId ? '?focus=' + encodeURIComponent(ord.pedidoId) : ''))} />
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </>
             )}
 

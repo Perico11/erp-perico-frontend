@@ -69,7 +69,96 @@ const S = {
   }),
   empty: { textAlign: 'center', padding: '40px 0', color: 'var(--lp-text-tertiary)', fontSize: 13 },
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12, marginBottom: 12 },
+  /* ── Z2 (jun 2026): mini pipeline horizontal en cada card ─────────── */
+  pipelineWrap: {
+    display: 'flex', alignItems: 'center', gap: 0,
+    padding: '8px 2px 4px',
+    overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+  },
+  pipelineStep: (estado /* 'done' | 'current' | 'pending' */) => ({
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
+    gap: 4, flex: '0 0 auto',
+    minWidth: 56,
+  }),
+  pipelineDot: (estado, accent) => ({
+    width: estado === 'current' ? 22 : 14, height: estado === 'current' ? 22 : 14,
+    borderRadius: '50%',
+    background: estado === 'pending' ? 'var(--lp-bg-sunken)' : (estado === 'current' ? accent : accent),
+    border: estado === 'pending' ? '1.5px solid var(--lp-border-default)' : 'none',
+    boxShadow: estado === 'current' ? `0 0 0 4px ${accent}22` : 'none',
+    transition: 'all .2s',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    color: '#fff', fontSize: 10, fontWeight: 800,
+  }),
+  pipelineLabel: (estado) => ({
+    fontSize: 9, fontWeight: estado === 'current' ? 700 : 500,
+    color: estado === 'current' ? 'var(--lp-text-primary)'
+         : estado === 'done'    ? 'var(--lp-text-secondary)'
+         : 'var(--lp-text-tertiary)',
+    textTransform: 'uppercase', letterSpacing: '.04em',
+    textAlign: 'center',
+  }),
+  pipelineLine: (done, accent) => ({
+    flex: 1, height: 2,
+    background: done ? accent : 'var(--lp-border-subtle)',
+    minWidth: 14, marginBottom: 22, /* alineado con el dot */
+    transition: 'background .2s',
+  }),
 };
+
+/* Fases canónicas del pipeline de un pedido — espejo del backend.
+   Cada fase agrupa varios estados internos (ej: aceptado + en_proceso
+   son ambos "Aceptado"). Si el pedido está en cancelado/rechazado,
+   no renderizamos el pipeline (no aplica). */
+const PIPELINE_FASES = [
+  { key: 'pendiente',  label: 'Pedido',     estados: ['pendiente'] },
+  { key: 'aceptado',   label: 'Aceptado',   estados: ['aceptado', 'en_proceso'] },
+  { key: 'produccion', label: 'Producción', estados: ['en_produccion', 'producido', 'qc_hold', 'qc_aprobado'] },
+  { key: 'envasado',   label: 'Envasado',   estados: ['en_envasado', 'envasado'] },
+  { key: 'camino',     label: 'En camino',  estados: ['en_recoleccion', 'en_camino'] },
+  { key: 'entregado',  label: 'Entregado',  estados: ['en_almacen', 'entregado'] },
+];
+
+/* Devuelve el índice de fase actual del pedido (0..5) o -1 si no aplica */
+function _idxFasePedido(estado) {
+  const e = (estado || '').toLowerCase();
+  for (let i = 0; i < PIPELINE_FASES.length; i++) {
+    if (PIPELINE_FASES[i].estados.includes(e)) return i;
+  }
+  return -1;
+}
+
+/* Componente PipelinePedido — mini timeline horizontal por card */
+function PipelinePedido({ estado, esPrueba }) {
+  const idx = _idxFasePedido(estado);
+  if (idx < 0) return null; /* cancelado/rechazado/eliminado: ocultar */
+  const accent = esPrueba ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
+  /* Construimos un array plano de nodos (step + línea + step + ...) para
+     que cada uno tenga key propia sin necesidad de Fragment con key. */
+  const nodos = [];
+  PIPELINE_FASES.forEach((fase, i) => {
+    const st = i < idx ? 'done' : i === idx ? 'current' : 'pending';
+    nodos.push(
+      <div key={'s_' + fase.key} style={S.pipelineStep(st)}>
+        <div style={S.pipelineDot(st, accent)}>
+          {st === 'done' && (
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+          )}
+        </div>
+        <div style={S.pipelineLabel(st)}>{fase.label}</div>
+      </div>
+    );
+    if (i < PIPELINE_FASES.length - 1) {
+      nodos.push(
+        <div key={'l_' + fase.key} style={S.pipelineLine(i < idx, accent)} />
+      );
+    }
+  });
+  return <div style={S.pipelineWrap}>{nodos}</div>;
+}
 
 /* X3 (jun 2026): ESTADO_COLOR y ESTADO_LABEL ahora vienen de lib/estados.js
    con alias. Antes vivían duplicados aquí (shape distinto al de OrdenesPage
@@ -399,6 +488,11 @@ export default function PedidosPage() {
                   )}
                 </div>
 
+                {/* Z2 (jun 2026): mini-pipeline horizontal del estado del pedido.
+                    Ayuda visual rápida — el operario ve en una mirada en qué fase
+                    está sin tener que descifrar el badge de texto. */}
+                <PipelinePedido estado={p.estado} esPrueba={p.esPrueba} />
+
                 {/* Cuerpo: título + metadata */}
                 <div style={S.pedidoBody}>
                   <div style={S.pedidoTitle}>{p.producto} × {p.cantidad} cubetas</div>
@@ -422,7 +516,7 @@ export default function PedidosPage() {
                         disabled={busyId === p.id}
                         onClick={() => handleAceptar(p)}
                       >
-                        {busyId === p.id ? '…' : '✓ Aceptar'}
+                        {busyId === p.id ? '…' : 'Aceptar'}
                       </button>
                     )}
                     {mostrarIniciar && (
@@ -432,7 +526,7 @@ export default function PedidosPage() {
                         onClick={() => handleIniciarProduccion(p)}
                         title="Arranca el cronómetro y abre la pantalla de producción"
                       >
-                        {busyId === p.id ? '…' : '▶ Iniciar producción'}
+                        {busyId === p.id ? '…' : 'Iniciar producción'}
                       </button>
                     )}
                     {mostrarIrProduccion && (
