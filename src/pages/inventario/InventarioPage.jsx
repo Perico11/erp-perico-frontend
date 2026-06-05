@@ -148,6 +148,79 @@ const S = {
     background: on ? 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)' : 'var(--lp-bg-sunken)',
     color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
   }),
+  /* ── Mockup v2: encabezado + toolbar + pills + tabla escritorio + sheet ── */
+  h1: { fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--lp-text-primary)' },
+  psub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3, marginBottom: 16 },
+  toolbarRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' },
+  searchBox: {
+    display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 200, maxWidth: 440,
+    height: 44, padding: '0 14px', borderRadius: 12, background: 'var(--lp-bg-raised)',
+    border: '1.5px solid var(--lp-border-subtle)', color: 'var(--lp-text-tertiary)',
+  },
+  searchInput: {
+    flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 14.5, color: 'var(--lp-text-primary)',
+  },
+  pillGroup: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
+  pill: (on) => ({
+    fontSize: 12.5, fontWeight: 600, padding: '8px 15px', borderRadius: 999, cursor: 'pointer',
+    border: 'none', fontFamily: 'var(--lp-font-sans)', minHeight: 36,
+    background: on ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
+    color: on ? '#fff' : 'var(--lp-text-secondary)',
+  }),
+  subRow: { display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 14px', flexWrap: 'wrap' },
+  tablewrap: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, overflow: 'hidden' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: {
+    textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em',
+    color: 'var(--lp-text-tertiary)', padding: '12px 16px', borderBottom: '1px solid var(--lp-border-subtle)',
+    background: 'var(--lp-bg-sunken)', whiteSpace: 'nowrap',
+  },
+  td: { padding: '12px 16px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13.5, color: 'var(--lp-text-primary)' },
+  tdMono: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600 },
+  btnGhost: {
+    height: 36, padding: '0 15px', borderRadius: 10, border: '1px solid var(--lp-border-subtle)',
+    background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-sans)',
+    fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+  },
+  estDot: (c) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
+    padding: '3px 9px', borderRadius: 999, background: `color-mix(in srgb, ${c} 14%, transparent)`, color: c,
+  }),
+  /* sheet "Ajustar existencia" */
+  sheetOverlay: (desktop) => ({
+    position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 1200,
+    display: 'flex', alignItems: desktop ? 'center' : 'flex-end', justifyContent: 'center', padding: desktop ? 16 : 0,
+  }),
+  sheet: (desktop) => ({
+    background: 'var(--lp-bg-base)', width: '100%', maxWidth: 460,
+    borderRadius: desktop ? 20 : '24px 24px 0 0', padding: '20px 20px 26px',
+    boxShadow: '0 -8px 40px rgba(0,0,0,.22)',
+  }),
+  shH: { fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)' },
+  shS: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 16 },
+  bigsis: { textAlign: 'center', padding: 12, borderRadius: 14, background: 'var(--lp-bg-sunken)', marginBottom: 14 },
+  bigK: { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--lp-text-tertiary)' },
+  bigV: { fontFamily: 'var(--lp-font-mono)', fontSize: 24, fontWeight: 700, color: 'var(--lp-text-primary)', marginTop: 3 },
+  flbl: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '0 2px 6px' },
+  finQty: {
+    width: '100%', height: 54, padding: '0 14px', borderRadius: 12, background: 'var(--lp-bg-raised)',
+    border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-mono)', fontSize: 22,
+    fontWeight: 700, color: 'var(--lp-text-primary)', outline: 'none', textAlign: 'center', boxSizing: 'border-box',
+  },
+  finTxt: {
+    width: '100%', height: 48, padding: '0 14px', borderRadius: 12, background: 'var(--lp-bg-raised)',
+    border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-sans)', fontSize: 15,
+    color: 'var(--lp-text-primary)', outline: 'none', boxSizing: 'border-box',
+  },
+  shActs: { display: 'flex', gap: 10, marginTop: 18 },
+  act2: (primary) => ({
+    flex: 1, height: 50, borderRadius: 14, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    fontSize: 14.5, fontWeight: 600,
+    border: primary ? 'none' : '1px solid var(--lp-border-subtle)',
+    background: primary ? 'var(--lp-brand-600)' : 'transparent',
+    color: primary ? '#fff' : 'var(--lp-text-secondary)',
+  }),
   empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '40px 0', fontSize: 13 },
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
   editInput: {
@@ -364,73 +437,12 @@ function resaltar(texto, query) {
   );
 }
 
-function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction, query }) {
+function MPRow({ item, canEdit, canDelete, mpsDisponibles, onAdjust, onAction, query }) {
   const { mp, inv, pct, maestro } = item;
-  const [editing, setEditing] = useState(false);
-  const [editQty, setEditQty] = useState(inv.qty || 0);
-  const [editMin, setEditMin] = useState(inv.min || 0);
-  const [motivo, setMotivo] = useState('');
-  const [saving, setSaving] = useState(false);
-
   const qty = inv.qty || 0;
-  const badgeType = qty <= 0 ? 'err' : pct <= 100 ? 'warn' : 'ok';
-  const badgeText = qty <= 0 ? 'Agotado' : pct <= 100 ? 'Bajo' : 'OK';
-  const qtyColor = qty <= 0 ? 'var(--lp-danger-600)' : pct <= 100 ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
-  const prov = maestro?.proveedor?.principal;
-
-  /* AD1: motivo obligatorio (≥3 chars) para auditoría del ajuste */
-  const puedeGuardar = motivo.trim().length >= 3;
-
-  const handleSave = async () => {
-    if (!puedeGuardar) return;
-    setSaving(true);
-    try {
-      await onSave(mp, parseFloat(editQty) || 0, parseFloat(editMin) || 0, motivo.trim());
-      setEditing(false);
-      setMotivo('');
-    } catch (e) {
-      console.error('Save error:', e);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (editing) {
-    /* AD1: panel de "Ajustar existencia" — cantidad, mínimo y MOTIVO obligatorio */
-    return (
-      <div style={{ ...S.row, flexDirection: 'column', alignItems: 'stretch', gap: 8, background: 'var(--lp-bg-sunken)', borderRadius: 'var(--lp-radius-sm)', padding: '10px 12px' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' }}>Ajustar existencia · {mp}</div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>Cantidad
-            <input type="number" step="0.1" min="0" style={{ ...S.editInput, marginLeft: 6 }} value={editQty} onChange={e => setEditQty(e.target.value)} autoFocus />
-          </label>
-          <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>Mínimo
-            <input type="number" step="0.1" min="0" style={{ ...S.editInput, width: 60, marginLeft: 6 }} value={editMin} onChange={e => setEditMin(e.target.value)} />
-          </label>
-        </div>
-        <input
-          type="text"
-          style={{ ...S.editInput, width: '100%', boxSizing: 'border-box' }}
-          value={motivo}
-          onChange={e => setMotivo(e.target.value)}
-          placeholder="Motivo del ajuste (obligatorio) — ej: merma, conteo físico, corrección"
-          maxLength={120}
-        />
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button style={{ ...S.saveBtn, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)' }} onClick={() => { setEditing(false); setMotivo(''); }}>Cancelar</button>
-          <button style={{ ...S.saveBtn, opacity: puedeGuardar && !saving ? 1 : 0.5 }} onClick={handleSave} disabled={!puedeGuardar || saving}>
-            {saving ? 'Guardando…' : 'Guardar ajuste'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  /* Severidad mockup: Crítico (agotado) · Bajo · OK */
-  const sevColor = badgeType === 'err' ? 'var(--lp-danger-600)' : badgeType === 'warn' ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
-  const sevLabel = badgeType === 'err' ? 'Crítico' : badgeType === 'warn' ? 'Bajo' : 'OK';
+  const sev = sevOf(qty, pct);
   const barPct = Math.max(4, Math.min(100, (inv.min || 0) > 0 ? (qty / inv.min * 100) : 100));
-  const openEdit = () => { setEditQty(qty); setEditMin(inv.min || 0); setMotivo(''); setEditing(true); };
+  const prov = maestro?.proveedor?.principal;
 
   return (
     <div style={S.cardRow} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
@@ -439,9 +451,9 @@ function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction, que
           {resaltar(mp, query)}
           {prov && <span style={{ ...S.provSub, marginLeft: 6 }}>· {prov}</span>}
         </span>
-        <span style={S.estBadge(sevColor)}>{sevLabel}</span>
+        <span style={S.estBadge(sev.color)}>{sev.label}</span>
         {canEdit && (
-          <button type="button" style={S.pencilBtn} onClick={openEdit} aria-label="Ajustar existencia" title="Ajustar existencia">
+          <button type="button" style={S.pencilBtn} onClick={() => onAdjust(item)} aria-label="Ajustar existencia" title="Ajustar existencia">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
           </button>
         )}
@@ -449,11 +461,11 @@ function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction, que
           <MPActionsMenu mp={mp} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
         )}
       </div>
-      <div style={S.sevBar}><div style={S.sevFill(barPct, sevColor)} /></div>
+      <div style={S.sevBar}><div style={S.sevFill(barPct, sev.color)} /></div>
       <div style={S.cardNums}>
         <span
-          style={{ ...S.numEx(badgeType === 'err' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
-          onClick={() => { if (canEdit) openEdit(); }}
+          style={{ ...S.numEx(sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
+          onClick={() => { if (canEdit) onAdjust(item); }}
           title={canEdit ? 'Ajustar existencia' : ''}
         >{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} kg</span>
         <span style={S.numMin}>mín {(inv.min || 0).toLocaleString('es-MX')} kg</span>
@@ -463,75 +475,29 @@ function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction, que
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
-function PTRow({ item, canEdit, canPedir, onSave, onPedir, query }) {
+function PTRow({ item, canEdit, canPedir, onAdjust, onPedir, query }) {
   const { nombre, inv, pct } = item;
-  const [editing, setEditing] = useState(false);
-  const [editQty, setEditQty] = useState(inv.qty || 0);
-  const [motivo, setMotivo] = useState('');
-  const [saving, setSaving] = useState(false);
   const qty = inv.qty || 0;
-  const badgeType = qty <= 0 ? 'err' : pct <= 100 ? 'warn' : 'ok';
-  const badgeText = qty <= 0 ? 'Agotado' : pct <= 100 ? 'Bajo' : 'OK';
-  const qtyColor = qty <= 0 ? 'var(--lp-danger-600)' : pct <= 100 ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
-  /* Mostrar CTA solo si stock bajo o agotado y el usuario puede crear pedidos */
-  const mostrarCTAPedir = canPedir && (qty <= 0 || pct <= 100);
-  const puedeGuardar = motivo.trim().length >= 3;
-
-  const handleSave = async () => {
-    if (!puedeGuardar) return;
-    setSaving(true);
-    try {
-      /* parseFloat para decimales (PT puede ser 0.5 cubetas en pruebas).
-         AD1: pasa el motivo capturado para auditoría. Si el handler lanza
-         error (rol no permitido, validación server), NO cerramos el editor. */
-      await onSave(nombre, parseFloat(editQty) || 0, motivo.trim());
-      setEditing(false);
-      setMotivo('');
-    } catch (e) {
-      /* Mantener editor abierto para reintentar. El alert ya lo mostró el handler. */
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (editing) {
-    return (
-      <div style={{ ...S.row, flexDirection: 'column', alignItems: 'stretch', gap: 8, background: 'var(--lp-bg-sunken)', borderRadius: 'var(--lp-radius-sm)', padding: '10px 12px' }}>
-        <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' }}>Ajustar existencia · {nombre}</div>
-        <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>Cantidad (cubetas)
-          <input type="number" inputMode="decimal" min="0" step="0.1" style={{ ...S.editInput, marginLeft: 6 }} value={editQty} onChange={e => setEditQty(e.target.value)} autoFocus />
-        </label>
-        <input type="text" style={{ ...S.editInput, width: '100%', boxSizing: 'border-box' }} value={motivo} onChange={e => setMotivo(e.target.value)}
-          placeholder="Motivo del ajuste (obligatorio) — ej: merma, conteo físico, corrección" maxLength={120} />
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button style={{ ...S.saveBtn, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)' }} onClick={() => { setEditing(false); setMotivo(''); }}>Cancelar</button>
-          <button style={{ ...S.saveBtn, opacity: puedeGuardar && !saving ? 1 : 0.5 }} onClick={handleSave} disabled={!puedeGuardar || saving}>{saving ? 'Guardando…' : 'Guardar ajuste'}</button>
-        </div>
-      </div>
-    );
-  }
-
-  const sevColor = badgeType === 'err' ? 'var(--lp-danger-600)' : badgeType === 'warn' ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
-  const sevLabel = badgeType === 'err' ? 'Crítico' : badgeType === 'warn' ? 'Bajo' : 'OK';
+  const sev = sevOf(qty, pct);
   const barPct = Math.max(4, Math.min(100, (inv.min || 0) > 0 ? (qty / inv.min * 100) : 100));
-  const openEdit = () => { setEditQty(qty); setMotivo(''); setEditing(true); };
+  const mostrarCTAPedir = canPedir && (qty <= 0 || pct <= 100);
 
   return (
     <div style={S.cardRow} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
       <div style={S.cardTop}>
         <span style={S.cardName}>{resaltar(nombre, query)}</span>
-        <span style={S.estBadge(sevColor)}>{sevLabel}</span>
+        <span style={S.estBadge(sev.color)}>{sev.label}</span>
         {canEdit && (
-          <button type="button" style={S.pencilBtn} onClick={openEdit} aria-label="Ajustar existencia" title="Ajustar existencia">
+          <button type="button" style={S.pencilBtn} onClick={() => onAdjust(item)} aria-label="Ajustar existencia" title="Ajustar existencia">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
           </button>
         )}
       </div>
-      <div style={S.sevBar}><div style={S.sevFill(barPct, sevColor)} /></div>
+      <div style={S.sevBar}><div style={S.sevFill(barPct, sev.color)} /></div>
       <div style={S.cardNums}>
         <span
-          style={{ ...S.numEx(badgeType === 'err' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
-          onClick={() => { if (canEdit) openEdit(); }}
+          style={{ ...S.numEx(sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
+          onClick={() => { if (canEdit) onAdjust(item); }}
           title={canEdit ? 'Ajustar existencia' : ''}
         >{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -716,6 +682,170 @@ function TapaRow({ tapaKey, tapa, canEdit, onSave }) {
   );
 }
 
+/* ── Responsive: escritorio (tabla) vs móvil (cards) ── */
+function useIsDesktop(bp = 880) {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth >= bp : true
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia(`(min-width:${bp}px)`);
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
+    return () => { mq.removeEventListener ? mq.removeEventListener('change', onChange) : mq.removeListener(onChange); };
+  }, [bp]);
+  return isDesktop;
+}
+
+/* Severidad canónica: Crítico (agotado) · Bajo · OK */
+function sevOf(qty, pct) {
+  if (qty <= 0) return { key: 'critico', color: 'var(--lp-danger-600)', label: 'Crítico' };
+  if (pct <= 100) return { key: 'bajo', color: 'var(--lp-warning-600)', label: 'Bajo' };
+  return { key: 'ok', color: 'var(--lp-success-600)', label: 'OK' };
+}
+
+function EstadoBadge({ qty, pct }) {
+  const s = sevOf(qty, pct);
+  return (
+    <span style={S.estDot(s.color)}>
+      <i style={{ width: 6, height: 6, borderRadius: 999, background: s.color, display: 'inline-block' }} />
+      {s.label}
+    </span>
+  );
+}
+
+/* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
+   Conserva el candado: el onSave del padre pasa por ajustarConCandado. */
+function AjusteSheet({ item, isDesktop, onClose, onSave }) {
+  const [qty, setQty] = useState(String(item.qty ?? 0));
+  const [motivo, setMotivo] = useState('');
+  const [saving, setSaving] = useState(false);
+  const inputRef = useRef(null);
+  useEffect(() => { const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 120); return () => clearTimeout(t); }, []);
+
+  const puedeGuardar = motivo.trim().length >= 3 && qty !== '' && !isNaN(parseFloat(qty)) && parseFloat(qty) >= 0;
+
+  const handleSave = async () => {
+    if (!puedeGuardar) return;
+    setSaving(true);
+    try {
+      await onSave(parseFloat(qty), motivo.trim());
+      onClose();
+    } catch { /* el handler ya avisó; mantener abierto para reintentar */ }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shH}>Ajustar existencia</div>
+        <div style={S.shS}>{item.nombre} · mín {(item.min ?? 0).toLocaleString('es-MX')} {item.unidad}</div>
+        <div style={S.bigsis}>
+          <div style={S.bigK}>Existencia actual</div>
+          <div style={S.bigV}>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</div>
+        </div>
+        <label style={S.flbl}>Nueva cantidad</label>
+        <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
+          value={qty} onChange={e => setQty(e.target.value)} />
+        <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste</label>
+        <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, merma, corrección"
+          value={motivo} onChange={e => setMotivo(e.target.value)} />
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose}>Cancelar</button>
+          <button style={{ ...S.act2(true), opacity: puedeGuardar && !saving ? 1 : 0.5 }}
+            disabled={!puedeGuardar || saving} onClick={handleSave}>
+            {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Tabla de inventario (escritorio) ── */
+function InvTable({ items, tipo, unidad, canEdit, canDelete, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, query }) {
+  return (
+    <div style={S.tablewrap}>
+      <table style={S.table}>
+        <thead>
+          <tr>
+            <th style={S.th}>{tipo === 'mp' ? 'Material' : 'Producto'}</th>
+            <th style={{ ...S.th, textAlign: 'right' }}>Existencia</th>
+            <th style={{ ...S.th, textAlign: 'right' }}>Mínimo</th>
+            <th style={S.th}>Estado</th>
+            <th style={{ ...S.th, textAlign: 'right' }}>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map(it => {
+            const nombre = tipo === 'mp' ? it.mp : it.nombre;
+            const qty = it.inv.qty || 0;
+            const min = it.inv.min || 0;
+            const sev = sevOf(qty, it.pct);
+            const prov = tipo === 'mp' ? it.maestro?.proveedor?.principal : null;
+            const lowPT = tipo === 'pt' && (qty <= 0 || it.pct <= 100);
+            return (
+              <tr key={nombre} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
+                <td style={S.td}>
+                  <span style={{ fontWeight: 600 }}>{resaltar(nombre, query)}</span>
+                  {prov && <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· {prov}</span>}
+                </td>
+                <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
+                  {qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {unidad}
+                </td>
+                <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: 'var(--lp-text-tertiary)' }}>
+                  {min.toLocaleString('es-MX')} {unidad}
+                </td>
+                <td style={S.td}><EstadoBadge qty={qty} pct={it.pct} /></td>
+                <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {lowPT && canPedir && (
+                    <button type="button" data-id="inventario.btn.pedir-pt" data-rol="admin,almacen,tecnico"
+                      onClick={() => onPedir(nombre)}
+                      style={{ ...S.btnGhost, marginRight: 8, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' }}>
+                      + Pedir
+                    </button>
+                  )}
+                  {canEdit && (
+                    <button type="button" style={S.btnGhost} onClick={() => onAdjust(it)}>Ajustar</button>
+                  )}
+                  {tipo === 'mp' && canDelete && (
+                    <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
+                      <MPActionsMenu mp={nombre} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/* Chips de filtro por severidad (Todos · Crítico · Bajo) */
+function FilterChips({ activeFilter, onPick }) {
+  const FILTS = [['todos', 'Todos', 'var(--lp-text-secondary)'], ['sin', 'Crítico', 'var(--lp-danger-600)'], ['bajo', 'Bajo', 'var(--lp-warning-600)']];
+  return (
+    <div style={{ display: 'flex', gap: 6 }}>
+      {FILTS.map(([k, l, c]) => {
+        const on = activeFilter === k;
+        return (
+          <button key={k} type="button" onClick={() => onPick(k)}
+            style={{
+              height: 34, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
+              fontFamily: 'var(--lp-font-sans)', fontSize: 12, fontWeight: 600,
+              border: '1px solid var(--lp-border-subtle)',
+              background: on ? `color-mix(in srgb, ${c} 14%, transparent)` : 'transparent',
+              color: on ? c : 'var(--lp-text-secondary)',
+            }}>{l}</button>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ================================================================ */
 /* MAIN COMPONENT                                                    */
 /* ================================================================ */
@@ -743,6 +873,9 @@ export default function InventarioPage() {
   const [confirm, ConfirmEl] = useConfirm();
   const [eliminarMP, setEliminarMP] = useState(null);
   const [sustituirMP, setSustituirMP] = useState(null);
+  /* AG2 (jun 2026): escritorio = tabla, móvil = cards. Sheet "Ajustar existencia" compartido. */
+  const isDesktop = useIsDesktop();
+  const [ajusteItem, setAjusteItem] = useState(null);
 
   /* Fetch data */
   const { data: invData, loading: invLoading, reload: reloadInv } = useApiData(() => api.getInventario(), [], 8000);
@@ -999,6 +1132,20 @@ export default function InventarioPage() {
     );
   }, [inventory, ajustarConCandado]);
 
+  /* ── Abrir sheet "Ajustar existencia" (tabla escritorio + cards móvil) ── */
+  const handleAdjustMP = useCallback((item) => {
+    setAjusteItem({ tipo: 'mp', nombre: item.mp, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'kg' });
+  }, []);
+  const handleAdjustPT = useCallback((item) => {
+    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub' });
+  }, []);
+  /* El guardado del sheet pasa por handleSaveMP/PT → ajustarConCandado (candado intacto). */
+  const handleAjusteSave = useCallback(async (newQty, motivo) => {
+    if (!ajusteItem) return;
+    if (ajusteItem.tipo === 'mp') await handleSaveMP(ajusteItem.nombre, newQty, ajusteItem.min, motivo);
+    else await handleSavePT(ajusteItem.nombre, newQty, motivo);
+  }, [ajusteItem, handleSaveMP, handleSavePT]);
+
   /* ── KPI click handler ── */
   const handleKpiClick = (filter) => {
     const newFilter = activeFilter === filter ? 'todos' : filter;
@@ -1032,159 +1179,69 @@ export default function InventarioPage() {
     <>
       <TopBar title="Inventarios" />
       <div style={S.wrap}>
-        {/* Sub-nav tabs */}
-        <PageTabs
-          tabs={tabs.map(t => ({ ...t, style: (active) => S.tab(active) }))}
-          activeTab={activeTab}
-          onChange={handleTabChange}
-          style={S.tabs}
-        />
+        <div style={S.h1}>Inventario</div>
+        <div style={S.psub}>Materia prima y producto terminado</div>
 
-        {/* ════════ TAB: MATERIA PRIMA — sub-tabs (Stock / Costos / Maestro) ════════ */}
+        {/* Toolbar: búsqueda + pills MP / PT / Envases */}
+        <div style={S.toolbarRow}>
+          <div style={S.searchBox}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query} onChange={e => setQuery(e.target.value)} />
+          </div>
+          <div style={S.pillGroup}>
+            {tabs.map(t => (
+              <button key={t.id} type="button" data-id={`inventario.tab.${t.id}`} style={S.pill(activeTab === t.id)} onClick={() => handleTabChange(t.id)}>
+                {t.id === 'mp' ? 'MP' : t.id === 'pt' ? 'PT' : 'Envases'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* ════════ TAB: MATERIA PRIMA ════════ */}
         {activeTab === 'mp' && (
           <>
-            <div style={{ display: 'flex', gap: 6, margin: '2px 0 14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-              {[
-                { id: 'stock', label: 'Stock' },
-                { id: 'costos', label: 'Costos' },
-                { id: 'maestro', label: 'Maestro' },
-              ].map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  data-id={`inventario.subtab.${t.id}`}
-                  data-rol="admin,compras,inventario,almacen,tecnico"
-                  style={S.chip(t.id === mpSubtab)}
-                  onClick={() => setMpSubtab(t.id)}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div style={S.subRow}>
+              <div style={S.pillGroup}>
+                {[{ id: 'stock', label: 'Stock' }, { id: 'costos', label: 'Costos' }, { id: 'maestro', label: 'Maestro' }].map(t => (
+                  <button key={t.id} type="button" data-id={`inventario.subtab.${t.id}`} data-rol="admin,compras,inventario,almacen,tecnico"
+                    style={S.chip(t.id === mpSubtab)} onClick={() => setMpSubtab(t.id)}>{t.label}</button>
+                ))}
+              </div>
+              {mpSubtab === 'stock' && (
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
+                  {canRecibirMP && (
+                    <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
+                  )}
+                  <ImportExportPrint
+                    exportUrl={() => api.urlExportInv('mp', activeFilter)}
+                    printUrl={() => api.urlPrintInv('mp', activeFilter)}
+                    importEndpoint={canEditMP ? (api.urlImportInv && api.urlImportInv()) : null}
+                    onImported={() => reloadInv()}
+                    permisos={{ import: canEditMP }}
+                  />
+                </div>
+              )}
             </div>
 
-            {mpSubtab === 'costos' && (
-              <>
-                <HelpHint id="inv-mp-costos" title="Editar costos de materias primas">
-                  Filtra por <strong>Sin costo</strong> para ver las MPs que faltan precio. Teclea precio base + flete y presiona Enter para guardar. El costo se aplica al instante a cada fórmula que la use.
-                </HelpHint>
-                <CostosMPPanel />
-              </>
-            )}
+            {mpSubtab === 'costos' && <CostosMPPanel />}
             {mpSubtab === 'maestro' && <MaestroMPInline />}
             {mpSubtab === 'stock' && (
               <>
-                <HelpHint id="inv-mp-stock" title="Inventario de materias primas">
-                  KPIs clickeables filtran la lista. Botón <strong>+ Recepción</strong> registra entrada de MP de proveedor. Click en cualquier MP para editar stock o eliminar/sustituir.
-                </HelpHint>
-            {/* Clickable KPIs */}
-            <div style={S.kpiGrid}>
-              <div style={S.kpi('var(--lp-brand-600)', activeFilter === 'todos', true)}
-                onClick={() => handleKpiClick('todos')}>
-                <div style={S.kpiLabel}>Total MPs</div>
-                <div style={S.kpiValue}>{mpKpi.total}</div>
-                {activeFilter === 'todos' && <div style={S.kpiHint}>Mostrando todas</div>}
-              </div>
-              <div style={S.kpi('var(--lp-success-600)', activeFilter === 'ok', true)}
-                onClick={() => handleKpiClick('ok')}>
-                <div style={S.kpiLabel}>Stock OK</div>
-                <div style={S.kpiValue}>{mpKpi.ok}</div>
-                {activeFilter === 'ok' && <div style={S.kpiHint}>Filtro activo</div>}
-              </div>
-              <div style={S.kpi('var(--lp-warning-600)', activeFilter === 'bajo', true)}
-                onClick={() => handleKpiClick('bajo')}>
-                <div style={S.kpiLabel}>Stock Bajo</div>
-                <div style={S.kpiValue}>{mpKpi.bajo}</div>
-                {activeFilter === 'bajo' && <div style={S.kpiHint}>Filtro activo</div>}
-              </div>
-              <div style={S.kpi('var(--lp-danger-600)', activeFilter === 'sin', true)}
-                onClick={() => handleKpiClick('sin')}>
-                <div style={S.kpiLabel}>Sin Stock</div>
-                <div style={S.kpiValue}>{mpKpi.sin}</div>
-                {activeFilter === 'sin' && <div style={S.kpiHint}>Filtro activo</div>}
-              </div>
-            </div>
-
-            {/* Active filter indicator */}
-            {activeFilter !== 'todos' && (
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-                padding: '8px 14px', background: 'var(--lp-brand-50)', borderRadius: 8,
-                fontSize: 12, color: 'var(--lp-brand-700)', fontWeight: 600,
-              }}>
-                Filtrando: {activeFilter === 'ok' ? 'Stock OK' : activeFilter === 'bajo' ? 'Stock Bajo' : 'Sin Stock'}
-                ({filteredMP.length} de {mpItems.length})
-                <button
-                  style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--lp-brand-600)', fontWeight: 600, fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}
-                  onClick={() => handleKpiClick('todos')}
-                >✕ Limpiar</button>
-              </div>
-            )}
-
-            <div style={S.toolbar}>
-              <input type="text" style={S.search} placeholder="Buscar materia prima..."
-                value={query} onChange={e => setQuery(e.target.value)} />
-              {canRecibirMP && (
-                <button
-                  style={S.btnAdd}
-                  data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin"
-                  onClick={() => setShowRecepcion(true)}
-                >+ Recepción MP</button>
-              )}
-              <ImportExportPrint
-                exportUrl={() => api.urlExportInv('mp', activeFilter)}
-                printUrl={() => api.urlPrintInv('mp', activeFilter)}
-                importEndpoint={canEditMP ? (api.urlImportInv && api.urlImportInv()) : null}
-                onImported={() => reloadInv()}
-                permisos={{ import: canEditMP }}
-              />
-            </div>
-
-            {/* Agrupado por categoría — etiqueta + cards (estilo mockup) */}
-            {Object.keys(MP_CATEGORIES).map(catName => {
-              const items = mpGrouped.groups[catName];
-              if (!items?.length) return null;
-              const cfg = MP_CATEGORIES[catName];
-              return (
-                <div key={catName}>
-                  <div style={S.catLabel}>
-                    <span style={S.catTag(cfg.bg, cfg.fg)}>{cfg.icon}</span>
-                    {catName} · {items.length}
-                  </div>
-                  {items.map(item => (
-                    <MPRow
-                      key={item.mp}
-                      item={item}
-                      canEdit={canEditMP}
-                      canDelete={canDeleteMP}
-                      mpsDisponibles={mpsDisponibles}
-                      onSave={handleSaveMP}
-                      onAction={handleMPAction}
-                      query={debouncedQuery}
-                    />
-                  ))}
-                </div>
-              );
-            })}
-
-            {mpGrouped.uncategorized.length > 0 && (
-              <div>
-                <div style={S.catLabel}>
-                  <span style={S.catTag('var(--lp-bg-sunken)', 'var(--lp-text-secondary)')}>··</span>
-                  Otros · {mpGrouped.uncategorized.length}
-                </div>
-                {mpGrouped.uncategorized.map(item => (
-                  <MPRow key={item.mp} item={item} canEdit={canEditMP} canDelete={canDeleteMP}
-                    mpsDisponibles={mpsDisponibles} onSave={handleSaveMP} onAction={handleMPAction} query={debouncedQuery} />
-                ))}
-              </div>
-            )}
-
-            {filteredMP.length === 0 && (
+            {/* Lista de stock MP — tabla (escritorio) / cards (móvil) */}
+            {filteredMP.length === 0 ? (
               <div style={S.empty}>
-                {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` :
-                  activeFilter !== 'todos' ? 'Sin materias primas en esta categoría' :
-                  'Sin materias primas registradas'}
+                {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` : activeFilter !== 'todos' ? 'Sin materias primas en este filtro' : 'Sin materias primas registradas'}
+              </div>
+            ) : isDesktop ? (
+              <InvTable items={filteredMP} tipo="mp" unidad="kg" canEdit={canEditMP} canDelete={canDeleteMP}
+                mpsDisponibles={mpsDisponibles} onAdjust={handleAdjustMP} onAction={handleMPAction} query={debouncedQuery} />
+            ) : (
+              <div>
+                {filteredMP.map(item => (
+                  <MPRow key={item.mp} item={item} canEdit={canEditMP} canDelete={canDeleteMP}
+                    mpsDisponibles={mpsDisponibles} onAdjust={handleAdjustMP} onAction={handleMPAction} query={debouncedQuery} />
+                ))}
               </div>
             )}
               </>
@@ -1195,115 +1252,47 @@ export default function InventarioPage() {
         {/* ════════ TAB: PRODUCTO TERMINADO ════════ */}
         {activeTab === 'pt' && (
           <>
-            {/* W3 (jun 2026) — Pills de sub-vista por ubicación física.
-                Total: usa el agregado de inv.pt (igual que antes).
-                Fábrica: solo sublotes con ub=fabrica (lo que Enrique tiene aquí).
-                Terán:   solo sublotes con ub=teran (lo que Josué tiene allá). */}
-            <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
-              {[
-                { id: 'total',   label: 'Total combinado', hint: 'Suma fábrica + Terán' },
-                { id: 'fabrica', label: 'Stock Fábrica',    hint: 'Lo que tiene Enrique aquí' },
-                { id: 'teran',   label: 'Stock Terán',      hint: 'Lo que tiene Josué allá' },
-              ].map(p => (
-                <button
-                  key={p.id}
-                  data-id={`inventario.ptview.${p.id}`} data-rol="admin,almacen,inventario"
-                  onClick={() => setPtSubtab(p.id)}
-                  title={p.hint}
-                  style={{
-                    padding: '8px 14px', minHeight: 36, borderRadius: 999,
-                    border: ptSubtab === p.id ? '1.5px solid var(--lp-brand-600)' : '1.5px solid var(--lp-border-subtle)',
-                    background: ptSubtab === p.id ? 'var(--lp-brand-50)' : 'var(--lp-bg-raised)',
-                    color: ptSubtab === p.id ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
-                    fontWeight: ptSubtab === p.id ? 700 : 500,
-                    fontSize: 13, cursor: 'pointer',
-                    fontFamily: 'var(--lp-font-sans)',
-                  }}
-                >{p.label}</button>
-              ))}
+            <div style={S.subRow}>
+              <div style={S.pillGroup}>
+                {[
+                  { id: 'total', label: 'Total', hint: 'Suma fábrica + Terán' },
+                  { id: 'fabrica', label: 'Fábrica', hint: 'Lo que tiene Enrique aquí' },
+                  { id: 'teran', label: 'Terán', hint: 'Lo que tiene Josué allá' },
+                ].map(p => (
+                  <button key={p.id} type="button" title={p.hint}
+                    data-id={`inventario.ptview.${p.id}`} data-rol="admin,almacen,inventario"
+                    style={S.chip(p.id === ptSubtab)} onClick={() => setPtSubtab(p.id)}>{p.label}</button>
+                ))}
+              </div>
+              {ptSubtab === 'total' && (
+                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
+                  {canEditMP && (
+                    <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
+                  )}
+                  <ImportExportPrint exportUrl={() => api.urlExportInv('pt', activeFilter)} printUrl={() => api.urlPrintInv('pt', activeFilter)} permisos={{ import: false }} />
+                </div>
+              )}
             </div>
 
-            {/* Vista TOTAL — mantiene comportamiento original con inv.pt */}
-            {ptSubtab === 'total' && (<>
-              <div style={S.kpiGrid}>
-                <div style={S.kpi('var(--lp-brand-600)', activeFilter === 'todos', true)}
-                  onClick={() => handleKpiClick('todos')}>
-                  <div style={S.kpiLabel}>Total PT</div>
-                  <div style={S.kpiValue}>{ptKpi.total}</div>
-                  {activeFilter === 'todos' && <div style={S.kpiHint}>Mostrando todos</div>}
-                </div>
-                <div style={S.kpi('var(--lp-success-600)', activeFilter === 'ok', true)}
-                  onClick={() => handleKpiClick('ok')}>
-                  <div style={S.kpiLabel}>Stock OK</div>
-                  <div style={S.kpiValue}>{ptKpi.ok}</div>
-                  {activeFilter === 'ok' && <div style={S.kpiHint}>Filtro activo</div>}
-                </div>
-                <div style={S.kpi('var(--lp-warning-600)', activeFilter === 'bajo', true)}
-                  onClick={() => handleKpiClick('bajo')}>
-                  <div style={S.kpiLabel}>Stock Bajo</div>
-                  <div style={S.kpiValue}>{ptKpi.bajo}</div>
-                  {activeFilter === 'bajo' && <div style={S.kpiHint}>Filtro activo</div>}
-                </div>
-                <div style={S.kpi('var(--lp-danger-600)', activeFilter === 'sin', true)}
-                  onClick={() => handleKpiClick('sin')}>
-                  <div style={S.kpiLabel}>Sin Stock</div>
-                  <div style={S.kpiValue}>{ptKpi.sin}</div>
-                  {activeFilter === 'sin' && <div style={S.kpiHint}>Filtro activo</div>}
-                </div>
-              </div>
-
-              {activeFilter !== 'todos' && (
-                <div style={{
-                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12,
-                  padding: '8px 14px', background: 'var(--lp-brand-50)', borderRadius: 8,
-                  fontSize: 12, color: 'var(--lp-brand-700)', fontWeight: 600,
-                }}>
-                  Filtrando: {activeFilter === 'ok' ? 'Stock OK' : activeFilter === 'bajo' ? 'Stock Bajo' : 'Sin Stock'}
-                  ({filteredPT.length} de {ptItems.length})
-                  <button style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer',
-                    color: 'var(--lp-brand-600)', fontWeight: 600, fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}
-                    onClick={() => handleKpiClick('todos')}>✕ Limpiar</button>
-                </div>
-              )}
-
-              <div style={S.toolbar}>
-                <input type="text" style={S.search} placeholder="Buscar producto terminado..."
-                  value={query} onChange={e => setQuery(e.target.value)} />
-                {canEditMP && (
-                  <button
-                    style={S.btnAdd}
-                    onClick={() => setShowAgregarPT(true)}
-                    title="Agregar inventario inicial de producto terminado (individual o masivo)"
-                  >+ Agregar PT</button>
-                )}
-                <ImportExportPrint
-                  exportUrl={() => api.urlExportInv('pt', activeFilter)}
-                  printUrl={() => api.urlPrintInv('pt', activeFilter)}
-                  permisos={{ import: false }}
-                />
-              </div>
-
-              <div style={S.catLabel}>Producto terminado (agregado) · {filteredPT.length}</div>
-              {filteredPT.map(item => (
-                <PTRow
-                  key={item.nombre}
-                  item={item}
-                  canEdit={canEditMP}
-                  canPedir={canPedirPT}
-                  onSave={handleSavePT}
-                  onPedir={handlePedirPT}
-                  query={debouncedQuery}
-                />
-              ))}
-
-              {filteredPT.length === 0 && (
+            {/* Vista TOTAL — agregado inv.pt: tabla (escritorio) / cards (móvil) */}
+            {ptSubtab === 'total' && (
+              filteredPT.length === 0 ? (
                 <div style={S.empty}>
-                  {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` :
-                    activeFilter !== 'todos' ? 'Sin productos en esta categoría' :
-                    'Sin productos terminados'}
+                  {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` : activeFilter !== 'todos' ? 'Sin productos en este filtro' : 'Sin productos terminados'}
                 </div>
-              )}
-            </>)}
+              ) : isDesktop ? (
+                <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
+                  onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
+              ) : (
+                <div>
+                  {filteredPT.map(item => (
+                    <PTRow key={item.nombre} item={item} canEdit={canEditMP} canPedir={canPedirPT}
+                      onAdjust={handleAdjustPT} onPedir={handlePedirPT} query={debouncedQuery} />
+                  ))}
+                </div>
+              )
+            )}
 
             {/* Vista FÁBRICA o TERÁN — desde /api/inventario/pt-por-ubicacion */}
             {(ptSubtab === 'fabrica' || ptSubtab === 'teran') && (
@@ -1381,6 +1370,16 @@ export default function InventarioPage() {
             reloadInv();
             setTimeout(() => setToastMsg(''), 4000);
           }}
+        />
+      )}
+
+      {/* ── Sheet "Ajustar existencia" (tabla escritorio + cards móvil) ── */}
+      {ajusteItem && (
+        <AjusteSheet
+          item={ajusteItem}
+          isDesktop={isDesktop}
+          onClose={() => setAjusteItem(null)}
+          onSave={handleAjusteSave}
         />
       )}
 
