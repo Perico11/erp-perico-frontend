@@ -111,6 +111,43 @@ const S = {
     };
   },
   provSub: { fontSize: 11, color: 'var(--lp-text-tertiary)', fontWeight: 400, marginTop: 1 },
+  /* ── Mockup v2: card row con barra de severidad (Inventarios.html) ── */
+  catLabel: {
+    fontSize: 11.5, color: 'var(--lp-text-tertiary)', fontWeight: 600,
+    textTransform: 'uppercase', letterSpacing: '.04em', margin: '8px 2px 8px',
+    display: 'flex', alignItems: 'center', gap: 7,
+  },
+  catTag: (bg, fg) => ({
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    width: 20, height: 20, borderRadius: 6, background: bg, color: fg,
+    fontSize: 9, fontWeight: 800, flexShrink: 0,
+  }),
+  cardRow: {
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 14, padding: '13px 15px', marginBottom: 9,
+  },
+  cardTop: { display: 'flex', alignItems: 'center', gap: 9, marginBottom: 8 },
+  cardName: { flex: 1, fontSize: 14.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0 },
+  estBadge: (c) => ({
+    fontSize: 10.5, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
+    background: `color-mix(in srgb, ${c} 15%, transparent)`, color: c, whiteSpace: 'nowrap',
+  }),
+  pencilBtn: {
+    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)',
+    padding: 4, display: 'flex', alignItems: 'center', flexShrink: 0,
+  },
+  sevBar: { height: 6, borderRadius: 999, background: 'var(--lp-bg-sunken)', overflow: 'hidden', margin: '8px 0 7px' },
+  sevFill: (pct, c) => ({ width: `${pct}%`, height: '100%', borderRadius: 999, background: c }),
+  cardNums: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 },
+  numEx: (c) => ({ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: c || 'var(--lp-text-primary)' }),
+  numMin: { color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' },
+  chip: (on) => ({
+    height: 36, padding: '0 14px', borderRadius: 10, cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600,
+    border: on ? '1px solid color-mix(in srgb, var(--lp-brand-600) 30%, transparent)' : '1px solid var(--lp-border-subtle)',
+    background: on ? 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)' : 'var(--lp-bg-sunken)',
+    color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+  }),
   empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '40px 0', fontSize: 13 },
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
   editInput: {
@@ -389,26 +426,38 @@ function MPRow({ item, canEdit, canDelete, mpsDisponibles, onSave, onAction, que
     );
   }
 
+  /* Severidad mockup: Crítico (agotado) · Bajo · OK */
+  const sevColor = badgeType === 'err' ? 'var(--lp-danger-600)' : badgeType === 'warn' ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
+  const sevLabel = badgeType === 'err' ? 'Crítico' : badgeType === 'warn' ? 'Bajo' : 'OK';
+  const barPct = Math.max(4, Math.min(100, (inv.min || 0) > 0 ? (qty / inv.min * 100) : 100));
+  const openEdit = () => { setEditQty(qty); setEditMin(inv.min || 0); setMotivo(''); setEditing(true); };
+
   return (
-    <div style={S.row}>
-      <div style={S.rowName}>
-        {resaltar(mp, query)}
-        {prov && <div style={S.provSub}>{prov}</div>}
-      </div>
-      <>
-        <div
-          style={{ ...S.rowQty(qtyColor), ...(canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}) }}
-          onClick={() => { if (canEdit) { setEditQty(qty); setEditMin(inv.min || 0); setMotivo(''); setEditing(true); } }}
-          title={canEdit ? 'Click para ajustar existencia' : ''}
-        >
-          {qty.toFixed(1)}
-        </div>
-        <div style={S.rowUnit}>kg</div>
-        <span style={S.badge(badgeType)}>{badgeText}</span>
+    <div style={S.cardRow} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
+      <div style={S.cardTop}>
+        <span style={S.cardName}>
+          {resaltar(mp, query)}
+          {prov && <span style={{ ...S.provSub, marginLeft: 6 }}>· {prov}</span>}
+        </span>
+        <span style={S.estBadge(sevColor)}>{sevLabel}</span>
+        {canEdit && (
+          <button type="button" style={S.pencilBtn} onClick={openEdit} aria-label="Ajustar existencia" title="Ajustar existencia">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </button>
+        )}
         {canDelete && (
           <MPActionsMenu mp={mp} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
         )}
-      </>
+      </div>
+      <div style={S.sevBar}><div style={S.sevFill(barPct, sevColor)} /></div>
+      <div style={S.cardNums}>
+        <span
+          style={{ ...S.numEx(badgeType === 'err' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
+          onClick={() => { if (canEdit) openEdit(); }}
+          title={canEdit ? 'Ajustar existencia' : ''}
+        >{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} kg</span>
+        <span style={S.numMin}>mín {(inv.min || 0).toLocaleString('es-MX')} kg</span>
+      </div>
     </div>
   );
 }
@@ -462,36 +511,46 @@ function PTRow({ item, canEdit, canPedir, onSave, onPedir, query }) {
     );
   }
 
+  const sevColor = badgeType === 'err' ? 'var(--lp-danger-600)' : badgeType === 'warn' ? 'var(--lp-warning-600)' : 'var(--lp-success-600)';
+  const sevLabel = badgeType === 'err' ? 'Crítico' : badgeType === 'warn' ? 'Bajo' : 'OK';
+  const barPct = Math.max(4, Math.min(100, (inv.min || 0) > 0 ? (qty / inv.min * 100) : 100));
+  const openEdit = () => { setEditQty(qty); setMotivo(''); setEditing(true); };
+
   return (
-    <div style={S.row}>
-      <div style={S.rowName}>{resaltar(nombre, query)}</div>
-      {(
-        <>
-          <div
-            style={{ ...S.rowQty(qtyColor), ...(canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}) }}
-            onClick={() => { if (canEdit) { setEditQty(qty); setMotivo(''); setEditing(true); } }}
-            title={canEdit ? 'Click para ajustar existencia' : ''}
-          >{qty}</div>
-          <div style={S.rowUnit}>cub.</div>
-          <span style={S.badge(badgeType)}>{badgeText}</span>
+    <div style={S.cardRow} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
+      <div style={S.cardTop}>
+        <span style={S.cardName}>{resaltar(nombre, query)}</span>
+        <span style={S.estBadge(sevColor)}>{sevLabel}</span>
+        {canEdit && (
+          <button type="button" style={S.pencilBtn} onClick={openEdit} aria-label="Ajustar existencia" title="Ajustar existencia">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          </button>
+        )}
+      </div>
+      <div style={S.sevBar}><div style={S.sevFill(barPct, sevColor)} /></div>
+      <div style={S.cardNums}>
+        <span
+          style={{ ...S.numEx(badgeType === 'err' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'), ...(canEdit ? { cursor: 'pointer' } : {}) }}
+          onClick={() => { if (canEdit) openEdit(); }}
+          title={canEdit ? 'Ajustar existencia' : ''}
+        >{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={S.numMin}>mín {(inv.min || 0).toLocaleString('es-MX')} cub</span>
           {mostrarCTAPedir && (
             <button
               type="button"
+              data-id="inventario.btn.pedir-pt" data-rol="admin,almacen,tecnico"
               onClick={() => onPedir(nombre)}
               title={`Levantar pedido de reposición de ${nombre}`}
               style={{
-                marginLeft: 8, padding: '6px 12px', fontSize: 11, fontWeight: 600,
-                borderRadius: 8, border: 'none', cursor: 'pointer',
-                background: 'var(--lp-brand-600)', color: '#fff',
-                fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
-                minHeight: 32,
+                padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 8,
+                border: 'none', cursor: 'pointer', background: 'var(--lp-brand-600)',
+                color: '#fff', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', minHeight: 32,
               }}
-            >
-              + Pedir
-            </button>
+            >+ Pedir</button>
           )}
-        </>
-      )}
+        </span>
+      </div>
     </div>
   );
 }
@@ -529,7 +588,8 @@ function EnvasesTab({ envases, canEdit, onReload }) {
       {Object.entries(cats).map(([catName, cat]) => (
         <div key={catName} style={S.section}>
           <div style={S.sectionHeader('var(--lp-brand-100)', 'var(--lp-brand-700)')}>
-            📦 {catName}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05"/></svg>
+            {catName}
           </div>
           {Object.entries(cat.subcategorias || {}).map(([subKey, sub]) => (
             <EnvaseRow key={subKey} subKey={subKey} sub={sub} catKey={catName}
@@ -539,7 +599,10 @@ function EnvasesTab({ envases, canEdit, onReload }) {
       ))}
       {Object.keys(tapas).length > 0 && (
         <div style={S.section}>
-          <div style={S.sectionHeader('#EDE9FE', '#5B21B6')}>🧢 Tapas</div>
+          <div style={S.sectionHeader('#EDE9FE', '#5B21B6')}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
+            Tapas
+          </div>
           {Object.entries(tapas).map(([tapaKey, tapa]) => (
             <TapaRow key={tapaKey} tapaKey={tapaKey} tapa={tapa}
               canEdit={canEdit} onSave={handleSaveTapa} />
@@ -704,7 +767,11 @@ export default function InventarioPage() {
   /* Permissions */
   const canEditMP = can('editarInventario');
   const canEditEnvases = can('editarEnvases') || can('editarInventario');
-  const canDeleteMP = can('eliminarMP') || can('editarInventario');
+  /* §8 (handoff verde): eliminar/sustituir MP es exclusivo del permiso `eliminarMP`
+     (admin por defecto) — NO de cualquiera con editarInventario. */
+  const canDeleteMP = can('eliminarMP');
+  /* §8: +Recepción MP gateado por permiso `recibirMP` (almacen/compras/admin). */
+  const canRecibirMP = can('recibirMP');
 
   /* Lista de MPs disponibles para el datalist de sustituir */
   const mpsDisponibles = useMemo(
@@ -976,13 +1043,7 @@ export default function InventarioPage() {
         {/* ════════ TAB: MATERIA PRIMA — sub-tabs (Stock / Costos / Maestro) ════════ */}
         {activeTab === 'mp' && (
           <>
-            <div style={{
-              display: 'flex', gap: 0,
-              borderBottom: '1.5px solid var(--lp-border-subtle)',
-              marginBottom: 14,
-              overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-              scrollbarWidth: 'none', msOverflowStyle: 'none',
-            }}>
+            <div style={{ display: 'flex', gap: 6, margin: '2px 0 14px', overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               {[
                 { id: 'stock', label: 'Stock' },
                 { id: 'costos', label: 'Costos' },
@@ -991,16 +1052,9 @@ export default function InventarioPage() {
                 <button
                   key={t.id}
                   type="button"
-                  style={{
-                    padding: '8px 16px', fontSize: 12,
-                    fontWeight: t.id === mpSubtab ? 700 : 500,
-                    color: t.id === mpSubtab ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-                    background: 'none', border: 'none',
-                    borderBottom: t.id === mpSubtab ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-                    cursor: 'pointer', whiteSpace: 'nowrap',
-                    fontFamily: 'var(--lp-font-sans)', marginBottom: -1.5, flexShrink: 0,
-                    transition: 'color .15s, border-color .15s',
-                  }}
+                  data-id={`inventario.subtab.${t.id}`}
+                  data-rol="admin,compras,inventario,almacen,tecnico"
+                  style={S.chip(t.id === mpSubtab)}
                   onClick={() => setMpSubtab(t.id)}
                 >
                   {t.label}
@@ -1070,11 +1124,12 @@ export default function InventarioPage() {
             <div style={S.toolbar}>
               <input type="text" style={S.search} placeholder="Buscar materia prima..."
                 value={query} onChange={e => setQuery(e.target.value)} />
-              {canEditMP && (
+              {canRecibirMP && (
                 <button
                   style={S.btnAdd}
+                  data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin"
                   onClick={() => setShowRecepcion(true)}
-                >+ Recepción</button>
+                >+ Recepción MP</button>
               )}
               <ImportExportPrint
                 exportUrl={() => api.urlExportInv('mp', activeFilter)}
@@ -1085,16 +1140,16 @@ export default function InventarioPage() {
               />
             </div>
 
-            {/* Grouped by category */}
+            {/* Agrupado por categoría — etiqueta + cards (estilo mockup) */}
             {Object.keys(MP_CATEGORIES).map(catName => {
               const items = mpGrouped.groups[catName];
               if (!items?.length) return null;
               const cfg = MP_CATEGORIES[catName];
               return (
-                <div key={catName} style={S.section}>
-                  <div style={S.sectionHeader(cfg.bg, cfg.fg)}>
-                    {cfg.icon} {catName}
-                    <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>{items.length}</span>
+                <div key={catName}>
+                  <div style={S.catLabel}>
+                    <span style={S.catTag(cfg.bg, cfg.fg)}>{cfg.icon}</span>
+                    {catName} · {items.length}
                   </div>
                   {items.map(item => (
                     <MPRow
@@ -1113,13 +1168,14 @@ export default function InventarioPage() {
             })}
 
             {mpGrouped.uncategorized.length > 0 && (
-              <div style={S.section}>
-                <div style={S.sectionHeader('var(--lp-bg-sunken)', 'var(--lp-text-secondary)')}>
-                  📦 Otros
-                  <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>{mpGrouped.uncategorized.length}</span>
+              <div>
+                <div style={S.catLabel}>
+                  <span style={S.catTag('var(--lp-bg-sunken)', 'var(--lp-text-secondary)')}>··</span>
+                  Otros · {mpGrouped.uncategorized.length}
                 </div>
                 {mpGrouped.uncategorized.map(item => (
-                  <MPRow key={item.mp} item={item} canEdit={canEditMP} onSave={handleSaveMP} query={debouncedQuery} />
+                  <MPRow key={item.mp} item={item} canEdit={canEditMP} canDelete={canDeleteMP}
+                    mpsDisponibles={mpsDisponibles} onSave={handleSaveMP} onAction={handleMPAction} query={debouncedQuery} />
                 ))}
               </div>
             )}
@@ -1151,6 +1207,7 @@ export default function InventarioPage() {
               ].map(p => (
                 <button
                   key={p.id}
+                  data-id={`inventario.ptview.${p.id}`} data-rol="admin,almacen,inventario"
                   onClick={() => setPtSubtab(p.id)}
                   title={p.hint}
                   style={{
@@ -1226,23 +1283,18 @@ export default function InventarioPage() {
                 />
               </div>
 
-              <div style={S.section}>
-                <div style={S.sectionHeader('var(--lp-success-100)', 'var(--lp-success-700)')}>
-                  Producto Terminado (agregado)
-                  <span style={{ marginLeft: 'auto', fontSize: 11, opacity: 0.7 }}>{filteredPT.length}</span>
-                </div>
-                {filteredPT.map(item => (
-                  <PTRow
-                    key={item.nombre}
-                    item={item}
-                    canEdit={canEditMP}
-                    canPedir={canPedirPT}
-                    onSave={handleSavePT}
-                    onPedir={handlePedirPT}
-                    query={debouncedQuery}
-                  />
-                ))}
-              </div>
+              <div style={S.catLabel}>Producto terminado (agregado) · {filteredPT.length}</div>
+              {filteredPT.map(item => (
+                <PTRow
+                  key={item.nombre}
+                  item={item}
+                  canEdit={canEditMP}
+                  canPedir={canPedirPT}
+                  onSave={handleSavePT}
+                  onPedir={handlePedirPT}
+                  query={debouncedQuery}
+                />
+              ))}
 
               {filteredPT.length === 0 && (
                 <div style={S.empty}>
