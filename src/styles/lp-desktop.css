@@ -1,0 +1,66 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   lp-desktop.css — Primitivos de ESCRITORIO portados 1:1 del documento
+   Claude Design (`ERP Escritorio.html` <style>). Valores EXACTOS (no derivados).
+   Usan los tokens --lp-* (que ya coinciden con --bg/--card/--txt/--acc/--line del
+   mockup), así heredan claro/oscuro automáticamente.
+
+   Uso: en el render de ESCRITORIO de cada página, usar estas clases en vez de
+   estilos inline aproximados → fidelidad pixel con el documento.
+   Prefijo `lpd-` para no colisionar con clases existentes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Encabezado de pantalla */
+.lpd-h1   { font-size: 23px; font-weight: 600; letter-spacing: -.02em; color: var(--lp-text-primary); margin: 0; }
+.lpd-psub { font-size: 13px; color: var(--lp-text-secondary); margin: 3px 0 18px; }
+.lpd-seclbl { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--lp-text-tertiary); margin: 20px 2px 11px; }
+
+/* Grids de cards (g2/g3/g4 del documento) */
+.lpd-grid { display: grid; gap: 12px; }
+.lpd-g2 { grid-template-columns: 1fr 1fr; }
+.lpd-g3 { grid-template-columns: repeat(3, 1fr); }
+.lpd-g4 { grid-template-columns: repeat(4, 1fr); }
+
+/* Card base — radio 14, padding 15/16, borde hairline */
+.lpd-card { background: var(--lp-bg-raised); border: 1px solid var(--lp-border-subtle); border-radius: 14px; padding: 15px 16px; }
+
+/* KPI card (Health-style: dot + label upper + valor mono 22) */
+.lpd-kpi .kl { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--lp-text-tertiary); display: flex; align-items: center; gap: 6px; }
+.lpd-kpi .kl i { width: 7px; height: 7px; border-radius: 999px; display: inline-block; flex-shrink: 0; }
+.lpd-kpi .kv { font-family: var(--lp-font-mono); font-size: 22px; font-weight: 700; margin-top: 6px; color: var(--lp-text-primary); }
+.lpd-kpi .ks { font-size: 11.5px; color: var(--lp-text-secondary); margin-top: 4px; }
+
+/* Folio mono verde */
+.lpd-folio { font-family: var(--lp-font-mono); font-size: 12px; font-weight: 700; color: var(--lp-brand-600); }
+
+/* Badge pill con dot (estado) */
+.lpd-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+.lpd-badge i { width: 6px; height: 6px; border-radius: 999px; flex-shrink: 0; }
+
+/* Botón primario / ghost — altura exacta 38 */
+.lpd-btn { height: 38px; padding: 0 15px; border-radius: 10px; border: none; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; background: var(--lp-brand-600); color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; }
+[data-theme="dark"] .lpd-btn, .dark .lpd-btn { color: #0B0F0E; }
+.lpd-btn.gh { background: var(--lp-bg-raised); border: 1px solid var(--lp-border-subtle); color: var(--lp-text-secondary); }
+.lpd-btn.gh:hover { background: var(--lp-bg-sunken); }
+.lpd-btn:disabled { opacity: .55; cursor: default; }
+
+/* Tabla — th uppercase hint sobre panel; td 13.5; hover sutil */
+.lpd-tablewrap { background: var(--lp-bg-raised); border: 1px solid var(--lp-border-subtle); border-radius: 14px; overflow: hidden; }
+.lpd-table { width: 100%; border-collapse: collapse; }
+.lpd-table thead th { text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--lp-text-tertiary); padding: 12px 16px; border-bottom: 1px solid var(--lp-border-subtle); background: var(--lp-bg-sunken); white-space: nowrap; }
+.lpd-table th.r, .lpd-table td.r { text-align: right; }
+.lpd-table tbody td { padding: 12px 16px; border-bottom: 1px solid var(--lp-border-subtle); font-size: 13.5px; color: var(--lp-text-primary); }
+.lpd-table tbody tr:last-child td { border-bottom: none; }
+.lpd-table tbody tr:hover { background: var(--lp-bg-sunken); }
+
+/* Pills de filtro / sub-tabs */
+.lpd-pill { font-size: 12px; font-weight: 600; padding: 7px 13px; border-radius: 999px; background: var(--lp-bg-sunken); color: var(--lp-text-secondary); cursor: pointer; border: none; font-family: inherit; }
+.lpd-pill.on { background: var(--lp-brand-600); color: #fff; }
+[data-theme="dark"] .lpd-pill.on, .dark .lpd-pill.on { color: #0B0F0E; }
+
+/* Card de "atención" con borde-left de color (Inicio) */
+.lpd-atn { background: var(--lp-bg-raised); border: 1px solid var(--lp-border-subtle); border-radius: 14px; padding: 15px 16px; border-left-width: 3px; border-left-style: solid; }
+
+/* Helpers */
+.lpd-mono { font-family: var(--lp-font-mono); }
+.lpd-r { text-align: right; }
+.lpd-row { display: flex; align-items: center; gap: 12px; }
