@@ -6,6 +6,7 @@ import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useAuth } from '../../context/AuthContext';
+import useIsDesktop from '../../hooks/useIsDesktop';
 
 /* DevolucionesMPPage — Capa 3 (Arely / rol compras).
    Devoluciones de MATERIA PRIMA al proveedor. Flujo SEPARADO del de PT.
@@ -46,6 +47,41 @@ const S = {
   link: { display: 'inline-block', marginTop: 8, fontSize: 12.5, fontWeight: 600, color: 'var(--lp-brand-700)', textDecoration: 'none' },
   empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', fontSize: 13.5, padding: '60px 20px', lineHeight: 1.5 },
   obs: { fontSize: 11.5, color: 'var(--lp-warning-700)', marginTop: 6 },
+
+  /* ── Escritorio (ERP Escritorio.html → SCREENS.devol): encabezado, toolbar y tabla ── */
+  wrapDesk: { padding: '0 28px 60px' },
+  h1: { fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--lp-text-primary)' },
+  psub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3, marginBottom: 18 },
+  toolbarRow: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' },
+  tablewrap: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, overflow: 'hidden' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: (alignRight) => ({
+    textAlign: alignRight ? 'right' : 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', padding: '12px 16px',
+    borderBottom: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-sunken)', whiteSpace: 'nowrap',
+  }),
+  td: { padding: '13px 16px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13.5, color: 'var(--lp-text-primary)', verticalAlign: 'top' },
+  tdFolio: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-brand-700)', whiteSpace: 'nowrap' },
+  tdMono: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, textAlign: 'right', whiteSpace: 'nowrap' },
+  tdMut: { fontSize: 12.5, color: 'var(--lp-text-secondary)' },
+  estDot: (c) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 700,
+    padding: '4px 10px', borderRadius: 999, whiteSpace: 'nowrap',
+    background: `color-mix(in srgb, ${c} 14%, transparent)`, color: c,
+  }),
+  actBtn: {
+    minHeight: 36, padding: '0 15px', borderRadius: 10, border: 'none', cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap',
+    background: 'var(--lp-brand-600)', color: '#fff',
+  },
+  cellLink: { display: 'inline-block', marginTop: 4, fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)', textDecoration: 'none' },
+};
+
+/* Color del badge de "Cierre" por estado (escritorio) */
+const ESTADO_COLOR = {
+  por_gestionar: 'var(--lp-warning-600)',
+  registrada:    'var(--lp-success-600)',
+  merma:         'var(--lp-text-secondary)',
 };
 
 const ESTADO_BADGE = {
@@ -58,6 +94,7 @@ const fmtMoney = (n) => (n == null || n === '') ? '—' : '$' + Number(n).toLoca
 
 export default function DevolucionesMPPage() {
   const { user } = useAuth();
+  const isDesktop = useIsDesktop();
   const [tab, setTab] = useState('por_gestionar');
   const [crear, setCrear] = useState(false);
   const [cerrar, setCerrar] = useState(null); /* devolución a cerrar */
@@ -90,6 +127,51 @@ export default function DevolucionesMPPage() {
     { id: 'merma', label: `Merma · ${counts.merma}` },
   ];
 
+  /* ── Escritorio: encabezado + toolbar (tabs izq · botón der) + tabla ── */
+  if (isDesktop) {
+    return (
+      <>
+        <TopBar title="Devoluciones a proveedor" />
+        <div style={S.wrapDesk}>
+          <div style={S.h1}>Devoluciones</div>
+          <div style={S.psub}>Materia prima → proveedor</div>
+
+          <div style={S.toolbarRow}>
+            <PageTabs tabs={tabs} activeTab={tab} onChange={setTab} />
+            <button style={{ ...S.newBtn, margin: 0, marginLeft: 'auto' }} onClick={() => setCrear(true)}>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+              Nueva devolución
+            </button>
+          </div>
+
+          {loading && !data ? (
+            <div style={S.empty}>Cargando…</div>
+          ) : !visibles.length ? (
+            <div style={S.empty}>Sin devoluciones aquí.</div>
+          ) : (
+            <DevTable devs={visibles} onCerrar={setCerrar} />
+          )}
+        </div>
+
+        {crear && (
+          <CrearSheet
+            isDesktop={isDesktop} inv={invData} maestro={maestroData} usuario={user?.nombre}
+            onClose={() => setCrear(false)}
+            onSaved={() => { setCrear(false); reload(); }}
+          />
+        )}
+        {cerrar && (
+          <CerrarSheet
+            isDesktop={isDesktop} dev={cerrar}
+            onClose={() => setCerrar(null)}
+            onSaved={() => { setCerrar(null); reload(); }}
+          />
+        )}
+      </>
+    );
+  }
+
+  /* ── Móvil (1:1 actual): botón + tabs + cards + bottom-sheets ── */
   return (
     <>
       <TopBar title="Devoluciones a proveedor" />
@@ -112,19 +194,91 @@ export default function DevolucionesMPPage() {
 
       {crear && (
         <CrearSheet
-          inv={invData} maestro={maestroData} usuario={user?.nombre}
+          isDesktop={isDesktop} inv={invData} maestro={maestroData} usuario={user?.nombre}
           onClose={() => setCrear(false)}
           onSaved={() => { setCrear(false); reload(); }}
         />
       )}
       {cerrar && (
         <CerrarSheet
-          dev={cerrar}
+          isDesktop={isDesktop} dev={cerrar}
           onClose={() => setCerrar(null)}
           onSaved={() => { setCerrar(null); reload(); }}
         />
       )}
     </>
+  );
+}
+
+/* ── Tabla de devoluciones (escritorio) — 1:1 SCREENS.devol ── */
+function DevTable({ devs, onCerrar }) {
+  return (
+    <div style={S.tablewrap}>
+      <table style={S.table}>
+        <thead>
+          <tr>
+            <th style={S.th(false)}>Folio</th>
+            <th style={S.th(false)}>Materia prima</th>
+            <th style={S.th(false)}>Proveedor</th>
+            <th style={S.th(true)}>Monto</th>
+            <th style={S.th(false)}>Cierre</th>
+            <th style={S.th(true)}>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {devs.map(d => {
+            const est = ESTADO_BADGE[d.estado] || ESTADO_BADGE.merma;
+            const color = ESTADO_COLOR[d.estado] || ESTADO_COLOR.merma;
+            const cantTxt = (d.cantidad != null ? d.cantidad + ' ' + (d.unidad || '') : '').trim();
+            const dispTxt = d.disposicion === 'descartar' ? 'Descartar (merma)' : 'Devolver a proveedor';
+            return (
+              <tr key={d.id} data-id="devoluciones-mp.row.item" data-rol="admin,compras">
+                <td style={{ ...S.td, ...S.tdFolio }}>{d.codigo || d.id}</td>
+                <td style={S.td}>
+                  <div style={{ fontWeight: 600 }}>{d.mp}</div>
+                  <div style={S.tdMut}>{dispTxt}{cantTxt ? ' · ' + cantTxt : ''}</div>
+                  {d.observacionAjuste ? <div style={S.obs}>{d.observacionAjuste}</div> : null}
+                </td>
+                <td style={S.td}>{d.proveedor || '—'}</td>
+                <td style={{ ...S.td, ...S.tdMono, color: 'var(--lp-text-primary)' }}>{fmtMoney(d.montoEstimado)}</td>
+                <td style={S.td}>
+                  <span style={S.estDot(color)}>
+                    <i style={{ width: 6, height: 6, borderRadius: 999, background: color, display: 'inline-block' }} />
+                    {est.label}
+                  </span>
+                  {d.estado === 'registrada' && (
+                    <div style={{ ...S.tdMut, marginTop: 4, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-brand-700)', fontWeight: 700 }}>
+                      {d.cierreTipo === 'reembolso' ? d.referenciaPago : d.notaCredito}
+                    </div>
+                  )}
+                </td>
+                <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {d.estado === 'por_gestionar' && (
+                    <button type="button" data-id="devoluciones-mp.btn.cerrar" data-rol="admin,compras"
+                      style={S.actBtn} onClick={() => onCerrar(d)}>
+                      Registrar NC / reembolso
+                    </button>
+                  )}
+                  {d.estado === 'registrada' && (
+                    <div style={{ ...S.tdMut, textAlign: 'right' }}>
+                      {d.cierreTipo === 'reembolso' ? 'Reembolso registrado' : 'Crédito registrado'}
+                      {d.cierreTipo === 'reembolso' && d.comprobanteArchivo && (
+                        <div>
+                          <a style={S.cellLink} href={api.comprobanteDevolucionMPUrl(d.id)} target="_blank" rel="noreferrer">Ver comprobante →</a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {d.estado === 'merma' && (
+                    <span style={{ ...S.tdMut, textAlign: 'right' }}>Sin nota de crédito</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -184,8 +338,9 @@ function DevCard({ d, onCerrar }) {
 
 /* ── Sheet: crear devolución ── */
 const SH = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'auto' },
-  sheet: { background: 'var(--lp-bg-base)', borderRadius: '24px 24px 0 0', padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: '94vh', overflowY: 'auto' },
+  /* Bottom-sheet en móvil; modal centrado en escritorio (mismo overlay). */
+  overlay: (desktop) => ({ position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: desktop ? 'center' : 'flex-end', justifyContent: 'center', overflow: 'auto', padding: desktop ? 16 : 0 }),
+  sheet: (desktop) => ({ background: 'var(--lp-bg-base)', borderRadius: desktop ? 20 : '24px 24px 0 0', padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: desktop ? '92vh' : '94vh', overflowY: 'auto', boxShadow: desktop ? '0 12px 48px rgba(0,0,0,.28)' : 'none' }),
   h: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
   s: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 8 },
   lbl: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '16px 2px 6px' },
@@ -202,7 +357,7 @@ const SH = {
   btnPrimary: { flex: 1, background: 'var(--lp-brand-600)', color: '#fff' },
 };
 
-function CrearSheet({ inv, maestro, usuario, onClose, onSaved }) {
+function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
   /* getInventario() → { ok, data: { mp, pt } }; getMaestroMP() → { ok, data: { mps } }.
      Desenvolvemos .data (con fallback por si el shape cambia). */
   const invMp = (inv && inv.data && inv.data.mp) || (inv && inv.mp) || {};
@@ -253,8 +408,8 @@ function CrearSheet({ inv, maestro, usuario, onClose, onSaved }) {
   };
 
   return (
-    <div style={SH.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
-      <div style={SH.sheet}>
+    <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+      <div style={SH.sheet(isDesktop)}>
         <div style={SH.h}>Nueva devolución de MP</div>
         <div style={SH.s}>La materia prima se descuenta del inventario al registrar.</div>
 
@@ -320,7 +475,7 @@ const IFile = (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
 );
 
-function CerrarSheet({ dev, onClose, onSaved }) {
+function CerrarSheet({ isDesktop, dev, onClose, onSaved }) {
   const [tipo, setTipo] = useState('nota_credito');
   const [nc, setNc] = useState('');
   const [ref, setRef] = useState('');
@@ -360,8 +515,8 @@ function CerrarSheet({ dev, onClose, onSaved }) {
   };
 
   return (
-    <div style={SH.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
-      <div style={SH.sheet}>
+    <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+      <div style={SH.sheet(isDesktop)}>
         <div style={SH.h}>Cerrar devolución</div>
         <div style={SH.s}>{dev.codigo} · {dev.mp} → {dev.proveedor}</div>
 

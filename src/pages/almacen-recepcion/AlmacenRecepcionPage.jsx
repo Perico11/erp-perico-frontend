@@ -7,6 +7,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { QRScanner } from '../../components/QRModal';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
 import useConfirm from '../../hooks/useConfirm';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import { getAccionesSublote } from '../../lib/loteTransiciones';
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -20,10 +21,12 @@ import { getAccionesSublote } from '../../lib/loteTransiciones';
    ────────────────────────────────────────────────────────────────────────── */
 
 const S = {
+  /* móvil: una columna; escritorio: aprovecha el ancho del shell (sidebar + topbar) */
   wrap: { padding: '6px 20px 110px' },
+  wrapDesktop: { padding: '8px 24px 48px' },
   greet: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '2px 2px 12px' },
 
-  /* scan hero — botón verde, redondeado 18px (mockup) */
+  /* scan hero — botón verde, redondeado 18px (mockup) — MÓVIL: ancho completo */
   scanHero: (activo) => ({
     width: '100%', height: 64, borderRadius: 18, border: 'none', cursor: 'pointer',
     background: 'var(--lp-brand-600)', color: '#fff',
@@ -32,9 +35,30 @@ const S = {
     boxShadow: '0 10px 24px -10px color-mix(in srgb, var(--lp-brand-600) 60%, transparent)',
     animation: activo ? 'lpPulse 2.4s ease-in-out infinite' : 'none',
   }),
+  /* escritorio: barra superior — botón tamaño estándar alineado a la derecha (no 100%) */
+  scanRowDesktop: { display: 'flex', justifyContent: 'flex-end', marginBottom: 16 },
+  scanBtnDesktop: (activo) => ({
+    height: 44, minHeight: 44, padding: '0 18px', borderRadius: 12, border: 'none', cursor: 'pointer',
+    background: 'var(--lp-brand-600)', color: '#fff',
+    fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', gap: 8,
+    boxShadow: '0 8px 20px -12px color-mix(in srgb, var(--lp-brand-600) 60%, transparent)',
+    animation: activo ? 'lpPulse 2.4s ease-in-out infinite' : 'none',
+  }),
 
   /* tabs pill */
   tabs: { display: 'flex', gap: 4, marginBottom: 12 },
+  /* escritorio: pills alineadas a la izquierda, no estiradas a todo el ancho */
+  tabsDesktop: { display: 'flex', gap: 6, marginBottom: 16 },
+  tabDesktop: (on) => ({
+    padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 700 : 500, minHeight: 44,
+    background: on ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
+    color: on ? '#fff' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap',
+  }),
+
+  /* grid de cards (escritorio): 2-3 columnas auto-fill */
+  grid: { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' },
   tab: (on) => ({
     flex: 1, padding: '9px 6px', borderRadius: 999, border: 'none', cursor: 'pointer',
     fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 700 : 500,
@@ -44,6 +68,8 @@ const S = {
 
   /* card por sublote */
   card: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 18, padding: 16, marginBottom: 12 },
+  /* escritorio: sin marginBottom (lo da el grid), flex-col para alinear el CTA abajo */
+  cardDesktop: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 18, padding: 16, display: 'flex', flexDirection: 'column' },
   cardPrueba: { background: 'var(--lp-warning-50)', borderLeft: '4px solid var(--lp-warning-600)' },
   chead: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 },
   cod: { fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-700)' },
@@ -54,6 +80,8 @@ const S = {
   pruebaNote: { marginTop: 11, padding: '9px 11px', background: 'var(--lp-warning-100)', border: '1.5px solid var(--lp-warning-500)', borderRadius: 11, fontSize: 12, color: 'var(--lp-warning-800)', lineHeight: 1.4 },
 
   act: { width: '100%', height: 54, borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  /* escritorio: CTA pegado al fondo de la card (alturas parejas en grid), un poco más compacto */
+  actDesktop: { width: '100%', height: 44, minHeight: 44, marginTop: 'auto', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   actPrimary: { background: 'var(--lp-brand-600)', color: '#fff' },
   actDone: { background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)', cursor: 'default' },
 
@@ -194,6 +222,7 @@ function ReenvasarToteModal({ tote, lote, userName, onClose, onSuccess }) {
 /* ─────────────── PAGE PRINCIPAL ─────────────── */
 export default function AlmacenRecepcionPage() {
   const { user } = useAuth();
+  const isDesktop = useIsDesktop();
   const userName = user?.nombre || '?';
   const rol = user?.rol || '';
   const [confirm, ConfirmEl] = useConfirm();
@@ -305,17 +334,29 @@ export default function AlmacenRecepcionPage() {
   return (
     <div>
       <TopBar title="Recepción Terán" />
-      <div style={S.wrap}>
+      <div style={isDesktop ? S.wrapDesktop : S.wrap}>
         <div style={S.greet}>Hola {userName} · {totales.enCamino} por recibir</div>
 
-        {/* Scan hero — solo roles que pueden recibir */}
+        {/* Scan hero — solo roles que pueden recibir.
+            Móvil: hero verde ancho completo. Escritorio: barra superior, botón estándar. */}
         {canAct && (
-          <button type="button" data-id="recepcion.btn.scan" data-rol="almacen,admin"
-            style={S.scanHero(totales.enCamino > 0)} onClick={() => setScanning(true)}
-            aria-label="Escanear QR de recepción">
-            {QR_ICON}
-            Escanear QR de recepción
-          </button>
+          isDesktop ? (
+            <div style={S.scanRowDesktop}>
+              <button type="button" data-id="recepcion.btn.scan" data-rol="almacen,admin"
+                style={S.scanBtnDesktop(totales.enCamino > 0)} onClick={() => setScanning(true)}
+                aria-label="Escanear QR de recepción">
+                {QR_ICON}
+                Escanear QR de recepción
+              </button>
+            </div>
+          ) : (
+            <button type="button" data-id="recepcion.btn.scan" data-rol="almacen,admin"
+              style={S.scanHero(totales.enCamino > 0)} onClick={() => setScanning(true)}
+              aria-label="Escanear QR de recepción">
+              {QR_ICON}
+              Escanear QR de recepción
+            </button>
+          )
         )}
 
         {/* TOTEs en buffer (funcionalidad real, no en el mockup — se conserva) */}
@@ -353,10 +394,10 @@ export default function AlmacenRecepcionPage() {
           </div>
         )}
 
-        {/* Tabs */}
-        <div style={S.tabs}>
-          <button style={S.tab(filter === 'en_camino')} onClick={() => setFilter('en_camino')}>Por recibir · {totales.enCamino}</button>
-          <button style={S.tab(filter === 'en_almacen')} onClick={() => setFilter('en_almacen')}>Recibidos hoy · {totales.enAlmacen}</button>
+        {/* Tabs — escritorio: pills compactas a la izquierda; móvil: flex 1:1 */}
+        <div style={isDesktop ? S.tabsDesktop : S.tabs}>
+          <button style={isDesktop ? S.tabDesktop(filter === 'en_camino') : S.tab(filter === 'en_camino')} onClick={() => setFilter('en_camino')}>Por recibir · {totales.enCamino}</button>
+          <button style={isDesktop ? S.tabDesktop(filter === 'en_almacen') : S.tab(filter === 'en_almacen')} onClick={() => setFilter('en_almacen')}>Recibidos hoy · {totales.enAlmacen}</button>
         </div>
 
         {/* Lista de sublotes (cards) */}
@@ -368,46 +409,51 @@ export default function AlmacenRecepcionPage() {
             <br />{filter === 'en_camino' ? 'Todo recibido. Sin pendientes en el andén.' : 'Aún sin recepciones hoy.'}
           </div>
         ) : (
-          lista.map(s => {
-            const lote = s._lote;
-            const prueba = esPrueba(lote);
-            const esTote = s.claseSublote === 'tote' || s.tipo === 'tote' || s.fase === 1;
-            const isBusy = busy === s.cod;
-            const acciones = getAccionesSublote(s, rol);
-            const puedeRecibir = canAct && acciones.includes('escanearRecibirTeran');
-            const est = filter === 'en_camino'
-              ? { l: 'En camino', bg: 'color-mix(in srgb, var(--lp-warning-600) 14%, transparent)', fg: 'var(--lp-warning-700)' }
-              : { l: 'Recibido', bg: 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)', fg: 'var(--lp-brand-700)' };
-            return (
-              <div key={s.cod} style={{ ...S.card, ...(prueba ? S.cardPrueba : {}) }}>
-                <div style={S.chead}>
-                  <span style={S.cod}>{s.cod}</span>
-                  {esTote && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-brand-700)', letterSpacing: '.04em' }}>TOTE</span>}
-                  {prueba && <PruebaBadge size="sm" />}
-                  <span style={S.estado(est)}>{est.l}</span>
-                </div>
-                <div style={S.prod}>{lote?.producto || lote?.nombre || '—'}</div>
-                <div style={S.qty}>{subloteQtyTxt(s)}</div>
-                <div style={S.from}>{TRUCK_ICON} {(lote?.codigo || lote?.codigoLote || '')} · Fábrica → Terán</div>
-                {prueba && filter === 'en_camino' && (
-                  <div style={S.pruebaNote}>Lote de prueba — no sumes PT al stock físico, sólo simula la recepción.</div>
-                )}
-                {filter === 'en_camino' ? (
-                  puedeRecibir ? (
-                    <button type="button" data-id="recepcion.btn.confirmar" data-rol="almacen,admin"
-                      style={{ ...S.act, ...S.actPrimary, opacity: isBusy ? 0.6 : 1 }} disabled={isBusy}
-                      onClick={() => recibirSublote(s)}>
-                      {CHECK_ICON} {isBusy ? 'Recibiendo…' : (esTote ? 'Recibir TOTE' : 'Confirmar recepción')}
-                    </button>
+          /* móvil: una columna (cards apiladas con marginBottom);
+             escritorio: grid auto-fill 2-3 columnas (mismo card, CTA al fondo). */
+          <div style={isDesktop ? S.grid : undefined}>
+            {lista.map(s => {
+              const lote = s._lote;
+              const prueba = esPrueba(lote);
+              const esTote = s.claseSublote === 'tote' || s.tipo === 'tote' || s.fase === 1;
+              const isBusy = busy === s.cod;
+              const acciones = getAccionesSublote(s, rol);
+              const puedeRecibir = canAct && acciones.includes('escanearRecibirTeran');
+              const actBase = isDesktop ? S.actDesktop : S.act;
+              const est = filter === 'en_camino'
+                ? { l: 'En camino', bg: 'color-mix(in srgb, var(--lp-warning-600) 14%, transparent)', fg: 'var(--lp-warning-700)' }
+                : { l: 'Recibido', bg: 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)', fg: 'var(--lp-brand-700)' };
+              return (
+                <div key={s.cod} style={{ ...(isDesktop ? S.cardDesktop : S.card), ...(prueba ? S.cardPrueba : {}) }}>
+                  <div style={S.chead}>
+                    <span style={S.cod}>{s.cod}</span>
+                    {esTote && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-brand-700)', letterSpacing: '.04em' }}>TOTE</span>}
+                    {prueba && <PruebaBadge size="sm" />}
+                    <span style={S.estado(est)}>{est.l}</span>
+                  </div>
+                  <div style={S.prod}>{lote?.producto || lote?.nombre || '—'}</div>
+                  <div style={S.qty}>{subloteQtyTxt(s)}</div>
+                  <div style={S.from}>{TRUCK_ICON} {(lote?.codigo || lote?.codigoLote || '')} · Fábrica → Terán</div>
+                  {prueba && filter === 'en_camino' && (
+                    <div style={S.pruebaNote}>Lote de prueba — no sumes PT al stock físico, sólo simula la recepción.</div>
+                  )}
+                  {filter === 'en_camino' ? (
+                    puedeRecibir ? (
+                      <button type="button" data-id="recepcion.btn.confirmar" data-rol="almacen,admin"
+                        style={{ ...actBase, ...S.actPrimary, opacity: isBusy ? 0.6 : 1 }} disabled={isBusy}
+                        onClick={() => recibirSublote(s)}>
+                        {CHECK_ICON} {isBusy ? 'Recibiendo…' : (esTote ? 'Recibir TOTE' : 'Confirmar recepción')}
+                      </button>
+                    ) : (
+                      <button style={{ ...actBase, ...S.actDone }} disabled>En camino — espera a que llegue</button>
+                    )
                   ) : (
-                    <button style={{ ...S.act, ...S.actDone }} disabled>En camino — espera a que llegue</button>
-                  )
-                ) : (
-                  <button style={{ ...S.act, ...S.actDone }} disabled>✓ En stock Terán</button>
-                )}
-              </div>
-            );
-          })
+                    <button style={{ ...actBase, ...S.actDone }} disabled>✓ En stock Terán</button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
