@@ -1,5 +1,28 @@
 import { useState, useEffect } from 'react';
 
+/* Ícono SVG line de reloj (reemplaza el emoji ⏱ por defecto).
+   stroke="currentColor" → hereda el color del cronómetro. */
+function IconoReloj({ size = 14 }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      style={{ flexShrink: 0 }}
+    >
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2.5 2" />
+      <path d="M9 2h6" />
+    </svg>
+  );
+}
+
 /**
  * Cronómetro vivo: muestra tiempo transcurrido desde `desde` (ISO string).
  * Se actualiza cada segundo. Si `desde` no es válida, muestra "—".
@@ -8,9 +31,9 @@ import { useState, useEffect } from 'react';
  *  - desde: string ISO (ej: "2026-05-08T10:30:00Z")
  *  - compact: bool — formato compacto "HH:MM" en vez de "HH:MM:SS"
  *  - color: bg color override
- *  - prefix: texto antes del cronómetro (default "⏱")
+ *  - prefix: nodo antes del cronómetro (default: ícono SVG de reloj)
  */
-export default function Cronometro({ desde, compact = false, color, prefix = '⏱' }) {
+export default function Cronometro({ desde, compact = false, color, prefix }) {
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -52,7 +75,9 @@ export default function Cronometro({ desde, compact = false, color, prefix = '�
       letterSpacing: '.04em',
       whiteSpace: 'nowrap',
     }} title={`Iniciado: ${new Date(desde).toLocaleString('es-MX')}`}>
-      <span style={{ fontSize: 11 }}>{prefix}</span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', fontSize: 11 }}>
+        {prefix == null ? <IconoReloj size={13} /> : prefix}
+      </span>
       {label}
     </span>
   );

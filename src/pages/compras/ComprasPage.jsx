@@ -3,7 +3,8 @@ import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
-import OCsTab from './OCsTab';
+import useIsDesktop from '../../hooks/useIsDesktop';
+import { useAuth } from '../../context/AuthContext';
 import PrediccionIATab from './PrediccionIATab';
 import ForecastIATab from './ForecastIATab';
 import PrediccionPedidosTab from './PrediccionPedidosTab';
@@ -12,6 +13,13 @@ import SATPanel from '../admin/SATPanel';
 import HelpHint from '../../components/HelpHint';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import PageTabs from '../../components/ui/PageTabs';
+/* Modales reales del flujo OC (Sprint AC) — se REUSAN tal cual, sin tocarlos. */
+import NewOCModal from './components/NewOCModal';
+import AprobarOCModal from './components/AprobarOCModal';
+import RegistrarPagoModal from './components/RegistrarPagoModal';
+import EditOCModal from './components/EditOCModal';
+import RecibirOCModal from './components/RecibirOCModal';
+import EliminarOCModal from './components/EliminarOCModal';
 
 const S = {
   wrap: { padding: '0 20px 100px' },
@@ -78,6 +86,12 @@ const S = {
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
 };
 
+/* ── Brand chart palette (verde manda — antes era morado #534AB7/#AFA9EC).
+   Canvas no resuelve var(--lp-*), por eso se usan los hex del tema verde. ── */
+const CHART_FC_HEX = '#7BC9AC';
+const CHART_HIST_HEX = '#1D9E75';
+const CHART_FC_STROKE_HEX = '#1D9E75';
+
 /* ── Months helper ── */
 const MESES_CORTO = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 function mesLabel(mesKey) {
@@ -88,7 +102,440 @@ function mesLabel(mesKey) {
 }
 
 /* ══════════════════════════════════════════════════════════════════ */
-/* BAR CHART — pure canvas, no dependencies                          */
+/* OCs — helpers de estado/pago/vencimiento (espejo de OCCard)        */
+/* ══════════════════════════════════════════════════════════════════ */
+function _diasVence(fechaVencimientoISO) {
+  if (!fechaVencimientoISO) return null;
+  try {
+    const v = new Date(fechaVencimientoISO.slice(0, 10) + 'T00:00:00');
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    return Math.round((v - hoy) / (24 * 3600 * 1000));
+  } catch { return null; }
+}
+
+/* Clasifica una OC en: porAprobar | activa | recibida */
+function _ocBucket(oc) {
+  if (oc.estado === 'recibida' || oc.estado === 'completada' || oc.estado === 'eliminada' || oc.eliminada) {
+    return 'recibida';
+  }
+  /* sin aprobar y sin forma de pago = está esperando aprobación */
+  if (!oc.aprobada && !oc.pago) return 'porAprobar';
+  return 'activa';
+}
+
+function fmtMoney(n) {
+  const num = Number(n);
+  if (!Number.isFinite(num) || num === 0) return null;
+  return '$' + num.toLocaleString('es-MX', { maximumFractionDigits: 0 });
+}
+
+/* Monto a mostrar en la columna/línea: factura real > estimado por items > flete. */
+function _ocMonto(oc) {
+  if (Number(oc.totalFacturaConIva) > 0) return fmtMoney(oc.totalFacturaConIva);
+  const est = (oc.items || []).reduce((s, it) => {
+    const kg = Number(it.kg) || 0;
+    const p = Number(it.precioUnitario) || 0;
+    return s + kg * p;
+  }, 0);
+  const flete = Number(oc.fleteEstimadoMxn) || 0;
+  const total = est + flete;
+  if (total > 0) return fmtMoney(total);
+  return null;
+}
+
+function _ocKgTotal(oc) {
+  return (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0), 0);
+}
+
+function _ocMPLabel(oc) {
+  const items = oc.items || [];
+  if (items.length === 0) return 'Materia prima';
+  if (items.length === 1) return items[0].mp || 'Materia prima';
+  return `${items[0].mp || 'MP'} +${items.length - 1}`;
+}
+
+/* Estado visual: { label, color (token) } */
+function _ocEstadoVisual(oc, alertas) {
+  const bucket = _ocBucket(oc);
+  if (bucket === 'recibida') {
+    if (oc.eliminada || oc.estado === 'eliminada') return { label: 'Eliminada', color: 'var(--lp-danger-600)' };
+    return { label: 'Recibida', color: 'var(--lp-success-600)' };
+  }
+  if (bucket === 'porAprobar') return { label: 'Por aprobar', color: 'var(--lp-warning-600)' };
+  if (alertas.vencida) return { label: 'Vencida', color: 'var(--lp-danger-600)' };
+  if (alertas.porVencer) return { label: 'Por vencer', color: 'var(--lp-warning-600)' };
+  return { label: 'Activa', color: 'var(--lp-info-600)' };
+}
+
+/* Etiqueta de forma de pago para la columna Pago */
+function _ocPagoLabel(oc) {
+  if (!oc.pago) return '—';
+  if (oc.pago === 'contado') return 'Contado' + (oc.comprobanteNombre ? ' · comprobante' : '');
+  if (oc.pago === 'credito') return oc.pagada ? 'Crédito · pagado' : 'Crédito 30d';
+  return oc.pago;
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* OC ACTIONS — botones + modales reales, gating idéntico a OCCard    */
+/* Reutilizable por la fila de tabla (escritorio) y la card (móvil).  */
+/* ══════════════════════════════════════════════════════════════════ */
+const BTN = {
+  base: {
+    padding: '0 14px', minHeight: 44, height: 44, fontSize: 13, fontWeight: 600,
+    borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    whiteSpace: 'nowrap',
+  },
+  primary: { background: 'var(--lp-brand-600)', color: '#fff' },
+  ghost: { background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)' },
+  warn: { background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' },
+  danger: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)' },
+  success: { background: 'var(--lp-success-100)', color: 'var(--lp-success-700)' },
+  done: { background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)', cursor: 'default' },
+};
+/* Versión compacta para celdas de tabla (escritorio): no estirar, tamaño cómodo. */
+const BTN_SM = {
+  base: {
+    padding: '0 12px', minHeight: 34, height: 34, fontSize: 12, fontWeight: 600,
+    borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+    whiteSpace: 'nowrap',
+  },
+};
+
+/* SVG line icons (sin emojis) */
+const ICheck = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+);
+const IPrint = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+);
+const IPlus = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+);
+
+/**
+ * useOCActions — comparte el modal-state + handlers + gating de UNA oc.
+ * Devuelve los botones a renderizar y los modales montados.
+ * `compact` = botones de tabla (escritorio).
+ */
+function useOCActions(oc, onRefresh, can) {
+  const [modal, setModal] = useState(null); /* aprobar | pago | editar | recibir | eliminar | null */
+  const close = () => setModal(null);
+  const refresh = () => onRefresh && onRefresh();
+
+  const bucket = _ocBucket(oc);
+  const isActive = bucket === 'activa';
+  const isSolicitud = oc.origen === 'solicitud_tecnico' || oc.estado === 'solicitud';
+
+  const necesitaAprobar = bucket === 'porAprobar' && can('compras');
+  const esCreditoSinPagar = oc.pago === 'credito' && !oc.pagada;
+  const dias = esCreditoSinPagar ? _diasVence(oc.fechaVencimiento) : null;
+  const vencida = esCreditoSinPagar && dias != null && dias < 0;
+  const porVencer = esCreditoSinPagar && dias != null && dias >= 0 && dias <= 5;
+
+  const handlePrint = () => window.open(`/api/compras/oc/${oc.id}/print`, '_blank');
+
+  const modals = (
+    <>
+      {modal === 'aprobar' && <AprobarOCModal oc={oc} onClose={close} onSaved={refresh} />}
+      {modal === 'pago' && <RegistrarPagoModal oc={oc} onClose={close} onSaved={refresh} />}
+      {modal === 'editar' && <EditOCModal oc={oc} onClose={close} onSaved={refresh} />}
+      {modal === 'recibir' && <RecibirOCModal oc={oc} onClose={close} onSaved={refresh} />}
+      {modal === 'eliminar' && <EliminarOCModal oc={oc} onClose={close} onSaved={refresh} />}
+    </>
+  );
+
+  return {
+    bucket, isActive, isSolicitud,
+    necesitaAprobar, esCreditoSinPagar, dias, vencida, porVencer,
+    setModal, handlePrint, modals,
+  };
+}
+
+/* Renderiza la fila de botones de una OC. `sm` = compacto (tabla escritorio). */
+function OCButtons({ a, can, sm }) {
+  const SZ = sm ? BTN_SM.base : BTN.base;
+  const recibida = a.bucket === 'recibida';
+  return (
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: sm ? 'flex-end' : 'flex-start' }}>
+      {a.necesitaAprobar && (
+        /* §2: Aprobar OC → sheet de pago + comprobante */
+        <button data-id="compras.btn.aprobar-oc" style={{ ...SZ, ...BTN.primary }}
+          onClick={() => a.setModal('aprobar')} title="Aprobar OC: forma de pago + comprobante">
+          Aprobar OC
+        </button>
+      )}
+      {a.esCreditoSinPagar && can('compras') && (
+        /* §2: Registrar pago (crédito) */
+        <button data-id="compras.btn.registrar-pago" style={{ ...SZ, ...BTN.warn }}
+          onClick={() => a.setModal('pago')} title="Registrar el pago del crédito (sube comprobante)">
+          Registrar pago
+        </button>
+      )}
+      {a.isActive && can('recibirMP') && (
+        /* §2: Recibir MP */
+        <button data-id="compras.btn.recibir-mp" style={{ ...SZ, ...(sm ? BTN.success : BTN.primary) }}
+          onClick={() => a.setModal('recibir')} title="Registrar recepción de MP">
+          {!sm && ICheck} Recibir MP
+        </button>
+      )}
+      {a.isActive && can('compras') && (
+        /* §2: Editar OC (compras, admin) */
+        <button data-id="compras.btn.editar-oc" style={{ ...SZ, ...BTN.ghost }}
+          onClick={() => a.setModal('editar')} title="Editar detalles de la OC">
+          Editar
+        </button>
+      )}
+      {!a.isSolicitud && !recibida && can('compras') && (
+        /* §2: Imprimir OC */
+        <button data-id="compras.btn.imprimir-oc" style={{ ...SZ, ...BTN.ghost }}
+          onClick={a.handlePrint} title="Imprimir OC formal">
+          {IPrint}{!sm && <span>Imprimir</span>}
+        </button>
+      )}
+      {a.isActive && can('configuracion') && (
+        /* §2: Eliminar OC (SOLO admin — can('configuracion') es admin-only) */
+        <button data-id="compras.btn.eliminar-oc" data-rol="admin" style={{ ...SZ, ...BTN.danger }}
+          onClick={() => a.setModal('eliminar')} title="Eliminar esta OC (solo admin)">
+          Eliminar
+        </button>
+      )}
+      {recibida && (
+        <button style={{ ...SZ, ...BTN.done }} disabled>
+          {ICheck} En inventario
+        </button>
+      )}
+      {recibida && !a.isSolicitud && can('compras') && (
+        <button data-id="compras.btn.imprimir-oc" style={{ ...SZ, ...BTN.ghost }}
+          onClick={a.handlePrint} title="Imprimir OC formal">
+          {IPrint}{!sm && <span>Imprimir</span>}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/* Alerta de crédito (vencido / por vencer) — §2 */
+function OCCreditAlert({ a, oc }) {
+  if (a.vencida) {
+    return (
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-danger-700)' }}>
+        Crédito vencido · {Math.abs(a.dias)}d de retraso
+      </div>
+    );
+  }
+  if (a.porVencer) {
+    return (
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-warning-700)' }}>
+        Crédito por vencer · en {a.dias}d
+      </div>
+    );
+  }
+  if (a.esCreditoSinPagar && oc.fechaVencimiento) {
+    return (
+      <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+        Crédito · vence {oc.fechaVencimiento.slice(0, 10)}
+      </div>
+    );
+  }
+  return null;
+}
+
+/* ── ESCRITORIO: una fila de la tabla de OCs ── */
+function OCDeskRow({ oc, onRefresh, can }) {
+  const a = useOCActions(oc, onRefresh, can);
+  const ev = _ocEstadoVisual(oc, a);
+  const monto = _ocMonto(oc);
+  const kg = _ocKgTotal(oc);
+  return (
+    <>
+      <tr data-id="compras.card.oc">
+        <td style={{ ...S.td, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-brand-700)' }}>
+          {oc.codigo}
+        </td>
+        <td style={S.td}>
+          <div style={{ fontWeight: 600 }}>{_ocMPLabel(oc)}</div>
+          {kg > 0 && <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{kg.toLocaleString('es-MX')} kg</div>}
+          <OCCreditAlert a={a} oc={oc} />
+        </td>
+        <td style={S.td}>{oc.proveedor || '—'}</td>
+        <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>
+          {monto || <span style={{ color: 'var(--lp-text-disabled)' }}>—</span>}
+        </td>
+        <td style={{ ...S.td, fontSize: 11, color: 'var(--lp-text-secondary)' }}>{_ocPagoLabel(oc)}</td>
+        <td style={S.td}>
+          <span style={S.badge(`color-mix(in srgb, ${ev.color} 14%, transparent)`, ev.color)}>{ev.label}</span>
+        </td>
+        <td style={{ ...S.td, textAlign: 'right' }}>
+          <OCButtons a={a} can={can} sm />
+        </td>
+      </tr>
+      {a.modals}
+    </>
+  );
+}
+
+/* ── MÓVIL: card limpia (estilo S.compras) ── */
+function OCMobileCard({ oc, onRefresh, can }) {
+  const a = useOCActions(oc, onRefresh, can);
+  const ev = _ocEstadoVisual(oc, a);
+  const monto = _ocMonto(oc);
+  const stripe = ev.color;
+  return (
+    <div data-id="compras.card.oc"
+      style={{ ...S.card, position: 'relative', paddingLeft: 20, borderRadius: 18 }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, width: 4, height: '100%', borderRadius: '18px 0 0 18px', background: stripe }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-700)' }}>
+          {oc.codigo}
+        </span>
+        {a.isSolicitud && (
+          <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-700)')}>SOLICITUD</span>
+        )}
+        <span style={{ ...S.badge(`color-mix(in srgb, ${ev.color} 14%, transparent)`, ev.color), marginLeft: 'auto' }}>
+          {ev.label}
+        </span>
+      </div>
+      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-primary)', letterSpacing: '-.01em' }}>
+        {_ocMPLabel(oc)}
+      </div>
+      <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3 }}>
+        {oc.proveedor || 'Proveedor'}{monto ? ` · ` : ''}
+        {monto && <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{monto}</span>}
+      </div>
+      <div style={{ marginTop: 8 }}>
+        <OCCreditAlert a={a} oc={oc} />
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <OCButtons a={a} can={can} />
+      </div>
+      {a.modals}
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* OCs TAB — pills (Por aprobar/Activas/Recibidas) + Levantar OC       */
+/* responsive: tabla (escritorio) / cards (móvil)                     */
+/* ══════════════════════════════════════════════════════════════════ */
+function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed, onCreated, isDesktop }) {
+  const { can } = useAuth();
+  const { query, debouncedQuery, setQuery } = useSearch(200);
+  const [bucket, setBucket] = useState('porAprobar');
+  const [showNew, setShowNew] = useState(false);
+
+  /* Si llega prefill desde MRP/Predicción, abrir Levantar OC */
+  useEffect(() => { if (prefillNewOC) setShowNew(true); }, [prefillNewOC]);
+
+  const ocs = useMemo(() => {
+    const raw = Array.isArray(ocsData) ? ocsData : ocsData?.data || [];
+    return raw;
+  }, [ocsData]);
+
+  const counts = useMemo(() => {
+    const c = { porAprobar: 0, activa: 0, recibida: 0 };
+    ocs.forEach(o => { c[_ocBucket(o)]++; });
+    return c;
+  }, [ocs]);
+
+  const filtered = useMemo(() => {
+    let items = ocs.filter(o => _ocBucket(o) === bucket);
+    if (debouncedQuery) {
+      const q = debouncedQuery.toLowerCase();
+      items = items.filter(o =>
+        (o.codigo || '').toLowerCase().includes(q) ||
+        (o.proveedor || '').toLowerCase().includes(q) ||
+        (o.items || []).some(it => (it.mp || '').toLowerCase().includes(q))
+      );
+    }
+    return items;
+  }, [ocs, bucket, debouncedQuery]);
+
+  const handleCreated = async () => {
+    setShowNew(false);
+    if (onPrefillConsumed) onPrefillConsumed();
+    if (onCreated) onCreated();
+    else await onRefresh();
+  };
+  const handleCloseNew = () => {
+    setShowNew(false);
+    if (onPrefillConsumed) onPrefillConsumed();
+  };
+
+  return (
+    <>
+      {/* Pills de estado + Levantar OC */}
+      <div style={{ ...S.toolbar, alignItems: 'stretch' }}>
+        <input type="text" style={{ ...S.search, maxWidth: 280, minHeight: 44, height: 44 }}
+          placeholder="Buscar por código, proveedor o MP..."
+          value={query} onChange={e => setQuery(e.target.value)} />
+        <SegmentedControl
+          value={bucket}
+          onChange={setBucket}
+          color="brand"
+          options={[
+            { value: 'porAprobar', label: `Por aprobar${counts.porAprobar ? ` · ${counts.porAprobar}` : ''}` },
+            { value: 'activa',     label: `Activas${counts.activa ? ` · ${counts.activa}` : ''}` },
+            { value: 'recibida',   label: `Recibidas${counts.recibida ? ` · ${counts.recibida}` : ''}` },
+          ]}
+        />
+        {can('compras') && (
+          <button
+            data-id="compras.btn.levantar-oc"
+            style={{ ...BTN.base, ...BTN.primary, minHeight: 44, height: 44, marginLeft: isDesktop ? 'auto' : 0 }}
+            onClick={() => setShowNew(true)}>
+            {IPlus} Levantar OC
+          </button>
+        )}
+      </div>
+
+      {filtered.length === 0 ? (
+        <div style={S.empty}>
+          {ocs.length === 0 ? 'Sin órdenes de compra.' : 'Sin OCs en esta vista.'}
+        </div>
+      ) : isDesktop ? (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={S.table}>
+            <thead>
+              <tr>
+                <th style={S.th}>OC</th>
+                <th style={S.th}>Materia prima</th>
+                <th style={S.th}>Proveedor</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Monto</th>
+                <th style={S.th}>Pago</th>
+                <th style={S.th}>Estado</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(oc => (
+                <OCDeskRow key={oc.id} oc={oc} onRefresh={onRefresh} can={can} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div>
+          {filtered.map(oc => (
+            <OCMobileCard key={oc.id} oc={oc} onRefresh={onRefresh} can={can} />
+          ))}
+        </div>
+      )}
+
+      {showNew && (
+        <NewOCModal
+          onClose={handleCloseNew}
+          onCreated={handleCreated}
+          prefillMP={prefillNewOC}
+        />
+      )}
+    </>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════ */
+/* BAR CHART — pure canvas, no dependencies (verde)                  */
 /* ══════════════════════════════════════════════════════════════════ */
 function BarChart({ historico, forecast, height = 220, onBarClick }) {
   const canvasRef = useRef(null);
@@ -145,15 +592,15 @@ function BarChart({ historico, forecast, height = 220, onBarClick }) {
       const y = padT + chartH - bh;
 
       if (bar.tipo === 'forecast') {
-        ctx.fillStyle = '#AFA9EC';
+        ctx.fillStyle = CHART_FC_HEX;
         ctx.setLineDash([3, 2]);
-        ctx.strokeStyle = '#534AB7';
+        ctx.strokeStyle = CHART_FC_STROKE_HEX;
         ctx.lineWidth = 1;
         ctx.fillRect(x, y, barW, bh);
         ctx.strokeRect(x, y, barW, bh);
         ctx.setLineDash([]);
       } else {
-        ctx.fillStyle = '#534AB7';
+        ctx.fillStyle = CHART_HIST_HEX;
         ctx.fillRect(x, y, barW, bh);
       }
 
@@ -172,17 +619,17 @@ function BarChart({ historico, forecast, height = 220, onBarClick }) {
 
     /* Legend */
     const legY = padT + 2;
-    ctx.fillStyle = '#534AB7';
+    ctx.fillStyle = CHART_HIST_HEX;
     ctx.fillRect(w - padR - 160, legY, 10, 10);
     ctx.fillStyle = '#666';
     ctx.font = '10px system-ui';
     ctx.textAlign = 'left';
     ctx.fillText('Historico', w - padR - 146, legY + 9);
 
-    ctx.fillStyle = '#AFA9EC';
+    ctx.fillStyle = CHART_FC_HEX;
     ctx.fillRect(w - padR - 82, legY, 10, 10);
     ctx.setLineDash([3, 2]);
-    ctx.strokeStyle = '#534AB7';
+    ctx.strokeStyle = CHART_FC_STROKE_HEX;
     ctx.strokeRect(w - padR - 82, legY, 10, 10);
     ctx.setLineDash([]);
     ctx.fillStyle = '#666';
@@ -419,7 +866,7 @@ function BarDetail({ barData, consumoPorMP, onClose }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div>
           <span style={{ fontSize: 13, fontWeight: 700 }}>{mesLabel(barData.mes)}</span>
-          <span style={{ ...S.badge(barData.tipo === 'forecast' ? '#EDE9FE' : 'var(--lp-brand-100)', barData.tipo === 'forecast' ? '#534AB7' : 'var(--lp-brand-700)'), marginLeft: 8 }}>
+          <span style={{ ...S.badge(barData.tipo === 'forecast' ? 'var(--lp-brand-100)' : 'var(--lp-brand-100)', barData.tipo === 'forecast' ? 'var(--lp-brand-600)' : 'var(--lp-brand-700)'), marginLeft: 8 }}>
             {barData.tipo === 'forecast' ? 'Proyeccion' : 'Historico'}
           </span>
         </div>
@@ -506,7 +953,7 @@ function ForecastPTTable({ forecastPorPT, consumoPorPT, forecastBlend, demandaPO
           Proyeccion producto terminado
         </div>
         {hasPOS && (
-          <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: '#DBEAFE', color: '#1D4ED8', fontWeight: 600 }}>
+          <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--lp-info-100)', color: 'var(--lp-info-700)', fontWeight: 600 }}>
             + Ventas POS
           </span>
         )}
@@ -564,7 +1011,7 @@ function ForecastPTTable({ forecastPorPT, consumoPorPT, forecastBlend, demandaPO
                         <span style={{ fontSize: 10, color: 'var(--lp-text-disabled)', transition: 'transform .2s', transform: isOpen ? 'rotate(90deg)' : 'none' }}>&#9654;</span>
                         <div>
                           <span>{it.pt}</span>
-                          {it.fuente === 'pos' && <span style={{ fontSize: 8, marginLeft: 4, color: '#1D4ED8' }}>solo POS</span>}
+                          {it.fuente === 'pos' && <span style={{ fontSize: 8, marginLeft: 4, color: 'var(--lp-info-700)' }}>solo POS</span>}
                         </div>
                       </div>
                       {isOpen && (
@@ -574,7 +1021,7 @@ function ForecastPTTable({ forecastPorPT, consumoPorPT, forecastBlend, demandaPO
                             <div key={f.mes} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
                               <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--lp-text-tertiary)', width: 42 }}>{mesLabel(f.mes)}</span>
                               <div style={{ flex: 1, height: 6, borderRadius: 3, background: 'var(--lp-bg-sunken)', overflow: 'hidden', maxWidth: 120 }}>
-                                <div style={{ height: '100%', width: `${(f.cubetas / maxFc) * 100}%`, borderRadius: 3, background: it.fuente === 'pos' ? '#60A5FA' : it.fuente === 'blend' ? '#818CF8' : '#AFA9EC' }} />
+                                <div style={{ height: '100%', width: `${(f.cubetas / maxFc) * 100}%`, borderRadius: 3, background: it.fuente === 'pos' ? 'var(--lp-info-500)' : it.fuente === 'blend' ? 'var(--lp-brand-500)' : 'var(--lp-brand-300)' }} />
                               </div>
                               <span style={{ fontSize: 11, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-text-secondary)' }}>
                                 {f.cubetas}
@@ -590,7 +1037,7 @@ function ForecastPTTable({ forecastPorPT, consumoPorPT, forecastBlend, demandaPO
                       {Math.round(it.prodMensual) || <span style={{ color: 'var(--lp-text-disabled)' }}>—</span>}
                     </td>
                     {hasPOS && (
-                      <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)', verticalAlign: 'top', color: '#1D4ED8' }}>
+                      <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)', verticalAlign: 'top', color: 'var(--lp-info-700)' }}>
                         {it.posMensual || <span style={{ color: 'var(--lp-text-disabled)' }}>—</span>}
                       </td>
                     )}
@@ -617,7 +1064,7 @@ function ForecastPTTable({ forecastPorPT, consumoPorPT, forecastBlend, demandaPO
                       <div style={{ display: 'flex', gap: 1, alignItems: 'flex-end', height: 20 }}>
                         {it.forecast.slice(0, 6).map((f, idx) => {
                           const bh = maxFc > 0 ? Math.max(2, (f.cubetas / maxFc) * 20) : 2;
-                          return <div key={idx} style={{ width: 6, height: bh, borderRadius: 1, background: it.fuente === 'blend' ? '#818CF8' : '#AFA9EC' }} />;
+                          return <div key={idx} style={{ width: 6, height: bh, borderRadius: 1, background: it.fuente === 'blend' ? 'var(--lp-brand-500)' : 'var(--lp-brand-300)' }} />;
                         })}
                       </div>
                     </td>
@@ -1019,7 +1466,8 @@ function MRPTab({ mrpData, onCrearOC }) {
 /* MAIN COMPONENT                                                    */
 /* ══════════════════════════════════════════════════════════════════ */
 export default function ComprasPage() {
-  const [activeTab, setActiveTab] = useState('mrp');
+  const isDesktop = useIsDesktop();
+  const [activeTab, setActiveTab] = useState('ocs');
   const [newOCPrefill, setNewOCPrefill] = useState(null); // { mp, kg, proveedor }
 
   const { data: mrpData, loading: mrpLoading } = useApiData(() => api.getMRP(), [], 15000);
@@ -1036,7 +1484,7 @@ export default function ComprasPage() {
     onInventario:() => reloadOCs(),
   });
 
-  /* Callback desde MRPTab: abre el NewOCModal con los datos de la MP pre-llenados */
+  /* Callback desde MRPTab/Predicción: abre Levantar OC con la MP pre-llenada */
   const handleCrearOCFromMRP = (data) => {
     setNewOCPrefill(data);
     setActiveTab('ocs');
@@ -1059,13 +1507,18 @@ export default function ComprasPage() {
     return map;
   }, [invData]);
 
+  /* TABS.
+     - "Compras" (OCs) = EJECUTAR órdenes — la pantalla que urge, ya responsive.
+     - El resto (Pronóstico/MRP/Forecast IA/IA/Predicción) es "la inteligencia":
+       el plan del dueño es moverla a una pantalla NUEVA /pronostico (otro agente).
+       POR AHORA se reskina y se deja accesible aquí — NO se borra.  Ver FLAGS. */
   const tabs = [
-    { id: 'forecast',   label: '🤖 Forecast IA' },
+    { id: 'ocs',        label: 'Compras' },
+    { id: 'forecast',   label: 'Forecast IA' },
     { id: 'pedidos',    label: 'Predicción' },
     { id: 'mrp',        label: 'MRP' },
-    { id: 'ocs',        label: 'OCs' },
     { id: 'pronostico', label: 'Pronóstico' },
-    { id: 'ia',         label: 'IA' },
+    { id: 'ia',         label: 'IA avanzada' },
     { id: 'aliases',    label: 'POS Aliases' },
     { id: 'sat',        label: 'SAT' },
   ];
@@ -1074,8 +1527,8 @@ export default function ComprasPage() {
     <>
       <TopBar title="Compras" />
       <div style={S.wrap}>
-        <HelpHint id="compras-overview" title="Compras: 5 herramientas en uno">
-          <strong>MRP</strong>: detecta MPs que faltan según producción esperada. <strong>OCs</strong>: crea, recibe y cierra órdenes de compra. <strong>Pronóstico</strong>: WMA × estacional × YoY blended con demanda POS. <strong>Predicción IA</strong>: Holt forecasting con alertas. <strong>SAT/CFDI</strong>: parsea XMLs de facturas y los cruza con OCs.
+        <HelpHint id="compras-overview" title="Compras: ejecutar OCs + inteligencia de compra">
+          <strong>Compras</strong>: levanta, aprueba (con pago + comprobante), recibe y cierra órdenes de compra. <strong>MRP</strong>: detecta MPs que faltan según producción esperada. <strong>Pronóstico</strong>: WMA × estacional × YoY blended con demanda POS. <strong>Forecast IA / IA avanzada</strong>: motor de sugerencias y Holt forecasting. <strong>SAT/CFDI</strong>: parsea XMLs de facturas y los cruza con OCs.
         </HelpHint>
         <PageTabs
           tabs={tabs.map(t => ({ ...t, style: (active) => S.tab(active) }))}
@@ -1083,6 +1536,19 @@ export default function ComprasPage() {
           onChange={setActiveTab}
           style={S.tabs}
         />
+
+        {activeTab === 'ocs' && (
+          ocsLoading
+            ? <div style={S.spinner}><div className="lp-spinner" /></div>
+            : <OCsTabResponsive
+                ocsData={ocsData}
+                onRefresh={reloadOCs}
+                prefillNewOC={newOCPrefill}
+                onPrefillConsumed={() => setNewOCPrefill(null)}
+                onCreated={handleNewOCCreated}
+                isDesktop={isDesktop}
+              />
+        )}
 
         {activeTab === 'pedidos' && (
           <PrediccionPedidosTab onCreateOC={handleCrearOCFromMRP} />
@@ -1092,18 +1558,6 @@ export default function ComprasPage() {
           mrpLoading
             ? <div style={S.spinner}><div className="lp-spinner" /></div>
             : <MRPTab mrpData={mrpData} onCrearOC={handleCrearOCFromMRP} />
-        )}
-
-        {activeTab === 'ocs' && (
-          ocsLoading
-            ? <div style={S.spinner}><div className="lp-spinner" /></div>
-            : <OCsTab
-                ocsData={ocsData}
-                onRefresh={reloadOCs}
-                prefillNewOC={newOCPrefill}
-                onPrefillConsumed={() => setNewOCPrefill(null)}
-                onCreated={handleNewOCCreated}
-              />
         )}
 
         {activeTab === 'pronostico' && (

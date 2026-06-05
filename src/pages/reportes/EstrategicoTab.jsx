@@ -29,6 +29,54 @@ const fmtN = (n, d = 1) => n != null ? Number(n).toFixed(d) : '—';
 const fmtPct = (n) => n != null ? Number(n).toFixed(1) + '%' : '—';
 const MESES_ES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
+/* ── Íconos SVG line (reemplazan emojis 🖨️ ⚠ ✓ ⬆ ⬇). stroke="currentColor". ── */
+const SVG_BASE = {
+  fill: 'none', stroke: 'currentColor', strokeWidth: 2,
+  strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true,
+  style: { flexShrink: 0, verticalAlign: 'middle' },
+};
+function IconPrinter({ size = 15 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...SVG_BASE}>
+      <path d="M6 9V3h12v6" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="7" rx="1" />
+    </svg>
+  );
+}
+function IconWarning({ size = 12 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...SVG_BASE}>
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4" />
+      <path d="M12 17h.01" />
+    </svg>
+  );
+}
+function IconCheck({ size = 13 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...SVG_BASE}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
+  );
+}
+function IconArrowUp({ size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...SVG_BASE}>
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </svg>
+  );
+}
+function IconArrowDown({ size = 11 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" {...SVG_BASE}>
+      <path d="M12 5v14" />
+      <path d="m19 12-7 7-7-7" />
+    </svg>
+  );
+}
+
 /* ── SVG: Line chart simple para series mensuales ──────────────────────── */
 function LineChart({ series, labels, color = '#7C3AED', height = 120, formatter = (v) => v, suffix = '' }) {
   const valid = series.map(v => v == null ? null : Number(v));
@@ -163,7 +211,7 @@ export default function EstrategicoTab() {
         </select>
         <div style={{ flex: 1 }} />
         <a href={api.urlPDFEjecutivo(year, q)} target="_blank" rel="noopener noreferrer" style={S.btnPrimary}>
-          🖨️ Reporte ejecutivo PDF (Q{q}/{year})
+          <IconPrinter /> Reporte ejecutivo PDF (Q{q}/{year})
         </a>
       </div>
 
@@ -198,7 +246,7 @@ export default function EstrategicoTab() {
               </div>
               <div>
                 <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', marginBottom: 6 }}>Cobertura mensual %</div>
-                <BarChart series={anual.series.cobertura} labels={MESES_ES} color="#534AB7" suffix="%" height={100} />
+                <BarChart series={anual.series.cobertura} labels={MESES_ES} color="var(--lp-brand-600)" suffix="%" height={100} />
               </div>
             </div>
           </>
@@ -262,7 +310,7 @@ export default function EstrategicoTab() {
               <tbody>
                 {leads.filas.slice(0, 15).map(f => (
                   <tr key={f.mp}>
-                    <td style={S.td}><strong>{f.mp}</strong>{f.alerta && <div style={{ fontSize: 10, color: 'var(--lp-danger-700)' }}>⚠ {f.alerta}</div>}</td>
+                    <td style={S.td}><strong>{f.mp}</strong>{f.alerta && <div style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 10, color: 'var(--lp-danger-700)' }}><IconWarning size={11} /> {f.alerta}</div>}</td>
                     <td style={S.td}>{f.proveedor || '—'}</td>
                     <td style={S.tdNum}>{f.teorico ? f.teorico + 'd' : '—'}</td>
                     <td style={S.tdNum}>{f.promedio}d</td>
@@ -299,8 +347,8 @@ export default function EstrategicoTab() {
               <div style={{ background: 'var(--lp-warning-50)', border: '1px solid var(--lp-warning-200)', padding: 10, borderRadius: 6, marginBottom: 14, fontSize: 12 }}>
                 <strong>{abc.cambiosDeClase.length} MP(s) cambiaron de clase</strong> vs {abc.trimestreAnterior.y}-Q{abc.trimestreAnterior.q}:
                 {' '}{abc.cambiosDeClase.slice(0, 5).map(c => (
-                  <span key={c.mp} style={{ display: 'inline-block', marginRight: 12 }}>
-                    {c.mp}: {c.de}→{c.a} {c.cambio === 'subio' ? '⬆' : '⬇'}
+                  <span key={c.mp} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, marginRight: 12 }}>
+                    {c.mp}: {c.de}→{c.a} {c.cambio === 'subio' ? <IconArrowUp /> : <IconArrowDown />}
                   </span>
                 ))}
               </div>
@@ -327,7 +375,7 @@ export default function EstrategicoTab() {
                     </td>
                     <td style={S.td}>
                       {f.claseAnterior
-                        ? <>{f.claseAnterior} {f.cambio === 'subio' ? '⬆' : f.cambio === 'bajo' ? '⬇' : ''}</>
+                        ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>{f.claseAnterior} {f.cambio === 'subio' ? <IconArrowUp /> : f.cambio === 'bajo' ? <IconArrowDown /> : null}</span>
                         : '—'}
                     </td>
                     <td style={S.tdNum}>{fmtN(f.kgConsumidos, 0)}</td>
@@ -350,8 +398,8 @@ export default function EstrategicoTab() {
       <div style={S.section}>
         <div style={S.sectionTitle}>Costo de oportunidad por stockout — mes en curso</div>
         {!stockout || stockout.totalMPsConStockout === 0 ? (
-          <div style={{ padding: 20, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-            ✓ Sin stockouts en el mes en curso. Excelente disponibilidad de MP.
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: 20, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+            <span style={{ color: 'var(--lp-success-600)' }}><IconCheck /></span> Sin stockouts en el mes en curso. Excelente disponibilidad de MP.
           </div>
         ) : (
           <>

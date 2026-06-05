@@ -5,16 +5,40 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import NDAModal from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
 import MisActivosTab from './MisActivosTab';
 
+/* ═══════════════════════════════════════════════════════════════════ */
+/* ICONOS — line SVG (sin emojis). Diseño verde Claude Design.         */
+/* ═══════════════════════════════════════════════════════════════════ */
+const Ico = ({ d, size = 18, fill = 'none', sw = 2, style }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+    strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" style={style} aria-hidden="true">
+    {Array.isArray(d) ? d.map((p, i) => <path key={i} d={p} />) : <path d={d} />}
+  </svg>
+);
+const IcoClose   = (p) => <Ico {...p} d="M18 6L6 18M6 6l12 12" />;
+const IcoCheck   = (p) => <Ico {...p} d="M20 6L9 17l-5-5" />;
+const IcoX       = (p) => <Ico {...p} d="M18 6L6 18M6 6l12 12" />;
+const IcoFlask   = (p) => <Ico {...p} d={['M9 3h6', 'M10 3v6.5L5 18a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-8.5V3', 'M7.5 14h9']} />;
+const IcoPlay    = (p) => <Ico {...p} fill="currentColor" sw={0} d="M7 5l12 7-12 7z" />;
+const IcoEye     = (p) => <Ico {...p} d={['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z', 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z']} />;
+const IcoBeaker  = (p) => <Ico {...p} d={['M10 2v6.6L4.8 17A2 2 0 0 0 6.5 20h11a2 2 0 0 0 1.7-3L14 8.6V2', 'M9 2h6']} />;
+const IcoGear    = (p) => <Ico {...p} size={p.size || 40} sw={1.6} d={['M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z', 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z']} />;
+const IcoCheckCircle = (p) => <Ico {...p} size={p.size || 40} sw={1.7} d={['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'M22 4L12 14.01l-3-3']} />;
+const IcoChart   = (p) => <Ico {...p} size={p.size || 40} sw={1.6} d={['M3 3v18h18', 'M7 14l4-4 3 3 5-6']} />;
+
+/* QC accent — morado universal (no es color de marca, es estado QC) */
+const QC = '#7C3AED';
+
 /* ── Badge helper ── */
 const B = (bg, fg) => ({
-  display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 600,
-  borderRadius: 6, background: bg, color: fg, marginRight: 4,
+  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', fontSize: 10.5, fontWeight: 600,
+  borderRadius: 999, background: bg, color: fg, whiteSpace: 'nowrap',
 });
 
 const S = {
@@ -36,55 +60,62 @@ const S = {
     gap: 10, marginBottom: 16,
   },
   kpi: (accent) => ({
-    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-sm)',
-    border: '1.5px solid var(--lp-border-subtle)', padding: '14px 16px',
-    borderTop: `3px solid ${accent}`, textAlign: 'center',
+    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
+    border: '1px solid var(--lp-border-subtle)', padding: '14px 16px',
+    borderTop: `3px solid ${accent}`,
   }),
-  kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-tertiary)' },
+  kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' },
   kpiValue: { fontSize: 24, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 },
+
+  /* ── Cards móvil ── */
   card: (highlight) => ({
     background: highlight ? 'var(--lp-brand-50)' : 'var(--lp-bg-raised)',
-    border: highlight ? '2px solid var(--lp-brand-200)' : '1.5px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 10,
+    border: highlight ? '1.5px solid var(--lp-brand-200)' : '1px solid var(--lp-border-subtle)',
+    borderRadius: 18, padding: 16, marginBottom: 10,
   }),
-  cardTitle: { fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 4 },
-  cardMeta: { fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 8 },
-  cardActions: { display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' },
-  btnPrimary: {
-    padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
+  cardTitle: { fontSize: 15, fontWeight: 600, color: 'var(--lp-text-primary)', marginBottom: 3, lineHeight: 1.25 },
+  cardMeta: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginBottom: 4 },
+  cardActions: { display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' },
+
+  /* ── Tabla escritorio (estilo SCREENS.produccion) ── */
+  tablewrap: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, overflow: 'hidden' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: {
+    textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em',
+    color: 'var(--lp-text-tertiary)', padding: '12px 16px', borderBottom: '1px solid var(--lp-border-subtle)',
+    background: 'var(--lp-bg-sunken)', whiteSpace: 'nowrap',
+  },
+  thR: { textAlign: 'right' },
+  td: { padding: '13px 16px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13.5, color: 'var(--lp-text-primary)', verticalAlign: 'middle' },
+  tdR: { textAlign: 'right' },
+  tdMono: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600 },
+  folio: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-600)', fontSize: 12.5 },
+  noteCard: {
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14,
+    padding: '14px 16px', marginTop: 14, color: 'var(--lp-text-secondary)', fontSize: 13, lineHeight: 1.55,
+    display: 'flex', gap: 10, alignItems: 'flex-start',
+  },
+
+  /* ── Botones ── */
+  btnBase: {
+    padding: '0 16px', minHeight: 44, borderRadius: 12, border: 'none', fontSize: 13,
     fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-brand-600)', color: '#fff', minHeight: 40,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
   },
-  btnSuccess: {
-    padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
-    fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-success-600)', color: '#fff', minHeight: 40,
-  },
-  btnDanger: {
-    padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
-    fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-danger-600)', color: '#fff', minHeight: 40,
-  },
-  btnSecondary: {
-    padding: '8px 16px', borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)',
-    fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', minHeight: 40,
-  },
-  empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '40px 0', fontSize: 13 },
+  empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '60px 20px' },
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
-  /* Modal */
+
+  /* ── Modal ── */
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
+    position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 1000,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
   },
   modal: {
-    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
+    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)',
     width: '100%', maxWidth: 520,
-    /* Reducimos maxHeight para dejar margen al bottom-nav (64px) + safe-area.
-       Antes era 90vh y los botones del footer quedaban tapados. */
     maxHeight: 'calc(100vh - 80px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px))',
     overflow: 'auto',
-    boxShadow: '0 8px 32px rgba(0,0,0,.18)',
+    boxShadow: '0 8px 40px rgba(0,0,0,.22)',
   },
   modalHeader: {
     padding: '16px 20px', borderBottom: '1px solid var(--lp-border-subtle)',
@@ -95,35 +126,64 @@ const S = {
     padding: '12px 20px', borderTop: '1px solid var(--lp-border-subtle)',
     display: 'flex', justifyContent: 'flex-end', gap: 8,
   },
+  iconBtn: {
+    width: 36, height: 36, borderRadius: 999, background: 'var(--lp-bg-sunken)',
+    border: '1px solid var(--lp-border-subtle)', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', cursor: 'pointer', color: 'var(--lp-text-tertiary)', flexShrink: 0,
+  },
   fieldLabel: {
     fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)',
-    marginBottom: 4, display: 'block', textTransform: 'uppercase', letterSpacing: '.04em',
+    marginBottom: 6, display: 'block', textTransform: 'uppercase', letterSpacing: '.04em',
   },
   fieldInput: {
-    width: '100%', padding: '10px 12px', borderRadius: 8,
-    border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
-    boxSizing: 'border-box', marginBottom: 12,
+    width: '100%', padding: '11px 12px', borderRadius: 10,
+    border: '1.5px solid var(--lp-border-subtle)', fontSize: 14,
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)',
+    outline: 'none', boxSizing: 'border-box', marginBottom: 12,
   },
   toast: {
     position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
-    padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 1001,
-    background: 'var(--lp-success-600)', color: '#fff',
-    boxShadow: '0 4px 16px rgba(0,0,0,.15)',
+    padding: '11px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1001,
+    background: 'var(--lp-brand-600)', color: '#fff',
+    boxShadow: '0 8px 28px rgba(0,0,0,.20)', display: 'inline-flex', alignItems: 'center', gap: 8,
   },
-  ingTable: {
-    width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 12,
-  },
+  ingTable: { width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 12 },
   ingTh: {
     textAlign: 'left', padding: '8px 10px', fontWeight: 700, fontSize: 11,
     textTransform: 'uppercase', color: 'var(--lp-text-tertiary)',
-    borderBottom: '2px solid var(--lp-border-subtle)', background: 'var(--lp-bg-sunken)',
+    borderBottom: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-sunken)',
   },
   ingTd: {
     padding: '8px 10px', borderBottom: '1px solid var(--lp-border-subtle)',
-    fontFamily: 'var(--lp-font-mono)', fontSize: 12,
+    fontFamily: 'var(--lp-font-mono)', fontSize: 12, color: 'var(--lp-text-primary)',
   },
+  infoBox: { padding: 14, background: 'var(--lp-bg-sunken)', borderRadius: 12, marginBottom: 16 },
 };
+
+/* botones por variante — width auto en escritorio, fluido en card móvil */
+const btn = (variant, fullWidth) => {
+  const base = { ...S.btnBase, ...(fullWidth ? { width: '100%' } : { width: 'auto' }) };
+  switch (variant) {
+    case 'primary': return { ...base, background: 'var(--lp-brand-600)', color: '#fff' };
+    case 'success': return { ...base, background: 'var(--lp-success-600)', color: '#fff' };
+    case 'warning': return { ...base, background: 'var(--lp-warning-600)', color: '#fff' };
+    case 'danger':  return { ...base, background: 'var(--lp-danger-600)', color: '#fff' };
+    case 'ghost':   return { ...base, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)' };
+    default:        return { ...base, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' };
+  }
+};
+
+/* badge de estado para tabla escritorio: punto de color + texto */
+const EstadoBadge = ({ color, label }) => (
+  <span style={{
+    display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600,
+    padding: '4px 10px', borderRadius: 999,
+    background: `color-mix(in srgb, ${color} 14%, transparent)`, color,
+  }}>
+    <span style={{ width: 7, height: 7, borderRadius: 999, background: color, flexShrink: 0 }} />
+    {label}
+  </span>
+);
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /* PRODUCCIÓN MODAL — Lanzar producción desde una orden o un pedido    */
@@ -275,36 +335,36 @@ function ProduccionModal({ item, userName, onClose, onSuccess }) {
     <div style={S.overlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>Lanzar Producción</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">✕</button>
+          <span style={{ fontSize: 16, fontWeight: 600 }}>Lanzar producción</span>
+          <button onClick={onClose} style={S.iconBtn} aria-label="Cerrar"><IcoClose size={17} /></button>
         </div>
         <div style={S.modalBody}>
           {error && (
-            <div style={{ padding: '8px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+            <div style={{ padding: '9px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 10, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
               {error}
             </div>
           )}
 
           {/* Item info */}
-          <div style={{ padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>
+          <div style={S.infoBox}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>
               {item.codigo || item.id} {tipo === 'pedido' && <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--lp-text-tertiary)' }}>(Pedido)</span>}
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{productoNombre}</div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
-              Cantidad original: {item.cantidad} cubetas
-              {item.esPrueba && <span style={{ marginLeft: 8, color: 'var(--lp-warning-600)', fontWeight: 600 }}>🧪 PRUEBA</span>}
+            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>{productoNombre}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <span>Cantidad original: <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{item.cantidad}</span> cubetas</span>
+              {item.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}><IcoFlask size={12} /> PRUEBA</span>}
             </div>
             {item.fechaInicioProduccion && (
               <div style={{ marginTop: 8 }}>
-                <Cronometro desde={item.fechaInicioProduccion} prefix="⏱ Desde inicio:" />
+                <Cronometro desde={item.fechaInicioProduccion} prefix="Desde inicio:" />
               </div>
             )}
           </div>
 
           {/* Lotes input */}
           <label style={S.fieldLabel}>Cubetas a producir</label>
-          <input style={S.fieldInput} type="number" inputMode="decimal" min="1" value={lotes}
+          <input style={{ ...S.fieldInput, fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }} type="number" inputMode="decimal" min="1" value={lotes}
             onChange={e => setLotes(Math.max(1, parseInt(e.target.value) || 1))} />
 
           {/* Ingredientes table */}
@@ -344,8 +404,8 @@ function ProduccionModal({ item, userName, onClose, onSuccess }) {
           )}
         </div>
         <div style={S.modalFooter}>
-          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={S.btnSuccess} disabled={saving || loadingFormula} onClick={handleProducir}>
+          <button style={btn('ghost')} onClick={onClose}>Cancelar</button>
+          <button style={btn('success')} disabled={saving || loadingFormula} onClick={handleProducir}>
             {saving ? 'Produciendo...' : `Producir ${lotes} cubetas`}
           </button>
         </div>
@@ -355,7 +415,9 @@ function ProduccionModal({ item, userName, onClose, onSuccess }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
-/* QC MODAL — Registrar resultados de calidad                        */
+/* QC MODAL — Registrar resultados de calidad (UNIVERSAL)            */
+/* §9.1: los campos de QC vienen del backend; este modal es universal */
+/* (no por fórmula). Reskin verde, lógica intacta.                    */
 /* ═══════════════════════════════════════════════════════════════════ */
 function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
   const [viscosidad, setViscosidad] = useState('');
@@ -474,47 +536,44 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
     }
   };
 
+  /* Campos QC universales (no por fórmula) — vienen del backend / estándar */
+  const qcFields = [
+    { key: 'visc', label: 'Viscosidad (KU)', step: '0.1', ph: 'Ej: 85', value: viscosidad, set: setViscosidad },
+    { key: 'ph',   label: 'pH',              step: '0.1', ph: 'Ej: 8.5', value: ph,         set: setPh },
+    { key: 'bri',  label: 'Brillo (GU)',     step: '0.1', ph: 'Ej: 20', value: brillo,     set: setBrillo },
+    { key: 'den',  label: 'Densidad (g/mL)', step: '0.01', ph: 'Ej: 1.32', value: densidad, set: setDensidad },
+  ];
+
   return (
     <div style={S.overlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>Control de Calidad</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">✕</button>
+          <span style={{ fontSize: 16, fontWeight: 600 }}>Control de calidad</span>
+          <button onClick={onClose} style={S.iconBtn} aria-label="Cerrar"><IcoClose size={17} /></button>
         </div>
         <div style={S.modalBody}>
           {error && (
-            <div style={{ padding: '8px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+            <div style={{ padding: '9px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 10, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
               {error}
             </div>
           )}
 
-          <div style={{ padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>{orden.codigo}</div>
-            <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{orden.formula}</div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{orden.cantidad} cubetas</div>
+          <div style={S.infoBox}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>{orden.codigo}</div>
+            <div style={{ fontSize: 15, fontWeight: 600, marginTop: 4 }}>{orden.formula || orden.producto}</div>
+            <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
+              <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{orden.cantidad}</span> cubetas
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-            <div>
-              <label style={S.fieldLabel}>Viscosidad (KU)</label>
-              <input style={S.fieldInput} type="number" inputMode="decimal" step="0.1" placeholder="Ej: 85"
-                value={viscosidad} onChange={e => setViscosidad(e.target.value)} />
-            </div>
-            <div>
-              <label style={S.fieldLabel}>pH</label>
-              <input style={S.fieldInput} type="number" inputMode="decimal" step="0.1" placeholder="Ej: 8.5"
-                value={ph} onChange={e => setPh(e.target.value)} />
-            </div>
-            <div>
-              <label style={S.fieldLabel}>Brillo (GU)</label>
-              <input style={S.fieldInput} type="number" inputMode="decimal" step="0.1" placeholder="Ej: 20"
-                value={brillo} onChange={e => setBrillo(e.target.value)} />
-            </div>
-            <div>
-              <label style={S.fieldLabel}>Densidad (g/mL)</label>
-              <input style={S.fieldInput} type="number" inputMode="decimal" step="0.01" placeholder="Ej: 1.32"
-                value={densidad} onChange={e => setDensidad(e.target.value)} />
-            </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+            {qcFields.map(f => (
+              <div key={f.key}>
+                <label style={S.fieldLabel}>{f.label}</label>
+                <input style={{ ...S.fieldInput, fontFamily: 'var(--lp-font-mono)' }} type="number" inputMode="decimal"
+                  step={f.step} placeholder={f.ph} value={f.value} onChange={e => f.set(e.target.value)} />
+              </div>
+            ))}
           </div>
 
           <label style={S.fieldLabel}>Notas / Observaciones</label>
@@ -522,12 +581,12 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
             value={notas} onChange={e => setNotas(e.target.value)} />
         </div>
         <div style={S.modalFooter}>
-          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={S.btnDanger} disabled={saving} onClick={handleReject}>
-            Rechazar
+          <button style={btn('ghost')} onClick={onClose}>Cancelar</button>
+          <button style={btn('danger')} disabled={saving} onClick={handleReject}>
+            <IcoX size={15} /> Rechazar
           </button>
-          <button style={S.btnSuccess} disabled={saving} onClick={handleApprove}>
-            {saving ? 'Guardando...' : 'Aprobar QC'}
+          <button style={btn('success')} disabled={saving} onClick={handleApprove}>
+            {saving ? 'Guardando...' : <><IcoCheck size={15} /> Aprobar QC</>}
           </button>
         </div>
       </div>
@@ -541,6 +600,7 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
 export default function ProduccionPage() {
   const { user, can } = useAuth();
   const userName = user?.nombre || '?';
+  const isDesktop = useIsDesktop();
   /* Leer ?tab=calidad de la URL para que redirección desde alertas funcione.
      Permite que push notifs o notificacionesPage envíen al usuario directo
      a la tab Calidad QC. */
@@ -732,6 +792,7 @@ export default function ProduccionPage() {
         cantidad: l.cantidad,
         estado: l.estado,
         fecha: l.fecha,
+        esPrueba: !!l.esPrueba,
         loteRef: l, /* referencia al lote para acciones QC */
       }));
     return [...ordItems, ...loteItems];
@@ -771,6 +832,28 @@ export default function ProduccionPage() {
     );
   }
 
+  /* ── helpers de presentación ── */
+  const estadoTabla = (it) => {
+    if (it._tipo === 'pedido' && it.estado === 'en_produccion') return { color: 'var(--lp-warning-600)', label: 'En curso' };
+    if (it.estado === 'aceptado') return { color: 'var(--lp-success-600)', label: 'Listo' };
+    return { color: 'var(--lp-info-600)', label: 'En proceso' };
+  };
+  const accionLabel = (it) => (it._tipo === 'pedido' && it.estado === 'aceptado') ? 'Iniciar' : 'Producir';
+
+  /* botón de acción de una fila/card de producción */
+  const renderProdAction = (it, full) => {
+    if (!can('produccion')) return <span style={{ color: 'var(--lp-text-tertiary)', fontSize: 12 }}>—</span>;
+    const isAceptado = it._tipo === 'pedido' && it.estado === 'aceptado';
+    return (
+      <button
+        style={btn(isAceptado ? 'warning' : 'success', full)}
+        onClick={() => handleStartProduccion(it)}
+      >
+        <IcoPlay size={14} /> {isAceptado ? 'Iniciar producción' : 'Producir'}
+      </button>
+    );
+  };
+
   return (
     <>
       <TopBar title="Producción" />
@@ -790,7 +873,7 @@ export default function ProduccionPage() {
           <MisActivosTab pedidos={pedidos} ordenes={ordenes} lotes={lotes} />
         )}
 
-        {/* ════════ PRODUCCIÓN TAB ════════ */}
+        {/* ════════ PRODUCCIÓN TAB (Lanzar lote) ════════ */}
         {activeTab === 'produccion' && (
           <>
             <div style={S.kpiGrid}>
@@ -798,7 +881,7 @@ export default function ProduccionPage() {
                 <div style={S.kpiLabel}>Listos / En curso</div>
                 <div style={S.kpiValue}>{productibles.length}</div>
               </div>
-              <div style={S.kpi('#7C3AED')}>
+              <div style={S.kpi(QC)}>
                 <div style={S.kpiLabel}>En QC</div>
                 <div style={S.kpiValue}>{qcItems.length}</div>
               </div>
@@ -813,74 +896,109 @@ export default function ProduccionPage() {
             </div>
 
             {productibles.length === 0 ? (
-              <div style={{ ...S.empty, padding: '60px 20px' }}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>⚙️</div>
+              <div style={S.empty}>
+                <div style={{ color: 'var(--lp-text-tertiary)', marginBottom: 12, display: 'flex', justifyContent: 'center' }}><IcoGear /></div>
                 <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Sin producción activa</div>
-                <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 4, lineHeight: 1.6 }}>
+                <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', marginTop: 6, lineHeight: 1.6 }}>
                   Aquí solo aparecen lotes con el cronómetro ya iniciado.<br />
-                  Para arrancar uno: ve a <strong>Pedidos</strong> o <strong>Órdenes</strong> y presiona <strong>Producir</strong>.
+                  Para arrancar uno: ve a <strong>Pedidos</strong> u <strong>Órdenes</strong> y presiona <strong>Producir</strong>.
                 </div>
               </div>
+            ) : isDesktop ? (
+              /* ── ESCRITORIO: tabla Orden / Producto / Cantidad / Estado / Acción ── */
+              <>
+                <div style={S.tablewrap}>
+                  <table style={S.table}>
+                    <thead>
+                      <tr>
+                        <th style={S.th}>Orden</th>
+                        <th style={S.th}>Producto</th>
+                        <th style={{ ...S.th, ...S.thR }}>Cantidad</th>
+                        <th style={S.th}>Estado</th>
+                        <th style={{ ...S.th, ...S.thR }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productibles.map(it => {
+                        const est = estadoTabla(it);
+                        const enCurso = it._tipo === 'pedido' && it.estado === 'en_produccion' && it.fechaInicioProduccion;
+                        return (
+                          <tr key={it._tipo + ':' + it.id}>
+                            <td style={S.td}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                <span style={S.folio}>{it.codigo}</span>
+                                {it._tipo === 'pedido' && <span style={B('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Pedido</span>}
+                                {it.prioridad === 'urgente' && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>URGENTE</span>}
+                                {it.prioridad === 'alta' && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>ALTA</span>}
+                                {it.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}><IcoFlask size={11} /> PRUEBA</span>}
+                              </div>
+                            </td>
+                            <td style={S.td}>
+                              <div style={{ fontWeight: 600 }}>{it.formula}</div>
+                              {(it.notas || enCurso) && (
+                                <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 2, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                  {it.notas && <span>{it.notas}</span>}
+                                  {enCurso && <Cronometro desde={it.fechaInicioProduccion} />}
+                                </div>
+                              )}
+                            </td>
+                            <td style={{ ...S.td, ...S.tdR, ...S.tdMono }}>{it.cantidad} cub</td>
+                            <td style={S.td}><EstadoBadge color={est.color} label={est.label} /></td>
+                            <td style={{ ...S.td, ...S.tdR }}>{renderProdAction(it, false)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={S.noteCard}>
+                  <span style={{ color: 'var(--lp-brand-600)', flexShrink: 0, marginTop: 1 }}><IcoBeaker size={18} /></span>
+                  <span>Cada fórmula tiene su <strong style={{ color: 'var(--lp-text-primary)' }}>propio proceso y apartados de QC</strong> (orden de materias primas, tiempos y mediciones distintas por producto). El paso a paso se abre en el asistente.</span>
+                </div>
+              </>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                gap: 12,
-              }}>
-              {productibles.map(it => {
-                const enCurso = it._tipo === 'pedido' && it.estado === 'en_produccion' && it.fechaInicioProduccion;
-                return (
-                  <div key={it._tipo + ':' + it.id} style={S.card(enCurso)}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>{it.codigo}</span>
-                      {it._tipo === 'pedido'
-                        ? <span style={B('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Pedido</span>
-                        : <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>Orden En Proceso</span>}
-                      {it.estado === 'en_produccion' && (
-                        <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>En curso</span>
+              /* ── MÓVIL: cards limpias, una acción dominante por estado ── */
+              <>
+                {productibles.map(it => {
+                  const enCurso = it._tipo === 'pedido' && it.estado === 'en_produccion' && it.fechaInicioProduccion;
+                  const est = estadoTabla(it);
+                  return (
+                    <div key={it._tipo + ':' + it.id} style={S.card(enCurso)}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, flexWrap: 'wrap' }}>
+                        <span style={S.folio}>{it.codigo}</span>
+                        <EstadoBadge color={est.color} label={est.label} />
+                        {it.prioridad === 'urgente' && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>URGENTE</span>}
+                        {it.prioridad === 'alta' && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>ALTA</span>}
+                        {it.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}><IcoFlask size={11} /> PRUEBA</span>}
+                      </div>
+                      <div style={S.cardTitle}>{it.formula}</div>
+                      <div style={S.cardMeta}>
+                        <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{it.cantidad}</span> cubetas
+                        {it.fechaCreacion && ` · ${it.fechaCreacion}`}
+                        {it.notas && ` · ${it.notas}`}
+                      </div>
+                      {enCurso && (
+                        <div style={{ marginTop: 2, fontSize: 12 }}><Cronometro desde={it.fechaInicioProduccion} /></div>
                       )}
-                      {it.estado === 'aceptado' && (
-                        <span style={B('var(--lp-success-100)', 'var(--lp-success-600)')}>Listo</span>
-                      )}
-                      {it.prioridad === 'urgente' && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>URGENTE</span>}
-                      {it.prioridad === 'alta' && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>ALTA</span>}
-                      {it.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>🧪 PRUEBA</span>}
-                      {enCurso && <Cronometro desde={it.fechaInicioProduccion} />}
+                      <div style={S.cardActions}>
+                        {renderProdAction(it, true)}
+                      </div>
                     </div>
-                    <div style={S.cardTitle}>{it.formula}</div>
-                    <div style={S.cardMeta}>
-                      {it.cantidad} cubetas
-                      {it.fechaCreacion && ` · ${it.fechaCreacion}`}
-                      {it.notas && ` · ${it.notas}`}
-                    </div>
-                    <div style={S.cardActions}>
-                      {can('produccion') && it._tipo === 'pedido' && it.estado === 'aceptado' && (
-                        <button
-                          style={{ ...S.btnSuccess, background: 'var(--lp-warning-600)' }}
-                          onClick={() => handleStartProduccion(it)}
-                        >
-                          Iniciar producción
-                        </button>
-                      )}
-                      {can('produccion') && (it._tipo === 'orden' || it.estado === 'en_produccion') && (
-                        <button style={S.btnSuccess} onClick={() => handleStartProduccion(it)}>
-                          Iniciar producción
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-              </div>
+                  );
+                })}
+                <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>
+                  Cada fórmula tiene su propio proceso y QC. El paso a paso se abre en el asistente.
+                </div>
+              </>
             )}
           </>
         )}
 
-        {/* ════════ CALIDAD TAB ════════ */}
+        {/* ════════ CALIDAD TAB (QC universal) ════════ */}
         {activeTab === 'calidad' && (
           <>
             <div style={S.kpiGrid}>
-              <div style={S.kpi('#7C3AED')}>
+              <div style={S.kpi(QC)}>
                 <div style={S.kpiLabel}>En QC</div>
                 <div style={S.kpiValue}>{qcItems.length}</div>
               </div>
@@ -896,46 +1014,88 @@ export default function ProduccionPage() {
 
             {qcItems.length === 0 ? (
               <div style={S.empty}>
-                <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Sin productos en control de calidad</div>
-                <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 4 }}>
+                <div style={{ color: 'var(--lp-success-600)', marginBottom: 12, display: 'flex', justifyContent: 'center' }}><IcoCheckCircle /></div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Sin productos en control de calidad</div>
+                <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
                   Los productos aparecen aquí después de completar producción.
                 </div>
               </div>
+            ) : isDesktop ? (
+              /* ── ESCRITORIO: tabla QC ── */
+              <div style={S.tablewrap}>
+                <table style={S.table}>
+                  <thead>
+                    <tr>
+                      <th style={S.th}>Lote / Orden</th>
+                      <th style={S.th}>Producto</th>
+                      <th style={{ ...S.th, ...S.thR }}>Cantidad</th>
+                      <th style={S.th}>Estado</th>
+                      <th style={{ ...S.th, ...S.thR }}>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {qcItems.map(o => (
+                      <tr key={o.id}>
+                        <td style={S.td}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            <span style={S.folio}>{o.codigo}</span>
+                            {o.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}><IcoFlask size={11} /> PRUEBA</span>}
+                          </div>
+                        </td>
+                        <td style={{ ...S.td, fontWeight: 600 }}>
+                          {o.formula || o.producto}
+                          {o.qcResultados && (
+                            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 3, fontFamily: 'var(--lp-font-mono)' }}>
+                              {o.qcResultados.viscosidad != null && `Visc ${o.qcResultados.viscosidad}`}
+                              {o.qcResultados.ph != null && ` · pH ${o.qcResultados.ph}`}
+                              {o.qcResultados.brillo != null && ` · Brillo ${o.qcResultados.brillo}`}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ ...S.td, ...S.tdR, ...S.tdMono }}>{o.cantidad} cub</td>
+                        <td style={S.td}><EstadoBadge color={QC} label="QC pendiente" /></td>
+                        <td style={{ ...S.td, ...S.tdR }}>
+                          {can('registrarQC')
+                            ? <button style={{ ...btn('primary', false), background: QC }} onClick={() => setQcModal(o)}><IcoBeaker size={14} /> Registrar QC</button>
+                            : <span style={{ color: 'var(--lp-text-tertiary)', fontSize: 12 }}>—</span>}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                gap: 12,
-              }}>
-              {qcItems.map(o => (
+              /* ── MÓVIL: cards QC ── */
+              qcItems.map(o => (
                 <div key={o.id} style={S.card(true)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>{o.codigo}</span>
-                    <span style={B('#EDE9FE', '#7C3AED')}>QC Pendiente</span>
-                    {o.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>🧪 PRUEBA</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, flexWrap: 'wrap' }}>
+                    <span style={S.folio}>{o.codigo}</span>
+                    <EstadoBadge color={QC} label="QC pendiente" />
+                    {o.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}><IcoFlask size={11} /> PRUEBA</span>}
                   </div>
-                  <div style={S.cardTitle}>{o.formula}</div>
-                  <div style={S.cardMeta}>{o.cantidad} cubetas · {o.fechaCreacion}</div>
+                  <div style={S.cardTitle}>{o.formula || o.producto}</div>
+                  <div style={S.cardMeta}>
+                    <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{o.cantidad}</span> cubetas
+                    {o.fechaCreacion && ` · ${o.fechaCreacion}`}
+                  </div>
                   {o.qcResultados && (
-                    <div style={{ fontSize: 11, marginTop: 8, padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8 }}>
-                      <strong>Último QC:</strong>
-                      {o.qcResultados.viscosidad != null && ` Visc: ${o.qcResultados.viscosidad} KU`}
-                      {o.qcResultados.ph != null && ` · pH: ${o.qcResultados.ph}`}
-                      {o.qcResultados.brillo != null && ` · Brillo: ${o.qcResultados.brillo}`}
+                    <div style={{ fontSize: 11, marginTop: 8, padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 10, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)' }}>
+                      <strong style={{ fontFamily: 'var(--lp-font-sans)' }}>Último QC:</strong>
+                      {o.qcResultados.viscosidad != null && ` Visc ${o.qcResultados.viscosidad}`}
+                      {o.qcResultados.ph != null && ` · pH ${o.qcResultados.ph}`}
+                      {o.qcResultados.brillo != null && ` · Brillo ${o.qcResultados.brillo}`}
                       {o.qcResultados.notas && ` · ${o.qcResultados.notas}`}
                     </div>
                   )}
-                  <div style={S.cardActions}>
-                    {can('registrarQC') && (
-                      <button style={S.btnPrimary} onClick={() => setQcModal(o)}>
-                        Registrar QC
+                  {can('registrarQC') && (
+                    <div style={S.cardActions}>
+                      <button style={{ ...btn('primary', true), background: QC }} onClick={() => setQcModal(o)}>
+                        <IcoBeaker size={15} /> Registrar QC
                       </button>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
-              ))}
-              </div>
+              ))
             )}
 
             {/* Recent QC records */}
@@ -944,29 +1104,32 @@ export default function ProduccionPage() {
                 <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 10 }}>
                   Historial QC reciente
                 </div>
-                {qcRecords.slice(-10).reverse().map(r => (
-                  <div key={r.id} style={{
-                    padding: '10px 14px', borderRadius: 8, marginBottom: 6,
-                    border: '1px solid var(--lp-border-subtle)',
-                    background: r.resultado === 'aprobado' ? 'var(--lp-success-50)' : 'var(--lp-danger-50)',
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 12, fontWeight: 600 }}>{r.producto}</span>
-                      <span style={B(
-                        r.resultado === 'aprobado' ? 'var(--lp-success-100)' : 'var(--lp-danger-100)',
-                        r.resultado === 'aprobado' ? 'var(--lp-success-600)' : 'var(--lp-danger-600)',
-                      )}>
-                        {r.resultado === 'aprobado' ? '✓ Aprobado' : '✗ Rechazado'}
-                      </span>
+                {qcRecords.slice(-10).reverse().map(r => {
+                  const ok = r.resultado === 'aprobado';
+                  return (
+                    <div key={r.id} style={{
+                      padding: '10px 14px', borderRadius: 12, marginBottom: 6,
+                      border: '1px solid var(--lp-border-subtle)',
+                      background: ok ? 'var(--lp-success-50)' : 'var(--lp-danger-50)',
+                    }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 600 }}>{r.producto}</span>
+                        <span style={B(
+                          ok ? 'var(--lp-success-100)' : 'var(--lp-danger-100)',
+                          ok ? 'var(--lp-success-600)' : 'var(--lp-danger-600)',
+                        )}>
+                          {ok ? <><IcoCheck size={12} /> Aprobado</> : <><IcoX size={12} /> Rechazado</>}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4, fontFamily: 'var(--lp-font-mono)' }}>
+                        {r.ordenCodigo} · {new Date(r.fecha).toLocaleDateString('es-MX')}
+                        {r.viscosidad != null && ` · Visc ${r.viscosidad}`}
+                        {r.ph != null && ` · pH ${r.ph}`}
+                        {r.notas && ` · ${r.notas}`}
+                      </div>
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4 }}>
-                      {r.ordenCodigo} · {new Date(r.fecha).toLocaleDateString('es-MX')}
-                      {r.viscosidad != null && ` · Visc: ${r.viscosidad}`}
-                      {r.ph != null && ` · pH: ${r.ph}`}
-                      {r.notas && ` · ${r.notas}`}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
@@ -993,7 +1156,7 @@ export default function ProduccionPage() {
             {/* QC rate */}
             {(stats.qcAprobados + stats.qcRechazados) > 0 && (
               <div style={{
-                background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
+                background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
                 borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 16,
               }}>
                 <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Tasa de aprobación QC</div>
@@ -1004,7 +1167,7 @@ export default function ProduccionPage() {
                   }}>
                     {Math.round((stats.qcAprobados / (stats.qcAprobados + stats.qcRechazados)) * 100)}%
                   </div>
-                  <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)' }}>
+                  <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>
                     {stats.qcAprobados} aprobados · {stats.qcRechazados} rechazados
                   </div>
                 </div>
@@ -1012,9 +1175,9 @@ export default function ProduccionPage() {
             )}
 
             <div style={S.empty}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>📊</div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Reportes detallados</div>
-              <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 4 }}>
+              <div style={{ color: 'var(--lp-text-tertiary)', marginBottom: 12, display: 'flex', justifyContent: 'center' }}><IcoChart /></div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Reportes detallados</div>
+              <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
                 Gráficas de producción mensual y análisis de tendencias próximamente.
               </div>
             </div>
@@ -1093,7 +1256,7 @@ export default function ProduccionPage() {
       )}
 
       {/* ── Toast ── */}
-      {toastMsg && <div style={S.toast}><span style={{ marginRight: 8 }}>✓</span>{toastMsg}</div>}
+      {toastMsg && <div style={S.toast}><IcoCheck size={16} />{toastMsg}</div>}
     </>
   );
 }

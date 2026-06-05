@@ -13,6 +13,40 @@
    ════════════════════════════════════════════════════════════════════════════ */
 import { useState, useRef } from 'react';
 
+/* Íconos SVG line (reemplazan 📥 / 📤 / 🖨️). stroke="currentColor" → heredan el color del botón. */
+const ICON_BASE = {
+  width: 15, height: 15, viewBox: '0 0 24 24', fill: 'none',
+  stroke: 'currentColor', strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round',
+  'aria-hidden': true, style: { flexShrink: 0 },
+};
+function IconDownload() {
+  return (
+    <svg {...ICON_BASE}>
+      <path d="M12 3v12" />
+      <path d="M7 10l5 5 5-5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+function IconUpload() {
+  return (
+    <svg {...ICON_BASE}>
+      <path d="M12 17V5" />
+      <path d="M7 10l5-5 5 5" />
+      <path d="M5 21h14" />
+    </svg>
+  );
+}
+function IconPrinter() {
+  return (
+    <svg {...ICON_BASE}>
+      <path d="M6 9V3h12v6" />
+      <path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2" />
+      <rect x="6" y="14" width="12" height="7" rx="1" />
+    </svg>
+  );
+}
+
 const S = {
   bar: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
   btn: (variant) => ({
@@ -99,7 +133,7 @@ export default function ImportExportPrint({
         <>
           <button type="button" style={S.btn('ghost')} onClick={handleImportClick} disabled={busy}
                   title="Subir archivo Excel">
-            <span aria-hidden="true">📥</span> {busy ? 'Subiendo…' : importLabel}
+            <IconUpload /> {busy ? 'Subiendo…' : importLabel}
           </button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv"
                  onChange={handleFileChange} style={S.hidden} />
@@ -108,13 +142,13 @@ export default function ImportExportPrint({
       {canExport && (
         <button type="button" style={S.btn('ghost')} onClick={handleExport}
                 title="Descargar Excel">
-          <span aria-hidden="true">📤</span> Exportar
+          <IconDownload /> Exportar
         </button>
       )}
       {canPrint && (
         <button type="button" style={S.btn('ghost')} onClick={handlePrint}
                 title="Abrir hoja imprimible">
-          <span aria-hidden="true">🖨️</span> Imprimir
+          <IconPrinter /> Imprimir
         </button>
       )}
       {msg && (
