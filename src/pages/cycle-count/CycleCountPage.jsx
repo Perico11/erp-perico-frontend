@@ -5,86 +5,210 @@ import api from '../../services/api';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import useConfirm from '../../hooks/useConfirm';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import PageTabs from '../../components/ui/PageTabs';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
 
+/* ════════════════════════════════════════════════════════════════════════════
+   Conteo / Cycle Count — reskin Claude Design (verde).
+   · Escritorio (ERP Escritorio.html · SCREENS.conteo): tabla Material/Tipo/
+     Ubicación/Sistema/Estado/Acción con botón "Contar".
+   · Móvil (ERP Móvil.html · S.conteo + Conteo.html §7): cards limpias (badge +
+     nombre + ubicación + botón "Contar") → bottom-sheet de conteo con firma PIN.
+   · Tokens SOLO var(--lp-*). Sin emojis (iconos line SVG). Touch ≥44px.
+   · LÓGICA INTACTA: handlers, endpoints cycle-count/*, useRealtimeSync,
+     useConfirm, firma PIN al abrir/cerrar, causa raíz obligatoria, modales.
+     Gating: contar/finalizar = inventario; aprobar varianza = admin.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Iconos line SVG (sin emojis) ── */
+const Icon = {
+  check: (sz = 18) => (
+    <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  ),
+  plus: (sz = 16) => (
+    <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  search: (sz = 18) => (
+    <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
+    </svg>
+  ),
+  shield: (sz = 16) => (
+    <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><path d="M9 12l2 2 4-4" />
+    </svg>
+  ),
+  flag: (sz = 14) => (
+    <svg width={sz} height={sz} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" /><line x1="4" y1="22" x2="4" y2="15" />
+    </svg>
+  ),
+};
+
+/* ── Estilos (LP design system · espejo del patrón validado en InventarioPage) ── */
 const S = {
   wrap: { padding: '0 20px 100px' },
+  h1: { fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--lp-text-primary)' },
+  psub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3, marginBottom: 16 },
+  tab: (active) => ({
+    padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
+    color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
+    background: 'none', border: 'none',
+    borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
+    cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)',
+    marginBottom: -2, flexShrink: 0,
+  }),
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
-  search: {
-    flex: 1, minWidth: 200, padding: '10px 14px',
-    borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)',
-    fontSize: 13, fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)',
-    outline: 'none', boxSizing: 'border-box',
+  searchBox: {
+    display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 200, maxWidth: 440,
+    height: 44, padding: '0 14px', borderRadius: 12, background: 'var(--lp-bg-raised)',
+    border: '1.5px solid var(--lp-border-subtle)', color: 'var(--lp-text-tertiary)',
   },
+  searchInput: {
+    flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 14.5, color: 'var(--lp-text-primary)',
+  },
+  /* Botones — NUNCA 100% width en escritorio. Touch ≥44px. */
   btnPrimary: {
-    padding: '10px 16px', fontSize: 12, fontWeight: 700,
-    borderRadius: 'var(--lp-radius-sm)', border: 'none',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    minHeight: 44, padding: '0 18px', fontSize: 13, fontWeight: 600,
+    borderRadius: 12, border: 'none',
     background: 'var(--lp-brand-600)', color: '#fff',
-    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
   },
   btnGhost: {
-    padding: '8px 14px', fontSize: 11, fontWeight: 600,
-    borderRadius: 'var(--lp-radius-sm)',
-    border: '1.5px solid var(--lp-border-subtle)',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minHeight: 40, padding: '0 15px', fontSize: 13, fontWeight: 600,
+    borderRadius: 10, border: '1px solid var(--lp-border-subtle)',
     background: 'var(--lp-bg-raised)', cursor: 'pointer',
-    fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-primary)',
+    fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-secondary)', whiteSpace: 'nowrap',
   },
   btnSuccess: {
-    padding: '8px 14px', fontSize: 11, fontWeight: 700,
-    borderRadius: 'var(--lp-radius-sm)',
-    border: 'none', background: 'var(--lp-success-600)', color: '#fff',
-    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    minHeight: 40, padding: '0 16px', fontSize: 13, fontWeight: 700,
+    borderRadius: 10, border: 'none', background: 'var(--lp-success-600)', color: '#fff',
+    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
   },
   btnWarning: {
-    padding: '8px 14px', fontSize: 11, fontWeight: 700,
-    borderRadius: 'var(--lp-radius-sm)',
-    border: 'none', background: 'var(--lp-warning-600)', color: '#fff',
-    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+    minHeight: 44, padding: '0 18px', fontSize: 13, fontWeight: 700,
+    borderRadius: 12, border: 'none', background: 'var(--lp-warning-600)', color: '#fff',
+    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
   },
-  metric: {
-    display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-    gap: 12, marginBottom: 16,
-  },
-  metricCard: {
-    background: 'var(--lp-bg-sunken)', borderRadius: 'var(--lp-radius-sm)',
-    padding: 14, textAlign: 'center',
-  },
+  /* KPI metric cards */
+  metric: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 },
+  metricCard: { background: 'var(--lp-bg-sunken)', borderRadius: 14, padding: 14, textAlign: 'center' },
   metricVal: { fontSize: 24, fontWeight: 800, color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)' },
   metricLabel: { fontSize: 11, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4, fontWeight: 600 },
-  card: {
-    background: 'var(--lp-bg-raised)',
-    border: '1.5px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius)',
-    padding: 16, marginBottom: 12,
-  },
+  /* Card genérica (histórico, sesión activa, pendientes) */
+  card: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 18, padding: 16, marginBottom: 12, position: 'relative', overflow: 'hidden' },
   cardHeader: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' },
   badge: (bg, fg) => ({
-    display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700,
-    borderRadius: 4, background: bg, color: fg,
-    textTransform: 'uppercase', letterSpacing: '.04em',
+    display: 'inline-flex', padding: '3px 9px', fontSize: 10.5, fontWeight: 700,
+    borderRadius: 999, background: bg, color: fg, textTransform: 'uppercase', letterSpacing: '.04em',
   }),
-  /* itemRow se aplica desktop. En móvil reorganizamos con clase CSS. */
-  itemRow: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 90px 90px 80px 60px',
-    gap: 8, alignItems: 'center', padding: '10px 12px',
-    borderRadius: 'var(--lp-radius-sm)', fontSize: 12,
+  estChip: (c) => ({
+    fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+    background: `color-mix(in srgb, ${c} 14%, transparent)`, color: c, whiteSpace: 'nowrap',
+  }),
+  /* ── Tabla escritorio (1:1 ERP Escritorio.html) ── */
+  tablewrap: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, overflow: 'hidden' },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: {
+    textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em',
+    color: 'var(--lp-text-tertiary)', padding: '12px 16px', borderBottom: '1px solid var(--lp-border-subtle)',
+    background: 'var(--lp-bg-sunken)', whiteSpace: 'nowrap',
   },
-  itemRowFlagged: { background: 'var(--lp-danger-50)' },
-  itemRowOK: { background: 'var(--lp-bg-sunken)' },
+  thR: { textAlign: 'right' },
+  thC: { textAlign: 'center' },
+  td: { padding: '11px 16px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13.5, color: 'var(--lp-text-primary)' },
+  tdMut: { padding: '11px 16px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 12, color: 'var(--lp-text-tertiary)' },
+  tdMono: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600 },
+  /* Input físico inline (tabla escritorio) */
   inputCount: {
-    width: '100%', padding: '6px 10px',
-    border: '1.5px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius-sm)',
-    fontSize: 12, fontFamily: 'var(--lp-font-mono)',
-    textAlign: 'right', background: 'var(--lp-bg-raised)',
-    boxSizing: 'border-box',
+    width: 96, padding: '7px 10px', border: '1.5px solid var(--lp-border-subtle)',
+    borderRadius: 10, fontSize: 13, fontFamily: 'var(--lp-font-mono)',
+    textAlign: 'right', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)',
+    boxSizing: 'border-box', outline: 'none',
   },
+  /* ── Card móvil de item (1:1 ERP Móvil.html · Conteo.html) ── */
+  mCard: (venc) => ({
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 18, padding: '15px 16px', marginBottom: 11, position: 'relative', overflow: 'hidden',
+    ...(venc ? { boxShadow: 'inset 4px 0 0 var(--lp-danger-600)' } : {}),
+  }),
+  mTipo: { fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)' },
+  mItem: { fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)' },
+  mMeta: { fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 2 },
+  mRows: { margin: '11px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+  mSis: { fontSize: 12, color: 'var(--lp-text-tertiary)' },
+  mSisB: { color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)', fontSize: 14, fontWeight: 700 },
+  mVchip: (c) => ({ fontSize: 12, fontWeight: 600, fontFamily: 'var(--lp-font-mono)', padding: '3px 9px', borderRadius: 999, background: `color-mix(in srgb, ${c} 15%, transparent)`, color: c }),
+  /* Botón ancho en card móvil (full width SOLO en móvil) */
+  actMobile: {
+    width: '100%', minHeight: 46, borderRadius: 12, border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    background: 'var(--lp-brand-600)', color: '#fff',
+  },
+  actMobileDone: {
+    width: '100%', minHeight: 46, borderRadius: 12, cursor: 'default',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 13.5, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)', border: '1px solid var(--lp-border-subtle)',
+  },
+  /* ── Bottom-sheet de conteo móvil (Conteo.html §7) ── */
+  sheetOverlay: (desktop) => ({
+    position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999,
+    display: 'flex', alignItems: desktop ? 'center' : 'flex-end', justifyContent: 'center', padding: desktop ? 16 : 0,
+  }),
+  sheet: (desktop) => ({
+    background: 'var(--lp-bg-base)', width: '100%', maxWidth: 460,
+    borderRadius: desktop ? 20 : '24px 24px 0 0', padding: '20px 20px 28px',
+    boxShadow: '0 -8px 40px rgba(0,0,0,.22)', boxSizing: 'border-box',
+  }),
+  shH: { fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)' },
+  shS: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 16 },
+  bigsis: { textAlign: 'center', padding: 14, borderRadius: 14, background: 'var(--lp-bg-sunken)', marginBottom: 14 },
+  bigK: { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--lp-text-tertiary)' },
+  bigV: { fontFamily: 'var(--lp-font-mono)', fontSize: 26, fontWeight: 700, color: 'var(--lp-text-primary)', marginTop: 3 },
+  flbl: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '0 2px 6px' },
+  finQty: {
+    width: '100%', height: 54, padding: '0 14px', borderRadius: 12, background: 'var(--lp-bg-raised)',
+    border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-mono)', fontSize: 22,
+    fontWeight: 700, color: 'var(--lp-text-primary)', outline: 'none', textAlign: 'center', boxSizing: 'border-box',
+  },
+  finPin: {
+    width: '100%', height: 54, padding: '0 14px', borderRadius: 12, background: 'var(--lp-bg-raised)',
+    border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-mono)', fontSize: 22,
+    fontWeight: 700, color: 'var(--lp-text-primary)', outline: 'none', textAlign: 'center',
+    letterSpacing: '.3em', boxSizing: 'border-box',
+  },
+  varbox: (c) => ({
+    marginTop: 14, padding: '12px 14px', borderRadius: 12, fontSize: 13,
+    background: `color-mix(in srgb, ${c} 10%, var(--lp-bg-raised))`,
+    border: `1px solid color-mix(in srgb, ${c} 26%, transparent)`,
+  }),
+  shActs: { display: 'flex', gap: 10, marginTop: 18 },
+  act2: (primary) => ({
+    flex: 1, minHeight: 50, borderRadius: 14, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    fontSize: 14.5, fontWeight: 600, border: primary ? 'none' : '1px solid var(--lp-border-subtle)',
+    background: primary ? 'var(--lp-brand-600)' : 'transparent',
+    color: primary ? '#fff' : 'var(--lp-text-secondary)',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+  }),
+  /* genéricos */
+  itemRow: { display: 'grid', gridTemplateColumns: '1fr 90px 90px 80px 60px', gap: 8, alignItems: 'center', padding: '10px 12px', borderRadius: 10, fontSize: 12 },
+  itemRowFlagged: { background: 'var(--lp-danger-50)' },
   loading: { textAlign: 'center', padding: '32px 0', fontSize: 13, color: 'var(--lp-text-tertiary)' },
-  err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 'var(--lp-radius-sm)', fontSize: 12, marginBottom: 12 },
-  empty: { textAlign: 'center', padding: '40px 0', fontSize: 13, color: 'var(--lp-text-tertiary)' },
+  err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 10, fontSize: 12, marginBottom: 12 },
+  empty: { textAlign: 'center', padding: '54px 20px', fontSize: 13.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 },
+  noteCard: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 16px', marginTop: 14, color: 'var(--lp-text-tertiary)', fontSize: 13, lineHeight: 1.5 },
 };
 
 const CATEGORIAS = [
@@ -97,35 +221,124 @@ const TIPOS = [
   { v: 'aleatorio', label: 'Aleatorio (~30%)' },
 ];
 
-function StartModal({ onStart, onClose, loading }) {
+/* Umbral de varianza que dispara aprobación admin (espejo del backend). */
+const UMBRAL = 5;
+
+function StartModal({ onStart, onClose, loading, isDesktop }) {
   const [categoria, setCategoria] = useState('mp');
   const [tipo, setTipo] = useState('completo');
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,21,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 20, maxWidth: 460, width: '100%', border: '1.5px solid var(--lp-border-subtle)' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 16 }}>Iniciar nueva sesión de conteo</div>
-        <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-secondary)', marginBottom: 6 }}>Categoría</div>
-          <SegmentedControl
-            value={categoria}
-            onChange={setCategoria}
-            options={CATEGORIAS.map(c => ({ value: c.v, label: c.label }))}
-            color="brand"
-          />
+    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
+        <div style={S.shH}>Iniciar sesión de conteo</div>
+        <div style={S.shS}>Elige qué contar y el alcance. Firmarás con tu PIN para abrir.</div>
+        <div style={{ marginBottom: 14 }}>
+          <label style={S.flbl}>Categoría</label>
+          <SegmentedControl value={categoria} onChange={setCategoria}
+            options={CATEGORIAS.map(c => ({ value: c.v, label: c.label }))} color="brand" />
         </div>
-        <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-secondary)', marginBottom: 6 }}>Tipo de conteo</div>
-          <SegmentedControl
-            value={tipo}
-            onChange={setTipo}
-            options={TIPOS.map(t => ({ value: t.v, label: t.label }))}
-            color="brand"
-          />
+        <div style={{ marginBottom: 8 }}>
+          <label style={S.flbl}>Tipo de conteo</label>
+          <SegmentedControl value={tipo} onChange={setTipo}
+            options={TIPOS.map(t => ({ value: t.v, label: t.label }))} color="brand" />
         </div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button style={S.btnGhost} onClick={onClose} disabled={loading}>Cancelar</button>
-          <button style={S.btnPrimary} onClick={() => onStart(categoria, tipo)} disabled={loading}>
-            {loading ? 'Iniciando...' : 'Iniciar conteo'}
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose} disabled={loading}
+            data-id="conteo.btn.cancelar-iniciar" data-rol="inventario,admin">Cancelar</button>
+          <button style={S.act2(true)} onClick={() => onStart(categoria, tipo)} disabled={loading}
+            data-id="conteo.btn.iniciar-sesion" data-rol="inventario,admin">
+            {loading ? 'Iniciando…' : 'Iniciar conteo'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
+   CountSheet — bottom-sheet de conteo de un item (Conteo.html §7).
+   Patrón MÓVIL: card "Contar" → sheet con Sistema grande, input físico,
+   preview de varianza en vivo, y FIRMA DEL CONTADOR (PIN) antes de registrar.
+   El PIN se valida server-side al finalizar la sesión; aquí se captura igual
+   que el mockup y se registra el conteo del item. Si varianza > umbral, el
+   item queda flagged y la sesión irá a aprobación de admin al finalizar.
+   ════════════════════════════════════════════════════════════════════════════ */
+function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
+  const [val, setVal] = useState(
+    item.stockFisico !== null && item.stockFisico !== undefined ? String(item.stockFisico) : ''
+  );
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const f = parseFloat(val);
+  const showVar = !isNaN(f);
+  const sis = Number(item.stockSistema) || 0;
+  const diff = showVar ? f - sis : 0;
+  const vp = showVar ? (sis === 0 ? (f === 0 ? 0 : 100) : ((f - sis) / sis) * 100) : 0;
+  const alta = Math.abs(vp) > UMBRAL;
+  const vColor = vp === 0 ? 'var(--lp-success-600)' : alta ? 'var(--lp-danger-600)' : 'var(--lp-warning-600)';
+
+  const guardar = async () => {
+    if (val === '' || isNaN(f) || f < 0) { setErr('Ingresa un físico válido'); return; }
+    setErr('');
+    setSaving(true);
+    try {
+      await onRegistrar(item.key, f);
+      onClose();
+    } catch (e) {
+      setErr(e?.data?.error || e.message || 'Error al registrar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
+        <div style={S.shH}>Conteo físico</div>
+        <div style={S.shS}>{item.nombre}{item.ubicacion ? ' · ' + item.ubicacion : ''}</div>
+
+        <div style={S.bigsis}>
+          <div style={S.bigK}>Sistema</div>
+          <div style={S.bigV}>{item.stockSistema} {item.unidad}</div>
+        </div>
+
+        <label style={S.flbl}>¿Cuánto contaste físicamente?</label>
+        <input style={S.finQty} type="number" inputMode="decimal" min="0" step="0.01"
+          value={val} autoFocus placeholder="0"
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('cc-sheet-pin')?.focus(); }}
+          data-id="conteo.input.fisico" data-rol="inventario,admin" />
+
+        {showVar && (
+          <div style={S.varbox(vColor)}>
+            <div style={{ fontWeight: 600, color: vColor }}>
+              Varianza {(vp > 0 ? '+' : '') + (Math.round(vp * 10) / 10)}% ({diff > 0 ? '+' : ''}{Math.round(diff * 100) / 100} {item.unidad})
+            </div>
+            <div style={{ fontSize: 12, marginTop: 3, color: 'var(--lp-text-secondary)' }}>
+              {vp === 0 ? 'Coincide con el sistema.'
+                : alta ? `Supera el umbral de ${UMBRAL}% — se enviará a aprobación de admin.`
+                : 'Dentro de tolerancia.'}
+            </div>
+          </div>
+        )}
+
+        <label style={{ ...S.flbl, marginTop: 14 }}>Firma del contador (PIN)</label>
+        <input id="cc-sheet-pin" style={S.finPin} type="password" inputMode="numeric" maxLength={6}
+          placeholder="••••" data-id="conteo.input.pin-firma" data-rol="inventario,admin"
+          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} />
+        <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 5 }}>
+          Tu PIN se valida al finalizar la sesión — queda registrado que TÚ contaste.
+        </div>
+
+        {err && <div style={{ ...S.err, marginTop: 12, marginBottom: 0 }}>{err}</div>}
+
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose} disabled={saving}
+            data-id="conteo.btn.cancelar-conteo" data-rol="inventario,admin">Cancelar</button>
+          <button style={S.act2(true)} onClick={guardar} disabled={saving}
+            data-id="conteo.btn.registrar-conteo" data-rol="inventario,admin">
+            {saving ? 'Registrando…' : 'Registrar y firmar'}
           </button>
         </div>
       </div>
@@ -135,10 +348,10 @@ function StartModal({ onStart, onClose, loading }) {
 
 /* ════════════════════════════════════════════════════════════════════════════
    CausasRaizModal — bloquea la aprobación hasta que cada item flagged tenga
-   una causa raíz asignada. Es el punto de control de calidad del proceso:
-   sin causa no aprendemos por qué hay varianza.
+   una causa raíz asignada. Punto de control de calidad: sin causa no
+   aprendemos por qué hay varianza. SOLO admin aprueba (Burgos NO).
    ════════════════════════════════════════════════════════════════════════════ */
-function CausasRaizModal({ sesion, onAprobar, onClose, loading }) {
+function CausasRaizModal({ sesion, onAprobar, onClose, loading, isDesktop }) {
   const [causas, setCausas] = useState([]);
   const [asignaciones, setAsignaciones] = useState({});
   const [err, setErr] = useState('');
@@ -161,64 +374,65 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading }) {
     if (!todasAsignadas) { setErr('Asigna causa a TODOS los items'); return; }
     setErr('');
     try { await onAprobar(asignaciones); }
-    catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al aprobar');
-    }
+    catch (e) { setErr(e?.data?.error || e.message || 'Error al aprobar'); }
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,21,.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 20, maxWidth: 720, width: '100%', maxHeight: '85vh', overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)' }}>
-        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>Asignar causa raíz</div>
-        <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 14 }}>
+    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ ...S.sheet(isDesktop), maxWidth: 720, maxHeight: '88vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+        <div style={S.shH}>Asignar causa raíz</div>
+        <div style={{ ...S.shS, marginBottom: 14 }}>
           La sesión <strong>{sesion?.id}</strong> tiene <strong>{flagged.length}</strong> item(s) con varianza significativa. Asigna una causa a cada uno antes de aprobar — esto alimenta el análisis Pareto trimestral.
         </div>
 
         {loadingCat ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--lp-text-tertiary)' }}>Cargando catálogo…</div> : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 14 }}>
-            <thead><tr>
-              <th style={{ textAlign: 'left', padding: '8px 10px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>Item</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Sistema</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Físico</th>
-              <th style={{ textAlign: 'right', padding: '8px 10px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Δ</th>
-              <th style={{ textAlign: 'left', padding: '8px 10px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Causa raíz *</th>
-            </tr></thead>
-            <tbody>
-              {flagged.map(it => (
-                <tr key={it.key} style={{ borderBottom: '1px solid var(--lp-border-subtle)' }}>
-                  <td style={{ padding: '8px 10px', fontWeight: 600 }}>{it.nombre}</td>
-                  <td style={{ padding: '8px 10px', fontFamily: 'var(--lp-font-mono)', textAlign: 'right' }}>{it.stockSistema}</td>
-                  <td style={{ padding: '8px 10px', fontFamily: 'var(--lp-font-mono)', textAlign: 'right' }}>{it.stockFisico}</td>
-                  <td style={{ padding: '8px 10px', fontFamily: 'var(--lp-font-mono)', textAlign: 'right', color: 'var(--lp-danger-600)', fontWeight: 700 }}>
-                    {it.varianza > 0 ? '+' : ''}{it.varianza} ({it.pctVarianza?.toFixed(1)}%)
-                  </td>
-                  <td style={{ padding: '6px 10px' }}>
-                    <select value={asignaciones[it.key] || ''}
-                      onChange={e => setAsignaciones(prev => ({ ...prev, [it.key]: e.target.value }))}
-                      style={{ width: '100%', padding: '6px 8px', fontSize: 12, border: '1.5px solid ' + (asignaciones[it.key] ? 'var(--lp-success-300)' : 'var(--lp-danger-300)'), borderRadius: 'var(--lp-radius-sm)', background: 'var(--lp-bg-raised)' }}>
-                      <option value="">— Selecciona —</option>
-                      {causas.map(c => (
-                        <option key={c.id} value={c.id}>{c.nombre}</option>
-                      ))}
-                    </select>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div style={S.tablewrap}>
+            <table style={S.table}>
+              <thead><tr>
+                <th style={S.th}>Item</th>
+                <th style={{ ...S.th, ...S.thR }}>Sistema</th>
+                <th style={{ ...S.th, ...S.thR }}>Físico</th>
+                <th style={{ ...S.th, ...S.thR }}>Δ</th>
+                <th style={S.th}>Causa raíz *</th>
+              </tr></thead>
+              <tbody>
+                {flagged.map(it => (
+                  <tr key={it.key}>
+                    <td style={{ ...S.td, fontWeight: 600 }}>{it.nombre}</td>
+                    <td style={{ ...S.td, ...S.tdMono, ...S.thR }}>{it.stockSistema}</td>
+                    <td style={{ ...S.td, ...S.tdMono, ...S.thR }}>{it.stockFisico}</td>
+                    <td style={{ ...S.td, ...S.tdMono, ...S.thR, color: 'var(--lp-danger-600)', fontWeight: 700 }}>
+                      {it.varianza > 0 ? '+' : ''}{it.varianza} ({it.pctVarianza?.toFixed(1)}%)
+                    </td>
+                    <td style={{ ...S.td, padding: '7px 16px' }}>
+                      <select value={asignaciones[it.key] || ''}
+                        onChange={e => setAsignaciones(prev => ({ ...prev, [it.key]: e.target.value }))}
+                        data-id="conteo.input.causa-raiz" data-rol="admin"
+                        style={{ width: '100%', padding: '7px 10px', fontSize: 12.5, fontFamily: 'var(--lp-font-sans)', borderRadius: 10, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', outline: 'none', border: '1.5px solid ' + (asignaciones[it.key] ? 'var(--lp-success-300)' : 'var(--lp-danger-300)') }}>
+                        <option value="">— Selecciona —</option>
+                        {causas.map(c => (<option key={c.id} value={c.id}>{c.nombre}</option>))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
 
-        {err && <div style={{ ...S.err, marginBottom: 12 }}>{err}</div>}
+        {err && <div style={{ ...S.err, marginTop: 12, marginBottom: 0 }}>{err}</div>}
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
           <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
             {Object.keys(asignaciones).filter(k => asignaciones[k]).length} de {flagged.length} asignadas
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <button style={S.btnGhost} onClick={onClose} disabled={loading}>Cancelar</button>
+            <button style={S.btnGhost} onClick={onClose} disabled={loading}
+              data-id="conteo.btn.cancelar-causas" data-rol="admin">Cancelar</button>
             <button style={{ ...S.btnSuccess, opacity: todasAsignadas ? 1 : 0.5, cursor: todasAsignadas ? 'pointer' : 'not-allowed' }}
-              onClick={handleConfirmar} disabled={!todasAsignadas || loading}>
-              {loading ? 'Aprobando…' : '✓ Aprobar con causas'}
+              onClick={handleConfirmar} disabled={!todasAsignadas || loading}
+              data-id="conteo.btn.aprobar-con-causas" data-rol="admin">
+              {Icon.check(16)}{loading ? 'Aprobando…' : 'Aprobar con causas'}
             </button>
           </div>
         </div>
@@ -228,11 +442,87 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
-   PendientesTab — Calendario de conteos pendientes (Fase 3)
-   Lista MPs según cadencia ABC: vencidos (rojo), esta semana (ámbar), próximos.
-   Permite ver de un vistazo qué tocan contar.
+   PendientesTab — Calendario de conteos pendientes (Fase 3).
+   Vencidos (rojo), esta semana (ámbar), próximos (verde) según cadencia ABC.
    ════════════════════════════════════════════════════════════════════════════ */
-function PendientesTab() {
+const fmtPesos = n => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
+const claseColor = (clase) => clase === 'A' ? 'var(--lp-danger-600)' : clase === 'B' ? 'var(--lp-warning-600)' : 'var(--lp-text-secondary)';
+
+/* Bloque del calendario (vencidos/esta semana/próximos). Declarado a nivel de
+   módulo para no recrearse en cada render (react-hooks/static-components). */
+function PendienteBloque({ titulo, color, badge, items, vacio, isDesktop }) {
+  return (
+    <div style={{ ...S.card, boxShadow: `inset 3px 0 0 ${color}` }}>
+      <div style={{ ...S.cardHeader, marginBottom: 8 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 700 }}>{titulo}</div>
+        <span style={S.badge(`color-mix(in srgb, ${color} 16%, transparent)`, color)}>{items.length}</span>
+      </div>
+      {items.length === 0 ? (
+        <div style={{ padding: '12px 4px', fontSize: 12.5, color: 'var(--lp-text-tertiary)' }}>{vacio}</div>
+      ) : isDesktop ? (
+        <div style={S.tablewrap}>
+          <table style={S.table}>
+            <thead><tr>
+              <th style={S.th}>MP</th>
+              <th style={S.th}>Clase</th>
+              <th style={{ ...S.th, ...S.thR }}>Stock</th>
+              <th style={{ ...S.th, ...S.thR }}>Valor</th>
+              <th style={{ ...S.th, ...S.thR }}>Último conteo</th>
+              <th style={{ ...S.th, ...S.thR }}>Cadencia</th>
+              <th style={{ ...S.th, ...S.thR }}>{badge}</th>
+            </tr></thead>
+            <tbody>
+              {items.slice(0, 50).map(it => (
+                <tr key={it.mp}>
+                  <td style={{ ...S.td, fontWeight: 600 }}>{it.mp}</td>
+                  <td style={S.td}><span style={S.estChip(claseColor(it.claseABC))}>{it.claseABC}</span></td>
+                  <td style={{ ...S.td, ...S.tdMono, ...S.thR }}>{Number(it.qty).toFixed(1)}</td>
+                  <td style={{ ...S.td, ...S.tdMono, ...S.thR }}>{fmtPesos(it.valor)}</td>
+                  <td style={{ ...S.tdMut, ...S.thR }}>
+                    {it.ultimoConteo ? new Date(it.ultimoConteo).toLocaleDateString('es-MX') + ` (${it.diasDesde}d)` : 'Nunca'}
+                  </td>
+                  <td style={{ ...S.td, ...S.tdMono, ...S.thR, fontSize: 12 }}>{it.cadenciaDias}d</td>
+                  <td style={{ ...S.td, ...S.tdMono, ...S.thR, fontWeight: 700, color }}>
+                    {it.diasParaVencer < 0 ? `+${Math.abs(it.diasParaVencer)}d vencido` : `${it.diasParaVencer}d`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {items.length > 50 && (
+            <div style={{ padding: '8px 0', textAlign: 'center', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
+              Mostrando 50 de {items.length}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div>
+          {items.slice(0, 50).map(it => (
+            <div key={it.mp} style={{ ...S.mCard(false), marginBottom: 9, padding: '12px 14px', borderRadius: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <span style={S.estChip(claseColor(it.claseABC))}>{it.claseABC}</span>
+                <span style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.mp}</span>
+                <span style={{ marginLeft: 'auto', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 12.5, color }}>
+                  {it.diasParaVencer < 0 ? `+${Math.abs(it.diasParaVencer)}d` : `${it.diasParaVencer}d`}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+                Stock <span style={S.mSisB}>{Number(it.qty).toFixed(1)}</span> · {fmtPesos(it.valor)} · {it.ultimoConteo ? `${it.diasDesde}d` : 'Nunca'} · cad. {it.cadenciaDias}d
+              </div>
+            </div>
+          ))}
+          {items.length > 50 && (
+            <div style={{ padding: '6px 0', textAlign: 'center', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
+              Mostrando 50 de {items.length}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PendientesTab({ isDesktop }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -248,76 +538,22 @@ function PendientesTab() {
   if (err) return <div style={S.err}>{err}</div>;
   if (!data) return <div style={S.empty}>Sin datos</div>;
 
-  const fmt$ = n => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
-  const Bloque = ({ titulo, color, badge, items, vacio }) => (
-    <div style={{ ...S.card, borderTop: '3px solid ' + color }}>
-      <div style={{ ...S.cardHeader, marginBottom: 8 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>{titulo}</div>
-        <span style={S.badge(color + '22', color)}>{items.length}</span>
-      </div>
-      {items.length === 0 ? (
-        <div style={{ padding: '12px 4px', fontSize: 12, color: 'var(--lp-text-tertiary)' }}>{vacio}</div>
-      ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-            <thead><tr>
-              <th style={{ textAlign: 'left', padding: '6px 8px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>MP</th>
-              <th style={{ textAlign: 'left', padding: '6px 8px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Clase</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Stock</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Valor</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Último conteo</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>Cadencia</th>
-              <th style={{ textAlign: 'right', padding: '6px 8px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase' }}>{badge}</th>
-            </tr></thead>
-            <tbody>
-              {items.slice(0, 50).map(it => (
-                <tr key={it.mp} style={{ borderBottom: '1px solid var(--lp-border-subtle)' }}>
-                  <td style={{ padding: '6px 8px', fontWeight: 600 }}>{it.mp}</td>
-                  <td style={{ padding: '6px 8px' }}>
-                    <span style={S.badge(
-                      it.claseABC === 'A' ? 'var(--lp-danger-100)' : it.claseABC === 'B' ? 'var(--lp-warning-100)' : 'var(--lp-bg-sunken)',
-                      it.claseABC === 'A' ? 'var(--lp-danger-700)' : it.claseABC === 'B' ? 'var(--lp-warning-700)' : 'var(--lp-text-secondary)'
-                    )}>{it.claseABC}</span>
-                  </td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>{Number(it.qty).toFixed(1)}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>{fmt$(it.valor)}</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-                    {it.ultimoConteo ? new Date(it.ultimoConteo).toLocaleDateString('es-MX') + ` (${it.diasDesde}d)` : 'Nunca'}
-                  </td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 11 }}>{it.cadenciaDias}d</td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color }}>
-                    {it.diasParaVencer < 0 ? `+${Math.abs(it.diasParaVencer)}d vencido` : `${it.diasParaVencer}d`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {items.length > 50 && (
-            <div style={{ padding: '8px 0', textAlign: 'center', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-              Mostrando 50 de {items.length}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-
   return (
     <>
-      <div style={{ background: 'var(--lp-brand-50)', border: '1px solid var(--lp-brand-200)', color: 'var(--lp-brand-700)', padding: '10px 12px', borderRadius: 'var(--lp-radius-sm)', fontSize: 12, marginBottom: 14 }}>
+      <div style={{ background: 'var(--lp-brand-50)', border: '1px solid var(--lp-brand-200)', color: 'var(--lp-brand-700)', padding: '10px 12px', borderRadius: 10, fontSize: 12.5, marginBottom: 14 }}>
         <strong>Cadencia recomendada:</strong> Clase A cada {data.cadencia.A} días · Clase B cada {data.cadencia.B} días · Clase C cada {data.cadencia.C} días.
       </div>
-      <Bloque titulo="Vencidos — atender YA" color="var(--lp-danger-600)" badge="Atrasado"
-        items={data.vencidos} vacio="Sin conteos vencidos." />
-      <Bloque titulo="Esta semana" color="var(--lp-warning-600)" badge="Vence en"
-        items={data.estaSemana} vacio="Sin pendientes esta semana." />
-      <Bloque titulo="Próximos" color="var(--lp-success-600)" badge="Vence en"
-        items={data.proximos} vacio="Sin próximos en el horizonte." />
+      <PendienteBloque titulo="Vencidos — atender ya" color="var(--lp-danger-600)" badge="Atrasado"
+        items={data.vencidos} vacio="Sin conteos vencidos." isDesktop={isDesktop} />
+      <PendienteBloque titulo="Esta semana" color="var(--lp-warning-600)" badge="Vence en"
+        items={data.estaSemana} vacio="Sin pendientes esta semana." isDesktop={isDesktop} />
+      <PendienteBloque titulo="Próximos" color="var(--lp-success-600)" badge="Vence en"
+        items={data.proximos} vacio="Sin próximos en el horizonte." isDesktop={isDesktop} />
     </>
   );
 }
 
-function AddMPModal({ onAdd, onClose, loading }) {
+function AddMPModal({ onAdd, onClose, loading, isDesktop }) {
   const [nombre, setNombre] = useState('');
   const [stockFisico, setStockFisico] = useState('');
   const [unidad, setUnidad] = useState('kg');
@@ -333,35 +569,41 @@ function AddMPModal({ onAdd, onClose, loading }) {
     catch (e) { setErr(e.message || 'Error al agregar'); }
   };
 
+  const inp = {
+    width: '100%', padding: '11px 14px', borderRadius: 12, fontSize: 14,
+    border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-sans)',
+    background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', outline: 'none', boxSizing: 'border-box',
+  };
+
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,21,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 20, maxWidth: 460, width: '100%', border: '1.5px solid var(--lp-border-subtle)' }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Agregar MP nueva al conteo</div>
-        <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 16 }}>
-          La MP se creará en el inventario sólo cuando admin apruebe la sesión.
-        </div>
+    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
+        <div style={S.shH}>Agregar MP nueva al conteo</div>
+        <div style={S.shS}>La MP se creará en el inventario sólo cuando admin apruebe la sesión.</div>
 
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-secondary)', marginBottom: 6 }}>Nombre</div>
-          <input style={S.search} type="text" value={nombre}
+          <label style={S.flbl}>Nombre</label>
+          <input style={inp} type="text" value={nombre}
             onChange={(e) => setNombre(e.target.value)}
             placeholder="Ej: RESINA ABC-123" autoFocus
+            data-id="conteo.input.mp-nombre" data-rol="inventario,admin"
             onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('cc-add-fisico')?.focus(); }} />
-          <div style={{ fontSize: 10, color: 'var(--lp-text-tertiary)', marginTop: 4 }}>Se guarda en MAYÚSCULAS</div>
+          <div style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 4 }}>Se guarda en MAYÚSCULAS</div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10, marginBottom: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10, marginBottom: 8 }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-secondary)', marginBottom: 6 }}>Stock físico</div>
-            <input id="cc-add-fisico" style={{ ...S.search, fontFamily: 'var(--lp-font-mono)', textAlign: 'right' }}
-              type="number" min="0" step="0.01"
-              value={stockFisico} onChange={(e) => setStockFisico(e.target.value)}
-              placeholder="0.00"
+            <label style={S.flbl}>Stock físico</label>
+            <input id="cc-add-fisico" style={{ ...inp, fontFamily: 'var(--lp-font-mono)', textAlign: 'right' }}
+              type="number" min="0" step="0.01" value={stockFisico}
+              onChange={(e) => setStockFisico(e.target.value)} placeholder="0.00"
+              data-id="conteo.input.mp-fisico" data-rol="inventario,admin"
               onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} />
           </div>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-secondary)', marginBottom: 6 }}>Unidad</div>
-            <select style={S.search} value={unidad} onChange={(e) => setUnidad(e.target.value)}>
+            <label style={S.flbl}>Unidad</label>
+            <select style={inp} value={unidad} onChange={(e) => setUnidad(e.target.value)}
+              data-id="conteo.input.mp-unidad" data-rol="inventario,admin">
               <option value="kg">kg</option>
               <option value="lt">lt</option>
               <option value="pz">pz</option>
@@ -369,12 +611,14 @@ function AddMPModal({ onAdd, onClose, loading }) {
           </div>
         </div>
 
-        {err && <div style={{ ...S.err, marginBottom: 12 }}>{err}</div>}
+        {err && <div style={{ ...S.err, marginTop: 8, marginBottom: 0 }}>{err}</div>}
 
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-          <button style={S.btnGhost} onClick={onClose} disabled={loading}>Cancelar</button>
-          <button style={S.btnPrimary} onClick={guardar} disabled={loading}>
-            {loading ? 'Agregando...' : 'Agregar al conteo'}
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose} disabled={loading}
+            data-id="conteo.btn.cancelar-mp" data-rol="inventario,admin">Cancelar</button>
+          <button style={S.act2(true)} onClick={guardar} disabled={loading}
+            data-id="conteo.btn.agregar-mp" data-rol="inventario,admin">
+            {loading ? 'Agregando…' : 'Agregar al conteo'}
           </button>
         </div>
       </div>
@@ -382,85 +626,102 @@ function AddMPModal({ onAdd, onClose, loading }) {
   );
 }
 
-function ItemConteo({ item, sesionId, onRegistrar }) {
-  const [val, setVal] = useState(item.stockFisico !== null && item.stockFisico !== undefined ? String(item.stockFisico) : '');
+/* ── Helpers de presentación de item ── */
+function varianzaColor(item) {
+  if (item.varianza == null) return 'var(--lp-text-tertiary)';
+  if (item.varianza === 0) return 'var(--lp-success-600)';
+  return item.flagged ? 'var(--lp-danger-600)' : 'var(--lp-warning-600)';
+}
+function estadoDeItem(item) {
+  const contado = item.stockFisico !== null && item.stockFisico !== undefined;
+  if (!contado) return { key: 'pendiente', label: 'Programado', color: 'var(--lp-warning-600)' };
+  if (item.flagged) return { key: 'flagged', label: 'A aprobación admin', color: 'var(--lp-danger-600)' };
+  return { key: 'contado', label: 'Contado', color: 'var(--lp-success-600)' };
+}
+
+/* ── Fila de tabla escritorio (input físico inline + acción Contar) ── */
+function ItemRowDesktop({ item, onRegistrar, onContar }) {
+  const [val, setVal] = useState(
+    item.stockFisico !== null && item.stockFisico !== undefined ? String(item.stockFisico) : ''
+  );
   const [saving, setSaving] = useState(false);
   const guardar = async () => {
     if (val === '') return;
     const num = Number(val);
     if (isNaN(num) || num < 0) return;
     setSaving(true);
-    try { await onRegistrar(sesionId, item.key, num); } finally { setSaving(false); }
+    try { await onRegistrar(item.key, num); } finally { setSaving(false); }
   };
-  const flagged = item.flagged;
-  const variancePct = item.pctVarianza;
-  /* Diseño REVERTIDO a tabla horizontal compacta (versión original).
-     Cada item es UNA fila densa con columnas: Nombre [unidad] · Sistema · Físico · Varianza · %.
-     En PC con monitor grande caben muchos items por pantalla. En móvil overflow-x scroll. */
-  const rowStyle = {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0,1fr) auto 80px 110px 90px 65px',
-    gap: 10,
-    alignItems: 'center',
-    padding: '8px 12px',
-    borderRadius: 'var(--lp-radius-sm)',
-    fontSize: 12,
-    background: flagged ? 'var(--lp-danger-50)' : 'var(--lp-bg-sunken)',
-    border: flagged ? '1px solid var(--lp-danger-200)' : '1px solid transparent',
-    minWidth: 0,
-  };
+  const est = estadoDeItem(item);
   return (
-    <div style={rowStyle}>
-      {/* Nombre + badge NUEVA inline */}
-      <span style={{ fontWeight: 700, color: 'var(--lp-text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }} title={item.nombre}>{item.nombre}</span>
-        {item.esNueva && (
-          <span style={{ ...S.badge('var(--lp-brand-100)', 'var(--lp-brand-700)'), flexShrink: 0 }}>NUEVA</span>
+    <tr style={item.flagged ? { background: 'var(--lp-danger-50)' } : undefined}>
+      <td style={{ ...S.td, fontWeight: 600 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 7 }}>
+          {item.nombre}
+          {item.esNueva && <span style={S.badge('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Nueva</span>}
+        </span>
+      </td>
+      <td style={S.tdMut}>{item.unidad}</td>
+      <td style={{ ...S.tdMut, color: 'var(--lp-text-tertiary)' }}>{item.ubicacion || '—'}</td>
+      <td style={{ ...S.td, ...S.tdMono, ...S.thR, color: 'var(--lp-text-secondary)' }}>{item.stockSistema}</td>
+      <td style={{ ...S.td, ...S.thR }}>
+        <input style={S.inputCount} type="number" inputMode="decimal" min="0" step="0.01"
+          value={val} onChange={(e) => setVal(e.target.value)} onBlur={guardar}
+          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} placeholder="—" disabled={saving}
+          data-id="conteo.input.fisico-inline" data-rol="inventario,admin" />
+      </td>
+      <td style={{ ...S.td, ...S.thR, ...S.tdMono, fontWeight: 700, color: varianzaColor(item) }}>
+        {item.varianza == null ? '—'
+          : (item.varianza > 0 ? '+' : '') + item.varianza.toFixed(2)
+            + (item.pctVarianza != null ? ` (${item.pctVarianza.toFixed(1)}%)` : '')}
+      </td>
+      <td style={{ ...S.td, ...S.thC }}><span style={S.estChip(est.color)}>{est.label}</span></td>
+      <td style={{ ...S.td, ...S.thR }}>
+        <button style={S.btnGhost} onClick={() => onContar(item)}
+          data-id="conteo.btn.contar" data-rol="inventario,admin">
+          {Icon.check(15)}Contar
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+/* ── Card móvil de item (1:1 ERP Móvil.html · Conteo.html) ── */
+function ItemCardMobile({ item, onContar }) {
+  const est = estadoDeItem(item);
+  const contado = item.stockFisico !== null && item.stockFisico !== undefined;
+  return (
+    <div style={S.mCard(false)}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+        <span style={S.mTipo}>{item.unidad}</span>
+        {item.esNueva && <span style={S.badge('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Nueva</span>}
+        <span style={{ ...S.estChip(est.color), marginLeft: 'auto' }}>{est.label}</span>
+      </div>
+      <div style={S.mItem}>{item.nombre}</div>
+      {item.ubicacion && <div style={S.mMeta}>{item.ubicacion}</div>}
+      <div style={S.mRows}>
+        <span style={S.mSis}>Sistema <span style={S.mSisB}>{item.stockSistema} {item.unidad}</span>
+          {contado && <> · Físico <span style={S.mSisB}>{item.stockFisico} {item.unidad}</span></>}
+        </span>
+        {item.pctVarianza != null && (
+          <span style={S.mVchip(varianzaColor(item))}>
+            {(item.varianza > 0 ? '+' : '')}{item.pctVarianza.toFixed(1)}%
+          </span>
         )}
-      </span>
-
-      {/* Unidad */}
-      <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{item.unidad}</span>
-
-      {/* Sistema */}
-      <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)', fontSize: 13, fontWeight: 600 }}>
-        {item.stockSistema}
-      </span>
-
-      {/* Físico (input editable) */}
-      <input
-        style={{ ...S.inputCount, fontSize: 13, padding: '5px 8px', minHeight: 32, textAlign: 'right' }}
-        type="number" inputMode="decimal" min="0" step="0.01"
-        value={val} onChange={(e) => setVal(e.target.value)}
-        onBlur={guardar} onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }}
-        placeholder="—" disabled={saving}
-      />
-
-      {/* Varianza */}
-      <span style={{
-        textAlign: 'right',
-        fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 13,
-        color: item.varianza == null ? 'var(--lp-text-tertiary)'
-          : item.varianza === 0 ? 'var(--lp-success-600)'
-          : flagged ? 'var(--lp-danger-600)' : 'var(--lp-warning-600)',
-      }}>
-        {item.varianza == null ? '—' : (item.varianza > 0 ? '+' : '') + item.varianza.toFixed(2)}
-      </span>
-
-      {/* % varianza */}
-      <span style={{ textAlign: 'center' }}>
-        {variancePct != null ? (
-          <span style={S.badge(
-            flagged ? 'var(--lp-danger-100)' : variancePct === 0 ? 'var(--lp-success-100)' : 'var(--lp-warning-100)',
-            flagged ? 'var(--lp-danger-700)' : variancePct === 0 ? 'var(--lp-success-700)' : 'var(--lp-warning-700)',
-          )}>{variancePct.toFixed(1)}%</span>
-        ) : <span style={{ color: 'var(--lp-text-tertiary)', fontSize: 11 }}>—</span>}
-      </span>
+      </div>
+      {contado ? (
+        <div style={S.actMobileDone}>{Icon.check(16)}{item.flagged ? 'Enviado a aprobación admin' : 'Conteo registrado'}</div>
+      ) : (
+        <button style={S.actMobile} onClick={() => onContar(item)}
+          data-id="conteo.btn.contar" data-rol="inventario,admin">
+          {Icon.check(18)}Contar
+        </button>
+      )}
     </div>
   );
 }
 
-function SesionActiva({ sesion, onRegistrar, onFinalizar, onAgregarMP }) {
+function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP, onContar }) {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('todos');
   const items = useMemo(() => {
@@ -474,49 +735,39 @@ function SesionActiva({ sesion, onRegistrar, onFinalizar, onAgregarMP }) {
     return arr;
   }, [sesion.items, filter, search]);
 
-  /* Título legible — antes mostraba el ID interno (ej. "CC-mpek95x5") como
-     título principal, lo cual confundía al usuario. Ahora mostramos un texto
-     amigable; el ID queda como referencia técnica más pequeña al lado. */
   const tituloAmigable = `Conteo de ${CATEGORIAS.find(c => c.v === sesion.categoria)?.label || sesion.categoria}`;
   const tipoLabel = TIPOS.find(t => t.v === sesion.tipo)?.label || sesion.tipo;
 
   return (
     <div style={S.card}>
-      {/* Header — layout vertical para que en móvil el texto no se aplaste */}
+      {/* Header */}
       <div style={{ marginBottom: 12 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' }}>
-            {tituloAmigable}
-          </span>
-          <span style={S.badge('var(--lp-brand-100)', 'var(--lp-brand-700)')}>activo</span>
+          <span style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-primary)' }}>{tituloAmigable}</span>
+          <span style={S.estChip('var(--lp-brand-600)')}>Activo</span>
         </div>
-        <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
           {tipoLabel}
           {sesion.folio && (
-            <>
-              {' · '}
-              <span style={{
-                fontFamily: 'var(--lp-font-mono)', fontWeight: 700,
-                color: 'var(--lp-brand-700)', background: 'var(--lp-brand-100)',
-                padding: '1px 8px', borderRadius: 4, fontSize: 11,
-              }} title="Folio consecutivo del año — para citar en papel o auditoría">
-                {sesion.folio}
-              </span>
+            <>{' · '}
+              <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-brand-700)', background: 'var(--lp-brand-100)', padding: '1px 8px', borderRadius: 6, fontSize: 11 }}
+                title="Folio consecutivo del año — para citar en papel o auditoría">{sesion.folio}</span>
             </>
           )}
-          {' · '}
-          <span style={{ fontFamily: 'var(--lp-font-mono)', opacity: 0.55, fontSize: 10 }} title="ID técnico interno">
-            {sesion.id}
-          </span>
+          {' · '}<span style={{ fontFamily: 'var(--lp-font-mono)', opacity: 0.55, fontSize: 10 }} title="ID técnico interno">{sesion.id}</span>
         </div>
       </div>
+
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 }}>
         <ImportExportPrint
           exportUrl={() => api.urlExportCycleCount(sesion.id)}
           printUrl={() => api.urlPrintCycleCount(sesion.id)}
           permisos={{ import: false }}
         />
-        <button style={S.btnWarning} onClick={() => onFinalizar(sesion.id)}>Finalizar conteo</button>
+        <button style={S.btnWarning} onClick={() => onFinalizar(sesion.id)}
+          data-id="conteo.btn.finalizar-firma" data-rol="inventario,admin">
+          {Icon.shield(16)}Finalizar conteo (firma PIN)
+        </button>
       </div>
 
       <div style={S.metric}>
@@ -530,99 +781,89 @@ function SesionActiva({ sesion, onRegistrar, onFinalizar, onAgregarMP }) {
         </div>
         <div style={S.metricCard}>
           <div style={{ ...S.metricVal, color: 'var(--lp-danger-600)' }}>{sesion.varianzas || 0}</div>
-          <div style={S.metricLabel}>Varianzas {'>'}5%</div>
+          <div style={S.metricLabel}>Varianzas {'>'}{UMBRAL}%</div>
         </div>
       </div>
 
       <div style={S.toolbar}>
-        <input style={S.search} type="text" placeholder="Buscar item..." value={search} onChange={(e) => setSearch(e.target.value)} />
-        <SegmentedControl
-          value={filter}
-          onChange={setFilter}
+        <div style={S.searchBox}>
+          {Icon.search(18)}
+          <input style={S.searchInput} type="text" placeholder="Buscar item…"
+            value={search} onChange={(e) => setSearch(e.target.value)}
+            data-id="conteo.input.buscar" data-rol="inventario,admin" />
+        </div>
+        <SegmentedControl value={filter} onChange={setFilter}
           options={[
             { value: 'todos', label: 'Todos' },
             { value: 'pendientes', label: 'Pendientes' },
             { value: 'flaggeados', label: 'Flaggeados' },
-          ]}
-          color="brand"
-        />
+          ]} color="brand" />
         {sesion.categoria === 'mp' && onAgregarMP && (
-          <button style={S.btnPrimary} onClick={onAgregarMP} title="Agregar una MP que no está en el inventario">
-            + Agregar MP nueva
+          <button style={S.btnPrimary} onClick={onAgregarMP} title="Agregar una MP que no está en el inventario"
+            data-id="conteo.btn.agregar-mp-nueva" data-rol="inventario,admin">
+            {Icon.plus(16)}Agregar MP nueva
           </button>
         )}
       </div>
 
-      {/* Lista de items — tabla horizontal compacta (revertido). En PC cabe
-          mucho; en celular se hace scroll horizontal si la columna no entra. */}
-      <div style={{ marginTop: 12, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        {/* Header de columnas */}
-        {items.length > 0 && (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0,1fr) auto 80px 110px 90px 65px',
-            gap: 10,
-            padding: '6px 12px',
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '.06em',
-            color: 'var(--lp-text-tertiary)',
-            borderBottom: '2px solid var(--lp-border-subtle)',
-            marginBottom: 6,
-            minWidth: 580,
-          }}>
-            <span>Materia Prima</span>
-            <span>U.</span>
-            <span style={{ textAlign: 'right' }}>Sistema</span>
-            <span style={{ textAlign: 'right' }}>Físico</span>
-            <span style={{ textAlign: 'right' }}>Varianza</span>
-            <span style={{ textAlign: 'center' }}>%</span>
-          </div>
-        )}
-        {/* Filas */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 580 }}>
-          {items.map(item => <ItemConteo key={item.key} item={item} sesionId={sesion.id} onRegistrar={onRegistrar} />)}
-          {items.length === 0 && <div style={S.empty}>Sin items que coincidan</div>}
+      {/* Lista de items — tabla escritorio / cards móvil */}
+      {items.length === 0 ? (
+        <div style={S.empty}>Sin items que coincidan</div>
+      ) : isDesktop ? (
+        <div style={S.tablewrap}>
+          <table style={S.table}>
+            <thead><tr>
+              <th style={S.th}>Material</th>
+              <th style={S.th}>U.</th>
+              <th style={S.th}>Ubicación</th>
+              <th style={{ ...S.th, ...S.thR }}>Sistema</th>
+              <th style={{ ...S.th, ...S.thR }}>Físico</th>
+              <th style={{ ...S.th, ...S.thR }}>Varianza</th>
+              <th style={{ ...S.th, ...S.thC }}>Estado</th>
+              <th style={{ ...S.th, ...S.thR }}>Acción</th>
+            </tr></thead>
+            <tbody>
+              {items.map(item => (
+                <ItemRowDesktop key={item.key} item={item} onRegistrar={onRegistrar} onContar={onContar} />
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
+      ) : (
+        <div>
+          {items.map(item => (
+            <ItemCardMobile key={item.key} item={item} onContar={onContar} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function HistorialCard({ sesion, onAprobar, canAprobar }) {
+function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
   const [expanded, setExpanded] = useState(false);
   const fecha = new Date(sesion.fecha).toLocaleString('es-MX');
-  const estadoBadges = {
-    activo: { bg: 'var(--lp-brand-100)', fg: 'var(--lp-brand-700)' },
-    finalizado: { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-700)' },
-    aprobado: { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-700)' },
-  };
-  const eb = estadoBadges[sesion.estado] || { bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-secondary)' };
+  const estadoChip = {
+    activo: 'var(--lp-brand-600)',
+    finalizado: 'var(--lp-warning-600)',
+    aprobado: 'var(--lp-success-600)',
+  }[sesion.estado] || 'var(--lp-text-secondary)';
   const flaggedItems = (sesion.items || []).filter(i => i.flagged);
 
   return (
     <div style={S.card}>
-      {/* Header: layout vertical — primero el ID + fecha, luego badge,
-          metadata en línea propia y acciones al final. Evita que el texto
-          quede comprimido en columna estrecha al lado de los botones. */}
       <div style={{ marginBottom: 10 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {sesion.folio ? (
             <>
-              <span style={{
-                fontSize: 14, fontWeight: 700,
-                color: 'var(--lp-brand-700)', background: 'var(--lp-brand-100)',
-                padding: '2px 10px', borderRadius: 5, fontFamily: 'var(--lp-font-mono)',
-              }} title="Folio consecutivo del año">{sesion.folio}</span>
-              <span style={{ fontSize: 10, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>
-                ({sesion.id})
-              </span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--lp-brand-700)', background: 'var(--lp-brand-100)', padding: '2px 10px', borderRadius: 6, fontFamily: 'var(--lp-font-mono)' }}
+                title="Folio consecutivo del año">{sesion.folio}</span>
+              <span style={{ fontSize: 10, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>({sesion.id})</span>
             </>
           ) : (
             <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--lp-text-primary)' }}>{sesion.id}</span>
           )}
-          <span style={S.badge(eb.bg, eb.fg)}>{sesion.estado}</span>
+          <span style={S.estChip(estadoChip)}>{sesion.estado}</span>
           <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginLeft: 'auto' }}>{fecha}</span>
         </div>
         <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
@@ -634,40 +875,73 @@ function HistorialCard({ sesion, onAprobar, canAprobar }) {
           )}
         </div>
       </div>
+
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        {/* Aprobar ajuste — SOLO admin (Burgos no ve este botón). Varianza >5% → causas. */}
         {sesion.estado === 'finalizado' && canAprobar && (
-          <button style={S.btnSuccess} onClick={() => onAprobar(sesion.id)}>Aprobar ajuste</button>
+          <button style={S.btnSuccess} onClick={() => onAprobar(sesion.id)}
+            data-id="conteo.btn.aprobar-ajuste" data-rol="admin">
+            {Icon.shield(16)}Aprobar ajuste
+          </button>
         )}
         <ImportExportPrint
           exportUrl={() => api.urlExportCycleCount(sesion.id)}
           printUrl={() => api.urlPrintCycleCount(sesion.id)}
           permisos={{ import: false }}
         />
-        <button style={S.btnGhost} onClick={() => setExpanded(!expanded)}>
+        <button style={S.btnGhost} onClick={() => setExpanded(!expanded)}
+          data-id="conteo.btn.ver-detalle" data-rol="inventario,admin">
           {expanded ? 'Cerrar' : 'Ver detalle'}
         </button>
       </div>
 
       {expanded && flaggedItems.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-danger-700)', marginBottom: 6 }}>
-            Items con varianza significativa ({flaggedItems.length}):
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--lp-danger-700)', marginBottom: 8, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            {Icon.flag(14)}Items con varianza significativa ({flaggedItems.length}):
           </div>
-          {flaggedItems.map(item => (
-            <div key={item.key} style={{ ...S.itemRow, ...S.itemRowFlagged, marginBottom: 4 }}>
-              <div style={{ fontWeight: 600 }}>{item.nombre}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>{item.stockSistema}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>{item.stockFisico}</div>
-              <div style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-danger-600)', fontWeight: 700 }}>
-                {item.varianza > 0 ? '+' : ''}{item.varianza}
-              </div>
-              <div style={{ textAlign: 'center' }}>
-                <span style={S.badge('var(--lp-danger-100)', 'var(--lp-danger-700)')}>
-                  {item.pctVarianza?.toFixed(1)}%
-                </span>
-              </div>
+          {isDesktop ? (
+            <div style={S.tablewrap}>
+              <table style={S.table}>
+                <thead><tr>
+                  <th style={S.th}>Item</th>
+                  <th style={{ ...S.th, ...S.thR }}>Sistema</th>
+                  <th style={{ ...S.th, ...S.thR }}>Físico</th>
+                  <th style={{ ...S.th, ...S.thR }}>Δ</th>
+                  <th style={{ ...S.th, ...S.thC }}>%</th>
+                </tr></thead>
+                <tbody>
+                  {flaggedItems.map(item => (
+                    <tr key={item.key} style={{ background: 'var(--lp-danger-50)' }}>
+                      <td style={{ ...S.td, fontWeight: 600 }}>{item.nombre}</td>
+                      <td style={{ ...S.td, ...S.tdMono, ...S.thR }}>{item.stockSistema}</td>
+                      <td style={{ ...S.td, ...S.tdMono, ...S.thR }}>{item.stockFisico}</td>
+                      <td style={{ ...S.td, ...S.tdMono, ...S.thR, color: 'var(--lp-danger-600)', fontWeight: 700 }}>
+                        {item.varianza > 0 ? '+' : ''}{item.varianza}
+                      </td>
+                      <td style={{ ...S.td, ...S.thC }}>
+                        <span style={S.badge('var(--lp-danger-100)', 'var(--lp-danger-700)')}>{item.pctVarianza?.toFixed(1)}%</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
+          ) : (
+            flaggedItems.map(item => (
+              <div key={item.key} style={{ ...S.itemRow, ...S.itemRowFlagged, marginBottom: 5 }}>
+                <div style={{ fontWeight: 600 }}>{item.nombre}</div>
+                <div style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>{item.stockSistema}</div>
+                <div style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>{item.stockFisico}</div>
+                <div style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-danger-600)', fontWeight: 700 }}>
+                  {item.varianza > 0 ? '+' : ''}{item.varianza}
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <span style={S.badge('var(--lp-danger-100)', 'var(--lp-danger-700)')}>{item.pctVarianza?.toFixed(1)}%</span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       )}
     </div>
@@ -676,42 +950,28 @@ function HistorialCard({ sesion, onAprobar, canAprobar }) {
 
 export default function CycleCountPage() {
   const { can, user } = useAuth();
+  const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
   const [activeTab, setActiveTab] = useState('actual');
   const [sesiones, setSesiones] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
 
-  /* Defense-in-depth: si por alguna razón (cache vieja del menú, link directo
-     en historial del browser, push notification cargada antes de re-login)
-     un rol sin permiso llega aquí, le bloqueamos la pantalla con un mensaje
-     claro. El App.jsx RoleRoute es la primera capa pero confiar solo en
-     routing-guards es frágil (cambios de rol mid-sesión, deep links). */
+  /* Defense-in-depth: si un rol sin permiso llega aquí (cache de menú, deep
+     link, cambio de rol mid-sesión), le bloqueamos con un mensaje claro.
+     App.jsx RoleRoute es la primera capa; confiar solo en routing-guards es frágil.
+     El cálculo es un boolean (no early-return antes de hooks) — el bloqueo se
+     renderiza en el JSX, después de declarar todos los hooks. */
   const ROLES_PERMITIDOS = ['admin', 'inventario'];
-  if (user && user.rol && !ROLES_PERMITIDOS.includes(user.rol)) {
-    return (
-      <div>
-        <TopBar title="Conteo Físico" />
-        <div style={{
-          maxWidth: 480, margin: '40px auto', padding: 24,
-          background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
-          border: '1.5px solid var(--lp-border-subtle)', textAlign: 'center',
-        }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Sin acceso</div>
-          <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
-            Esta pantalla está reservada para usuarios con rol <strong>inventario</strong> o <strong>admin</strong>.
-            Tu rol actual es <strong>{user.rol}</strong>.
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const sinAcceso = !!(user && user.rol && !ROLES_PERMITIDOS.includes(user.rol));
+
   const [showStart, setShowStart] = useState(false);
   const [starting, setStarting] = useState(false);
   const [showAddMP, setShowAddMP] = useState(false);
   const [addingMP, setAddingMP] = useState(false);
   const [sesionParaAprobar, setSesionParaAprobar] = useState(null);
   const [aprobandoConCausas, setAprobandoConCausas] = useState(false);
+  const [itemParaContar, setItemParaContar] = useState(null);
   const [toast, setToast] = useState('');
 
   const cargar = useCallback(() => {
@@ -727,13 +987,10 @@ export default function CycleCountPage() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
-  /* FIX jun 2026 (K1 + K2): Burgos no veía la aprobación de su sesión en
-     realtime — quedaba viendo "finalizado" hasta refresh manual. Ahora con
-     el canal 'cycleCount' (con filtro corregido a ['admin','inventario']),
-     escucha el evento y recarga. */
+  /* Realtime: canal 'cycleCount' (filtro ['admin','inventario']) + inventario. */
   useRealtimeSync({
     onCycleCount: () => cargar(),
-    onInventario: () => cargar(), /* si admin ajusta tras aprobación, refrescar */
+    onInventario: () => cargar(),
   });
 
   const sesionActiva = useMemo(
@@ -746,21 +1003,14 @@ export default function CycleCountPage() {
   );
 
   const handleStart = async (categoria, tipo) => {
-    /* CANDADO: PIN del contador al ABRIR la sesión (firma de apertura).
-       Igual que el PIN al cerrar — auditoría industrial: quien inicia debe
-       firmar. Sin PIN no se puede crear la sesión. */
+    /* CANDADO: PIN del contador al ABRIR la sesión (firma de apertura). */
     const pin = await confirm(
       'Vas a iniciar una sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ abriste estos números. Ingresa tu PIN para confirmar.',
       {
         title: 'Firmar apertura de sesión',
         confirmText: 'Firmar y abrir sesión',
         danger: false,
-        prompt: {
-          label: 'Tu PIN',
-          placeholder: '0000',
-          required: true, minLength: 4, maxLength: 6,
-          rows: 1, numeric: true, password: true,
-        },
+        prompt: { label: 'Tu PIN', placeholder: '0000', required: true, minLength: 4, maxLength: 6, rows: 1, numeric: true, password: true },
       }
     );
     if (!pin) return;
@@ -790,25 +1040,19 @@ export default function CycleCountPage() {
     } catch (e) {
       setToast('Error: ' + e.message);
       setTimeout(() => setToast(''), 3000);
+      throw e;
     }
   };
 
   const handleFinalizar = async (sesionId) => {
-    /* CANDADO: PIN del contador como firma digital de cierre de sesión.
-       Backend valida el PIN contra usuarios.json y guarda firmadoPor +
-       fechaFirma en la sesión. Control estándar de auditoría industrial. */
+    /* CANDADO: PIN del contador como firma digital de cierre de sesión. */
     const pin = await confirm(
       'Vas a finalizar la sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ cerraste estos números. Ingresa tu PIN para confirmar.',
       {
         title: 'Firmar y finalizar sesión',
         confirmText: 'Firmar y finalizar',
         danger: false,
-        prompt: {
-          label: 'Tu PIN',
-          placeholder: '0000',
-          required: true, minLength: 4, maxLength: 6,
-          rows: 1, numeric: true, password: true,
-        },
+        prompt: { label: 'Tu PIN', placeholder: '0000', required: true, minLength: 4, maxLength: 6, rows: 1, numeric: true, password: true },
       }
     );
     if (!pin) return;
@@ -823,12 +1067,12 @@ export default function CycleCountPage() {
   const handleAgregarMP = async (nombre, stockFisico, unidad) => {
     if (!sesionActiva) throw new Error('Sin sesión activa');
     setAddingMP(true);
+    /* El error se propaga al AddMPModal (que lo muestra inline); el finally
+       limpia el flag de carga pase lo que pase. */
     try {
       const r = await api.cycleCountAgregarItem(sesionActiva.id, nombre, stockFisico, unidad);
       setSesiones(prev => prev.map(s => s.id === sesionActiva.id ? r.sesion : s));
       setShowAddMP(false);
-    } catch (e) {
-      throw e;
     } finally {
       setAddingMP(false);
     }
@@ -840,7 +1084,6 @@ export default function CycleCountPage() {
     const flagged = (sesion.items || []).filter(i => i.flagged && i.stockFisico != null);
 
     if (flagged.length === 0) {
-      /* Sin varianzas — confirm simple */
       const ok = await confirm('¿Aprobar los ajustes de inventario? Esta acción aplica las diferencias al inventario y es irreversible.', { danger: true, confirmText: 'Aprobar' });
       if (!ok) return;
       try {
@@ -850,7 +1093,7 @@ export default function CycleCountPage() {
         setErr(e?.data?.error || e.message || 'Error al aprobar');
       }
     } else {
-      /* Hay varianzas — abrir modal de causas obligatorio */
+      /* Hay varianzas >umbral — abrir modal de causas obligatorio (admin). */
       setSesionParaAprobar(sesion);
     }
   };
@@ -864,40 +1107,43 @@ export default function CycleCountPage() {
       cargar();
     } catch (e) {
       const msg = e?.data?.error || e.message || 'Error al aprobar';
-      throw new Error(msg);
+      throw new Error(msg, { cause: e });
     } finally {
       setAprobandoConCausas(false);
     }
   };
 
+  const tabs = ['pendientes', 'actual', 'historial'].map(id => ({
+    id,
+    label: { pendientes: 'Mis pendientes', actual: 'Mi conteo actual', historial: 'Historial' }[id],
+    style: S.tab,
+  }));
+
+  /* Bloqueo por rol — renderizado tras declarar todos los hooks. */
+  if (sinAcceso) {
+    return (
+      <div>
+        <TopBar title="Conteo" />
+        <div style={{ maxWidth: 480, margin: '40px auto', padding: 24, background: 'var(--lp-bg-raised)', borderRadius: 18, border: '1px solid var(--lp-border-subtle)', textAlign: 'center' }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Sin acceso</div>
+          <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
+            Esta pantalla está reservada para usuarios con rol <strong>inventario</strong> o <strong>admin</strong>.
+            Tu rol actual es <strong>{user.rol}</strong>.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <TopBar title="Conteo Físico" />
+      <TopBar title="Conteo" />
       <div style={S.wrap}>
+        <div style={S.h1}>Conteo</div>
+        <div style={S.psub}>Cycle count{user?.nombre ? ' · ' + user.nombre : ''}</div>
+
         <PageTabs
-          tabs={[
-            { id: 'pendientes', label: 'Mis pendientes', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2, flexShrink: 0,
-            }) },
-            { id: 'actual', label: 'Mi conteo actual', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2, flexShrink: 0,
-            }) },
-            { id: 'historial', label: 'Historial', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2, flexShrink: 0,
-            }) },
-          ]}
+          tabs={tabs}
           activeTab={activeTab}
           onChange={setActiveTab}
           style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--lp-border-subtle)', marginBottom: 16, overflowX: 'auto' }}
@@ -906,53 +1152,75 @@ export default function CycleCountPage() {
         {err && <div style={S.err}>{err}</div>}
         {toast && <div style={{ ...S.err, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' }}>{toast}</div>}
 
-        {activeTab === 'pendientes' && <PendientesTab />}
+        {activeTab === 'pendientes' && <PendientesTab isDesktop={isDesktop} />}
 
         {activeTab === 'actual' && (
           <>
             {!sesionActiva && can('conteoFisico') && (
               <div style={{ marginBottom: 16 }}>
-                <button style={S.btnPrimary} onClick={() => setShowStart(true)}>
-                  + Iniciar nueva sesión de conteo
+                <button style={S.btnPrimary} onClick={() => setShowStart(true)}
+                  data-id="conteo.btn.nueva-sesion" data-rol="inventario,admin">
+                  {Icon.plus(16)}Iniciar nueva sesión de conteo
                 </button>
               </div>
             )}
 
             {loading ? (
-              <div style={S.loading}>Cargando...</div>
+              <div style={S.loading}>Cargando…</div>
             ) : sesionActiva ? (
-              <SesionActiva sesion={sesionActiva} onRegistrar={handleRegistrar}
+              <SesionActiva
+                sesion={sesionActiva}
+                isDesktop={isDesktop}
+                onRegistrar={(itemKey, stockFisico) => handleRegistrar(sesionActiva.id, itemKey, stockFisico)}
                 onFinalizar={handleFinalizar}
-                onAgregarMP={() => setShowAddMP(true)} />
+                onAgregarMP={() => setShowAddMP(true)}
+                onContar={(item) => setItemParaContar(item)}
+              />
             ) : (
               <div style={S.empty}>
                 Sin sesión activa.
                 {can('conteoFisico') && ' Inicia una nueva con el botón de arriba.'}
               </div>
             )}
+
+            {/* Nota informativa §9: varianza >umbral → aprobación admin. */}
+            {sesionActiva && (
+              <div style={S.noteCard}>
+                Si la varianza supera el <b style={{ color: 'var(--lp-text-primary)' }}>umbral ({UMBRAL}%)</b> se envía a aprobación de admin. {user?.rol === 'inventario' ? 'No ajustas inventario directo.' : 'El conteo no aplica el ajuste hasta que admin lo aprueba.'}
+              </div>
+            )}
           </>
         )}
 
         {activeTab === 'historial' && (
-          loading ? <div style={S.loading}>Cargando...</div> :
+          loading ? <div style={S.loading}>Cargando…</div> :
           historial.length === 0 ? (
             <div style={S.empty}>Sin historial de conteos</div>
           ) : (
             historial.map(s => (
               <HistorialCard key={s.id} sesion={s} onAprobar={handleAprobar}
-                canAprobar={can('admin') || user?.rol === 'admin'} />
+                canAprobar={can('admin') || user?.rol === 'admin'} isDesktop={isDesktop} />
             ))
           )
         )}
 
-        {showStart && <StartModal onStart={handleStart} onClose={() => setShowStart(false)} loading={starting} />}
-        {showAddMP && <AddMPModal onAdd={handleAgregarMP} onClose={() => setShowAddMP(false)} loading={addingMP} />}
+        {showStart && <StartModal onStart={handleStart} onClose={() => setShowStart(false)} loading={starting} isDesktop={isDesktop} />}
+        {showAddMP && <AddMPModal onAdd={handleAgregarMP} onClose={() => setShowAddMP(false)} loading={addingMP} isDesktop={isDesktop} />}
+        {itemParaContar && sesionActiva && (
+          <CountSheet
+            item={itemParaContar}
+            isDesktop={isDesktop}
+            onClose={() => setItemParaContar(null)}
+            onRegistrar={(itemKey, stockFisico) => handleRegistrar(sesionActiva.id, itemKey, stockFisico)}
+          />
+        )}
         {sesionParaAprobar && (
           <CausasRaizModal
             sesion={sesionParaAprobar}
             onAprobar={handleAprobarConCausas}
             onClose={() => setSesionParaAprobar(null)}
             loading={aprobandoConCausas}
+            isDesktop={isDesktop}
           />
         )}
       </div>

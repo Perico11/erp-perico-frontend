@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import { EliminarMPModal, SustituirMPModal, MPActionsMenu } from './MPActions';
 import AgregarPTModal from './AgregarPTModal';
 import CostosMPPanel from '../admin/CostosMPPanel';
@@ -655,22 +656,6 @@ function TapaRow({ tapaKey, tapa, canEdit, onSave }) {
       )}
     </div>
   );
-}
-
-/* ── Responsive: escritorio (tabla) vs móvil (cards) ── */
-function useIsDesktop(bp = 880) {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window !== 'undefined' ? window.innerWidth >= bp : true
-  );
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const mq = window.matchMedia(`(min-width:${bp}px)`);
-    const onChange = () => setIsDesktop(mq.matches);
-    onChange();
-    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
-    return () => { mq.removeEventListener ? mq.removeEventListener('change', onChange) : mq.removeListener(onChange); };
-  }, [bp]);
-  return isDesktop;
 }
 
 /* Severidad canónica: Crítico (agotado) · Bajo · OK */

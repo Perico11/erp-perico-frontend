@@ -6,6 +6,7 @@ import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useConfirm from '../../hooks/useConfirm';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import { QRScanner } from '../../components/QRModal';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
 import {
@@ -15,112 +16,115 @@ import {
   LABELS_ACCION_SUBLOTE,
 } from '../../lib/loteTransiciones';
 
-const B = (bg, fg) => ({
-  display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 600,
-  borderRadius: 6, background: bg, color: fg,
-});
-
 /* ──────────────────────────────────────────────────────────────────── */
-/* RecoleccionPage refactorizada al state machine                       */
+/* RecoleccionPage — reskin Design System verde (Claude Design)         */
 /* ──────────────────────────────────────────────────────────────────── */
-/* Modelo: la unidad de trabajo de Luis es el SUBLOTE, no el lote.      */
-/* Cada sublote tiene QR físico y avanza por su propio estado:          */
+/* Responsive 1:1 con el paquete entrega_v2:                            */
+/*   · escritorio → grid de cards g3 (ERP Escritorio.html · recoleccion) */
+/*   · móvil      → cards limpias + hero verde "Escanear QR"             */
+/*                  (ERP Móvil.html · S.recoleccion + Recolección.html)  */
+/*                                                                       */
+/* La unidad de trabajo de Luis es el SUBLOTE, no el lote. Cada sublote  */
+/* tiene QR físico y avanza por su propio estado:                        */
 /*   envasado → en_recoleccion → en_camino → en_stock_teran             */
 /* Luis dispara 'escanearRecoger' (envasado/en_recoleccion → en_camino) */
 /* Josué (en AlmacenRecepcion) dispara 'escanearRecibirTeran'           */
+/*                                                                       */
+/* RESKIN VISUAL + cableo de botones — TODA la lógica se conserva:       */
+/* handlers, api/endpoints, useRealtimeSync, useConfirm, state machine   */
+/* de sublotes, esPrueba, validaciones, feedback háptico, scanner.       */
 /* ──────────────────────────────────────────────────────────────────── */
 
-const S = {
-  wrap: { padding: '0 20px 100px' },
-  scanBar: {
-    position: 'sticky', top: 0, zIndex: 5,
-    display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0',
-    background: 'var(--lp-bg-base)',
-    borderBottom: '1px solid var(--lp-border-subtle)',
-    marginBottom: 16,
+/* Iconos line SVG (sin emojis) ─────────────────────────────────────── */
+function IconQR({ size = 22 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M3 7V5a2 2 0 0 1 2-2h2" /><path d="M17 3h2a2 2 0 0 1 2 2v2" />
+      <path d="M21 17v2a2 2 0 0 1-2 2h-2" /><path d="M7 21H5a2 2 0 0 1-2-2v-2" />
+      <path d="M3 12h18" />
+    </svg>
+  );
+}
+function IconTruck({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M1 4h13v12H1z" /><path d="M14 8h4l3 3v5h-7" />
+      <circle cx="5.5" cy="18.5" r="2" /><circle cx="17.5" cy="18.5" r="2" />
+    </svg>
+  );
+}
+function IconCheckBox({ size = 20 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M9 11l3 3L22 4" />
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+    </svg>
+  );
+}
+function IconArrow({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M5 12h14M13 5l7 7-7 7" />
+    </svg>
+  );
+}
+function IconCheck({ size = 18 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M20 6L9 17l-5-5" />
+    </svg>
+  );
+}
+
+/* Pill de estado (badge con bolita) — espejo del .badge del mockup ─── */
+function EstadoBadge({ estado }) {
+  const color = ESTADO_SUBLOTE_COLOR[estado] || 'var(--lp-text-tertiary)';
+  const label = ESTADO_SUBLOTE_LABEL[estado] || estado || '—';
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 5,
+      fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999,
+      background: `color-mix(in srgb, ${color} 14%, transparent)`, color,
+    }}>
+      <i style={{ width: 6, height: 6, borderRadius: 999, background: color }} />
+      {label}
+    </span>
+  );
+}
+
+/* Mapa de acción → presentación del botón (verbo del mockup + icono + color).
+   La disponibilidad real la decide getAccionesSublote(s, rol) — esto es solo
+   la capa visual + los data-id/data-rol del mockup (Recolección.html). */
+const ACCION_BTN = {
+  escanearRecoger: {
+    label: 'Voy por él',
+    dataId: 'recoleccion.btn.voy',
+    dataRol: 'recolector,admin',
+    bg: 'var(--lp-brand-600)',
+    fg: '#fff',
+    Icon: IconTruck,
   },
-  scanBtn: {
-    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-    padding: '14px 18px', borderRadius: 12, border: 'none',
-    background: 'linear-gradient(135deg, var(--lp-brand-600), var(--lp-brand-700))',
-    color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer',
-    fontFamily: 'var(--lp-font-sans)', minHeight: 52,
-    boxShadow: '0 4px 12px rgba(143,107,77,.25)',
+  escanearRecibirTeran: {
+    label: 'Entregar en Terán',
+    dataId: 'recoleccion.btn.entregar',
+    dataRol: 'recolector,admin',
+    bg: 'var(--lp-info-600)',
+    fg: '#fff',
+    Icon: IconCheckBox,
   },
-  tabs: {
-    display: 'flex', gap: 0, borderBottom: '2px solid var(--lp-border-subtle)',
-    marginBottom: 16, overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none',
+  marcarRecoleccion: {
+    label: LABELS_ACCION_SUBLOTE.marcarRecoleccion,
+    dataId: 'recoleccion.btn.marcar',
+    dataRol: 'almacen,admin',
+    bg: 'var(--lp-text-tertiary)',
+    fg: '#fff',
+    Icon: IconArrow,
   },
-  tab: (active) => ({
-    padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-    color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-    borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-    background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-    fontFamily: 'var(--lp-font-sans)', marginBottom: -2, flexShrink: 0,
-  }),
-  kpiGrid: {
-    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-    gap: 10, marginBottom: 16,
-  },
-  kpi: (accent) => ({
-    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-sm)',
-    border: '1.5px solid var(--lp-border-subtle)', padding: '14px 16px',
-    borderTop: `3px solid ${accent}`, textAlign: 'center',
-  }),
-  kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-tertiary)' },
-  kpiValue: { fontSize: 24, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 },
-  toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  search: {
-    flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
-    border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
-    color: 'var(--lp-text-primary)', boxSizing: 'border-box',
-  },
-  card: {
-    background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 10,
-  },
-  cardHeader: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
-    flexWrap: 'wrap', marginBottom: 6,
-  },
-  loteCode: { fontWeight: 700, fontSize: 12, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' },
-  cardTitle: { fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 4 },
-  cardMeta: { fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 8 },
-  btnPrimary: {
-    padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
-    fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-brand-600)', color: '#fff', minHeight: 44,
-  },
-  btnSuccess: {
-    padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
-    fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-success-600)', color: '#fff', minHeight: 44,
-  },
-  sublote: {
-    padding: '10px 12px', borderRadius: 8, marginBottom: 6,
-    border: '1px solid var(--lp-border-subtle)', fontSize: 12,
-    background: 'var(--lp-bg-sunken)',
-    display: 'flex', flexDirection: 'column', gap: 4,
-  },
-  subloteHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
-  subloteCod: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 12 },
-  subloteActions: { display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' },
-  smallBtn: {
-    padding: '6px 12px', borderRadius: 6, border: 'none', fontSize: 11,
-    fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-brand-600)', color: '#fff', minHeight: 36,
-  },
-  empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '40px 0', fontSize: 13 },
-  spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
-  toast: {
-    position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
-    padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 1001,
-    background: 'var(--lp-success-600)', color: '#fff',
-    boxShadow: '0 4px 16px rgba(0,0,0,.15)',
-  },
-  toastErr: { background: 'var(--lp-danger-600)' },
 };
 
 /* Estado UI: agrupa sublote.estado en buckets visuales para el rol Luis */
@@ -148,6 +152,7 @@ function bucketOfSublote(s) {
 /* ═══════════════════════════════════════════════════════════════════ */
 export default function RecoleccionPage() {
   const { user } = useAuth();
+  const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
   const userName = user?.nombre || '?';
   const rol = user?.rol || '';
@@ -196,12 +201,6 @@ export default function RecoleccionPage() {
   const enCamino   = useMemo(() => allSublotes.filter(s => bucketOfSublote(s) === 'enCamino'),   [allSublotes]);
   const entregados = useMemo(() => allSublotes.filter(s => bucketOfSublote(s) === 'entregados'), [allSublotes]);
 
-  const kpis = useMemo(() => ({
-    pendientes: pendientes.length,
-    enCamino: enCamino.length,
-    entregados: entregados.length,
-  }), [pendientes, enCamino, entregados]);
-
   /* Filtrado por tab + búsqueda */
   const filtered = useMemo(() => {
     let list;
@@ -217,16 +216,8 @@ export default function RecoleccionPage() {
     );
   }, [activeTab, pendientes, enCamino, entregados, searchQ]);
 
-  /* Agrupar sublotes por lote para renderizar cards */
-  const groupedByLote = useMemo(() => {
-    const map = new Map();
-    filtered.forEach(s => {
-      const lid = s._lote?.id || s._lote?.codigoLote || 'sin-lote';
-      if (!map.has(lid)) map.set(lid, { lote: s._lote, sublotes: [] });
-      map.get(lid).sublotes.push(s);
-    });
-    return Array.from(map.values());
-  }, [filtered]);
+  /* Lista plana ordenada para cards (1 card por sublote = 1 QR físico) */
+  const filteredSublotes = useMemo(() => filtered, [filtered]);
 
   /* Ejecutar transición de sublote vía state machine */
   const doTransicion = useCallback(async (sublote, accion) => {
@@ -237,7 +228,7 @@ export default function RecoleccionPage() {
     try {
       await api.transicionSublote(sublote.cod, accion, { usuario: userName });
       reload();
-      showToast(`${sublote.cod}: ${label.toLowerCase()} ✓`);
+      showToast(`${sublote.cod}: ${label.toLowerCase()}`);
     } catch (err) {
       showToast('Error: ' + (err.message || 'No se pudo actualizar'), true);
     } finally {
@@ -320,7 +311,7 @@ export default function RecoleccionPage() {
       reload();
       const subloteCod = r?.sublote?.cod || code;
       feedbackScanOK();
-      showToast(`Recogido: ${subloteCod} ✓`);
+      showToast(`Recogido: ${subloteCod}`);
     } catch (err) {
       /* Caso especial: era QR de LOTE → ofrecer bulk */
       const data = err?.data;
@@ -336,7 +327,7 @@ export default function RecoleccionPage() {
             const n = r?.procesados?.length || 0;
             const omit = r?.omitidos?.length || 0;
             feedbackScanOK();
-            showToast(`Lote completo recogido: ${n} sublote(s)${omit ? ` · ${omit} omitido(s)` : ''} ✓`);
+            showToast(`Lote completo recogido: ${n} sublote(s)${omit ? ` · ${omit} omitido(s)` : ''}`);
           } catch (e2) {
             feedbackScanError();
             showToast('Error: ' + (e2.message || 'Bulk scan falló'), true);
@@ -351,7 +342,9 @@ export default function RecoleccionPage() {
     }
   }, [rol, reload, showToast, confirm, feedbackScanOK, feedbackScanError]);
 
-  const canAct = rol === 'admin' || rol === 'tecnico' || rol === 'almacen' || rol === 'recolector';
+  /* canScan: quién puede usar el hero "Escanear QR" (handleScan gatea por rol).
+     Las acciones por card las decide la state machine (getAccionesSublote). */
+  const canScan = rol === 'admin' || rol === 'recolector';
 
   if (loading) {
     return (
@@ -362,168 +355,92 @@ export default function RecoleccionPage() {
     );
   }
 
-  /* ────────────── VISTA SIMPLE PARA RECOLECTOR (Luis) ──────────────
-     Luis es un ejecutor: ve QUÉ recoger antes de salir, escanea el QR cuando
-     llega a fábrica, y puede validar QUÉ lleva consigo antes de salir hacia
-     Terán. Tres bloques claros:
-       1) Bloque "Por recoger" — número grande + lista mínima con producto/cantidad
-       2) Botón gigante "Escanear QR"
-       3) Bloque "Llevo conmigo" (colapsable) — lo escaneado pendiente de entregar
-     Sin tabs ni búsqueda — Luis no es admin.                                  */
-  if (rol === 'recolector') {
-    return <VistaRecolector
-      kpis={kpis}
-      pendientes={pendientes}
-      enCamino={enCamino}
-      scannerOpen={scannerOpen}
-      setScannerOpen={setScannerOpen}
-      handleScan={handleScan}
-      toast={toast}
-      ConfirmEl={ConfirmEl}
-      onRefresh={reload}
-    />;
-  }
+  /* Lista de tabs (compartida móvil/escritorio) */
+  const TABS = [
+    { id: 'pendientes', label: `Por recoger · ${pendientes.length}` },
+    { id: 'enCamino',   label: `En camino · ${enCamino.length}` },
+    { id: 'entregados', label: `Entregados · ${entregados.length}` },
+  ];
 
-  /* ────────────── VISTA COMPLETA (admin, almacén, tecnico) ────────────── */
+  const emptyCopy =
+    activeTab === 'pendientes' ? (searchQ ? 'Sin resultados' : 'Nada por recoger ahora. Respira tranquilo.')
+    : activeTab === 'enCamino' ? (searchQ ? 'Sin resultados' : 'Sin envíos en camino.')
+    : (searchQ ? 'Sin resultados' : 'Aún sin entregas.');
+
+  /* ════════════════════ RENDER ════════════════════ */
   return (
     <>
       <TopBar title="Recolección" />
-      <div style={S.wrap}>
-        {/* Active scanner CTA */}
-        {canAct && (
-          <div style={S.scanBar}>
+      <div style={isDesktop ? S.wrapDesktop : S.wrapMobile}>
+
+        {/* HERO "Escanear QR" — móvil: ancho completo; escritorio: botón auto */}
+        {canScan && (
+          isDesktop ? (
+            <div style={S.scanRowDesktop}>
+              <button
+                style={S.scanBtnDesktop}
+                onClick={() => setScannerOpen(true)}
+                aria-label="Escanear QR de sublote"
+              >
+                <IconQR size={20} />
+                Escanear QR
+              </button>
+            </div>
+          ) : (
             <button
-              style={S.scanBtn}
+              style={S.scanHeroMobile}
               onClick={() => setScannerOpen(true)}
               aria-label="Escanear QR de sublote"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-                <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-                <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-                <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-                <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-                <rect x="7" y="7" width="10" height="10" rx="1"/>
-              </svg>
+              <IconQR size={24} />
               Escanear QR
             </button>
-          </div>
+          )
         )}
 
-        {/* KPIs */}
-        <div style={S.kpiGrid}>
-          <div style={S.kpi('#7C3AED')}>
-            <div style={S.kpiLabel}>Por Recoger</div>
-            <div style={S.kpiValue}>{kpis.pendientes}</div>
-          </div>
-          <div style={S.kpi('var(--lp-warning-600)')}>
-            <div style={S.kpiLabel}>En Camino</div>
-            <div style={S.kpiValue}>{kpis.enCamino}</div>
-          </div>
-          <div style={S.kpi('var(--lp-success-600)')}>
-            <div style={S.kpiLabel}>Entregados</div>
-            <div style={S.kpiValue}>{kpis.entregados}</div>
-          </div>
-        </div>
-
-        {/* Tabs */}
+        {/* TABS tipo pill (estilo mockup) */}
         <PageTabs
-          tabs={[
-            { id: 'pendientes', label: `Por Recoger (${pendientes.length})`, style: (a) => S.tab(a) },
-            { id: 'enCamino', label: `En Camino (${enCamino.length})`, style: (a) => S.tab(a) },
-            { id: 'entregados', label: `Entregados (${entregados.length})`, style: (a) => S.tab(a) },
-          ]}
+          tabs={TABS.map(t => ({ ...t, style: (a) => S.tab(a) }))}
           activeTab={activeTab}
           onChange={setActiveTab}
           style={S.tabs}
         />
 
-        {/* Search */}
-        <div style={S.toolbar}>
-          <input type="text" style={S.search} placeholder="Buscar sublote, código o producto..."
-            value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-        </div>
+        {/* Búsqueda — útil para admin/almacén con muchos lotes */}
+        {isDesktop && (
+          <div style={S.toolbar}>
+            <input
+              type="text" style={S.search}
+              placeholder="Buscar sublote, código o producto…"
+              value={searchQ} onChange={e => setSearchQ(e.target.value)}
+            />
+          </div>
+        )}
 
-        {/* Sublotes agrupados por lote */}
-        {groupedByLote.length === 0 ? (
-          <div style={{ ...S.empty, padding: '60px 20px' }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🚚</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>
-              {searchQ ? 'Sin resultados' : 'No hay sublotes en esta categoría'}
-            </div>
+        {/* LISTA / GRID de cards */}
+        {filteredSublotes.length === 0 ? (
+          <div style={S.empty}>
+            <IconCheck size={40} />
+            <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}>{emptyCopy}</div>
             {!searchQ && activeTab === 'pendientes' && (
-              <div style={{ marginTop: 8, fontSize: 12 }}>
+              <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--lp-text-tertiary)' }}>
                 Cuando fábrica envase un lote, sus sublotes aparecerán aquí listos para recoger.
               </div>
             )}
           </div>
         ) : (
-          groupedByLote.map(({ lote, sublotes }) => (
-            <div key={lote?.id || lote?.codigoLote || Math.random()} style={S.card}>
-              <div style={S.cardHeader}>
-                <span style={S.loteCode}>{lote?.codigoLote || lote?.codigo || lote?.id}</span>
-                <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-                  {sublotes.length} sublote(s)
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <div style={S.cardTitle}>{lote?.producto || lote?.formula || lote?.nombre}</div>
-                {/* FIX jun 2026 (N7): Luis debe ver claramente si es prueba para
-                    no recolectar físicamente. */}
-                {esPrueba(lote) && <PruebaBadge size="md" />}
-              </div>
-              <div style={S.cardMeta}>
-                {lote?.cantidad && `${lote.cantidad} cubetas`}
-                {lote?.litrosTotal && ` · ${lote.litrosTotal} L totales`}
-                {lote?.ordenCodigo && ` · ${lote.ordenCodigo}`}
-              </div>
-              {esPrueba(lote) && (
-                <div style={{ marginTop: 6, padding: '8px 10px', background: 'var(--lp-warning-50)', border: '1.5px solid var(--lp-warning-300)', borderRadius: 8, fontSize: 12, color: 'var(--lp-warning-800)' }}>
-                  Este lote es de prueba — no recolectes físicamente, sólo simula el flujo.
-                </div>
-              )}
-
-              {sublotes.map(s => {
-                const acciones = getAccionesSublote(s, rol);
-                const estColor = ESTADO_SUBLOTE_COLOR[s.estado] || 'var(--lp-text-tertiary)';
-                const estLabel = ESTADO_SUBLOTE_LABEL[s.estado] || s.estado || '—';
-                const isBusy = busy === s.cod;
-                return (
-                  <div key={s.cod} style={S.sublote}>
-                    <div style={S.subloteHeader}>
-                      <span style={S.subloteCod}>{s.cod}</span>
-                      {(esPrueba(s) || esPrueba(lote)) && <PruebaBadge size="sm" />}
-                      <span style={B(estColor + '22', estColor)}>{estLabel}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
-                      {s.qty} {s.tipo} · {s.lit}L
-                      {s.marca && <> · <span style={{ fontWeight: 600 }}>{s.marca}</span></>}
-                      {s.esHijoDe && <> · <span style={{ color: '#7C3AED' }}>↳ tote {s.esHijoDe}</span></>}
-                    </div>
-                    {/* Acciones permitidas por rol según state machine */}
-                    {acciones.length > 0 && (
-                      <div style={S.subloteActions}>
-                        {acciones.filter(a => a !== 'cancelarSublote').map(a => (
-                          <button
-                            key={a}
-                            style={{
-                              ...S.smallBtn,
-                              background: a === 'escanearRecoger' ? 'var(--lp-brand-600)'
-                                       : a === 'escanearRecibirTeran' ? 'var(--lp-success-600)'
-                                       : 'var(--lp-text-tertiary)',
-                            }}
-                            disabled={isBusy}
-                            onClick={() => doTransicion(s, a)}
-                          >
-                            {isBusy ? '...' : (LABELS_ACCION_SUBLOTE[a] || a)}
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          ))
+          <div style={isDesktop ? S.grid3 : undefined}>
+            {filteredSublotes.map(s => (
+              <SubloteCard
+                key={s.cod}
+                sublote={s}
+                rol={rol}
+                busy={busy === s.cod}
+                onAccion={doTransicion}
+                isDesktop={isDesktop}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -538,7 +455,10 @@ export default function RecoleccionPage() {
       {/* Toast */}
       {toast && (
         <div style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>
-          <span style={{ marginRight: 8 }}>{toast.isErr ? '✕' : '✓'}</span>{toast.msg}
+          {toast.isErr
+            ? <span style={{ display: 'inline-flex' }} aria-hidden="true">✕</span>
+            : <IconCheck size={16} />}
+          <span>{toast.msg}</span>
         </div>
       )}
       {ConfirmEl}
@@ -547,280 +467,227 @@ export default function RecoleccionPage() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
-/* Vista simplificada de Luis (rol=recolector)                         */
+/* Card de sublote — visual unificado móvil/escritorio                  */
 /*                                                                     */
-/* Diseño:                                                             */
-/*   ┌─ "Por recoger" ─ N gigante ─────────┐                          */
-/*   │ • BLANCO MATE × 52 cub · LP-001     │                          */
-/*   │ • GRIS PERLA × 24 cub · LP-002      │                          */
-/*   └─────────────────────────────────────┘                          */
-/*   ┌─[ ESCANEAR QR ]─────────────────────┐                          */
-/*   └─────────────────────────────────────┘                          */
-/*   ┌─ Llevo conmigo (2) ▾ ───────────────┐                          */
-/*   │ Click para expandir y ver detalle   │                          */
-/*   └─────────────────────────────────────┘                          */
+/* Layout (espejo de Recolección.html y SCREENS.recoleccion):           */
+/*   ┌ folio · estado badge ────────────────────┐                      */
+/*   │ Producto 19L                              │                      │
+/*   │ 40 cubetas · 760 L                        │                      │
+/*   │ [Fábrica] → [Almacén Terán]               │                      │
+/*   │ [ Voy por él / Entregar en Terán ]        │                      │
+/*   └────────────────────────────────────────────┘                    │
+/*                                                                     */
+/* Acciones gateadas por la state machine real (getAccionesSublote).    */
+/* Los data-id/data-rol vienen del mockup; cada botón está cableado a    */
+/* doTransicion (api.transicionSublote) — la acción REAL.               */
 /* ═══════════════════════════════════════════════════════════════════ */
-function VistaRecolector({ kpis, pendientes, enCamino, scannerOpen, setScannerOpen, handleScan, toast, ConfirmEl, onRefresh }) {
-  const [showCarga, setShowCarga] = useState(false);
-  const pend = kpis.pendientes;
+function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
+  const lote = s._lote || {};
+  const esLotePrueba = esPrueba(lote);
+  const esSublotePrueba = esPrueba(s);
+  const producto = lote.producto || lote.formula || lote.nombre || '—';
+  const codLote = lote.codigoLote || lote.codigo || lote.id;
+  const litros = s.lit ? `${s.lit} L` : '';
+  const qtyTxt = [
+    s.qty != null ? `${s.qty} ${s.tipo || 'cubetas'}` : null,
+    litros,
+  ].filter(Boolean).join(' · ');
 
-  /* Agrupar sublotes pendientes por lote para mostrar productos, no sublotes
-     crípticos. Luis quiere ver "BLANCO MATE × 52", no "LP-2026-0522-001-A". */
-  const pendientesByLote = useMemo(() => {
-    const map = new Map();
-    pendientes.forEach(s => {
-      const lid = s._lote?.id || s._lote?.codigoLote || s.cod;
-      if (!map.has(lid)) map.set(lid, { lote: s._lote, sublotes: [], cubetas: 0, litros: 0 });
-      const entry = map.get(lid);
-      entry.sublotes.push(s);
-      entry.cubetas += parseInt(s.qty) || 0;
-      entry.litros  += parseFloat(s.lit) || 0;
-    });
-    return Array.from(map.values());
-  }, [pendientes]);
+  /* Destino según estado: entregados parten de Terán; resto Fábrica → Terán */
+  const origen = bucketOfSublote(s) === 'entregados' ? 'Almacén Terán' : 'Fábrica';
 
-  const enCaminoByLote = useMemo(() => {
-    const map = new Map();
-    enCamino.forEach(s => {
-      const lid = s._lote?.id || s._lote?.codigoLote || s.cod;
-      if (!map.has(lid)) map.set(lid, { lote: s._lote, sublotes: [], cubetas: 0, litros: 0 });
-      const entry = map.get(lid);
-      entry.sublotes.push(s);
-      entry.cubetas += parseInt(s.qty) || 0;
-      entry.litros  += parseFloat(s.lit) || 0;
-    });
-    return Array.from(map.values());
-  }, [enCamino]);
-
-  const cargaCubetasTotal = enCaminoByLote.reduce((acc, g) => acc + g.cubetas, 0);
-
-  const styles = {
-    wrap: { padding: '0 16px 100px' },
-    block: {
-      background: 'var(--lp-bg-raised)',
-      border: '1.5px solid var(--lp-border-subtle)',
-      borderRadius: 'var(--lp-radius)',
-      padding: '20px 18px',
-      marginBottom: 14,
-    },
-    blockHeader: {
-      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      marginBottom: 12,
-    },
-    blockLabel: {
-      fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-      letterSpacing: '.08em', color: 'var(--lp-text-tertiary)',
-    },
-    refreshBtn: {
-      background: 'none', border: 'none', cursor: 'pointer',
-      padding: 6, borderRadius: 6, color: 'var(--lp-text-tertiary)',
-      display: 'flex', alignItems: 'center',
-    },
-    bigNum: {
-      fontSize: 72, fontWeight: 800, fontFamily: 'var(--lp-font-mono)',
-      color: pend > 0 ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-      lineHeight: 1, textAlign: 'center', margin: '4px 0 16px',
-    },
-    pendItem: {
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '12px 0', borderTop: '1px solid var(--lp-border-subtle)',
-    },
-    pendDot: {
-      width: 8, height: 8, borderRadius: '50%',
-      background: 'var(--lp-brand-600)', flexShrink: 0,
-    },
-    pendBody: { flex: 1, minWidth: 0 },
-    pendProducto: {
-      fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)',
-      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-    },
-    pendMeta: { fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 },
-    pendCubetas: {
-      fontSize: 13, fontWeight: 700, fontFamily: 'var(--lp-font-mono)',
-      color: 'var(--lp-text-primary)', flexShrink: 0,
-    },
-    scanBtn: (active) => ({
-      width: '100%',
-      padding: '24px 24px', borderRadius: 18, border: 'none',
-      background: active
-        ? 'linear-gradient(135deg, var(--lp-brand-600), var(--lp-brand-700))'
-        : 'var(--lp-bg-sunken)',
-      color: active ? '#fff' : 'var(--lp-text-tertiary)',
-      fontSize: 19, fontWeight: 800, cursor: active ? 'pointer' : 'not-allowed',
-      fontFamily: 'var(--lp-font-sans)', minHeight: 84,
-      boxShadow: active ? '0 8px 28px rgba(37,99,235,.32)' : 'none',
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
-      marginBottom: 14,
-      /* Z4 (jun 2026): pulse sutil cuando hay pendientes — refuerza CTA */
-      animation: active ? 'lpPulse 2.4s ease-in-out infinite' : 'none',
-    }),
-    scanBtnSub: {
-      fontSize: 12, fontWeight: 600, opacity: .85, letterSpacing: '.02em',
-    },
-    cargaHeader: {
-      width: '100%', display: 'flex', alignItems: 'center',
-      justifyContent: 'space-between', cursor: 'pointer',
-      background: 'none', border: 'none', padding: 0,
-      fontFamily: 'inherit', textAlign: 'left',
-    },
-    cargaTitle: {
-      fontSize: 14, fontWeight: 700, color: 'var(--lp-text-primary)',
-    },
-    cargaCount: {
-      fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 600,
-    },
-    cargaChevron: (open) => ({
-      width: 18, height: 18, transform: open ? 'rotate(180deg)' : 'rotate(0)',
-      transition: 'transform 0.2s', color: 'var(--lp-text-tertiary)',
-    }),
-    helpText: {
-      fontSize: 13, color: 'var(--lp-text-secondary)',
-      textAlign: 'center', maxWidth: 340, margin: '0 auto 16px',
-      lineHeight: 1.45,
-    },
-  };
+  /* Acciones permitidas por la state machine real para este rol.
+     Excluimos cancelarSublote (acción de anulación admin, no del flujo Luis). */
+  const acciones = getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote');
 
   return (
-    <>
-      <TopBar title="Recolección" />
-      <div style={{ ...styles.wrap, paddingTop: 16 }}>
-
-        {/* ─── BLOQUE 1: Por recoger ─── */}
-        <div style={styles.block}>
-          <div style={styles.blockHeader}>
-            <div style={styles.blockLabel}>Pedidos listos para recoger</div>
-            <button
-              style={styles.refreshBtn}
-              onClick={onRefresh}
-              title="Actualizar"
-              aria-label="Actualizar"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-                <path d="M3 12a9 9 0 0 1 15.5-6.3L21 8"/>
-                <path d="M21 3v5h-5"/>
-                <path d="M21 12a9 9 0 0 1-15.5 6.3L3 16"/>
-                <path d="M3 21v-5h5"/>
-              </svg>
-            </button>
-          </div>
-
-          <div style={styles.bigNum}>{pend}</div>
-
-          {pend > 0 ? (
-            <>
-              <div style={{ ...styles.helpText, marginBottom: 8 }}>
-                Estos son los lotes esperándote en fábrica:
-              </div>
-              <div>
-                {pendientesByLote.map((g, i) => (
-                  <div key={(g.lote?.id || i)} style={styles.pendItem}>
-                    <span style={styles.pendDot} />
-                    <div style={styles.pendBody}>
-                      <div style={{ ...styles.pendProducto, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {g.lote?.producto || g.lote?.formula || g.lote?.nombre || '—'}
-                        </span>
-                        {esPrueba(g.lote) && <PruebaBadge size="sm" />}
-                      </div>
-                      <div style={styles.pendMeta}>
-                        {g.lote?.codigoLote || g.lote?.codigo || g.lote?.id}
-                        {g.litros ? ` · ${Math.round(g.litros)} L` : ''}
-                      </div>
-                    </div>
-                    <div style={styles.pendCubetas}>×{g.cubetas}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div style={styles.helpText}>
-              Sin pedidos pendientes. Te llegará una notificación cuando haya algo listo.
-            </div>
-          )}
-        </div>
-
-        {/* ─── BLOQUE 2: Botón Escanear (CTA dominante tipo delivery app) ───
-            Z4 (jun 2026): label contextual — "Voy por él" cuando hay pendientes,
-            "Escanear QR" cuando no. La frase "Voy por él" es la del owner
-            y se usa también en banners de notif (consistencia léxica). */}
-        <button
-          style={styles.scanBtn(pend > 0)}
-          disabled={pend === 0}
-          onClick={() => setScannerOpen(true)}
-          aria-label={pend > 0 ? 'Voy por él · Escanear QR de lote' : 'Escanear QR de lote'}
-        >
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true">
-            <path d="M3 7V5a2 2 0 0 1 2-2h2"/>
-            <path d="M17 3h2a2 2 0 0 1 2 2v2"/>
-            <path d="M21 17v2a2 2 0 0 1-2 2h-2"/>
-            <path d="M7 21H5a2 2 0 0 1-2-2v-2"/>
-            <rect x="7" y="7" width="10" height="10" rx="1"/>
-          </svg>
-          {pend > 0 ? 'Voy por él' : 'Escanear QR'}
-          {pend > 0 && <span style={styles.scanBtnSub}>Toca para escanear el QR del lote</span>}
-        </button>
-
-        {/* ─── BLOQUE 3: Llevo conmigo (colapsable) ─── */}
-        {enCaminoByLote.length > 0 && (
-          <div style={styles.block}>
-            <button
-              style={styles.cargaHeader}
-              onClick={() => setShowCarga(v => !v)}
-              aria-expanded={showCarga}
-              aria-controls="carga-detalle"
-            >
-              <div>
-                <div style={styles.cargaTitle}>
-                  Llevo conmigo: {enCaminoByLote.length} lote{enCaminoByLote.length === 1 ? '' : 's'}
-                </div>
-                <div style={styles.cargaCount}>
-                  {cargaCubetasTotal} cubeta{cargaCubetasTotal === 1 ? '' : 's'} en total
-                </div>
-              </div>
-              <svg style={styles.cargaChevron(showCarga)} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" aria-hidden="true">
-                <polyline points="6 9 12 15 18 9"/>
-              </svg>
-            </button>
-
-            {showCarga && (
-              <div id="carga-detalle" style={{ marginTop: 12 }}>
-                {enCaminoByLote.map((g, i) => (
-                  <div key={(g.lote?.id || i)} style={styles.pendItem}>
-                    <span style={{ ...styles.pendDot, background: 'var(--lp-warning-600)' }} />
-                    <div style={styles.pendBody}>
-                      <div style={{ ...styles.pendProducto, display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {g.lote?.producto || g.lote?.formula || g.lote?.nombre || '—'}
-                        </span>
-                        {esPrueba(g.lote) && <PruebaBadge size="sm" />}
-                      </div>
-                      <div style={styles.pendMeta}>
-                        {g.lote?.codigoLote || g.lote?.codigo || g.lote?.id}
-                        {g.litros ? ` · ${Math.round(g.litros)} L` : ''}
-                      </div>
-                    </div>
-                    <div style={styles.pendCubetas}>×{g.cubetas}</div>
-                  </div>
-                ))}
-                <div style={{ ...styles.helpText, marginTop: 14, fontSize: 12 }}>
-                  Almacén Terán confirma la recepción al recibir.
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
+    <div style={S.card}>
+      {/* header: folio + estado */}
+      <div style={S.cardHead}>
+        <span style={S.folio}>{s.cod}</span>
+        {(esSublotePrueba || esLotePrueba) && <PruebaBadge size="sm" />}
+        <span style={{ marginLeft: 'auto' }}><EstadoBadge estado={s.estado} /></span>
       </div>
 
-      {scannerOpen && (
-        <QRScanner onResult={handleScan} onClose={() => setScannerOpen(false)} />
-      )}
-      {toast && (
-        <div style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>
-          <span style={{ marginRight: 8 }}>{toast.isErr ? '✕' : '✓'}</span>{toast.msg}
+      {/* producto + cantidad */}
+      <div style={S.prod}>{producto}</div>
+      <div style={S.qty}>
+        {qtyTxt}
+        {codLote && <> · <span style={S.codLoteInline}>{codLote}</span></>}
+        {s.marca && <> · <span style={{ fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{s.marca}</span></>}
+        {s.esHijoDe && <> · <span style={{ color: '#7C3AED' }}>↳ tote {s.esHijoDe}</span></>}
+      </div>
+
+      {/* ruta Fábrica → Terán (chip del mockup .route) */}
+      <div style={S.route}>
+        <b style={S.routeNode}>{origen}</b>
+        <span style={S.routeArrow}><IconArrow size={16} /></span>
+        <b style={S.routeNode}>Almacén Terán</b>
+      </div>
+
+      {/* aviso de prueba: Luis no recolecta físicamente */}
+      {esLotePrueba && (
+        <div style={S.pruebaNote}>
+          Este lote es de prueba — no recolectes físicamente, sólo simula el flujo.
         </div>
       )}
-      {ConfirmEl}
-    </>
+
+      {/* acción dominante por estado (state machine + data-id/data-rol mockup) */}
+      {acciones.length > 0 ? (
+        <div style={isDesktop ? S.actionsDesktop : S.actionsMobile}>
+          {acciones.map(a => {
+            const meta = ACCION_BTN[a] || {
+              label: LABELS_ACCION_SUBLOTE[a] || a,
+              dataId: `recoleccion.btn.${a}`,
+              dataRol: 'recolector,admin',
+              bg: 'var(--lp-brand-600)',
+              fg: '#fff',
+              Icon: IconArrow,
+            };
+            const Ico = meta.Icon;
+            return (
+              <button
+                key={a}
+                data-id={meta.dataId}
+                data-rol={meta.dataRol}
+                style={{
+                  ...(isDesktop ? S.btnDesktop : S.btnMobile),
+                  background: meta.bg, color: meta.fg,
+                }}
+                disabled={busy}
+                onClick={() => onAccion(s, a)}
+              >
+                {busy ? <span aria-hidden="true">…</span> : <><Ico size={isDesktop ? 18 : 20} />{meta.label}</>}
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        /* Estado terminal (entregado en Terán) — chip "hecho", no botón */
+        bucketOfSublote(s) === 'entregados' && (
+          <div style={S.doneChip}>
+            <IconCheck size={16} /> Entregado en Terán
+          </div>
+        )
+      )}
+    </div>
   );
 }
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* Estilos — SOLO tokens var(--lp-*). Claro y oscuro salen solos.       */
+/* ═══════════════════════════════════════════════════════════════════ */
+const S = {
+  wrapMobile: { padding: '4px 16px 100px' },
+  wrapDesktop: { padding: '8px 24px 48px' },
+
+  /* hero scan móvil — ancho completo, verde, hero tipo delivery app */
+  scanHeroMobile: {
+    width: '100%', height: 64, borderRadius: 18, border: 'none', cursor: 'pointer',
+    background: 'var(--lp-brand-600)', color: '#fff',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 16, fontWeight: 600,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11,
+    boxShadow: '0 10px 24px -10px color-mix(in srgb, var(--lp-brand-600) 60%, transparent)',
+    marginBottom: 14,
+  },
+  /* escritorio — botón tamaño estándar alineado a la derecha (no 100%) */
+  scanRowDesktop: {
+    display: 'flex', justifyContent: 'flex-end', marginBottom: 16,
+  },
+  scanBtnDesktop: {
+    height: 40, padding: '0 18px', borderRadius: 10, border: 'none', cursor: 'pointer',
+    background: 'var(--lp-brand-600)', color: '#fff',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 13.5, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 44,
+  },
+
+  /* tabs pill (estilo mockup): activo verde sólido */
+  tabs: {
+    display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto',
+    WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none',
+  },
+  tab: (active) => ({
+    flexShrink: 0, padding: '9px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: active ? 600 : 500,
+    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
+    color: active ? '#fff' : 'var(--lp-text-tertiary)',
+    whiteSpace: 'nowrap', minHeight: 44,
+  }),
+
+  toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
+  search: {
+    flex: 1, minWidth: 200, maxWidth: 420, height: 44, padding: '0 14px', borderRadius: 10,
+    border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
+    color: 'var(--lp-text-primary)', boxSizing: 'border-box',
+  },
+
+  /* grid de 3 (escritorio) */
+  grid3: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 },
+
+  /* card 16-18px radius */
+  card: {
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 18, padding: 16, marginBottom: 12,
+    display: 'flex', flexDirection: 'column',
+  },
+  cardHead: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9, flexWrap: 'wrap' },
+  folio: {
+    fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700,
+    color: 'var(--lp-brand-600)',
+  },
+  prod: { fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)' },
+  qty: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 3 },
+  codLoteInline: { fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' },
+
+  route: {
+    display: 'flex', alignItems: 'center', gap: 8, margin: '13px 0',
+    padding: '11px 13px', borderRadius: 12, background: 'var(--lp-bg-sunken)',
+    fontSize: 13, flexWrap: 'wrap',
+  },
+  routeNode: { color: 'var(--lp-text-primary)', fontWeight: 600 },
+  routeArrow: { color: 'var(--lp-text-tertiary)', display: 'inline-flex' },
+
+  pruebaNote: {
+    marginBottom: 12, padding: '8px 10px',
+    background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)',
+    border: '1.5px solid color-mix(in srgb, var(--lp-warning-600) 40%, transparent)',
+    borderRadius: 10, fontSize: 12, color: 'var(--lp-warning-600)',
+  },
+
+  /* acciones: móvil = botón ancho completo (CTA), escritorio = ancho completo de card
+     pero la card es estrecha (1/3), por eso no estira de borde a borde de pantalla */
+  actionsMobile: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto' },
+  actionsDesktop: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 'auto' },
+  btnMobile: {
+    width: '100%', height: 50, borderRadius: 14, border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 15, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9,
+  },
+  btnDesktop: {
+    flex: 1, minWidth: 140, height: 44, padding: '0 16px', borderRadius: 12, border: 'none',
+    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13.5, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  doneChip: {
+    marginTop: 'auto', height: 44, borderRadius: 12,
+    background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)',
+    color: 'var(--lp-text-tertiary)', fontSize: 13.5, fontWeight: 600,
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+
+  empty: {
+    textAlign: 'center', color: 'var(--lp-text-secondary)',
+    padding: '60px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center',
+  },
+  spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
+
+  toast: {
+    position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)',
+    padding: '12px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1001,
+    background: 'var(--lp-success-600)', color: '#fff',
+    boxShadow: '0 4px 16px rgba(0,0,0,.18)',
+    display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+  },
+  toastErr: { background: 'var(--lp-danger-600)' },
+};

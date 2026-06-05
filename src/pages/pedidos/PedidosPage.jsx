@@ -6,8 +6,8 @@ import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useConfirm from '../../hooks/useConfirm';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import HelpHint from '../../components/HelpHint';
-import SegmentedControl from '../../components/ui/SegmentedControl';
 import Cronometro from '../../components/Cronometro';
 import NDAModal from '../../components/NDAModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
@@ -18,17 +18,99 @@ import {
   ESTADO_PEDIDO_COLOR as ESTADO_COLOR,
 } from '../../lib/estados';
 
+/* ═══════════════════════════════════════════════════════════════════════
+   PedidosPage — reskin "Claude Design" verde (jun 2026).
+
+   Diseño 1:1 según los mockups del paquete entrega_v2:
+     · ESCRITORIO (ERP Escritorio.html · SCREENS.pedidos): pills de filtro
+       Activos/Pruebas/Historial + "+ Nuevo pedido" → grid g3 de cards anchas
+       con folio, badge, mini-timeline y botón de acción por estado.
+     · MÓVIL (ERP Móvil.html · S.pedidos): mismas pills + cards apiladas limpias.
+     · STANDALONE (Pedidos.html · §7): "Eliminar pedido" SOLO admin; roles en
+       Aceptar y producir / Iniciar / Rechazar / QC (data-id + data-rol).
+
+   Tokens 100% var(--lp-*) (verde). Sin emojis → SVG line. mono para folios
+   y cantidades. Botones nunca 100% width en escritorio. Touch ≥44px.
+
+   LÓGICA INTACTA: todos los handlers, endpoints /api/pedidos/*, useRealtimeSync,
+   useConfirm (NDA/confirm), esPrueba inmutable, PedidoLoteActions, el patrón
+   "cerrar modal antes de await" del NDA, etc. Solo cambia la capa visual + el
+   cableo de data-id → handler.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Iconos line (sin emojis) ─────────────────────────────────────────── */
+const Icon = {
+  plus: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  check: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+  play: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  ),
+  arrow: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  ),
+  x: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ),
+  trash: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    </svg>
+  ),
+  flask: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 3h6M10 3v6.5L4.5 19a1.5 1.5 0 0 0 1.3 2.3h12.4a1.5 1.5 0 0 0 1.3-2.3L14 9.5V3" />
+      <path d="M7 15h10" />
+    </svg>
+  ),
+};
+
 const S = {
   wrap: { padding: '0 20px 100px' },
-  toolbar: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 14 },
-  btn: (kind = 'primary') => ({
-    padding: '9px 16px', fontSize: 13, fontWeight: 600,
-    background: kind === 'primary' ? 'var(--lp-brand-600)' : 'var(--lp-bg-base)',
-    color: kind === 'primary' ? '#fff' : 'var(--lp-text-primary)',
-    border: '1.5px solid ' + (kind === 'primary' ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
-    borderRadius: 'var(--lp-radius-sm)', cursor: 'pointer', fontFamily: 'inherit',
+
+  /* Toolbar: pills de filtro (izq) + "+ Nuevo pedido" (der) */
+  toolbar: {
+    display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16,
+  },
+  pillRow: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 },
+  pill: (active) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    minHeight: 36, padding: '0 14px',
+    borderRadius: 999,
+    border: '1.5px solid ' + (active ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
+    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-raised)',
+    color: active ? '#fff' : 'var(--lp-text-secondary)',
+    fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', transition: 'all .15s',
   }),
-  metric: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 14 },
+  pillCount: (active) => ({
+    fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700,
+    color: active ? '#fff' : 'var(--lp-text-tertiary)',
+  }),
+  newBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: 7,
+    minHeight: 44, padding: '0 18px',
+    background: 'var(--lp-brand-600)', color: '#fff',
+    border: '1.5px solid var(--lp-brand-600)', borderRadius: 999,
+    fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    whiteSpace: 'nowrap', flexShrink: 0,
+  },
+
+  /* KPIs */
+  metric: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 16 },
   metricCard: (color) => ({
     background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
     borderTop: `3px solid ${color}`,
@@ -36,73 +118,89 @@ const S = {
   }),
   metricVal: { fontSize: 22, fontWeight: 800, color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)' },
   metricLabel: { fontSize: 11, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4, fontWeight: 700 },
-  /* FIX bug visual del card:
-     Antes: display:flex + flex-wrap apilaba los botones verticalmente sin
-     estructura, creando el efecto "Aceptar arriba / Rechazar abajo".
-     Ahora: layout vertical claro con header, cuerpo y footer con grid 2 cols
-     para botones lado-a-lado (responsive: en pantallas <360px se apilan). */
-  pedidoCard: (estado) => ({
-    background: 'var(--lp-bg-raised)',
+
+  /* Card de pedido (radio 18px, header → mini-timeline → cuerpo → acciones) */
+  pedidoCard: (estado, esPrueba) => ({
+    background: esPrueba ? 'var(--lp-warning-50)' : 'var(--lp-bg-raised)',
     border: '1.5px solid var(--lp-border-subtle)',
-    borderTop: `3px solid ${ESTADO_COLOR[estado] || 'var(--lp-border-strong)'}`,
-    borderRadius: 'var(--lp-radius)',
-    padding: '14px 16px', marginBottom: 8,
+    borderTop: `3px solid ${esPrueba ? 'var(--lp-warning-600)' : (ESTADO_COLOR[estado] || 'var(--lp-border-strong)')}`,
+    borderRadius: 18,
+    padding: '15px 16px',
     display: 'flex', flexDirection: 'column', gap: 12,
   }),
-  pedidoHeader: {
-    display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
-  },
+  pedidoHeader: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   pedidoBody: { display: 'flex', flexDirection: 'column', gap: 4 },
   pedidoActions: {
     display: 'grid', gap: 8,
-    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-    marginTop: 4,
+    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+    marginTop: 2,
   },
-  pedidoMain: { flex: 1, minWidth: 220 }, /* legacy, dejado por compatibilidad */
-  pedidoId: { fontSize: 11, fontWeight: 700, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' },
-  pedidoTitle: { fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' },
-  pedidoMeta: { fontSize: 11, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 },
+  pedidoId: { fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' },
+  pedidoTitle: { fontSize: 15.5, fontWeight: 700, letterSpacing: '-.01em', color: 'var(--lp-text-primary)' },
+  pedidoMeta: { fontSize: 12, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 },
+  cantidad: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-text-secondary)' },
   estadoBadge: (estado) => ({
-    display: 'inline-block', padding: '3px 8px', fontSize: 10, fontWeight: 700,
-    background: ESTADO_COLOR[estado] || '#9C9589', color: '#fff',
-    borderRadius: 4, textTransform: 'uppercase', letterSpacing: '.04em',
+    display: 'inline-flex', alignItems: 'center', padding: '3px 9px', fontSize: 11, fontWeight: 700,
+    background: (ESTADO_COLOR[estado] || '#9C9589') + '1f',
+    color: ESTADO_COLOR[estado] || '#6B6560',
+    borderRadius: 999, whiteSpace: 'nowrap',
   }),
-  empty: { textAlign: 'center', padding: '40px 0', color: 'var(--lp-text-tertiary)', fontSize: 13 },
-  err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12, marginBottom: 12 },
-  /* ── Z2 (jun 2026): mini pipeline horizontal en cada card ─────────── */
+  /* Botones de acción de la card */
+  btn: (kind = 'primary') => ({
+    minHeight: 44, padding: '0 16px',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    borderRadius: 11,
+    background: kind === 'primary' ? 'var(--lp-brand-600)'
+              : kind === 'warning' ? 'var(--lp-warning-600)'
+              : kind === 'danger'  ? 'var(--lp-danger-100)'
+              :                      'var(--lp-bg-base)',
+    color: (kind === 'primary' || kind === 'warning') ? '#fff'
+         : kind === 'danger' ? 'var(--lp-danger-700)'
+         :                     'var(--lp-text-secondary)',
+    border: '1.5px solid ' + (
+      kind === 'primary' ? 'var(--lp-brand-600)'
+      : kind === 'warning' ? 'var(--lp-warning-600)'
+      : kind === 'danger'  ? 'var(--lp-danger-200)'
+      :                      'var(--lp-border-subtle)'),
+    transition: 'transform .1s',
+  }),
+
+  empty: { textAlign: 'center', padding: '50px 0', color: 'var(--lp-text-tertiary)', fontSize: 13 },
+  err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 10, fontSize: 12, marginBottom: 12 },
+
+  /* ── Mini pipeline horizontal por card ─────────────────────────────── */
   pipelineWrap: {
     display: 'flex', alignItems: 'center', gap: 0,
-    padding: '8px 2px 4px',
+    padding: '6px 2px 2px',
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
   },
-  pipelineStep: (estado /* 'done' | 'current' | 'pending' */) => ({
+  pipelineStep: () => ({
     display: 'flex', flexDirection: 'column', alignItems: 'center',
-    gap: 4, flex: '0 0 auto',
-    minWidth: 56,
+    gap: 4, flex: '0 0 auto', minWidth: 52,
   }),
   pipelineDot: (estado, accent) => ({
-    width: estado === 'current' ? 22 : 14, height: estado === 'current' ? 22 : 14,
+    width: estado === 'current' ? 20 : 13, height: estado === 'current' ? 20 : 13,
     borderRadius: '50%',
-    background: estado === 'pending' ? 'var(--lp-bg-sunken)' : (estado === 'current' ? accent : accent),
+    background: estado === 'pending' ? 'var(--lp-bg-sunken)' : accent,
     border: estado === 'pending' ? '1.5px solid var(--lp-border-default)' : 'none',
     boxShadow: estado === 'current' ? `0 0 0 4px ${accent}22` : 'none',
     transition: 'all .2s',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#fff', fontSize: 10, fontWeight: 800,
+    color: '#fff',
   }),
   pipelineLabel: (estado) => ({
-    fontSize: 9, fontWeight: estado === 'current' ? 700 : 500,
+    fontSize: 8.5, fontWeight: estado === 'current' ? 700 : 500,
     color: estado === 'current' ? 'var(--lp-text-primary)'
          : estado === 'done'    ? 'var(--lp-text-secondary)'
          : 'var(--lp-text-tertiary)',
-    textTransform: 'uppercase', letterSpacing: '.04em',
-    textAlign: 'center',
+    textTransform: 'uppercase', letterSpacing: '.03em', textAlign: 'center', whiteSpace: 'nowrap',
   }),
   pipelineLine: (done, accent) => ({
     flex: 1, height: 2,
     background: done ? accent : 'var(--lp-border-subtle)',
-    minWidth: 14, marginBottom: 22, /* alineado con el dot */
+    minWidth: 12, marginBottom: 20,
     transition: 'background .2s',
   }),
 };
@@ -143,8 +241,8 @@ function PipelinePedido({ estado, esPrueba }) {
       <div key={'s_' + fase.key} style={S.pipelineStep(st)}>
         <div style={S.pipelineDot(st, accent)}>
           {st === 'done' && (
-            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12"/>
+            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
             </svg>
           )}
         </div>
@@ -160,13 +258,12 @@ function PipelinePedido({ estado, esPrueba }) {
   return <div style={S.pipelineWrap}>{nodos}</div>;
 }
 
-/* X3 (jun 2026): ESTADO_COLOR y ESTADO_LABEL ahora vienen de lib/estados.js
-   con alias. Antes vivían duplicados aquí (shape distinto al de OrdenesPage
-   y DashboardPage). Centralizando se eliminó el drift. */
+/* X3 (jun 2026): ESTADO_COLOR y ESTADO_LABEL vienen de lib/estados.js. */
 
 export default function PedidosPage() {
   const { user, can } = useAuth();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const [searchParams, setSearchParams] = useSearchParams();
   const [tab, setTab] = useState('activos');
   const [showNuevo, setShowNuevo] = useState(false);
@@ -338,6 +435,67 @@ export default function PedidosPage() {
     }
   };
 
+  /* §7 Eliminar pedido — SOLO admin (data-rol="admin").
+     Distinto de Cancelar/Rechazar: borrado definitivo (soft-delete con
+     auditoría) que también cae en cascada sobre la orden vinculada y revierte
+     las materias primas si el pedido ya había entrado a producción. Pide
+     motivo + PIN del admin, igual que la ruta admin de handleCancelar pero
+     etiquetado explícitamente como "Eliminar" para coincidir con el mockup. */
+  const handleEliminar = async (p) => {
+    setErr('');
+    const yaProdujo = ['en_produccion','producido','qc_hold','qc_aprobado','en_envasado','envasado','en_recoleccion','en_camino','en_almacen'].includes(p.estado);
+
+    const motivo = await confirm(
+      `Vas a ELIMINAR el pedido ${p.id} de ${p.producto}. ${yaProdujo ? 'Como ya entró a producción, se revertirán las materias primas consumidas. ' : ''}Esta acción queda registrada para auditoría. Indica el motivo.`,
+      {
+        title: 'Eliminar pedido — paso 1 de 2',
+        confirmText: 'Continuar',
+        danger: true,
+        prompt: {
+          label: 'Motivo',
+          placeholder: 'Ej: Pedido duplicado, captura errónea...',
+          required: true,
+          minLength: 5,
+          rows: 3,
+        },
+      }
+    );
+    if (!motivo) return;
+
+    const pin = await confirm(
+      `Para confirmar la eliminación, ingresa tu PIN (${user?.nombre}).`,
+      {
+        title: 'Eliminar pedido — paso 2 de 2',
+        confirmText: 'Eliminar definitivamente',
+        danger: true,
+        prompt: {
+          label: 'PIN',
+          placeholder: '0000',
+          required: true,
+          minLength: 4, maxLength: 6,
+          rows: 1, numeric: true, password: true,
+        },
+      }
+    );
+    if (!pin) return;
+
+    setBusyId(p.id);
+    try {
+      const r = await api.eliminarPedido(p.id, user?.nombre, pin, motivo);
+      const msg = `Pedido ${p.id} eliminado` +
+        (r?.revirtioMP ? ' · MP revertida' : '') +
+        (r?.ordenInfo ? ' · orden ' + r.ordenInfo.codigo + ' también' : '');
+      console.log('[ELIMINAR]', msg);
+      setErr('');
+      reload();
+    } catch (e) {
+      console.error('[ELIMINAR] error:', e);
+      setErr('No se pudo eliminar: ' + (e?.data?.error || e.message || 'error desconocido'));
+    } finally {
+      setBusyId('');
+    }
+  };
+
   /* Sprint C: arrancar producción usa endpoint canónico que CREA orden
      (si no existe) + avanza pedido a en_produccion + setea fechaInicio.
      Antes hacía upsertPedido ciego sin crear orden formal — los lotes
@@ -369,7 +527,9 @@ export default function PedidosPage() {
     setPendingProd(p);  /* dispara el modal NDA */
   };
 
-  /* Callback cuando el usuario acepta el NDA */
+  /* Callback cuando el usuario acepta el NDA.
+     OJO (Bug-NDA): cerramos el modal (setPendingProd null) ANTES del await
+     para que no quede colgado mientras la producción arranca. No reordenar. */
   const handleNDAAccept = async () => {
     const p = pendingProd;
     setPendingProd(null);
@@ -387,6 +547,14 @@ export default function PedidosPage() {
               :                        activos;
   /* Ordenar por fecha desc */
   const listaOrdenada = [...lista].sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+  /* Pills de filtro — Activos / Pruebas (si hay) / Rechazados (si hay) / Historial */
+  const FILTROS = [
+    { value: 'activos',    label: 'Activos',    count: activos.length,    flask: false },
+    ...(pruebas.length > 0    ? [{ value: 'pruebas',    label: 'Pruebas',    count: pruebas.length,    flask: true }] : []),
+    ...(rechazados.length > 0 ? [{ value: 'rechazados', label: 'Rechazados', count: rechazados.length, flask: false }] : []),
+    { value: 'historial',  label: 'Historial',  count: historial.length,  flask: false },
+  ];
 
   return (
     <div>
@@ -431,38 +599,51 @@ export default function PedidosPage() {
           </div>
         </div>
 
-        {/* Toolbar */}
+        {/* Toolbar: pills de filtro + "+ Nuevo pedido" */}
         <div style={S.toolbar}>
-          <SegmentedControl
-            value={tab}
-            onChange={setTab}
-            color="brand"
-            options={[
-              { value: 'activos',    label: `Activos (${activos.length})` },
-              ...(pruebas.length > 0    ? [{ value: 'pruebas',    label: `🧪 Pruebas (${pruebas.length})` }] : []),
-              ...(rechazados.length > 0 ? [{ value: 'rechazados', label: `Rechazados (${rechazados.length})` }] : []),
-              { value: 'historial',  label: `Historial (${historial.length})` },
-            ]}
-          />
+          <div style={S.pillRow} role="tablist" aria-label="Filtro de pedidos">
+            {FILTROS.map(f => {
+              const active = tab === f.value;
+              return (
+                <button
+                  key={f.value}
+                  role="tab"
+                  aria-selected={active}
+                  style={S.pill(active)}
+                  onClick={() => setTab(f.value)}
+                >
+                  {f.flask && Icon.flask}
+                  {f.label}
+                  <span style={S.pillCount(active)}>· {f.count}</span>
+                </button>
+              );
+            })}
+          </div>
           {canCrear && (
-            <button style={{ ...S.btn('primary'), marginLeft: 'auto' }} onClick={() => setShowNuevo(true)}>
-              + Nuevo pedido
+            <button
+              style={{ ...S.newBtn, marginLeft: isDesktop ? 'auto' : 0 }}
+              data-id="pedidos.btn.nuevo"
+              data-rol="almacen,admin,tecnico"
+              onClick={() => setShowNuevo(true)}
+            >
+              {Icon.plus}
+              Nuevo pedido
             </button>
           )}
         </div>
 
-        {/* Lista */}
+        {/* Lista — escritorio: grid g3 (cards anchas). móvil: cards apiladas. */}
         {loading && pedidos.length === 0 ? (
           <div style={S.empty}>Cargando pedidos…</div>
         ) : listaOrdenada.length === 0 ? (
           <div style={S.empty}>
-            {tab === 'activos' ? 'No hay pedidos activos. ' + (canCrear ? 'Click "+ Nuevo pedido" para crear uno.' : 'Espera a que almacén cree uno.') : 'Sin pedidos en historial.'}
+            {tab === 'activos' ? 'No hay pedidos activos. ' + (canCrear ? 'Toca "+ Nuevo pedido" para crear uno.' : 'Espera a que almacén cree uno.') : 'Sin pedidos en este filtro.'}
           </div>
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-            gap: 10,
+            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
+            gap: 12,
           }}>
           {listaOrdenada.map(p => {
             const mostrarAceptar = tab === 'activos' && p.estado === 'pendiente' && canAceptar;
@@ -475,27 +656,35 @@ export default function PedidosPage() {
             const puedeAdminCancelar = user?.rol === 'admin' && !esTerminal;
             const puedeTecnicoCancelar = canAceptar && !puedeAdminCancelar && ['pendiente', 'aceptado'].includes(p.estado);
             const mostrarCancelar = (puedeAdminCancelar || puedeTecnicoCancelar) && tab === 'activos';
-            const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar;
+            /* §7: Eliminar = SOLO admin. No se renderiza para otros roles.
+               Disponible en cualquier filtro mientras el pedido no esté ya
+               eliminado (los terminales sí pueden eliminarse del histórico). */
+            const esAdmin = user?.rol === 'admin';
+            const mostrarEliminar = esAdmin;
+            const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
             return (
-              <div key={p.id} style={S.pedidoCard(p.estado)}>
-                {/* Header: ID + badge estado + cronómetro */}
+              <div key={p.id} style={S.pedidoCard(p.estado, p.esPrueba)}>
+                {/* Header: folio + badge estado + prueba + cronómetro */}
                 <div style={S.pedidoHeader}>
                   <span style={S.pedidoId}>{p.id}</span>
                   <span style={S.estadoBadge(p.estado)}>{ESTADO_LABEL[p.estado] || p.estado}</span>
                   {p.esPrueba && <PruebaBadge size="sm" />}
                   {p.estado === 'en_produccion' && p.fechaInicioProduccion && (
-                    <Cronometro desde={p.fechaInicioProduccion} />
+                    <span style={{ marginLeft: 'auto' }}>
+                      <Cronometro desde={p.fechaInicioProduccion} />
+                    </span>
                   )}
                 </div>
 
-                {/* Z2 (jun 2026): mini-pipeline horizontal del estado del pedido.
-                    Ayuda visual rápida — el operario ve en una mirada en qué fase
-                    está sin tener que descifrar el badge de texto. */}
+                {/* Mini-pipeline horizontal del estado del pedido. Ayuda visual
+                    rápida — el operario ve la fase de un vistazo. */}
                 <PipelinePedido estado={p.estado} esPrueba={p.esPrueba} />
 
                 {/* Cuerpo: título + metadata */}
                 <div style={S.pedidoBody}>
-                  <div style={S.pedidoTitle}>{p.producto} × {p.cantidad} cubetas</div>
+                  <div style={S.pedidoTitle}>
+                    {p.producto} <span style={S.cantidad}>× {p.cantidad} cub</span>
+                  </div>
                   <div style={S.pedidoMeta}>
                     {p.solicitante && <>Solicitante: <strong>{p.solicitante}</strong></>}
                     {p.lote && <> · Lote: <code>{p.lote}</code></>}
@@ -507,54 +696,71 @@ export default function PedidosPage() {
                   </div>
                 </div>
 
-                {/* Footer: acciones del pedido (solo un botón Cancelar, sin duplicados). */}
+                {/* Footer: acciones del pedido por estado. data-id/data-rol del
+                    mockup cableados a los handlers reales. */}
                 {tieneAcciones && (
                   <div style={S.pedidoActions}>
                     {mostrarAceptar && (
                       <button
-                        style={{ ...S.btn('primary'), gridColumn: mostrarCancelar ? 'auto' : '1 / -1' }}
+                        style={S.btn('primary')}
+                        data-id="pedidos.btn.aceptar-producir"
+                        data-rol="tecnico,admin"
                         disabled={busyId === p.id}
                         onClick={() => handleAceptar(p)}
                       >
-                        {busyId === p.id ? '…' : 'Aceptar'}
+                        {busyId === p.id ? '…' : <>{Icon.check} Aceptar</>}
                       </button>
                     )}
                     {mostrarIniciar && (
                       <button
-                        style={{ ...S.btn('primary'), background: 'var(--lp-warning-600)', borderColor: 'var(--lp-warning-600)', gridColumn: mostrarCancelar ? 'auto' : '1 / -1' }}
+                        style={S.btn('warning')}
+                        data-id="pedidos.btn.iniciar-produccion"
+                        data-rol="tecnico,admin"
                         disabled={busyId === p.id}
                         onClick={() => handleIniciarProduccion(p)}
                         title="Arranca el cronómetro y abre la pantalla de producción"
                       >
-                        {busyId === p.id ? '…' : 'Iniciar producción'}
+                        {busyId === p.id ? '…' : <>{Icon.play} Iniciar producción</>}
                       </button>
                     )}
                     {mostrarIrProduccion && (
                       <button
-                        style={{ ...S.btn('primary'), gridColumn: mostrarCancelar ? 'auto' : '1 / -1' }}
+                        style={S.btn('primary')}
+                        data-id="pedidos.btn.ir-produccion"
+                        data-rol="tecnico,admin"
                         onClick={() => navigate('/produccion')}
                         title="Ir a Producción para completar el lote"
                       >
-                        Ir a Producción →
+                        Ir a Producción {Icon.arrow}
                       </button>
                     )}
-                    {/* Botón UNIFICADO: Cancelar pedido. Para admin pide motivo + PIN
-                        y revierte MP. Para técnico solo pide motivo y rechaza. */}
+                    {/* Cancelar / Rechazar UNIFICADO. Admin: motivo + PIN +
+                        reversa MP. Técnico: solo motivo → rechazado. */}
                     {mostrarCancelar && (
                       <button
-                        style={{
-                          ...S.btn('secondary'),
-                          background: 'var(--lp-danger-100)',
-                          color: 'var(--lp-danger-700)',
-                          borderColor: 'var(--lp-danger-200)',
-                        }}
+                        style={S.btn('danger')}
+                        data-id={user?.rol === 'admin' ? 'pedidos.btn.cancelar' : 'pedidos.btn.rechazar'}
+                        data-rol="tecnico,admin"
                         disabled={busyId === p.id}
                         onClick={() => handleCancelar(p)}
                         title={user?.rol === 'admin'
                           ? 'Cancelar pedido (pide motivo + PIN; revierte MP si aplica)'
-                          : 'Cancelar pedido (pide motivo)'}
+                          : 'Rechazar pedido (pide motivo)'}
                       >
-                        {busyId === p.id ? '…' : 'Cancelar pedido'}
+                        {busyId === p.id ? '…' : <>{Icon.x} {user?.rol === 'admin' ? 'Cancelar' : 'Rechazar'}</>}
+                      </button>
+                    )}
+                    {/* §7: Eliminar pedido — SOLO admin (data-rol="admin"). */}
+                    {mostrarEliminar && (
+                      <button
+                        style={S.btn('danger')}
+                        data-id="pedidos.btn.eliminar"
+                        data-rol="admin"
+                        disabled={busyId === p.id}
+                        onClick={() => handleEliminar(p)}
+                        title="Eliminar pedido definitivamente (solo admin; pide motivo + PIN)"
+                      >
+                        {busyId === p.id ? '…' : <>{Icon.trash} Eliminar</>}
                       </button>
                     )}
                   </div>
@@ -562,17 +768,17 @@ export default function PedidosPage() {
 
                 {/* Panel de acciones del LOTE asociado — punto único de control.
                     Aparece solo cuando ya hay lote en trazabilidad. Muestra
-                    QC, marcar envasado, etc., según el estado y rol.
-                    No se renderiza si el lote no existe (estado pendiente o aceptado). */}
+                    QC (data-id="pedidos.btn.registrar-qc"), marcar envasado, etc.,
+                    según el estado y rol. No se renderiza si el lote no existe. */}
                 <PedidoLoteActions
                   pedido={p}
                   lotes={lotes}
                   userRol={user?.rol}
                   userName={user?.nombre || '?'}
-                  onSuccess={(msg) => {
+                  onSuccess={() => {
                     reload();
                     reloadTraz();
-                    /* ack visual mínimo — usar setErr con sentido positivo */
+                    /* ack visual mínimo — limpiar error previo */
                     setErr('');
                   }}
                   onError={(msg) => setErr(msg)}

@@ -6,11 +6,25 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import QRModal from '../../components/QRModal';
 import useConfirm from '../../hooks/useConfirm';
 import { ESTADO_SUBLOTE_LABEL, ESTADO_SUBLOTE_COLOR, ESTADO_LOTE_LABEL } from '../../lib/loteTransiciones';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import { qrSvg, qrDataUrl } from '../../lib/qrGenerator';
+
+/* ── Iconos line SVG (sin emojis — DS verde) ───────────────────────── */
+const Icon = {
+  envasar: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>),
+  truck: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>),
+  transfer: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>),
+  trash: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>),
+  x: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>),
+  check: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>),
+  qr: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><line x1="14" y1="14" x2="14" y2="17"/><line x1="17" y1="14" x2="21" y2="14"/><line x1="14" y1="21" x2="21" y2="21"/><line x1="21" y1="17" x2="21" y2="21"/></svg>),
+  chevron: (p = {}) => (<svg width={p.s || 14} height={p.s || 14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: p.open ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><polyline points="9 18 15 12 9 6"/></svg>),
+  qcHold: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>),
+};
 
 /* Construye la URL pública del QR de un sublote. Mirror de _generarQRPayload del backend. */
 function buildQrUrl(cod) {
@@ -260,6 +274,44 @@ const S = {
     padding: '8px 12px', borderRadius: 8, marginBottom: 4,
     border: '1px solid var(--lp-border-subtle)', fontSize: 12,
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+  },
+  /* ── Tabla escritorio (ERP Escritorio.html · SCREENS.stock) ──────── */
+  tablewrap: {
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 14, overflow: 'hidden',
+  },
+  table: { width: '100%', borderCollapse: 'collapse' },
+  th: {
+    textAlign: 'left', fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+    letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', padding: '12px 16px',
+    borderBottom: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-sunken)',
+    whiteSpace: 'nowrap',
+  },
+  td: {
+    padding: '12px 16px', borderBottom: '1px solid var(--lp-border-subtle)',
+    fontSize: 13.5, color: 'var(--lp-text-primary)', verticalAlign: 'middle',
+  },
+  tdMono: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600 },
+  /* Botón ghost de tabla — tamaño estándar, NUNCA 100% width en escritorio */
+  btnGhost: {
+    height: 36, padding: '0 14px', borderRadius: 10, border: '1px solid var(--lp-border-subtle)',
+    background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+  },
+  btnTablePrimary: {
+    height: 36, padding: '0 14px', borderRadius: 10, border: 'none',
+    background: 'var(--lp-brand-600)', color: '#fff',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
+  },
+  rowActions: {
+    display: 'inline-flex', gap: 8, alignItems: 'center', justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+  },
+  subRowCell: {
+    padding: '0 16px 14px', borderBottom: '1px solid var(--lp-border-subtle)',
+    background: 'var(--lp-bg-sunken)',
   },
 };
 
@@ -857,7 +909,7 @@ function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={{ ...S.modalHeader, borderBottom: '3px solid #993C1D' }}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>Re-envasar desde tote</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }}>x</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4 }} aria-label="Cerrar">{Icon.x({ s: 18 })}</button>
         </div>
         <div style={S.modalBody}>
           {error && (
@@ -1056,7 +1108,7 @@ function SubloteQRPrintModal({ payload, onClose }) {
               Pega este QR físicamente en cada envase para trazabilidad
             </div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">×</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4 }} aria-label="Cerrar">{Icon.x({ s: 18 })}</button>
         </div>
         <div style={S.modalBody}>
           <div style={{
@@ -1133,20 +1185,196 @@ function SubloteQRPrintModal({ payload, onClose }) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
-/* LOTE CARD                                                          */
+/* ACCIONES POR LOTE — descriptor único reutilizado por card y tabla   */
+/* §8 gating:                                                          */
+/*   · Envasar / Cerrar / Re-envasar = canEnvasar (admin/tecnico/almacen) */
+/*   · Enviar a recolectar / Transferir a Terán = canTransfer (almacen,admin) */
+/*   · Eliminar prueba = isAdmin                                       */
+/* data-id/data-rol mapean a los handlers reales (sin cambiar lógica). */
 /* ═══════════════════════════════════════════════════════════════════ */
-function LoteCard({ lote, canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
+function buildLoteAcciones(lote, ctx) {
+  const { canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
+    onReenvasar, onEnviarRecolectar, onIrQC, onReenvasarTote, onEliminarPrueba } = ctx;
+  const total = Number(lote.litrosTotal) || 0;
+  const rest = Math.max(0, total - litUsed(lote));
+  const envSt = envEstado(lote);
+  const sublotes = lote.sublotes || [];
+  const enFabrica = sublotes.filter(s => s.ub === 'fabrica' && !s.esMerma);
+  const totesSinConsumir = sublotes.filter(s => (s.tipo === 'tote' || s.fase === 1) && !s.consumido);
+  const haySublotesEnvasados = sublotes.some(s => s.estado === 'envasado' && !s.esMerma);
+
+  const acciones = [];
+  /* QC retenido — bloqueante (canEnvasar) */
+  if (canEnvasar && lote.estado === 'qc_hold') {
+    acciones.push({ key: 'qc-hold', label: 'QC retenido', icon: Icon.qcHold, kind: 'danger',
+      dataId: 'stock.btn.qc-hold', dataRol: 'tecnico,almacen,admin',
+      title: 'QC retenido — reabrir producción o reaprobar', onClick: () => onIrQC && onIrQC(lote) });
+  }
+  /* Envasar — acción primaria */
+  if (canEnvasar && envSt !== 'envasado' && rest > 0 && lote.estado !== 'qc_hold') {
+    acciones.push({ key: 'envasar', label: 'Envasar', icon: Icon.envasar, kind: 'primary',
+      dataId: 'stock.btn.envasar', dataRol: 'tecnico,almacen,admin',
+      onClick: () => onEnvasar(lote) });
+  }
+  /* Enviar a recolectar — §8 almacen,admin */
+  if (canTransfer && lote.estado === 'envasado' && haySublotesEnvasados && onEnviarRecolectar) {
+    acciones.push({ key: 'recolectar', label: 'Enviar a recolectar', icon: Icon.truck, kind: 'success',
+      dataId: 'stock.btn.enviar-recolectar', dataRol: 'almacen,admin',
+      title: 'Marcar listos para recolectar — Luis recibe notificación',
+      onClick: () => onEnviarRecolectar(lote) });
+  }
+  /* QC opcional (producido) */
+  if (canEnvasar && lote.estado === 'producido') {
+    acciones.push({ key: 'qc-opc', label: 'QC (opcional)', icon: null, kind: 'ghost',
+      dataId: 'stock.btn.qc-opcional', dataRol: 'tecnico,almacen,admin',
+      title: 'QC es opcional. Hacer QC formal antes de envasar (recomendado para auditoría).',
+      onClick: () => onIrQC && onIrQC(lote) });
+  }
+  /* Cerrar con merma (parcial) */
+  if (canEnvasar && envSt === 'parcial') {
+    acciones.push({ key: 'cerrar', label: 'Cerrar (merma)', icon: null, kind: 'warn',
+      dataId: 'stock.btn.cerrar-merma', dataRol: 'tecnico,almacen,admin',
+      onClick: () => onCerrar(lote) });
+  }
+  /* Transferir a Terán — §8 almacen,admin */
+  if (canTransfer && enFabrica.length > 0) {
+    acciones.push({ key: 'transferir', label: 'Transferir a Terán', icon: Icon.transfer, kind: 'success',
+      dataId: 'stock.btn.transferir-teran', dataRol: 'almacen,admin',
+      onClick: () => onTransferir(lote) });
+  }
+  /* Re-envasar TOTE */
+  if (canEnvasar && totesSinConsumir.length > 0 && (lote.estado === 'en_almacen' || lote.estado === 'envasado')) {
+    acciones.push({ key: 'reenvasar', label: 'Re-envasar tote', icon: null, kind: 'tote',
+      dataId: 'stock.btn.reenvasar-tote', dataRol: 'tecnico,almacen,admin',
+      onClick: () => onReenvasarTote(lote) });
+  }
+  /* Eliminar prueba — solo admin y solo si es prueba */
+  if (isAdmin && lote.esPrueba && onEliminarPrueba) {
+    acciones.push({ key: 'eliminar', label: 'Eliminar prueba', icon: Icon.trash, kind: 'danger',
+      dataId: 'stock.btn.eliminar-prueba', dataRol: 'admin',
+      title: 'Eliminar permanentemente este lote de prueba',
+      onClick: () => onEliminarPrueba(lote) });
+  }
+  return acciones;
+}
+
+/* Estilo del botón de acción según `kind` (móvil 40px / escritorio 36px) */
+function accionStyle(kind, compact) {
+  const base = compact ? S.btnTablePrimary : S.btnPrimary;
+  const ghost = compact ? S.btnGhost : { ...S.btnPrimary, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', border: '1.5px solid var(--lp-border-subtle)' };
+  switch (kind) {
+    case 'success': return { ...base, background: 'var(--lp-success-600)' };
+    case 'warn':    return { ...base, background: 'var(--lp-warning-600)' };
+    case 'danger':  return { ...base, background: 'var(--lp-danger-600)' };
+    case 'tote':    return { ...base, background: '#993C1D' };
+    case 'ghost':   return ghost;
+    default:        return base;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* SUBLOTES — lista expandible compartida (card + tabla)              */
+/* Conserva estado computado (tote/granel/retail/merma), litros        */
+/* restantes en tote, ubicación (fábrica/terán) y botón Anular.        */
+/* §8: Anular = almacen,admin (canAnular).                             */
+/* ═══════════════════════════════════════════════════════════════════ */
+function SublotesList({ lote, sublotes, canAnular, onAnularSublote }) {
+  return (
+    <div style={{ marginTop: 6 }}>
+      {sublotes.map((s, i) => {
+        const isTote = s.tipo === 'tote' || s.fase === 1 || s.claseSublote === 'tote';
+        const desdeTote = s.fromTote || s.esHijoDe;
+        const hijosDelTote = isTote ? sublotes.filter(h => h.fromTote === s.cod || h.esHijoDe === s.cod) : [];
+        const litHijos = hijosDelTote.reduce((a, h) => a + (Number(h.lit) || 0), 0);
+        const litRestTote = isTote ? Math.max(0, (Number(s.lit) || 0) - litHijos) : 0;
+        return (
+          <div key={i} style={{
+            ...S.sublote,
+            background: s.esMerma ? 'var(--lp-danger-50)' : isTote ? '#EDE9FE' : s.ub === 'teran' ? 'var(--lp-success-50)' : 'var(--lp-bg-raised)',
+            marginLeft: desdeTote ? 16 : 0,
+            borderLeft: desdeTote ? '3px solid #1E40AF' : undefined,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              {desdeTote && <span style={{ fontSize: 11, color: '#1E40AF' }}>↳</span>}
+              <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, fontSize: 11 }}>{s.cod}</span>
+              {s.esMerma && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>MERMA</span>}
+              {isTote && <span style={B('#EDE9FE', '#7C3AED')}>Granel</span>}
+              {s.fase === 2 && desdeTote && <span style={B('#DBEAFE', '#1E40AF')}>Retail</span>}
+              {s.consumido && <span style={B('#D1FAE5', '#065F46')}>Consumido</span>}
+            </div>
+            <div style={{ fontSize: 11 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600 }}>{isTote ? 'Tote' : `${s.qty} ${s.tipo}`}</span>
+                <span style={{ color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{s.lit}L</span>
+                {s.marca && <span style={{ color: 'var(--lp-text-tertiary)' }}>{s.marca}</span>}
+                <span style={B(
+                  s.ub === 'teran' ? 'var(--lp-success-100)' : 'var(--lp-brand-100)',
+                  s.ub === 'teran' ? 'var(--lp-success-600)' : 'var(--lp-brand-700)',
+                )}>{s.ub === 'teran' ? 'Terán' : 'Fábrica'}</span>
+              </div>
+              {isTote && hijosDelTote.length > 0 && (
+                <div style={{ color: 'var(--lp-text-tertiary)', fontSize: 10, marginTop: 2, textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>
+                  {litHijos.toFixed(0)}L reenvasado → {litRestTote.toFixed(0)}L pendiente en tote
+                </div>
+              )}
+              {desdeTote && (
+                <div style={{ color: '#1E40AF', fontSize: 10, marginTop: 2, textAlign: 'right' }}>
+                  ↳ reenvasado desde tote {desdeTote}
+                </div>
+              )}
+              {s.fecha && (
+                <div style={{ color: 'var(--lp-text-tertiary)', fontSize: 10, marginTop: 1, textAlign: 'right' }}>
+                  {s.fecha.slice(0, 10)} {s.fecha.slice(11, 16)} · {s.usuario || ''}
+                </div>
+              )}
+              {/* Sprint G-1: Anular sublote mal capturado. §8: almacen,admin.
+                 Solo si NO está en Terán, NO es merma, NO cancelado y sin hijos. */}
+              {onAnularSublote && canAnular && !s.esMerma && !s.cancelado
+                && s.ub !== 'teran' && hijosDelTote.length === 0 && (
+                <div style={{ marginTop: 4, textAlign: 'right' }}>
+                  <button
+                    data-id="stock.btn.anular-sublote" data-rol="almacen,admin"
+                    onClick={() => onAnularSublote(lote, s)}
+                    style={{
+                      padding: '4px 10px', fontSize: 10, fontWeight: 600, minHeight: 28,
+                      background: 'transparent', color: 'var(--lp-danger-600)',
+                      border: '1px solid var(--lp-danger-300, rgba(220,38,38,0.3))',
+                      borderRadius: 6, cursor: 'pointer',
+                    }}
+                    title="Anular sublote (reponer envase/tapa al stock)"
+                  >Anular</button>
+                </div>
+              )}
+              {s.cancelado && (
+                <div style={{ color: 'var(--lp-danger-600)', fontSize: 10, marginTop: 2, textAlign: 'right', fontStyle: 'italic', display: 'flex', alignItems: 'center', gap: 4, justifyContent: 'flex-end' }}>
+                  {Icon.x({ s: 10 })} Anulado{s.motivoAnulacion ? ` — ${s.motivoAnulacion}` : ''}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* LOTE CARD (móvil) — card limpia con barra de progreso + sublotes    */
+/* ═══════════════════════════════════════════════════════════════════ */
+function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
   const [showSublotes, setShowSublotes] = useState(!!autoExpand);
   const est = ESTADO_MAP[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
   const total = Number(lote.litrosTotal) || 0;
   const used = litUsed(lote);
   const rest = Math.max(0, total - used);
   const pct = total > 0 ? (used / total) * 100 : 0;
-  const envSt = envEstado(lote);
   const sublotes = lote.sublotes || [];
-  const enFabrica = sublotes.filter(s => s.ub === 'fabrica' && !s.esMerma);
   const hasTotes = sublotes.some(s => s.tipo === 'tote' || s.fase === 1);
-  const totesSinConsumir = sublotes.filter(s => (s.tipo === 'tote' || s.fase === 1) && !s.consumido);
+
+  const acciones = buildLoteAcciones(lote, {
+    canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
+    onEnviarRecolectar, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
+  });
 
   return (
     <div style={S.card}>
@@ -1164,197 +1392,180 @@ function LoteCard({ lote, canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar,
 
       <div style={S.cardTitle}>{lote.producto || lote.nombre}</div>
       <div style={S.cardMeta}>
-        {lote.cantidad} cubetas · {total.toFixed(0)} L totales
+        {lote.cantidad} cubetas · <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{total.toFixed(0)} L</span> totales
         {lote.ordenCodigo && ` · ${lote.ordenCodigo}`}
       </div>
 
-      {/* Progress bar */}
+      {/* Barra de progreso de envasado */}
       {total > 0 && (
         <>
           <div style={S.progressWrap}>
             <div style={S.progressBar(pct)} />
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>
             <span>{used.toFixed(1)} L envasados ({Math.round(pct)}%)</span>
             <span>{rest.toFixed(1)} L restantes</span>
           </div>
         </>
       )}
 
-      {/* Sublotes toggle */}
+      {/* Sublotes expandibles */}
       {sublotes.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <button
             onClick={() => setShowSublotes(!showSublotes)}
-            style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--lp-brand-600)', cursor: 'pointer', fontWeight: 600, padding: 0 }}
+            style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--lp-brand-600)', cursor: 'pointer', fontWeight: 600, padding: '4px 0', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           >
-            {showSublotes ? '▾' : '▸'} {sublotes.length} sublote(s)
+            {Icon.chevron({ open: showSublotes })} {sublotes.length} sublote(s)
           </button>
           {showSublotes && (
-            <div style={{ marginTop: 6 }}>
-              {sublotes.map((s, i) => {
-                const isTote = s.tipo === 'tote' || s.fase === 1 || s.claseSublote === 'tote';
-                const desdeTote = s.fromTote || s.esHijoDe;
-                /* Para TOTEs: calcular litros ya reenvasados en hijos */
-                const hijosDelTote = isTote ? sublotes.filter(h => h.fromTote === s.cod || h.esHijoDe === s.cod) : [];
-                const litHijos = hijosDelTote.reduce((a, h) => a + (Number(h.lit) || 0), 0);
-                const litRestTote = isTote ? Math.max(0, (Number(s.lit) || 0) - litHijos) : 0;
-                return (
-                <div key={i} style={{
-                  ...S.sublote,
-                  background: s.esMerma ? 'var(--lp-danger-50)' : isTote ? '#EDE9FE' : s.ub === 'teran' ? 'var(--lp-success-50)' : 'var(--lp-bg-sunken)',
-                  marginLeft: desdeTote ? 16 : 0,
-                  borderLeft: desdeTote ? '3px solid #1E40AF' : undefined,
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    {desdeTote && <span style={{ fontSize: 11, color: '#1E40AF' }}>↳</span>}
-                    <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, fontSize: 11 }}>{s.cod}</span>
-                    {s.esMerma && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>MERMA</span>}
-                    {isTote && <span style={B('#EDE9FE', '#7C3AED')}>Granel</span>}
-                    {s.fase === 2 && desdeTote && <span style={B('#DBEAFE', '#1E40AF')}>Retail</span>}
-                    {s.consumido && <span style={B('#D1FAE5', '#065F46')}>Consumido</span>}
-                  </div>
-                  <div style={{ fontSize: 11 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600 }}>{isTote ? 'Tote' : `${s.qty} ${s.tipo}`}</span>
-                      <span style={{ color: 'var(--lp-text-tertiary)' }}>{s.lit}L</span>
-                      {s.marca && <span style={{ color: 'var(--lp-text-tertiary)' }}>{s.marca}</span>}
-                      <span style={B(
-                        s.ub === 'teran' ? 'var(--lp-success-100)' : 'var(--lp-brand-100)',
-                        s.ub === 'teran' ? 'var(--lp-success-600)' : 'var(--lp-brand-700)',
-                      )}>{s.ub === 'teran' ? 'Teran' : 'Fabrica'}</span>
-                    </div>
-                    {/* Trazabilidad: TOTE muestra cuánto se ha reenvasado */}
-                    {isTote && hijosDelTote.length > 0 && (
-                      <div style={{ color: 'var(--lp-text-tertiary)', fontSize: 10, marginTop: 2, textAlign: 'right' }}>
-                        {litHijos.toFixed(0)}L reenvasado → {litRestTote.toFixed(0)}L pendiente en tote
-                      </div>
-                    )}
-                    {/* Trazabilidad: hijo muestra de qué TOTE salió */}
-                    {desdeTote && (
-                      <div style={{ color: '#1E40AF', fontSize: 10, marginTop: 2, textAlign: 'right' }}>
-                        ↳ reenvasado desde tote {desdeTote}
-                      </div>
-                    )}
-                    {/* Fecha de creación */}
-                    {s.fecha && (
-                      <div style={{ color: 'var(--lp-text-tertiary)', fontSize: 10, marginTop: 1, textAlign: 'right' }}>
-                        {s.fecha.slice(0, 10)} {s.fecha.slice(11, 16)} · {s.usuario || ''}
-                      </div>
-                    )}
-                    {/* Sprint G-1: botón Anular para sublotes mal capturados.
-                       Solo disponible si NO está en Terán, NO es merma, NO está
-                       cancelado y NO tiene hijos (no se puede anular un TOTE
-                       con retail ya envasado). Permitido a quien pueda envasar. */}
-                    {onAnularSublote && canEnvasar && !s.esMerma && !s.cancelado
-                      && s.ub !== 'teran' && hijosDelTote.length === 0 && (
-                      <div style={{ marginTop: 4, textAlign: 'right' }}>
-                        <button
-                          onClick={() => onAnularSublote(lote, s)}
-                          style={{
-                            padding: '3px 8px', fontSize: 10, fontWeight: 600,
-                            background: 'transparent', color: 'var(--lp-danger-600)',
-                            border: '1px solid var(--lp-danger-300, rgba(220,38,38,0.3))',
-                            borderRadius: 4, cursor: 'pointer',
-                          }}
-                          title="Anular sublote (reponer envase/tapa al stock)"
-                        >Anular</button>
-                      </div>
-                    )}
-                    {s.cancelado && (
-                      <div style={{ color: 'var(--lp-danger-600)', fontSize: 10, marginTop: 2, textAlign: 'right', fontStyle: 'italic' }}>
-                        ✕ Anulado{s.motivoAnulacion ? ` — ${s.motivoAnulacion}` : ''}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                );
-              })}
-            </div>
+            <SublotesList lote={lote} sublotes={sublotes} canAnular={canAnular} onAnularSublote={onAnularSublote} />
           )}
         </div>
       )}
 
-      {/* Actions */}
+      {/* Acciones */}
       <div style={S.cardActions}>
         <button
-          style={{ ...S.btnPrimary, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', border: '1.5px solid var(--lp-border-subtle)' }}
+          data-id="stock.btn.qr" data-rol="tecnico,almacen,admin"
+          style={{ ...S.btnPrimary, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', border: '1.5px solid var(--lp-border-subtle)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
           onClick={() => onQR && onQR(lote)}
           title="Generar QR del lote"
         >
-          QR
+          {Icon.qr({ s: 15 })} QR
         </button>
-        {/* FIX jun 2026 (decisión owner: QC opcional): permitir envasar desde
-           'producido' directamente. El botón principal de envasado se muestra,
-           y SI el lote está en 'producido' también ofrecemos un botón secundario
-           "Hacer QC" para quien prefiera completarlo. qc_hold sigue bloqueando
-           porque significa que algo falló y debe resolverse antes. */}
-        {canEnvasar && lote.estado === 'qc_hold' && (
+        {acciones.map(a => (
           <button
-            style={{ ...S.btnPrimary, background: 'var(--lp-danger-600)' }}
-            onClick={() => onIrQC && onIrQC(lote)}
-            title="QC retenido — reabrir producción o reaprobar"
+            key={a.key}
+            data-id={a.dataId} data-rol={a.dataRol}
+            style={{ ...accionStyle(a.kind, false), display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            onClick={a.onClick}
+            title={a.title}
           >
-            ✕ QC retenido
+            {a.icon ? a.icon({ s: 15 }) : null} {a.label}
           </button>
-        )}
-        {canEnvasar && envSt !== 'envasado' && rest > 0 && lote.estado !== 'qc_hold' && (
-          <button style={S.btnPrimary} onClick={() => onEnvasar(lote)}>
-            Envasar
-          </button>
-        )}
-        {/* FIX jun 2026 (O3): "Enviar a recolectar" como acción primaria
-            cuando todo el lote está envasado y hay sublotes listos. Notifica
-            push a Luis. */}
-        {canTransfer && lote.estado === 'envasado' && (lote.sublotes || []).some(s => s.estado === 'envasado' && !s.esMerma) && onEnviarRecolectar && (
-          <button
-            style={{ ...S.btnPrimary, background: 'var(--lp-success-600)' }}
-            onClick={() => onEnviarRecolectar(lote)}
-            title="Marcar listos para recolectar — Luis recibe notificación"
-          >
-            🚚 Enviar a recolectar
-          </button>
-        )}
-        {canEnvasar && lote.estado === 'producido' && (
-          <button
-            style={{ ...S.btnPrimary, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', border: '1.5px solid var(--lp-border-subtle)' }}
-            onClick={() => onIrQC && onIrQC(lote)}
-            title="QC es opcional. Hacer QC formal antes de envasar (recomendado para auditoría)."
-          >
-            QC (opcional)
-          </button>
-        )}
-        {canEnvasar && envSt === 'parcial' && (
-          <button style={S.btnWarn} onClick={() => onCerrar(lote)}>
-            Cerrar (merma)
-          </button>
-        )}
-        {canTransfer && enFabrica.length > 0 && (
-          <button style={S.btnSuccess} onClick={() => onTransferir(lote)}>
-            Transferir a Teran
-          </button>
-        )}
-        {canEnvasar && totesSinConsumir.length > 0 && (lote.estado === 'en_almacen' || lote.estado === 'envasado') && (
-          <button style={{ ...S.btnPrimary, background: '#993C1D' }} onClick={() => onReenvasar(lote)}>
-            Re-envasar tote
-          </button>
-        )}
-        {/* Solo admin puede eliminar lotes de PRUEBA y solo si lo son */}
-        {isAdmin && lote.esPrueba && onEliminarPrueba && (
-          <button
-            style={{
-              padding: '8px 16px', borderRadius: 8, border: 'none',
-              fontSize: 12, fontWeight: 600, cursor: 'pointer',
-              background: 'var(--lp-danger-600)', color: '#fff',
-              fontFamily: 'var(--lp-font-sans)',
-            }}
-            onClick={() => onEliminarPrueba(lote)}
-            title="Eliminar permanentemente este lote de prueba"
-          >
-            🗑 Eliminar prueba
-          </button>
-        )}
+        ))}
       </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════ */
+/* LOTE TABLE (escritorio) — ERP Escritorio.html · SCREENS.stock       */
+/* Columnas: Lote · Producto · Litros · Envasado · Estado · Acción     */
+/* Fila expandible con sublotes (mismo SublotesList que móvil).        */
+/* ═══════════════════════════════════════════════════════════════════ */
+function LoteTableRow({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
+  const [open, setOpen] = useState(!!autoExpand);
+  const est = ESTADO_MAP[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
+  const total = Number(lote.litrosTotal) || 0;
+  const used = litUsed(lote);
+  const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+  const sublotes = lote.sublotes || [];
+  const hasTotes = sublotes.some(s => s.tipo === 'tote' || s.fase === 1);
+
+  const acciones = buildLoteAcciones(lote, {
+    canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
+    onEnviarRecolectar, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
+  });
+  /* Primaria = primera acción; el resto va como ghost al lado */
+  return (
+    <>
+      <tr data-id="stock.row.lote" data-rol="tecnico,almacen,admin">
+        <td style={{ ...S.td, ...S.tdMono, color: 'var(--lp-brand-600)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {sublotes.length > 0 ? (
+              <button onClick={() => setOpen(!open)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 2 }}
+                title={`${sublotes.length} sublote(s)`}>
+                {Icon.chevron({ open })}
+              </button>
+            ) : <span style={{ width: 14, display: 'inline-block' }} />}
+            <span>{lote.codigo || lote.codigoLote || lote.id}</span>
+          </div>
+        </td>
+        <td style={S.td}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontWeight: 600 }}>{lote.producto || lote.nombre}</span>
+            {hasTotes && <span style={B('#EDE9FE', '#7C3AED')}>2 fases</span>}
+            {lote.esPrueba && <PruebaBadge size="sm" />}
+          </div>
+          {lote.ordenCodigo && <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>{lote.ordenCodigo}</div>}
+        </td>
+        <td style={{ ...S.td, ...S.tdMono, textAlign: 'right' }}>{total.toLocaleString('es-MX')} L</td>
+        <td style={{ ...S.td, textAlign: 'right' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, minWidth: 90 }}>
+            <span style={{ ...S.tdMono, fontSize: 13 }}>{pct}%</span>
+            <div style={{ ...S.progressWrap, width: 90, marginBottom: 0 }}>
+              <div style={S.progressBar(pct)} />
+            </div>
+          </div>
+        </td>
+        <td style={S.td}><span style={B(est.bg, est.fg)}>{est.label}</span></td>
+        <td style={{ ...S.td, textAlign: 'right' }}>
+          <div style={S.rowActions}>
+            <button
+              data-id="stock.btn.qr" data-rol="tecnico,almacen,admin"
+              style={S.btnGhost} onClick={() => onQR && onQR(lote)} title="Generar QR del lote">
+              {Icon.qr({ s: 15 })} QR
+            </button>
+            {acciones.length === 0 && (
+              <span style={{ color: 'var(--lp-text-tertiary)', fontSize: 12 }}>—</span>
+            )}
+            {acciones.map(a => (
+              <button
+                key={a.key}
+                data-id={a.dataId} data-rol={a.dataRol}
+                style={a.kind === 'primary' || a.kind === 'success' || a.kind === 'warn' || a.kind === 'danger' || a.kind === 'tote'
+                  ? accionStyle(a.kind, true)
+                  : S.btnGhost}
+                onClick={a.onClick}
+                title={a.title}
+              >
+                {a.icon ? a.icon({ s: 15 }) : null} {a.label}
+              </button>
+            ))}
+          </div>
+        </td>
+      </tr>
+      {open && sublotes.length > 0 && (
+        <tr>
+          <td />
+          <td style={S.subRowCell} colSpan={5}>
+            <SublotesList lote={lote} sublotes={sublotes} canAnular={canAnular} onAnularSublote={onAnularSublote} />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function LoteTable(props) {
+  const { lotes, highlightLote } = props;
+  return (
+    <div style={S.tablewrap}>
+      <table style={S.table}>
+        <thead>
+          <tr>
+            <th style={S.th}>Lote</th>
+            <th style={S.th}>Producto</th>
+            <th style={{ ...S.th, textAlign: 'right' }}>Litros</th>
+            <th style={{ ...S.th, textAlign: 'right' }}>Envasado</th>
+            <th style={S.th}>Estado</th>
+            <th style={{ ...S.th, textAlign: 'right' }}>Acción</th>
+          </tr>
+        </thead>
+        <tbody>
+          {lotes.map(lote => (
+            <LoteTableRow
+              key={lote.id}
+              lote={lote}
+              {...props}
+              autoExpand={!!highlightLote && (lote.codigo === highlightLote || lote.codigoLote === highlightLote || lote.id === highlightLote)}
+            />
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -1364,6 +1575,7 @@ function LoteCard({ lote, canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar,
 /* ═══════════════════════════════════════════════════════════════════ */
 export default function StockFabricaPage() {
   const { user, can } = useAuth();
+  const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const highlightLote = searchParams.get('lote') || '';
@@ -1470,7 +1682,9 @@ export default function StockFabricaPage() {
   }), [enFabrica]);
 
   const canEnvasar = can('envasado') || can('produccion');
+  /* §8: enviar a recolectar / transferir a Terán / anular sublote = almacen,admin */
   const canTransfer = rol === 'admin' || rol === 'almacen';
+  const canAnular = canTransfer;
 
   const handleCerrar = useCallback(async (lote) => {
     const ok = await confirm(`¿Cerrar lote ${lote.codigo}? Los litros restantes se registrarán como merma.`, { danger: true, confirmText: 'Cerrar lote' });
@@ -1578,10 +1792,10 @@ export default function StockFabricaPage() {
             { id: 'enFabrica', label: `En Fábrica (${enFabricaActivos.length})`, style: (a) => S.tab(a) },
             { id: 'transferidos', label: `Transferidos (${transferidosActivos.length})`, style: (a) => S.tab(a) },
             ...((enFabricaPrueba.length + transferidosPrueba.length) > 0
-              ? [{ id: 'pruebas', label: `🧪 Pruebas (${enFabricaPrueba.length + transferidosPrueba.length})`, style: (a) => S.tab(a) }]
+              ? [{ id: 'pruebas', label: `Pruebas (${enFabricaPrueba.length + transferidosPrueba.length})`, style: (a) => S.tab(a) }]
               : []),
             ...(enFabricaRechazados.length > 0
-              ? [{ id: 'rechazados', label: `✕ Rechazados (${enFabricaRechazados.length})`, style: (a) => S.tab(a) }]
+              ? [{ id: 'rechazados', label: `Rechazados (${enFabricaRechazados.length})`, style: (a) => S.tab(a) }]
               : []),
           ]}
           activeTab={activeTab}
@@ -1627,16 +1841,41 @@ export default function StockFabricaPage() {
               </svg>
             </div>
             <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>
-              {searchQ ? 'Sin resultados' : activeTab === 'enFabrica' ? 'Sin lotes en fabrica' : 'Sin lotes transferidos'}
+              {searchQ ? 'Sin resultados'
+                : activeTab === 'enFabrica' ? 'Sin lotes en fábrica'
+                : activeTab === 'transferidos' ? 'Sin lotes transferidos'
+                : activeTab === 'pruebas' ? 'Sin lotes de prueba'
+                : 'Sin lotes rechazados'}
             </div>
           </div>
+        ) : isDesktop ? (
+          /* ESCRITORIO — tabla Lote/Producto/Litros/Envasado/Estado/Acción */
+          <LoteTable
+            lotes={filtered}
+            canEnvasar={canEnvasar}
+            canTransfer={canTransfer}
+            canAnular={canAnular}
+            isAdmin={rol === 'admin'}
+            highlightLote={highlightLote}
+            onEnvasar={setEnvasadoModal}
+            onCerrar={handleCerrar}
+            onTransferir={handleTransferir}
+            onEnviarRecolectar={handleEnviarRecolectar}
+            onReenvasar={setReenvasadoModal}
+            onQR={setQrLote}
+            onEliminarPrueba={handleEliminarPrueba}
+            onAnularSublote={handleAnularSublote}
+            onIrQC={() => window.location.assign('/produccion?tab=calidad')}
+          />
         ) : (
+          /* MÓVIL — cards limpias con barra de progreso + sublotes expandibles */
           filtered.map(lote => (
             <LoteCard
               key={lote.id}
               lote={lote}
               canEnvasar={canEnvasar}
               canTransfer={canTransfer}
+              canAnular={canAnular}
               isAdmin={rol === 'admin'}
               autoExpand={!!highlightLote && (lote.codigo === highlightLote || lote.codigoLote === highlightLote || lote.id === highlightLote)}
               onEnvasar={setEnvasadoModal}
@@ -1706,7 +1945,7 @@ export default function StockFabricaPage() {
       )}
 
       {/* Toast */}
-      {toastMsg && <div style={S.toast}><span style={{ marginRight: 8 }}>OK</span>{toastMsg}</div>}
+      {toastMsg && <div style={S.toast}><span style={{ marginRight: 8, display: 'inline-flex' }}>{Icon.check({ s: 15 })}</span>{toastMsg}</div>}
       {ConfirmEl}
     </>
   );
