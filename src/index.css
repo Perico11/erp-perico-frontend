@@ -1,22 +1,33 @@
 @import "tailwindcss";
 
-/* ═══ Light Premium — CSS Variables (source of truth) ═══ */
+/* ═══ Light Premium — CSS Variables (source of truth) ═══
+   HANDOFF jun 2026 (rediseño owner): marca = VERDE Perico (no azul).
+   Estética minimalista "calm forest" — superficies cool gray-green,
+   texto dark-teal, hairlines translúcidos. El brand ramp se construye
+   alrededor del acento #1D9E75 (claro). El set oscuro está más abajo
+   bajo [data-theme="dark"] / .dark. */
 :root {
-  --lp-brand-50: #EFF6FF;
-  --lp-brand-100: #DBEAFE;
-  --lp-brand-200: #BFDBFE;
-  --lp-brand-500: #3B82F6;
-  --lp-brand-600: #2563EB;
-  --lp-brand-700: #1D4ED8;
-  --lp-brand-800: #1E40AF;
-  --lp-bg-base: #FAFAF8;
+  /* Marca — verde Perico (reemplaza el azul #2563EB) */
+  --lp-brand-50: #E6F5EE;
+  --lp-brand-100: #C5E9D9;
+  --lp-brand-200: #98D8BD;
+  --lp-brand-500: #2BB587;
+  --lp-brand-600: #1D9E75;   /* acento de marca */
+  --lp-brand-700: #178060;
+  --lp-brand-800: #12664C;
+  /* Superficies — calm forest (claro) */
+  --lp-bg-base: #F6F7F4;
   --lp-bg-raised: #FFFFFF;
-  --lp-bg-sunken: #F5F4F0;
-  --lp-text-primary: #1A1815;
-  --lp-text-secondary: #5A5550;
-  --lp-text-tertiary: #6B6560;
-  --lp-border-subtle: #E8E6DE;
-  --lp-border-strong: #D1CEC6;
+  --lp-bg-sunken: #EEF0EB;
+  /* Texto */
+  --lp-text-primary: #16241F;
+  --lp-text-secondary: #5C7268;
+  --lp-text-tertiary: #8A988F;
+  --lp-text-disabled: #A9B5AD;
+  /* Bordes (hairlines translúcidos) */
+  --lp-border-subtle: rgba(20,36,31,.08);
+  --lp-border-default: rgba(20,36,31,.12);
+  --lp-border-strong: rgba(20,36,31,.18);
   --lp-success-50: #F0FDF4;
   --lp-success-100: #DCFCE7;
   --lp-success-500: #22C55E;
@@ -88,14 +99,110 @@
   --lp-cat-neutro-fg: #5A5550;
   --lp-cat-neutro-tint: rgba(90,85,80,0.10);
 
-  /* Focus ring (Stripe-style — anillo tinted suave) */
-  --lp-focus-ring: 0 0 0 4px rgba(24,95,165,0.15);
-  --lp-focus-ring-danger: 0 0 0 4px rgba(220,38,38,0.15);
+  /* Focus ring (Stripe-style — anillo tinted suave; verde marca) */
+  --lp-focus-ring: 0 0 0 4px rgba(29,158,117,0.18);
+  --lp-focus-ring-danger: 0 0 0 4px rgba(200,85,59,0.18);
 
   /* Glass backgrounds (translúcidos para overlays y nav) */
   --lp-glass-bg: rgba(255,255,255,0.82);
   --lp-glass-border: rgba(26,24,21,0.08);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MODO OSCURO — HANDOFF jun 2026 (decisión owner)
+   Set "calm forest" oscuro con acento mint #3DDBA5. Se activa con
+   [data-theme="dark"] en <html> (lo setea el toggle, persistido en
+   localStorage 'pp_theme'). Soportamos también .dark por compatibilidad.
+
+   NOTA: todo componente que usa var(--lp-*) flipea automáticamente. Los
+   pocos que tienen color hardcodeado (#fff, #1A1815) se barren en AA2b.
+   ═══════════════════════════════════════════════════════════════════════ */
+[data-theme="dark"], .dark {
+  /* Marca — mint sobre fondo oscuro */
+  --lp-brand-50:  rgba(61,219,165,.10);
+  --lp-brand-100: rgba(61,219,165,.16);
+  --lp-brand-200: rgba(61,219,165,.24);
+  --lp-brand-500: #2FC793;
+  --lp-brand-600: #3DDBA5;   /* acento mint */
+  --lp-brand-700: #5FE3B7;
+  --lp-brand-800: #7FEBC8;
+  /* Superficies oscuras */
+  --lp-bg-base: #0E1413;
+  --lp-bg-raised: #161E1B;
+  --lp-bg-sunken: #0B1110;
+  /* Texto claro sobre oscuro */
+  --lp-text-primary: #E6EFEA;
+  --lp-text-secondary: #7E9C90;
+  --lp-text-tertiary: #5f7a6f;
+  --lp-text-disabled: #4a5f56;
+  /* Bordes translúcidos claros */
+  --lp-border-subtle: rgba(255,255,255,.09);
+  --lp-border-default: rgba(255,255,255,.14);
+  --lp-border-strong: rgba(255,255,255,.20);
+  /* Estados — versiones dark-friendly: el 600 más brillante, tints translúcidos */
+  --lp-success-50: rgba(61,219,165,.10);
+  --lp-success-100: rgba(61,219,165,.16);
+  --lp-success-500: #34D399;
+  --lp-success-600: #3DDBA5;
+  --lp-success-700: #6EE7B7;
+  --lp-warning-50: rgba(224,176,90,.10);
+  --lp-warning-100: rgba(224,176,90,.16);
+  --lp-warning-500: #E0B05A;
+  --lp-warning-600: #E0B05A;
+  --lp-warning-700: #EBC57E;
+  --lp-danger-50: rgba(232,128,106,.10);
+  --lp-danger-100: rgba(232,128,106,.16);
+  --lp-danger-500: #E8806A;
+  --lp-danger-600: #E8806A;
+  --lp-danger-700: #F0A48F;
+  --lp-info-50: rgba(121,176,224,.12);
+  --lp-info-600: #79B0E0;
+  /* Sombras más profundas en oscuro */
+  --lp-shadow-xs: 0 1px 2px rgba(0,0,0,0.30);
+  --lp-shadow-sm: 0 1px 3px rgba(0,0,0,0.36), 0 1px 2px rgba(0,0,0,0.28);
+  --lp-shadow-md: 0 4px 14px rgba(0,0,0,0.40), 0 1px 3px rgba(0,0,0,0.28);
+  --lp-shadow-lg: 0 10px 30px rgba(0,0,0,0.48), 0 2px 6px rgba(0,0,0,0.32);
+  --lp-shadow-xl: 0 20px 50px rgba(0,0,0,0.55), 0 4px 14px rgba(0,0,0,0.36);
+  /* Glass oscuro */
+  --lp-glass-bg: rgba(22,30,27,0.82);
+  --lp-glass-border: rgba(255,255,255,0.09);
+  /* Focus ring mint */
+  --lp-focus-ring: 0 0 0 4px rgba(61,219,165,0.22);
+  /* Categorías tinted — fondos translúcidos en oscuro */
+  --lp-cat-inventario-bg: rgba(121,176,224,.12); --lp-cat-inventario-fg: #79B0E0;
+  --lp-cat-produccion-bg: rgba(224,176,90,.12);  --lp-cat-produccion-fg: #E0B05A;
+  --lp-cat-compras-bg: rgba(232,128,106,.12);    --lp-cat-compras-fg: #E8806A;
+  --lp-cat-alertas-bg: rgba(232,128,106,.12);    --lp-cat-alertas-fg: #E8806A;
+  --lp-cat-calidad-bg: rgba(61,219,165,.12);     --lp-cat-calidad-fg: #3DDBA5;
+  --lp-cat-admin-bg: rgba(169,139,224,.14);      --lp-cat-admin-fg: #A98BE0;
+  --lp-cat-neutro-bg: rgba(255,255,255,.05);     --lp-cat-neutro-fg: #7E9C90;
+}
+
+/* Transición suave al togglear tema (respeta reduced-motion vía media abajo) */
+@media (prefers-reduced-motion: no-preference) {
+  html { transition: background-color .35s cubic-bezier(.22,1,.36,1); }
+}
+
+/* En modo oscuro, forzar superficie oscura en CONTROLES DE FORMULARIO aunque
+   tengan background:'#fff' inline (muchos componentes lo hardcodean). El
+   !important vence al inline. Solo aplica a input/select/textarea — NO a
+   botones (color intencional) ni al fondo blanco del QR (que es un <div>/<svg>
+   y debe seguir blanco para escanearse). El barrido fino por componente
+   (AA2b) reemplazará los hardcodeados restantes por tokens. */
+[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="dark"] select,
+[data-theme="dark"] textarea,
+.dark input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.dark select,
+.dark textarea {
+  background-color: var(--lp-bg-sunken) !important;
+  color: var(--lp-text-primary);
+  border-color: var(--lp-border-default);
+}
+[data-theme="dark"] input::placeholder,
+[data-theme="dark"] textarea::placeholder,
+.dark input::placeholder,
+.dark textarea::placeholder { color: var(--lp-text-tertiary); }
 
 /* ═══ Tailwind v4 theme mapping ═══ */
 @theme {
@@ -257,7 +364,7 @@ body {
 .login-card {
   width: 100%;
   max-width: 400px;
-  background: #fff;
+  background: var(--lp-bg-raised);
   border-radius: 20px;
   box-shadow: 0 12px 40px rgba(0,0,0,.08);
   overflow: hidden;

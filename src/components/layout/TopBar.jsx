@@ -4,13 +4,16 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import Logo from '../Logo';
+import ThemeToggle from '../ui/ThemeToggle';
 
 const S = {
   bar: {
     position: 'sticky', top: 0, zIndex: 30,
     /* Fondo opaco para que en iOS el área del notch / Dynamic Island
-       siempre tenga color sólido y nada se vea POR DEBAJO. */
-    background: '#FAFAF8',
+       siempre tenga color sólido y nada se vea POR DEBAJO.
+       HANDOFF jun 2026: usa token raised para flipear en modo oscuro
+       (antes #FAFAF8 hardcodeado no respondía al toggle). */
+    background: 'var(--lp-bg-raised)',
     borderBottom: '1px solid var(--lp-border-subtle)',
     /* Respeta el notch / Dynamic Island en iOS: el padding-top SOLO empuja
        hacia abajo el contenido. El contenido vive en el .inner con altura
@@ -87,9 +90,11 @@ export default function TopBar({ title }) {
     onTrazabilidad: () => cargarCount(),
   });
 
-  /* Logos desde branding configurable. Fallback a los assets por defecto. */
-  const logoMain = branding?.logoMain || '/logos/el-perico-horizontal.png';
-  const logoIcon = branding?.logoIcon || '/logos/el-perico-icono.png';
+  /* Logos desde branding configurable. HANDOFF jun 2026: default = logo
+     monocromático verde en TODAS las pantallas. El branding override sigue
+     funcionando si el admin sube uno propio. */
+  const logoMain = branding?.logoMain || '/logos/logo-perico-green.svg';
+  const logoIcon = branding?.logoIcon || '/logos/logo-perico-green.svg';
 
   return (
     <header style={S.bar}>
@@ -102,6 +107,7 @@ export default function TopBar({ title }) {
           <h1 style={S.title}>{title}</h1>
         </div>
         <div style={S.right} className="topbar-right-mobile">
+          <ThemeToggle style={S.btn} />
           <button
             onClick={() => navigate('/notificaciones')}
             style={S.btn}

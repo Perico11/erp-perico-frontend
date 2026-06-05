@@ -3,6 +3,11 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { loadCachedBranding, loadBrandingFromServer } from './utils/brandingLoader.js'
+import { initTheme } from './utils/theme.js'
+
+/* HANDOFF jun 2026: inicializar tema claro/oscuro ANTES del render para
+   evitar flash. Lee localStorage 'pp_theme' o cae a prefers-color-scheme. */
+initTheme();
 
 /* Aplicar branding cacheado de inmediato (evita flash de defaults) y luego
    refrescar desde el server (puede haber cambios). */
