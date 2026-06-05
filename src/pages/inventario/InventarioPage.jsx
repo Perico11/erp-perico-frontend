@@ -169,6 +169,11 @@ const S = {
     color: on ? '#fff' : 'var(--lp-text-secondary)',
   }),
   subRow: { display: 'flex', alignItems: 'center', gap: 8, margin: '2px 0 14px', flexWrap: 'wrap' },
+  /* Cluster de acciones de la sub-fila: a la derecha en escritorio, fila propia en móvil */
+  actionsCluster: (desktop) => ({
+    display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap',
+    marginLeft: desktop ? 'auto' : 0, width: desktop ? 'auto' : '100%',
+  }),
   tablewrap: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, overflow: 'hidden' },
   table: { width: '100%', borderCollapse: 'collapse' },
   th: {
@@ -1182,9 +1187,9 @@ export default function InventarioPage() {
         <div style={S.h1}>Inventario</div>
         <div style={S.psub}>Materia prima y producto terminado</div>
 
-        {/* Toolbar: búsqueda + pills MP / PT / Envases */}
-        <div style={S.toolbarRow}>
-          <div style={S.searchBox}>
+        {/* Toolbar: búsqueda + pills MP / PT / Envases (móvil = apiladas) */}
+        <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
+          <div style={{ ...S.searchBox, ...(isDesktop ? {} : { maxWidth: '100%' }) }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query} onChange={e => setQuery(e.target.value)} />
           </div>
@@ -1208,7 +1213,7 @@ export default function InventarioPage() {
                 ))}
               </div>
               {mpSubtab === 'stock' && (
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={S.actionsCluster(isDesktop)}>
                   <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
                   {canRecibirMP && (
                     <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
@@ -1265,7 +1270,7 @@ export default function InventarioPage() {
                 ))}
               </div>
               {ptSubtab === 'total' && (
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={S.actionsCluster(isDesktop)}>
                   <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
                   {canEditMP && (
                     <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
