@@ -205,11 +205,52 @@ const S = {
     background: 'var(--lp-bg-raised)',
     border: '1.5px dashed var(--lp-border-subtle)',
     borderRadius: 'var(--lp-radius)',
-    padding: 16,
+    padding: 20,
     textAlign: 'center',
-    fontSize: 12,
+    fontSize: 13,
     color: 'var(--lp-text-tertiary)',
     gridColumn: '1 / -1',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+  },
+  /* ── Z1 (jun 2026): tira de enfoque del rol ───────────────────────── */
+  focoStrip: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '8px 12px',
+    background: 'var(--lp-bg-sunken)',
+    border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 'var(--lp-radius-sm)',
+    fontSize: 12, color: 'var(--lp-text-secondary)',
+    marginBottom: 12, lineHeight: 1.4,
+  },
+  focoIcon: {
+    width: 28, height: 28, borderRadius: 8,
+    background: 'var(--lp-brand-50)', color: 'var(--lp-brand-600)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  focoTxt: { flex: 1, minWidth: 0 },
+  focoStrong: { color: 'var(--lp-text-primary)', fontWeight: 700 },
+
+  /* ── Bloques visuales agrupando pendientes por área de flujo ─────── */
+  bloque: {
+    marginBottom: 12,
+  },
+  bloqueHead: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    fontSize: 10, fontWeight: 800, color: 'var(--lp-text-tertiary)',
+    textTransform: 'uppercase', letterSpacing: '.08em',
+    margin: '0 0 6px 2px',
+  },
+  bloqueIcon: {
+    width: 14, height: 14, color: 'var(--lp-text-tertiary)',
+  },
+  /* Verde celebratorio sutil para "todo al día" */
+  okBadge: {
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    color: 'var(--lp-success-700)', fontWeight: 700,
+  },
+  okIcon: {
+    width: 18, height: 18,
+    color: 'var(--lp-success-600)',
   },
 };
 
@@ -463,6 +504,40 @@ export default function DashboardPage() {
     } : null,
   ].filter(Boolean);
 
+  /* Z1 (jun 2026): clasificación por área de flujo para agrupar cards visualmente.
+     Cada key de card se asigna a un área. Las áreas se renderizan en orden de
+     relevancia: producción primero (pedidos→QC→envasar), luego logística
+     (recolectar→en camino), luego compras, luego operación cross-rol. */
+  const AREA_DE_CARD = {
+    pedidos:           { area: 'produccion',  label: 'Producción' },
+    ordenes:           { area: 'produccion',  label: 'Producción' },
+    qc:                { area: 'produccion',  label: 'Producción' },
+    'qc-hold':         { area: 'produccion',  label: 'Producción' },
+    envasado:          { area: 'produccion',  label: 'Producción' },
+    recoleccion:       { area: 'logistica',   label: 'Logística' },
+    almacen:           { area: 'logistica',   label: 'Logística' },
+    'oc-vencidas':     { area: 'compras',     label: 'Compras' },
+    'ocs-por-aprobar': { area: 'compras',     label: 'Compras' },
+    'dev-recibir':     { area: 'operacion',   label: 'Operación' },
+    'dev-reembolsar':  { area: 'compras',     label: 'Compras' },
+    'conteos-vencidos':{ area: 'operacion',   label: 'Operación' },
+  };
+  const ORDEN_AREAS = ['produccion', 'logistica', 'compras', 'operacion'];
+
+  /* Foco del rol: hint corto sobre qué priorizar hoy. Independiente
+     de los pendientes — es un atajo mental para roles operativos. */
+  const focoDelRol = (() => {
+    const rol = user?.rol;
+    if (!rol) return null;
+    if (rol === 'tecnico')    return { txt: 'Aceptar pedidos, producir, envasar.', ruta: '/pedidos' };
+    if (rol === 'almacen')    return { txt: 'Crear pedidos, recibir lotes en Terán, gestionar PT.', ruta: '/pedidos' };
+    if (rol === 'recolector') return { txt: 'Recoger sublotes listos y llevarlos a Terán.', ruta: '/recoleccion' };
+    if (rol === 'compras')    return { txt: 'Procesar OCs, aprobar precios, gestionar reembolsos.', ruta: '/compras' };
+    if (rol === 'inventario') return { txt: 'Conteos físicos, ajustes con candado, reportar varianzas.', ruta: '/conteo' };
+    if (rol === 'admin')      return { txt: 'Supervisión global, ajustes con TOTP, decisiones de margen.', ruta: '/admin' };
+    return null;
+  })();
+
   if (err && !data) {
     return (
       <div>
@@ -499,10 +574,29 @@ export default function DashboardPage() {
               Este es tu tablero. Arriba ves <strong>tareas pendientes para tu rol</strong>: solo te muestra lo que tú puedes accionar. Abajo, los <strong>KPIs cruzados</strong> de toda la operación. Haz click en cualquier tarjeta para ir al detalle.
             </HelpHint>
 
-            {/* ════════ Sección 1 — Pendientes por rol ════════
-                Si hay pendientes: el de mayor prioridad va como Hero Banner,
-                el resto como cards compactas en grid. Si no hay: un solo
-                mensaje "todo al día" sin ocupar espacio innecesario. */}
+            {/* Z1 (jun 2026): Tira de foco — hint corto del rol */}
+            {focoDelRol && (
+              <button
+                type="button"
+                onClick={() => navigate(focoDelRol.ruta)}
+                style={{ ...S.focoStrip, border: '1px solid var(--lp-border-subtle)', cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: 'inherit' }}
+              >
+                <div style={S.focoIcon}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <polyline points="12 6 12 12 16 14"/>
+                  </svg>
+                </div>
+                <div style={S.focoTxt}>
+                  <span style={S.focoStrong}>Tu enfoque: </span>{focoDelRol.txt}
+                </div>
+              </button>
+            )}
+
+            {/* ════════ Sección 1 — Pendientes para tu rol ════════
+                Hero del más prioritario + cards agrupadas por área de flujo
+                (producción / logística / compras / operación). La agrupación
+                hace más legible cuando hay 5+ pendientes mezclados. */}
             {cardsConCount.length > 0 && (
               <div style={S.section}>
                 <div style={S.sectionTitle}>Pendientes para tu rol</div>
@@ -529,37 +623,62 @@ export default function DashboardPage() {
                     </button>
                   );
                 })()}
-                {/* Cards compactas para el resto */}
-                {cardsConCount.length > 1 && (
-                  <div style={S.pendList}>
-                    {cardsConCount.slice(1).map(c => (
-                      <button
-                        key={c.key}
-                        style={S.pendCard(c.accent)}
-                        onClick={() => navigate(c.ruta)}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.transform = 'translateY(-2px)';
-                          e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,24,21,.06)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.transform = '';
-                          e.currentTarget.style.boxShadow = '';
-                        }}
-                      >
-                        <div style={S.pendHead}>
-                          <div style={S.pendTitle}>{c.titulo}</div>
-                          <div style={S.pendCount(c.pillColor)}>{c.count}</div>
-                        </div>
-                        <div style={S.pendDesc}>{c.desc}</div>
-                        {c.items && <div style={S.pendItems}>{c.items}</div>}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {/* Cards restantes agrupadas por área de flujo */}
+                {cardsConCount.length > 1 && (() => {
+                  const restantes = cardsConCount.slice(1);
+                  const porArea = {};
+                  restantes.forEach(c => {
+                    const meta = AREA_DE_CARD[c.key] || { area: 'operacion', label: 'Operación' };
+                    if (!porArea[meta.area]) porArea[meta.area] = { label: meta.label, cards: [] };
+                    porArea[meta.area].cards.push(c);
+                  });
+                  return ORDEN_AREAS.filter(a => porArea[a]).map(areaKey => (
+                    <div key={areaKey} style={S.bloque}>
+                      <div style={S.bloqueHead}>
+                        <svg style={S.bloqueIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="2"/>
+                          <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+                        </svg>
+                        {porArea[areaKey].label}
+                      </div>
+                      <div style={S.pendList}>
+                        {porArea[areaKey].cards.map(c => (
+                          <button
+                            key={c.key}
+                            style={S.pendCard(c.accent)}
+                            onClick={() => navigate(c.ruta)}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.transform = 'translateY(-2px)';
+                              e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,24,21,.06)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.transform = '';
+                              e.currentTarget.style.boxShadow = '';
+                            }}
+                          >
+                            <div style={S.pendHead}>
+                              <div style={S.pendTitle}>{c.titulo}</div>
+                              <div style={S.pendCount(c.pillColor)}>{c.count}</div>
+                            </div>
+                            <div style={S.pendDesc}>{c.desc}</div>
+                            {c.items && <div style={S.pendItems}>{c.items}</div>}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ));
+                })()}
               </div>
             )}
             {cardsConCount.length === 0 && cards.length > 0 && (
-              <div style={{ ...S.empty, marginBottom: 14 }}>✓ Todo al día. Sin pendientes para tu rol.</div>
+              <div style={{ ...S.empty, marginBottom: 14 }}>
+                <span style={S.okBadge}>
+                  <svg style={S.okIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12"/>
+                  </svg>
+                  Todo al día — sin pendientes para tu rol
+                </span>
+              </div>
             )}
 
             {/* ════════ Sección 2 — KPIs ejecutivos agrupados ════════
@@ -782,7 +901,11 @@ export default function DashboardPage() {
               <div style={S.topPanel}>
                 {!Array.isArray(d.topProductos) ? (
                   <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>⏳</div>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
                     <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
                       Backend desactualizado
                     </div>
@@ -838,7 +961,11 @@ export default function DashboardPage() {
               <div style={S.trendPanel}>
                 {!Array.isArray(d.serie12m) ? (
                   <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                    <div style={{ fontSize: 28, marginBottom: 8 }}>⏳</div>
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
+                      <circle cx="12" cy="12" r="10"/>
+                      <line x1="12" y1="8" x2="12" y2="12"/>
+                      <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
                     <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
                       Backend desactualizado
                     </div>
