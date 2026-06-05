@@ -3,6 +3,8 @@ import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import { ESTADO_LOTE_LABEL } from '../../lib/loteTransiciones';
+import PruebaBadge from '../../components/ui/PruebaBadge';
 
 /* ── SVG Icons (stroke, same style as nav) ── */
 const ICONS = {
@@ -19,18 +21,24 @@ const ICONS = {
   pin: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
 };
 
-const ESTADO_CONFIG = {
-  producido:       { label: 'Producido',      bg: 'var(--lp-brand-100)',   fg: 'var(--lp-brand-700)' },
-  qc_aprobado:     { label: 'QC Aprobado',    bg: '#D1FAE5',              fg: '#065F46' },
-  qc_hold:         { label: 'QC Hold',        bg: 'var(--lp-danger-100)',  fg: 'var(--lp-danger-600)' },
-  en_envasado:     { label: 'En Envasado',    bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
-  envasado:        { label: 'Envasado',        bg: '#DBEAFE',              fg: '#1E40AF' },
-  en_recoleccion:  { label: 'En Recoleccion', bg: '#EDE9FE',              fg: '#7C3AED' },
-  en_camino:       { label: 'En Camino',      bg: '#FEF3C7',              fg: '#92400E' },
-  en_almacen:      { label: 'En Almacen',     bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
-  reenvasado:      { label: 'Re-envasado',    bg: '#FAECE7',              fg: '#993C1D' },
-  entregado:       { label: 'Entregado',      bg: 'var(--lp-success-100)', fg: 'var(--lp-success-700)' },
+/* X3 (jun 2026): labels canónicos importados de lib/loteTransiciones.js,
+   bg/fg local porque TrazabilidadPage usa una paleta pastel distinta. */
+const ESTADO_BG_FG = {
+  producido:       { bg: 'var(--lp-brand-100)',   fg: 'var(--lp-brand-700)' },
+  qc_aprobado:     { bg: '#D1FAE5',              fg: '#065F46' },
+  qc_hold:         { bg: 'var(--lp-danger-100)',  fg: 'var(--lp-danger-600)' },
+  en_envasado:     { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
+  envasado:        { bg: '#DBEAFE',              fg: '#1E40AF' },
+  en_recoleccion:  { bg: '#EDE9FE',              fg: '#7C3AED' },
+  en_camino:       { bg: '#FEF3C7',              fg: '#92400E' },
+  en_almacen:      { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
+  reenvasado:      { bg: '#FAECE7',              fg: '#993C1D' },
+  entregado:       { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-700)' },
 };
+const ESTADO_CONFIG = Object.keys(ESTADO_BG_FG).reduce((acc, k) => {
+  acc[k] = { label: ESTADO_LOTE_LABEL[k] || k, ...ESTADO_BG_FG[k] };
+  return acc;
+}, { reenvasado: { label: 'Re-envasado', ...ESTADO_BG_FG.reenvasado } });
 
 /* ── Pipeline steps (ordered) ── */
 const PIPELINE_STEPS = [
@@ -373,7 +381,7 @@ function LoteCard({ lote }) {
         <div style={S.cardHeader}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={S.loteCode}>{lote.codigoLote || lote.id}</span>
-            {isPrueba && <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-600)')}>PRUEBA</span>}
+            {isPrueba && <PruebaBadge size="sm" />}
             <span style={S.badge(est.bg, est.fg)}>{est.label}</span>
             {hasTotes && <span style={S.badge('#EDE9FE', '#7C3AED')}>2 fases</span>}
           </div>

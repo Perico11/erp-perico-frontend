@@ -18,6 +18,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import PruebaBadge from '../../components/ui/PruebaBadge';
 
 const PASOS = [
   { key: 'aceptado',       label: 'Aceptado',    short: 'Acep' },
@@ -119,6 +120,7 @@ function LoteCard({ lote, onClick }) {
       <div style={S.loteHeader}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
           <span style={S.loteCodigo}>{lote.codigoLote || lote.codigo || lote.id}</span>
+          {lote.esPrueba && <PruebaBadge size="sm" />}
           <span style={S.loteProducto}>{lote.producto || lote.nombre || lote.formula || '-'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -167,8 +169,12 @@ export default function MisLotesPipeline({ rol }) {
   });
 
   const lotesFiltrados = useMemo(() => {
-    /* Excluir eliminados y pruebas siempre */
-    let activos = lotes.filter(l => l && !l.eliminado && !l.esPrueba);
+    /* X4 (jun 2026): YA NO excluimos pruebas — la regla canónica del owner es
+       que las pruebas se comportan IDÉNTICAS al flujo real y deben mostrarse
+       en TODA la UI, solo que con el badge visible. Excluirlas silenciaba el
+       hecho de que un lote de prueba estaba en el pipeline (operario perdido
+       buscando dónde fue). El badge en LoteCard las hace inconfundibles. */
+    let activos = lotes.filter(l => l && !l.eliminado);
     /* Excluir terminales */
     activos = activos.filter(l => !['entregado', 'cancelado', 'rechazado'].includes(l.estado));
 

@@ -7,6 +7,7 @@ import {
   ESTADO_LOTE_LABEL,
   ESTADO_LOTE_COLOR,
 } from '../lib/loteTransiciones';
+import PruebaBadge from './ui/PruebaBadge';
 
 /* ──────────────────────────────────────────────────────────────────── */
 /* PedidoLoteActions                                                    */
@@ -302,6 +303,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
       <div style={S.loteHeader}>
         <span style={{ fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Lote:</span>
         <span style={S.loteCod}>{lote.codigoLote || lote.codigo || lote.id}</span>
+        {lote.esPrueba && <PruebaBadge size="sm" />}
         <span style={S.estadoBadge(estColor)}>{estLabel}</span>
         {litTotal > 0 && pctEnvasado > 0 && (
           <span style={S.sublotesResumen}>· {pctEnvasado}% envasado ({litUsed.toFixed(0)}/{litTotal.toFixed(0)}L)</span>

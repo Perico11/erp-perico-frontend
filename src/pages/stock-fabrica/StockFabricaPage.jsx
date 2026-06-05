@@ -8,7 +8,8 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import QRModal from '../../components/QRModal';
 import useConfirm from '../../hooks/useConfirm';
-import { ESTADO_SUBLOTE_LABEL, ESTADO_SUBLOTE_COLOR } from '../../lib/loteTransiciones';
+import { ESTADO_SUBLOTE_LABEL, ESTADO_SUBLOTE_COLOR, ESTADO_LOTE_LABEL } from '../../lib/loteTransiciones';
+import PruebaBadge from '../../components/ui/PruebaBadge';
 import { qrSvg, qrDataUrl } from '../../lib/qrGenerator';
 
 /* Construye la URL pública del QR de un sublote. Mirror de _generarQRPayload del backend. */
@@ -71,17 +72,26 @@ function envEstado(lote) {
   return 'parcial';
 }
 
-const ESTADO_MAP = {
-  producido:      { label: 'Producido',       bg: 'var(--lp-brand-100)',   fg: 'var(--lp-brand-700)' },
-  qc_aprobado:    { label: 'QC Aprobado',     bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
-  en_envasado:    { label: 'En Envasado',     bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
-  en_proceso:     { label: 'En Proceso',      bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
-  envasado:       { label: 'Envasado',        bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
-  en_recoleccion: { label: 'En Recoleccion',  bg: '#EDE9FE',              fg: '#7C3AED' },
-  en_camino:      { label: 'En Camino',       bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
-  en_almacen:     { label: 'En Almacen',      bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
-  reenvasado:     { label: 'Re-envasado',     bg: '#FAECE7',              fg: '#993C1D' },
+/* X3 (jun 2026): labels canónicos importados desde lib/loteTransiciones.js.
+   El bg/fg sigue local porque StockFabrica usa paletas suaves (chip pastel)
+   distintas a las del badge sólido del state-machine en otros lugares.
+   Si el lote tiene un estado fuera del dominio canónico, el .label
+   default es el código crudo (debug-friendly). */
+const ESTADO_BG_FG = {
+  producido:      { bg: 'var(--lp-brand-100)',   fg: 'var(--lp-brand-700)' },
+  qc_aprobado:    { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
+  en_envasado:    { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
+  en_proceso:     { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
+  envasado:       { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
+  en_recoleccion: { bg: '#EDE9FE',              fg: '#7C3AED' },
+  en_camino:      { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
+  en_almacen:     { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
+  reenvasado:     { bg: '#FAECE7',              fg: '#993C1D' },
 };
+const ESTADO_MAP = Object.keys(ESTADO_BG_FG).reduce((acc, k) => {
+  acc[k] = { label: ESTADO_LOTE_LABEL[k] || k, ...ESTADO_BG_FG[k] };
+  return acc;
+}, { reenvasado: { label: 'Re-envasado', ...ESTADO_BG_FG.reenvasado } }); /* reenvasado no está en ESTADO_LOTE_LABEL */
 
 const S = {
   wrap: { padding: '0 20px 100px' },
@@ -995,7 +1005,7 @@ function LoteCard({ lote, canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar,
           </span>
           <span style={B(est.bg, est.fg)}>{est.label}</span>
           {hasTotes && <span style={B('#EDE9FE', '#7C3AED')}>2 fases</span>}
-          {lote.esPrueba && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>PRUEBA</span>}
+          {lote.esPrueba && <PruebaBadge size="sm" />}
         </div>
         <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{(lote.fecha || '').slice(0, 10)}</span>
       </div>

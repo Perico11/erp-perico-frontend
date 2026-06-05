@@ -25,7 +25,8 @@ vi.mock('../services/api', () => ({
         },
       ],
     })),
-    upsertTrazabilidad: vi.fn(() => Promise.resolve({ ok: true })),
+    /* X2: upsertTrazabilidad eliminado; mock dejado vacío por compat
+       con tests que aún no migran al endpoint canónico transicionLote. */
   },
 }));
 

@@ -12,6 +12,11 @@ import Cronometro from '../../components/Cronometro';
 import NDAModal from '../../components/NDAModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
 import PedidoLoteActions from '../../components/PedidoLoteActions';
+import PruebaBadge from '../../components/ui/PruebaBadge';
+import {
+  ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
+  ESTADO_PEDIDO_COLOR as ESTADO_COLOR,
+} from '../../lib/estados';
 
 const S = {
   wrap: { padding: '0 20px 100px' },
@@ -66,30 +71,9 @@ const S = {
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12, marginBottom: 12 },
 };
 
-const ESTADO_COLOR = {
-  pendiente:      '#6B6560',
-  aceptado:       'var(--lp-brand-500)',
-  en_produccion:  'var(--lp-warning-600)',
-  producido:      'var(--lp-info-600)',
-  qc_hold:        'var(--lp-danger-500)',
-  qc_aprobado:    'var(--lp-success-500)',
-  en_envasado:    'var(--lp-warning-500)',
-  envasado:       'var(--lp-info-500, var(--lp-info-600))',
-  en_recoleccion: 'var(--lp-warning-600)',
-  en_camino:      'var(--lp-warning-600)',
-  en_almacen:     'var(--lp-info-600)',
-  entregado:      'var(--lp-success-600)',
-  rechazado:      'var(--lp-danger-600)',
-  cancelado:      'var(--lp-text-tertiary)',
-};
-
-const ESTADO_LABEL = {
-  pendiente: 'Pendiente', aceptado: 'Aceptado', en_produccion: 'En producción',
-  producido: 'Producido', qc_hold: 'QC retenido', qc_aprobado: 'QC aprobado',
-  en_envasado: 'Envasando', envasado: 'Envasado', en_recoleccion: 'En recolección',
-  en_camino: 'En camino', en_almacen: 'En almacén', entregado: 'Entregado',
-  rechazado: 'Rechazado', cancelado: 'Cancelado',
-};
+/* X3 (jun 2026): ESTADO_COLOR y ESTADO_LABEL ahora vienen de lib/estados.js
+   con alias. Antes vivían duplicados aquí (shape distinto al de OrdenesPage
+   y DashboardPage). Centralizando se eliminó el drift. */
 
 export default function PedidosPage() {
   const { user, can } = useAuth();
@@ -409,11 +393,7 @@ export default function PedidosPage() {
                 <div style={S.pedidoHeader}>
                   <span style={S.pedidoId}>{p.id}</span>
                   <span style={S.estadoBadge(p.estado)}>{ESTADO_LABEL[p.estado] || p.estado}</span>
-                  {p.esPrueba && (
-                    <span style={{ ...S.estadoBadge('pendiente'), background: 'var(--lp-warning-600)', color: '#1A1815' }}>
-                      🧪 PRUEBA
-                    </span>
-                  )}
+                  {p.esPrueba && <PruebaBadge size="sm" />}
                   {p.estado === 'en_produccion' && p.fechaInicioProduccion && (
                     <Cronometro desde={p.fechaInicioProduccion} />
                   )}

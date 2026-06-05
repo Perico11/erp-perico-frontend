@@ -196,7 +196,7 @@ const api = {
   getOrdenes: () => request('GET', '/api/ordenes'),
   getPedidos: () => request('GET', '/api/pedidos'),
   upsertPedido: (pedido) => request('POST', '/api/pedidos/upsert', pedido),
-  deletePedido: (id) => request('POST', '/api/pedidos/delete', { id }),
+  /* X2 (jun 2026): deletePedido eliminado — backend retorna 410. Usar eliminarPedido. */
   /* Eliminar pedido (admin con motivo + PIN). Revierte MP si tiene orden vinculada
      que ya produjo. Marca pedido y orden como eliminado para auditoría. */
   eliminarPedido: (pedidoId, nombre, pin, motivo) =>
@@ -208,7 +208,8 @@ const api = {
 
   /* ── Producción / Trazabilidad ── */
   getTrazabilidad: () => request('GET', '/api/trazabilidad'),
-  upsertTrazabilidad: (data) => request('POST', '/api/trazabilidad', data),
+  /* X2 (jun 2026): upsertTrazabilidad eliminado — backend retorna 410 sin header
+     x-trazabilidad-overwrite-confirm:SI. Usar crearLote o api.transicionLote/Sublote. */
   /* Crear UN lote nuevo — server asigna código canónico LP-YYYYMMDD-NNN
      dentro del mutex, evitando colisiones del antiguo Math.random*999. */
   crearLote: (lote) => request('POST', '/api/trazabilidad/lote', { lote }),

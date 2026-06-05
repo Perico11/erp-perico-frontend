@@ -8,18 +8,36 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import ProduccionFlow from '../produccion/ProduccionFlow';
 import NDAModal from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
+import PruebaBadge from '../../components/ui/PruebaBadge';
+import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
 
-/* ── Badge maps ── */
-const ESTADO_BADGE = {
-  pendiente:  { cls: 'warn',   label: 'Pendiente' },
-  en_proceso: { cls: 'info',   label: 'En Proceso' },
-  produccion: { cls: 'info',   label: 'Producción' },
-  qc:         { cls: 'purple', label: 'QC' },
-  terminada:  { cls: 'ok',     label: 'Terminada' },
-  entregada:  { cls: 'ok',     label: 'Entregada' },
-  cancelada:  { cls: 'neutral',label: 'Cancelada' },
-  eliminado:  { cls: 'err',    label: 'Eliminada' },
+/* ── Badge maps ──
+   X3 (jun 2026): labels canónicos vienen de lib/estados.js (espejo backend).
+   Antes había estados ficticios como 'terminada'/'entregada' que el backend
+   NUNCA emite — se quedaban "stuck" en órdenes reales por mismatch silencioso.
+   La clase visual (`cls`) sigue local porque el theme de OC mapea a colores
+   distintos según familia (warn/info/purple/ok/neutral/err). */
+const ESTADO_CLS = {
+  pendiente:     'warn',
+  aceptado:      'info',
+  en_proceso:    'info',
+  en_produccion: 'info',
+  qc_hold:       'err',
+  qc_aprobado:   'purple',
+  en_envasado:   'purple',
+  envasado:      'ok',
+  en_recoleccion:'info',
+  en_camino:     'info',
+  en_almacen:    'ok',
+  entregado:     'ok',
+  rechazado:     'err',
+  cancelado:     'neutral',
+  eliminado:     'err',
 };
+const ESTADO_BADGE = Object.keys(ESTADO_CLS).reduce((acc, k) => {
+  acc[k] = { cls: ESTADO_CLS[k], label: ESTADO_ORDEN_LABEL[k] || (k === 'eliminado' ? 'Eliminada' : k) };
+  return acc;
+}, {});
 const PRIO_BADGE = {
   urgente: { cls: 'err',  label: 'URGENTE' },
   alta:    { cls: 'warn', label: 'ALTA' },
@@ -629,7 +647,7 @@ function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onPr
       <div style={S.cardHeader}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <span style={S.cardCode}>{o.codigo}</span>
-          {isPrueba && <span style={S.badge('warn')}>🧪 PRUEBA</span>}
+          {isPrueba && <PruebaBadge size="sm" />}
           <span style={S.badge(est.cls)}>{est.label}</span>
           <span style={S.badge(prio.cls)}>{prio.label}</span>
         </div>
