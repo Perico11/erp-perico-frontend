@@ -25,6 +25,7 @@ const CycleCountPage      = lazy(() => import('./pages/cycle-count/CycleCountPag
 const AlmacenRecepcionPage = lazy(() => import('./pages/almacen-recepcion/AlmacenRecepcionPage'));
 const NotificacionesPage  = lazy(() => import('./pages/notificaciones/NotificacionesPage'));
 const DevolucionesPage    = lazy(() => import('./pages/devoluciones/DevolucionesPage'));
+const DevolucionesMPPage  = lazy(() => import('./pages/devoluciones-mp/DevolucionesMPPage'));
 const PedidosPage         = lazy(() => import('./pages/pedidos/PedidosPage'));
 const LaboratorioPage     = lazy(() => import('./pages/laboratorio/LaboratorioPage'));
 const ReportesPage        = lazy(() => import('./pages/reportes/ReportesPage'));
@@ -141,6 +142,7 @@ export default function App() {
               <Route path="notificaciones" element={<Suspense fallback={<PageLoader />}><ErrorBoundary><NotificacionesPage /></ErrorBoundary></Suspense>} />
               <Route path="laboratorio"    element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><LaboratorioPage /></ErrorBoundary></RoleRoute>} />
               <Route path="devoluciones"   element={<RoleRoute roles={['admin','compras','almacen','tecnico']}><ErrorBoundary><DevolucionesPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="devoluciones-mp" element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><DevolucionesMPPage /></ErrorBoundary></RoleRoute>} />
               <Route path="reportes"       element={<RoleRoute roles={['admin','inventario','compras']}><ErrorBoundary><ReportesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="admin"          element={<RoleRoute roles={['admin']}><ErrorBoundary><AdminPage /></ErrorBoundary></RoleRoute>} />
               <Route path="seguridad"      element={<RoleRoute roles={['admin','tecnico','inventario','almacen']}><ErrorBoundary><SeguridadPage /></ErrorBoundary></RoleRoute>} />

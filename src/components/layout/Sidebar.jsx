@@ -46,9 +46,12 @@ const NAV_ITEMS = [
      incluía a tecnico → parpadeo. Ahora restringido por roles[]. */
   { key: 'reportes',     label: 'Reportes',     path: '/reportes',      icon: icons.reportes,     perm: 'inventario',  roles: ['admin','inventario','compras'] },
   { key: 'laboratorio',  label: 'Laboratorio',  path: '/laboratorio',   icon: icons.laboratorio,  perm: 'laboratorio' },
-  /* Devoluciones: antes perm='admin' lo ocultaba a tecnico que la ruta SÍ
-     permite (Sprint F-2). Ahora perm='devoluciones' (nuevo, dado a admin/tecnico/almacen/compras). */
-  { key: 'devoluciones', label: 'Devoluciones', path: '/devoluciones',  icon: icons.devoluciones, perm: 'devoluciones' },
+  /* Devoluciones PT (cliente→fábrica): técnico/almacén/admin. Capa 3 (jun 2026)
+     separó la devolución de MP (compras→proveedor) en su propia entrada, así que
+     este item ya NO se muestra a compras (Arely usa "Devol. a proveedor"). */
+  { key: 'devoluciones', label: 'Devoluciones', path: '/devoluciones',  icon: icons.devoluciones, perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
+  /* Devoluciones de MP a proveedor (Capa 3, Arely / compras). */
+  { key: 'devolucionesMp', label: 'Devol. a proveedor', path: '/devoluciones-mp', icon: icons.devoluciones, perm: 'devoluciones', roles: ['admin','compras'] },
   { key: 'admin',        label: 'Admin',        path: '/admin',         icon: icons.admin,        perm: 'admin' },
 ];
 

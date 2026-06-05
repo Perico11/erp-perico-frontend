@@ -97,7 +97,7 @@ const SECCIONES = [
     items: [
       { path: '/inventario',   label: 'Stock MP',     icon: ICONS.inv,      perm: 'inventario' },
       { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount' },
-      { path: '/devoluciones', label: 'Devoluciones', icon: ICONS.devol,    perm: 'devoluciones' },
+      { path: '/devoluciones', label: 'Devoluciones', icon: ICONS.devol,    perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
       { path: '/reportes',     label: 'Reportes',     icon: ICONS.reportes, perm: 'inventario', roles: ['admin','inventario','compras'] },
     ],
   },
@@ -105,6 +105,7 @@ const SECCIONES = [
     titulo: 'Compras y trazabilidad',
     items: [
       { path: '/compras',      label: 'OCs y MRP',    icon: ICONS.compr, perm: 'compras' },
+      { path: '/devoluciones-mp', label: 'Devol. proveedor', icon: ICONS.devol, perm: 'devoluciones', roles: ['admin','compras'] },
       { path: '/recoleccion',  label: 'Recolección',  icon: ICONS.recol, perm: 'recoleccion' },
       { path: '/trazabilidad', label: 'Trazabilidad', icon: ICONS.traz,  perm: 'trazabilidad' },
     ],

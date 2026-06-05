@@ -415,6 +415,13 @@ const api = {
   disponerDevolucion: (devolucionId, disposicion, nota) =>
     request('POST', '/api/devoluciones/disposicion', { devolucionId, disposicion, nota }),
 
+  /* ── Devoluciones de MP → proveedor (Capa 3, Arely) ── */
+  getDevolucionesMP: () => request('GET', '/api/devoluciones/mp'),
+  crearDevolucionMP: (data) => request('POST', '/api/devoluciones/mp/crear', data),
+  cerrarDevolucionMP: (data) => request('POST', '/api/devoluciones/mp/cerrar', data),
+  comprobanteDevolucionMPUrl: (id) =>
+    '/api/devoluciones/mp/' + encodeURIComponent(id) + '/comprobante',
+
   /* ── SAT / CFDI ── */
   satParse: (xmlText) => request('POST', '/api/sat/parse', { xmlText }),
   satRegistrar: (cfdi, ocId) => request('POST', '/api/sat/registrar', { cfdi, ocId }),

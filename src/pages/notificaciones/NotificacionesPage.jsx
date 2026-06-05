@@ -73,6 +73,7 @@ const TECH_LABELS = {
   costo_faltante: 'Costo no definido',
   conteo_varianza: 'Varianza en conteo',
   conteo_pendiente_aprobacion: 'Conteo por aprobar',
+  devolucion_mp_pendiente: 'Devolución a proveedor',
   lote_en_camino: 'Lote en camino',
   devolucion: 'Devolución registrada',
 };
@@ -130,6 +131,8 @@ export default function NotificacionesPage() {
     /* Conteo finalizado/aprobado → refrescar la bandeja del admin al instante
        (el pendiente de aprobación aparece/desaparece sin esperar el polling). */
     onCycleCount: () => reload(),
+    /* Devolución MP creada/cerrada → refrescar pendientes de Arely/admin. */
+    onDevolucion: () => reload(),
   });
 
   /* Click en card → navega a la pantalla relevante. Prioridad: ruta explícita
