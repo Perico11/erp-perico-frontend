@@ -4,258 +4,280 @@ import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import HelpHint from '../../components/HelpHint';
 import MisLotesPipeline from './MisLotesPipeline';
 
+/* ════════════════════════════════════════════════════════════════════
+   Reskin "Claude Design" (verde) — Inicio / Dashboard
+   Refs: ERP Escritorio.html (SCREENS.inicio) · ERP Móvil.html (S.inicio)
+   · Inicio Resumen.html. Escritorio = saludo + KPIs g4 + "Requiere tu
+   atención" g3 (cards borde-left de color). Móvil = secciones apiladas:
+   "Requiere tu atención" (card hero) + "Pendientes" (lista lrow) +
+   "Tu día" (g2 KPIs). Tokens SOLO var(--lp-*). Sin emojis (SVG line).
+   KPIs/montos en var(--lp-font-mono). Touch ≥44px. Reskin VISUAL: toda
+   la lógica por rol, endpoints, realtime y drill-down se conserva 1:1.
+   ════════════════════════════════════════════════════════════════════ */
+
+/* Paleta de acentos — solo tokens LP del tema verde. El mockup usa
+   info(azul)/amber/danger/purple; mapeamos al set existente. */
+const ACC = {
+  brand:   'var(--lp-brand-600)',
+  info:    'var(--lp-info-600)',
+  amber:   'var(--lp-warning-600)',
+  amberHi: 'var(--lp-warning-700)',
+  crit:    'var(--lp-danger-600)',
+  critHi:  'var(--lp-danger-700)',
+  ok:      'var(--lp-success-600)',
+  okHi:    'var(--lp-success-700)',
+  mut:     'var(--lp-border-strong)',
+};
+const tint = (c) => `color-mix(in srgb, ${c} 14%, transparent)`;
+
 const S = {
-  wrap: { padding: '20px 20px 100px' },
-  greeting: { marginBottom: 14 },
-  greetH: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
-  greetSub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 4 },
-  section: { marginBottom: 18 },
+  wrap: (isDesktop) => ({ padding: isDesktop ? '24px 26px 48px' : '16px 18px 96px' }),
+
+  /* Saludo */
+  greeting: { marginBottom: 18 },
+  greetH: (isDesktop) => ({
+    fontSize: isDesktop ? 23 : 21, fontWeight: 600, letterSpacing: '-.02em',
+    color: 'var(--lp-text-primary)', lineHeight: 1.15,
+  }),
+  greetSub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3 },
+
+  /* Sección + etiqueta */
+  section: { marginBottom: 22 },
   sectionTitle: {
-    fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)',
-    textTransform: 'uppercase', letterSpacing: '.08em', margin: '0 0 8px 2px',
+    fontSize: 12, fontWeight: 600, color: 'var(--lp-text-tertiary)',
+    textTransform: 'uppercase', letterSpacing: '.04em', margin: '0 0 11px 2px',
   },
-  /* Grid compacto: hasta 6 columnas en pantallas anchas, 4 en medianas, 2 en móvil */
-  grid: {
-    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 8,
-  },
-  kpi: (accent, clickable) => ({
+
+  /* Grids de KPI: g4 ancho en escritorio, g2 apilado en móvil */
+  grid: (isDesktop) => ({
+    display: 'grid',
+    gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(220px, 1fr))' : '1fr 1fr',
+    gap: isDesktop ? 12 : 10,
+  }),
+
+  /* KPI card (estilo .card .kpi del mockup) */
+  kpi: (accent, clickable, isDesktop) => ({
     background: 'var(--lp-bg-raised)',
     borderRadius: 'var(--lp-radius)',
-    border: '1.5px solid var(--lp-border-subtle)',
-    borderTop: `2px solid ${accent}`,           /* 3px → 2px (más sutil) */
-    padding: '11px 13px',                       /* 14/16 → 11/13 (más denso) */
+    border: '1px solid var(--lp-border-subtle)',
+    padding: isDesktop ? '15px 16px' : '14px 15px',
     cursor: clickable ? 'pointer' : 'default',
     transition: 'transform .12s, box-shadow .12s, border-color .12s',
     fontFamily: 'var(--lp-font-sans)',
-    textAlign: 'left', width: '100%', minHeight: 78,
-    display: 'flex', flexDirection: 'column', gap: 2,
+    textAlign: 'left', width: '100%', minHeight: 44,
+    display: 'flex', flexDirection: 'column', gap: 4,
   }),
   kpiLabel: {
-    fontSize: 11, fontWeight: 700,
-    color: 'var(--lp-text-tertiary)',
-    textTransform: 'uppercase', letterSpacing: '.05em',
+    fontSize: 11, fontWeight: 600, color: 'var(--lp-text-tertiary)',
+    textTransform: 'uppercase', letterSpacing: '.04em',
+    display: 'flex', alignItems: 'center', gap: 6,
   },
+  kpiDot: (c) => ({ width: 7, height: 7, borderRadius: 999, background: c, flexShrink: 0, display: 'inline-block' }),
   kpiValue: {
-    fontSize: 20, fontWeight: 800, marginTop: 2,
+    fontSize: 22, fontWeight: 700, marginTop: 2,
     color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)',
-    lineHeight: 1.1,
+    lineHeight: 1.1, display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap',
   },
-  kpiSub: {
-    fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 'auto', paddingTop: 3, lineHeight: 1.3,
-  },
+  kpiSub: { fontSize: 11.5, color: 'var(--lp-text-secondary)', marginTop: 2, lineHeight: 1.3 },
   trend: (positivo) => ({
-    fontSize: 11, fontWeight: 700, padding: '1px 5px', borderRadius: 4,
-    background: positivo ? 'var(--lp-success-100)' : 'var(--lp-danger-100)',
+    fontSize: 12, fontWeight: 700,
     color: positivo ? 'var(--lp-success-700)' : 'var(--lp-danger-700)',
-    marginLeft: 5,
+    fontFamily: 'var(--lp-font-mono)',
   }),
-  /* === Top productos del mes === */
-  topPanel: {
+
+  /* ── Requiere tu atención (escritorio: g3 cards borde-left) ── */
+  atnGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12,
+  },
+  atnCard: (accent) => ({
     background: 'var(--lp-bg-raised)',
-    border: '1.5px solid var(--lp-border-subtle)',
+    border: '1px solid var(--lp-border-subtle)',
+    borderLeft: `3px solid ${accent}`,
+    borderRadius: 'var(--lp-radius)',
+    padding: '14px 16px',
+    cursor: 'pointer', width: '100%', textAlign: 'left',
+    fontFamily: 'var(--lp-font-sans)',
+    transition: 'transform .12s, box-shadow .12s',
+    display: 'flex', flexDirection: 'column', gap: 4, minHeight: 44,
+  }),
+  atnHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  atnTitle: { fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary)' },
+  atnDesc: { fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.45 },
+  atnItems: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 2, fontFamily: 'var(--lp-font-mono)' },
+  atnBadge: (c) => ({
+    fontSize: 11, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
+    background: tint(c), color: c, fontFamily: 'var(--lp-font-mono)', flexShrink: 0,
+  }),
+
+  /* ── Requiere tu atención (móvil: card hero del más prioritario) ── */
+  atnHero: (accent) => ({
+    background: 'var(--lp-bg-raised)',
+    border: '1px solid var(--lp-border-subtle)',
+    borderLeft: `3px solid ${accent}`,
+    borderRadius: 'var(--lp-radius-lg)',
+    padding: '15px 16px',
+    cursor: 'pointer', width: '100%', textAlign: 'left',
+    fontFamily: 'var(--lp-font-sans)', display: 'flex', flexDirection: 'column', gap: 4,
+  }),
+  atnHeroTitle: { fontSize: 16, fontWeight: 600, color: 'var(--lp-text-primary)' },
+  atnHeroDesc: { fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.4 },
+  atnHeroBtn: {
+    marginTop: 12, height: 46, width: '100%',
+    borderRadius: 12, border: 'none', cursor: 'pointer',
+    background: 'var(--lp-brand-600)', color: '#fff',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+
+  /* ── Pendientes (móvil: lista lrow dentro de una card) ── */
+  listCard: {
+    background: 'var(--lp-bg-raised)',
+    border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 'var(--lp-radius-lg)',
+    padding: '2px 15px',
+  },
+  lrow: (last) => ({
+    display: 'flex', alignItems: 'center', gap: 12,
+    padding: '13px 0',
+    borderBottom: last ? 'none' : '1px solid var(--lp-border-subtle)',
+    background: 'none', width: '100%', textAlign: 'left', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', border: 'none',
+    minHeight: 44,
+  }),
+  lrowIc: (c) => ({
+    width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+    background: tint(c), color: c,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  }),
+  lrowNm: { flex: 1, minWidth: 0 },
+  lrowT: { fontSize: 14, fontWeight: 500, color: 'var(--lp-text-primary)' },
+  lrowS: {
+    fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 1,
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
+  lrowCt: (c) => ({ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 14, color: c }),
+
+  /* ── Tira de foco del rol ── */
+  focoStrip: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '10px 13px',
+    background: 'var(--lp-bg-sunken)',
+    border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 'var(--lp-radius)',
+    fontSize: 13, color: 'var(--lp-text-secondary)',
+    marginBottom: 16, lineHeight: 1.4,
+    cursor: 'pointer', textAlign: 'left', width: '100%',
+    fontFamily: 'var(--lp-font-sans)',
+  },
+  focoIcon: {
+    width: 30, height: 30, borderRadius: 9,
+    background: 'var(--lp-brand-50)', color: 'var(--lp-brand-600)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  focoTxt: { flex: 1, minWidth: 0 },
+  focoStrong: { color: 'var(--lp-text-primary)', fontWeight: 600 },
+
+  /* === Top productos del mes === */
+  panel: {
+    background: 'var(--lp-bg-raised)',
+    border: '1px solid var(--lp-border-subtle)',
     borderRadius: 'var(--lp-radius)',
     padding: '14px 16px',
   },
-  topRow: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '7px 0',
-    fontSize: 12,
-  },
+  topRow: { display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', fontSize: 12.5 },
   topRank: {
     width: 22, height: 22, borderRadius: '50%',
     background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)',
-    fontSize: 10, fontWeight: 800,
+    fontSize: 10, fontWeight: 700,
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     flexShrink: 0, fontFamily: 'var(--lp-font-mono)',
   },
   topName: {
-    flex: 1, fontWeight: 600, color: 'var(--lp-text-primary)',
+    flex: 1, fontWeight: 500, color: 'var(--lp-text-primary)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
   topBarWrap: {
-    width: 140, height: 6,
-    background: 'var(--lp-bg-sunken)', borderRadius: 3, overflow: 'hidden',
-    flexShrink: 0,
+    width: 140, height: 6, background: 'var(--lp-bg-sunken)',
+    borderRadius: 3, overflow: 'hidden', flexShrink: 0,
   },
   topBar: (pct, color) => ({
-    height: '100%',
-    width: Math.max(2, pct) + '%',
-    background: color,
-    borderRadius: 3,
-    transition: 'width .3s',
+    height: '100%', width: Math.max(2, pct) + '%', background: color,
+    borderRadius: 3, transition: 'width .3s',
   }),
   topVal: {
-    fontFamily: 'var(--lp-font-mono)',
-    fontWeight: 700, fontSize: 12,
-    color: 'var(--lp-text-primary)',
-    minWidth: 50, textAlign: 'right',
+    fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 12.5,
+    color: 'var(--lp-text-primary)', minWidth: 50, textAlign: 'right',
   },
-  topSub: {
-    fontSize: 11, color: 'var(--lp-text-tertiary)',
-    marginTop: 2,
-  },
+  topSub: { fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 },
 
   /* === Sparkline 12 meses === */
-  trendPanel: {
-    background: 'var(--lp-bg-raised)',
-    border: '1.5px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius)',
-    padding: '14px 16px',
-  },
-  sparkRow: {
-    display: 'flex', alignItems: 'flex-end',
-    gap: 4, height: 80, marginTop: 4,
-  },
+  sparkRow: { display: 'flex', alignItems: 'flex-end', gap: 5, height: 110, marginTop: 4 },
   sparkBar: (pct, isCurrent) => ({
     flex: 1, height: Math.max(4, pct) + '%',
-    /* Mes actual en púrpura (igual que producción), histórico en teal suave */
-    background: isCurrent ? '#7C3AED' : '#5DCAA5',
-    opacity: isCurrent ? 1 : 0.55,
-    borderRadius: '3px 3px 0 0',
-    transition: 'opacity .15s',
-    cursor: 'pointer',
+    background: isCurrent ? 'var(--lp-brand-600)' : 'color-mix(in srgb, var(--lp-brand-600) 30%, var(--lp-bg-sunken))',
+    borderRadius: '5px 5px 0 0',
+    transition: 'opacity .15s', cursor: 'pointer',
   }),
-  sparkMonths: {
-    display: 'flex', justifyContent: 'space-between',
-    marginTop: 6, fontFamily: 'var(--lp-font-mono)',
-  },
+  sparkMonths: { display: 'flex', justifyContent: 'space-between', marginTop: 6, fontFamily: 'var(--lp-font-mono)' },
   sparkMonth: (isCurrent) => ({
-    flex: 1, textAlign: 'center',
-    fontSize: 11,
-    color: isCurrent ? '#534AB7' : 'var(--lp-text-tertiary)',
+    flex: 1, textAlign: 'center', fontSize: 11,
+    color: isCurrent ? 'var(--lp-brand-600)' : 'var(--lp-text-tertiary)',
     fontWeight: isCurrent ? 700 : 500,
   }),
   trendStats: {
     display: 'flex', justifyContent: 'space-between',
     marginTop: 14, paddingTop: 12,
     borderTop: '1px solid var(--lp-border-subtle)',
-    fontSize: 11, gap: 12, flexWrap: 'wrap',
+    fontSize: 11.5, gap: 12, flexWrap: 'wrap',
   },
   trendStat: { color: 'var(--lp-text-tertiary)' },
   trendStatVal: { color: 'var(--lp-text-primary)', fontWeight: 700, fontFamily: 'var(--lp-font-mono)' },
 
-  /* Layout 2 columnas para opción 2 + 3 */
-  bottomGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr',
-    gap: 12,
-    marginTop: 6,
-  },
-
-  /* Hero banner — pendiente prioritario destacado */
-  hero: {
-    background: 'linear-gradient(135deg, #FFFBEB 0%, #FEF3C7 100%)',
-    border: '1.5px solid #FCD34D',
-    borderRadius: 12,
-    padding: '14px 16px',
-    display: 'flex', alignItems: 'center', gap: 14,
-    marginBottom: 14,
-    cursor: 'pointer',
-    transition: 'transform .12s, box-shadow .12s',
-    fontFamily: 'var(--lp-font-sans)',
-    textAlign: 'left', width: '100%',
-  },
-  heroIcon: {
-    width: 42, height: 42, borderRadius: 10, background: 'var(--lp-bg-raised)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  heroText: { flex: 1, minWidth: 0 },
-  heroTitle: { fontSize: 13, fontWeight: 700, color: '#92400E' },
-  heroMeta: { fontSize: 11, color: '#A16207', marginTop: 2 },
-  heroBadge: {
-    background: '#D97706', color: '#fff', padding: '8px 14px', borderRadius: 8,
-    fontSize: 12, fontWeight: 700, flexShrink: 0,
-    fontFamily: 'inherit', border: 'none',
-  },
-  loading: { textAlign: 'center', padding: '40px 0', color: 'var(--lp-text-tertiary)' },
+  /* Estados */
+  loading: { textAlign: 'center', padding: '40px 0', color: 'var(--lp-text-tertiary)', fontSize: 13 },
   err: {
     background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)',
-    padding: 10, borderRadius: 'var(--lp-radius-sm)', fontSize: 12, marginBottom: 12,
+    padding: 12, borderRadius: 'var(--lp-radius-sm)', fontSize: 13, marginBottom: 12,
   },
-  /* Pendientes por rol (sección B) */
-  pendList: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-    gap: 10,
-  },
-  pendCard: (accent) => ({
-    background: 'var(--lp-bg-raised)',
-    border: '1.5px solid var(--lp-border-subtle)',
-    borderLeft: `3px solid ${accent}`,
-    borderRadius: 'var(--lp-radius)',
-    padding: 14,
-    cursor: 'pointer',
-    width: '100%',
-    textAlign: 'left',
-    fontFamily: 'var(--lp-font-sans)',
-    transition: 'transform .12s, box-shadow .12s',
-  }),
-  pendHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  pendTitle: { fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' },
-  pendCount: (color) => ({
-    fontSize: 11, fontWeight: 800, padding: '2px 8px',
-    borderRadius: 12, color: '#fff', background: color, fontFamily: 'var(--lp-font-mono)',
-  }),
-  pendDesc: { fontSize: 11, color: 'var(--lp-text-secondary)', lineHeight: 1.5 },
-  pendItems: { fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 6, lineHeight: 1.6 },
   empty: {
     background: 'var(--lp-bg-raised)',
-    border: '1.5px dashed var(--lp-border-subtle)',
+    border: '1px dashed var(--lp-border-default)',
     borderRadius: 'var(--lp-radius)',
-    padding: 20,
-    textAlign: 'center',
-    fontSize: 13,
-    color: 'var(--lp-text-tertiary)',
-    gridColumn: '1 / -1',
+    padding: 20, textAlign: 'center', fontSize: 13,
+    color: 'var(--lp-text-tertiary)', marginBottom: 18,
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
   },
-  /* ── Z1 (jun 2026): tira de enfoque del rol ───────────────────────── */
-  focoStrip: {
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '8px 12px',
-    background: 'var(--lp-bg-sunken)',
-    border: '1px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius-sm)',
-    fontSize: 12, color: 'var(--lp-text-secondary)',
-    marginBottom: 12, lineHeight: 1.4,
-  },
-  focoIcon: {
-    width: 28, height: 28, borderRadius: 8,
-    background: 'var(--lp-brand-50)', color: 'var(--lp-brand-600)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  focoTxt: { flex: 1, minWidth: 0 },
-  focoStrong: { color: 'var(--lp-text-primary)', fontWeight: 700 },
-
-  /* ── Bloques visuales agrupando pendientes por área de flujo ─────── */
-  bloque: {
-    marginBottom: 12,
-  },
-  bloqueHead: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    fontSize: 10, fontWeight: 800, color: 'var(--lp-text-tertiary)',
-    textTransform: 'uppercase', letterSpacing: '.08em',
-    margin: '0 0 6px 2px',
-  },
-  bloqueIcon: {
-    width: 14, height: 14, color: 'var(--lp-text-tertiary)',
-  },
-  /* Verde celebratorio sutil para "todo al día" */
-  okBadge: {
-    display: 'inline-flex', alignItems: 'center', gap: 6,
-    color: 'var(--lp-success-700)', fontWeight: 700,
-  },
-  okIcon: {
-    width: 18, height: 18,
-    color: 'var(--lp-success-600)',
-  },
+  okBadge: { display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--lp-success-700)', fontWeight: 600 },
+  okIcon: { width: 18, height: 18, color: 'var(--lp-success-600)' },
 };
 
 const fmt$ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
 const fmt$2 = (n) => '$' + Number(n || 0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/* Iconos line (SVG) por tipo de pendiente — sin emojis */
+const ICONS = {
+  pedidos: <><path d="M9 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-4" /><rect x="9" y="2" width="6" height="4" rx="1" /><path d="M9 14h6" /></>,
+  ordenes: <><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6M16 13H8M16 17H8" /></>,
+  qc: <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>,
+  'qc-hold': <><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></>,
+  envasado: <><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></>,
+  recoleccion: <><rect x="1" y="3" width="15" height="13" /><polygon points="16 8 20 8 23 11 23 16 16 16 16 8" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" /></>,
+  almacen: <><path d="M16 16l2 2 4-4" /><path d="M21 14V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l1-.6" /><path d="M3.3 7 12 12l8.7-5" /></>,
+  'oc-vencidas': <><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2 3h2l2.6 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 7H5" /></>,
+  'ocs-por-aprobar': <><circle cx="8" cy="21" r="1" /><circle cx="19" cy="21" r="1" /><path d="M2 3h2l2.6 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 7H5" /></>,
+  'dev-recibir': <><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></>,
+  'dev-reembolsar': <><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 102.13-9.36L1 10" /></>,
+  'conteos-vencidos': <><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></>,
+};
+const CardIcon = ({ id, color }) => (
+  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {ICONS[id] || ICONS.pedidos}
+  </svg>
+);
 
 /* FIX jun 2026 (K4): import del módulo canónico de estados. Antes los
    arrays estaban hardcoded con valores desalineados — PEND_PEDIDOS usaba
@@ -274,6 +296,7 @@ import {
 export default function DashboardPage() {
   const { user, can } = useAuth();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -371,7 +394,8 @@ export default function DashboardPage() {
       + (arr.length > n ? ` · +${arr.length - n}` : '');
   };
 
-  /* Tarjetas de pendientes — se filtran por permisos del rol */
+  /* Tarjetas de pendientes — se filtran por permisos del rol.
+     accent = solo tokens LP (var(--lp-*)). */
   const cards = [
     can('crearPedidos') || can('admin') ? {
       key: 'pedidos',
@@ -379,8 +403,7 @@ export default function DashboardPage() {
       desc: 'Pedidos de almacén esperando a Enrique para crear orden',
       count: tareas.pedidosPendientes.length,
       items: muestraNombres(tareas.pedidosPendientes, 'codigo'),
-      accent: 'var(--lp-info-600)',
-      pillColor: 'var(--lp-info-600)',
+      accent: ACC.info,
       ruta: '/pedidos',
     } : null,
     can('admin') || can('tecnico') ? {
@@ -389,8 +412,7 @@ export default function DashboardPage() {
       desc: 'Producción asignada que aún no se cierra',
       count: tareas.ordenesPendientes.length,
       items: muestraNombres(tareas.ordenesPendientes, 'codigo'),
-      accent: 'var(--lp-warning-600)',
-      pillColor: 'var(--lp-warning-600)',
+      accent: ACC.amber,
       ruta: '/ordenes',
     } : null,
     can('registrarQC') || can('admin') ? {
@@ -399,8 +421,7 @@ export default function DashboardPage() {
       desc: 'Lotes producidos esperando revisión de calidad',
       count: tareas.lotesProducidos.length,
       items: muestraNombres(tareas.lotesProducidos),
-      accent: 'var(--lp-warning-700)',
-      pillColor: 'var(--lp-warning-700)',
+      accent: ACC.amberHi,
       ruta: '/produccion',
     } : null,
     (can('admin') || can('tecnico')) && tareas.lotesQC.length > 0 ? {
@@ -409,8 +430,7 @@ export default function DashboardPage() {
       desc: 'Lotes con problemas de calidad que requieren retrabajo',
       count: tareas.lotesQC.length,
       items: muestraNombres(tareas.lotesQC),
-      accent: 'var(--lp-danger-600)',
-      pillColor: 'var(--lp-danger-600)',
+      accent: ACC.crit,
       ruta: '/produccion',
     } : null,
     can('admin') || can('tecnico') || can('almacen') ? {
@@ -419,8 +439,7 @@ export default function DashboardPage() {
       desc: 'Lotes aprobados de QC, listos para envasar',
       count: tareas.lotesEnvasado.length,
       items: muestraNombres(tareas.lotesEnvasado),
-      accent: 'var(--lp-brand-600)',
-      pillColor: 'var(--lp-brand-600)',
+      accent: ACC.brand,
       ruta: '/stock-fabrica',
     } : null,
     can('admin') || can('almacen') || can('recolector') ? {
@@ -429,8 +448,7 @@ export default function DashboardPage() {
       desc: 'Lotes envasados esperando a Luis',
       count: tareas.lotesRecoleccion.length,
       items: muestraNombres(tareas.lotesRecoleccion),
-      accent: 'var(--lp-success-600)',
-      pillColor: 'var(--lp-success-600)',
+      accent: ACC.ok,
       ruta: '/recoleccion',
     } : null,
     can('admin') || can('almacen') ? {
@@ -439,8 +457,7 @@ export default function DashboardPage() {
       desc: 'Luis ya escaneó, esperando confirmación de recepción',
       count: tareas.lotesEnCamino.length,
       items: muestraNombres(tareas.lotesEnCamino),
-      accent: 'var(--lp-info-700)',
-      pillColor: 'var(--lp-info-700)',
+      accent: ACC.info,
       ruta: '/almacen',
     } : null,
     can('admin') || can('compras') ? {
@@ -449,8 +466,7 @@ export default function DashboardPage() {
       desc: 'Órdenes de compra que pasaron fecha de entrega',
       count: tareas.ocsVencidas.length,
       items: muestraNombres(tareas.ocsVencidas, 'codigo'),
-      accent: 'var(--lp-danger-700)',
-      pillColor: 'var(--lp-danger-700)',
+      accent: ACC.critHi,
       ruta: '/compras',
     } : null,
     /* FIX jun 2026 (L5): card específica de Arely — OCs nuevas pendientes
@@ -462,8 +478,7 @@ export default function DashboardPage() {
       desc: 'Solicitudes de Enrique pendientes de asignar proveedor/precio',
       count: tareas.ocsPorAprobar.length,
       items: muestraNombres(tareas.ocsPorAprobar, 'codigo'),
-      accent: 'var(--lp-warning-600)',
-      pillColor: 'var(--lp-warning-600)',
+      accent: ACC.amber,
       ruta: '/compras',
     } : null,
     /* FIX jun 2026 (L5): card para técnico — devoluciones físicas pendientes de recibir */
@@ -473,8 +488,7 @@ export default function DashboardPage() {
       desc: 'Producto devuelto por cliente esperando inspección en fábrica',
       count: tareas.devsPendRecibir.length,
       items: muestraNombres(tareas.devsPendRecibir, 'id'),
-      accent: 'var(--lp-info-700)',
-      pillColor: 'var(--lp-info-700)',
+      accent: ACC.info,
       ruta: '/devoluciones',
     } : null,
     /* FIX jun 2026 (L5 + Sprint I G5): card para Arely — devoluciones que
@@ -485,8 +499,7 @@ export default function DashboardPage() {
       desc: 'Devoluciones regresadas a stock que necesitan nota de crédito',
       count: tareas.devsPorReembolsar.length,
       items: muestraNombres(tareas.devsPorReembolsar, 'cliente'),
-      accent: 'var(--lp-warning-700)',
-      pillColor: 'var(--lp-warning-700)',
+      accent: ACC.amberHi,
       ruta: '/devoluciones',
     } : null,
     /* FIX jun 2026 (L5): card específica de Burgos — conteos vencidos.
@@ -498,31 +511,10 @@ export default function DashboardPage() {
       desc: 'MPs/PT que el calendario indica contar ya y no se hicieron',
       count: tareas.conteosVencidos.length,
       items: muestraNombres(tareas.conteosVencidos, 'item') || muestraNombres(tareas.conteosVencidos, 'nombre'),
-      accent: 'var(--lp-danger-600)',
-      pillColor: 'var(--lp-danger-600)',
+      accent: ACC.crit,
       ruta: '/conteo',
     } : null,
   ].filter(Boolean);
-
-  /* Z1 (jun 2026): clasificación por área de flujo para agrupar cards visualmente.
-     Cada key de card se asigna a un área. Las áreas se renderizan en orden de
-     relevancia: producción primero (pedidos→QC→envasar), luego logística
-     (recolectar→en camino), luego compras, luego operación cross-rol. */
-  const AREA_DE_CARD = {
-    pedidos:           { area: 'produccion',  label: 'Producción' },
-    ordenes:           { area: 'produccion',  label: 'Producción' },
-    qc:                { area: 'produccion',  label: 'Producción' },
-    'qc-hold':         { area: 'produccion',  label: 'Producción' },
-    envasado:          { area: 'produccion',  label: 'Producción' },
-    recoleccion:       { area: 'logistica',   label: 'Logística' },
-    almacen:           { area: 'logistica',   label: 'Logística' },
-    'oc-vencidas':     { area: 'compras',     label: 'Compras' },
-    'ocs-por-aprobar': { area: 'compras',     label: 'Compras' },
-    'dev-recibir':     { area: 'operacion',   label: 'Operación' },
-    'dev-reembolsar':  { area: 'compras',     label: 'Compras' },
-    'conteos-vencidos':{ area: 'operacion',   label: 'Operación' },
-  };
-  const ORDEN_AREAS = ['produccion', 'logistica', 'compras', 'operacion'];
 
   /* Foco del rol: hint corto sobre qué priorizar hoy. Independiente
      de los pendientes — es un atajo mental para roles operativos. */
@@ -541,8 +533,8 @@ export default function DashboardPage() {
   if (err && !data) {
     return (
       <div>
-        <TopBar title="Dashboard" />
-        <div style={S.wrap}>
+        <TopBar title="Inicio" />
+        <div style={S.wrap(isDesktop)}>
           <div style={S.err}>{err}</div>
         </div>
       </div>
@@ -555,12 +547,29 @@ export default function DashboardPage() {
 
   const cardsConCount = cards.filter(c => c.count > 0);
 
+  /* Hover helpers (reskin: elevación sutil con sombra LP) */
+  const hoverIn = (e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--lp-shadow-md)'; };
+  const hoverOut = (e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; };
+
+  /* ── KPI reutilizable ── */
+  const Kpi = ({ accent, onClick, label, value, valueColor, trend, trendPos, sub }) => (
+    <button style={S.kpi(accent, !!onClick, isDesktop)} onClick={onClick} onMouseEnter={onClick ? hoverIn : undefined} onMouseLeave={onClick ? hoverOut : undefined}>
+      <div style={S.kpiLabel}><span style={S.kpiDot(accent)} />{label}</div>
+      <div style={{ ...S.kpiValue, ...(valueColor ? { color: valueColor } : {}) }}>
+        {value}
+        {trend != null && <span style={S.trend(trendPos)}>{trend}</span>}
+      </div>
+      {sub != null && <div style={S.kpiSub}>{sub}</div>}
+    </button>
+  );
+
   return (
     <div>
-      <TopBar title="Dashboard" />
-      <div style={S.wrap}>
+      <TopBar title="Inicio" />
+      <div style={S.wrap(isDesktop)}>
+        {/* Saludo (estilo head() del mockup) */}
         <div style={S.greeting}>
-          <div style={S.greetH}>{saludo}, {user?.nombre || ''}</div>
+          <div style={S.greetH(isDesktop)}>{saludo}, {user?.nombre || ''}</div>
           <div style={S.greetSub}>
             {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
           </div>
@@ -574,107 +583,86 @@ export default function DashboardPage() {
               Este es tu tablero. Arriba ves <strong>tareas pendientes para tu rol</strong>: solo te muestra lo que tú puedes accionar. Abajo, los <strong>KPIs cruzados</strong> de toda la operación. Haz click en cualquier tarjeta para ir al detalle.
             </HelpHint>
 
-            {/* Z1 (jun 2026): Tira de foco — hint corto del rol */}
+            {/* Tira de foco — hint corto del rol */}
             {focoDelRol && (
-              <button
-                type="button"
-                onClick={() => navigate(focoDelRol.ruta)}
-                style={{ ...S.focoStrip, border: '1px solid var(--lp-border-subtle)', cursor: 'pointer', textAlign: 'left', width: '100%', fontFamily: 'inherit' }}
-              >
-                <div style={S.focoIcon}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <polyline points="12 6 12 12 16 14"/>
+              <button type="button" onClick={() => navigate(focoDelRol.ruta)} style={S.focoStrip}>
+                <span style={S.focoIcon}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
                   </svg>
-                </div>
-                <div style={S.focoTxt}>
+                </span>
+                <span style={S.focoTxt}>
                   <span style={S.focoStrong}>Tu enfoque: </span>{focoDelRol.txt}
-                </div>
+                </span>
               </button>
             )}
 
-            {/* ════════ Sección 1 — Pendientes para tu rol ════════
-                Hero del más prioritario + cards agrupadas por área de flujo
-                (producción / logística / compras / operación). La agrupación
-                hace más legible cuando hay 5+ pendientes mezclados. */}
+            {/* ════════ Sección 1 — Requiere tu atención ════════
+                Escritorio: grid g3 de cards con borde-left de color.
+                Móvil: card hero del más prioritario + lista de pendientes. */}
             {cardsConCount.length > 0 && (
               <div style={S.section}>
-                <div style={S.sectionTitle}>Pendientes para tu rol</div>
-                {/* Hero banner para el pendiente más prioritario */}
-                {(() => {
-                  const hero = cardsConCount[0];
-                  return (
-                    <button
-                      style={S.hero}
-                      onClick={() => navigate(hero.ruta)}
-                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 14px rgba(217,119,6,.18)'; }}
-                      onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-                    >
-                      <div style={S.heroIcon}>
-                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#D97706" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                        </svg>
-                      </div>
-                      <div style={S.heroText}>
-                        <div style={S.heroTitle}>{hero.count} {hero.titulo.toLowerCase()}</div>
-                        <div style={S.heroMeta}>{hero.desc}{hero.items ? ' · ' + hero.items : ''}</div>
-                      </div>
-                      <span style={S.heroBadge}>Atender →</span>
-                    </button>
-                  );
-                })()}
-                {/* Cards restantes agrupadas por área de flujo */}
-                {cardsConCount.length > 1 && (() => {
-                  const restantes = cardsConCount.slice(1);
-                  const porArea = {};
-                  restantes.forEach(c => {
-                    const meta = AREA_DE_CARD[c.key] || { area: 'operacion', label: 'Operación' };
-                    if (!porArea[meta.area]) porArea[meta.area] = { label: meta.label, cards: [] };
-                    porArea[meta.area].cards.push(c);
-                  });
-                  return ORDEN_AREAS.filter(a => porArea[a]).map(areaKey => (
-                    <div key={areaKey} style={S.bloque}>
-                      <div style={S.bloqueHead}>
-                        <svg style={S.bloqueIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <circle cx="12" cy="12" r="2"/>
-                          <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
-                        </svg>
-                        {porArea[areaKey].label}
-                      </div>
-                      <div style={S.pendList}>
-                        {porArea[areaKey].cards.map(c => (
-                          <button
-                            key={c.key}
-                            style={S.pendCard(c.accent)}
-                            onClick={() => navigate(c.ruta)}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.transform = 'translateY(-2px)';
-                              e.currentTarget.style.boxShadow = '0 4px 14px rgba(26,24,21,.06)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.transform = '';
-                              e.currentTarget.style.boxShadow = '';
-                            }}
-                          >
-                            <div style={S.pendHead}>
-                              <div style={S.pendTitle}>{c.titulo}</div>
-                              <div style={S.pendCount(c.pillColor)}>{c.count}</div>
-                            </div>
-                            <div style={S.pendDesc}>{c.desc}</div>
-                            {c.items && <div style={S.pendItems}>{c.items}</div>}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ));
-                })()}
+                <div style={S.sectionTitle}>Requiere tu atención</div>
+
+                {isDesktop ? (
+                  /* ── Escritorio: g3 cards (mockup SCREENS.inicio "atn") ── */
+                  <div style={S.atnGrid}>
+                    {cardsConCount.map(c => (
+                      <button key={c.key} style={S.atnCard(c.accent)} onClick={() => navigate(c.ruta)} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+                        <div style={S.atnHead}>
+                          <div style={S.atnTitle}>{c.count} {c.titulo.toLowerCase()}</div>
+                          <span style={S.atnBadge(c.accent)}>{c.count}</span>
+                        </div>
+                        <div style={S.atnDesc}>{c.desc}</div>
+                        {c.items && <div style={S.atnItems}>{c.items}</div>}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  /* ── Móvil: hero del primero + lista lrow del resto ── */
+                  <>
+                    {(() => {
+                      const hero = cardsConCount[0];
+                      return (
+                        <button style={S.atnHero(hero.accent)} onClick={() => navigate(hero.ruta)}>
+                          <div style={S.atnHeroTitle}>{hero.count} {hero.titulo.toLowerCase()}</div>
+                          <div style={S.atnHeroDesc}>{hero.desc}{hero.items ? ' · ' + hero.items : ''}</div>
+                          <span style={S.atnHeroBtn}>
+                            Atender
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+                            </svg>
+                          </span>
+                        </button>
+                      );
+                    })()}
+
+                    {cardsConCount.length > 1 && (
+                      <>
+                        <div style={{ ...S.sectionTitle, marginTop: 18 }}>Pendientes</div>
+                        <div style={S.listCard}>
+                          {cardsConCount.slice(1).map((c, i, arr) => (
+                            <button key={c.key} style={S.lrow(i === arr.length - 1)} onClick={() => navigate(c.ruta)}>
+                              <span style={S.lrowIc(c.accent)}><CardIcon id={c.key} color={c.accent} /></span>
+                              <span style={S.lrowNm}>
+                                <span style={S.lrowT}>{c.titulo}</span>
+                                {c.items && <span style={{ ...S.lrowS, display: 'block' }}>{c.items}</span>}
+                              </span>
+                              <span style={S.lrowCt(c.accent)}>{c.count}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </>
+                )}
               </div>
             )}
             {cardsConCount.length === 0 && cards.length > 0 && (
-              <div style={{ ...S.empty, marginBottom: 14 }}>
+              <div style={S.empty}>
                 <span style={S.okBadge}>
                   <svg style={S.okIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
+                    <polyline points="20 6 9 17 4 12" />
                   </svg>
                   Todo al día — sin pendientes para tu rol
                 </span>
@@ -703,9 +691,7 @@ export default function DashboardPage() {
 
               return (
                 <>
-                  {/* Sprint H (jun 2026): Pipeline de lotes activos para almacen+recolector.
-                     Josué y Luis ven los lotes con su status timeline desde que Enrique los
-                     acepta, no solo cuando ya están en su pantalla. Realtime sync vía WS. */}
+                  {/* Pipeline de lotes activos para almacen+recolector. */}
                   {(user?.rol === 'almacen' || user?.rol === 'recolector') && (
                     <MisLotesPipeline rol={user.rol} />
                   )}
@@ -714,77 +700,64 @@ export default function DashboardPage() {
                   {verSeccionHoy && (
                     <div style={S.section}>
                       <div style={S.sectionTitle}>Hoy en la planta</div>
-                      <div style={S.grid}>
+                      <div style={S.grid(isDesktop)}>
                         {verProduccion && (
-                          <button style={S.kpi('#7C3AED', true)} onClick={() => navigate('/produccion')}>
-                            <div style={S.kpiLabel}>Cubetas/mes</div>
-                            <div style={S.kpiValue}>
-                              {(d.produccion.promMensual || 0).toLocaleString()}
-                              {d.produccion.growthPct != null && d.produccion.growthPct !== 0 && (
-                                <span style={S.trend(d.produccion.growthPct > 0)}>
-                                  {d.produccion.growthPct > 0 ? '+' : ''}{d.produccion.growthPct}%
-                                </span>
-                              )}
-                            </div>
-                            <div style={S.kpiSub}>Promedio últimos 6 meses</div>
-                          </button>
+                          <Kpi
+                            accent={ACC.brand}
+                            onClick={() => navigate('/produccion')}
+                            label="Cubetas / mes"
+                            value={(d.produccion.promMensual || 0).toLocaleString()}
+                            trend={d.produccion.growthPct != null && d.produccion.growthPct !== 0
+                              ? `${d.produccion.growthPct > 0 ? '+' : ''}${d.produccion.growthPct}%` : null}
+                            trendPos={d.produccion.growthPct > 0}
+                            sub="Promedio últimos 6 meses"
+                          />
                         )}
                         {verTrazab && (
-                          <button style={S.kpi('#7C3AED', true)} onClick={() => navigate('/trazabilidad')}>
-                            <div style={S.kpiLabel}>Lotes en flujo</div>
-                            <div style={S.kpiValue}>{(d.trazabilidad.lotesEnEnvasado || 0) + (d.trazabilidad.lotesEnCamino || 0)}</div>
-                            <div style={S.kpiSub}>
-                              {d.trazabilidad.lotesEnEnvasado || 0} envasando · {d.trazabilidad.lotesEnCamino || 0} en camino
-                            </div>
-                          </button>
+                          <Kpi
+                            accent={ACC.info}
+                            onClick={() => navigate('/trazabilidad')}
+                            label="Lotes en flujo"
+                            value={(d.trazabilidad.lotesEnEnvasado || 0) + (d.trazabilidad.lotesEnCamino || 0)}
+                            sub={`${d.trazabilidad.lotesEnEnvasado || 0} envasando · ${d.trazabilidad.lotesEnCamino || 0} en camino`}
+                          />
                         )}
                         {verInventario && (
                           <>
-                            <button style={S.kpi('#0F6E56', true)} onClick={() => navigate('/inventario?tab=mp')}>
-                              <div style={S.kpiLabel}>Valor inventario MP</div>
-                              <div style={S.kpiValue}>{fmt$(d.inventario.valorMP || 0)}</div>
-                              <div style={S.kpiSub}>
-                                {d.inventario.mpsTotales || 0} MPs · {d.inventario.ptsTotales || 0} PTs
-                              </div>
-                            </button>
-                            <button
-                              style={S.kpi(d.inventario.mpsCriticas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-border-subtle)', true)}
+                            <Kpi
+                              accent={ACC.brand}
+                              onClick={() => navigate('/inventario?tab=mp')}
+                              label="Valor inventario MP"
+                              value={fmt$(d.inventario.valorMP || 0)}
+                              sub={`${d.inventario.mpsTotales || 0} MPs · ${d.inventario.ptsTotales || 0} PTs`}
+                            />
+                            <Kpi
+                              accent={d.inventario.mpsCriticas > 0 ? ACC.crit : ACC.mut}
                               onClick={() => navigate('/inventario?tab=mp&filter=sin')}
-                              title="Ver MPs sin existencia"
-                            >
-                              <div style={S.kpiLabel}>Stock crítico</div>
-                              <div style={{
-                                ...S.kpiValue,
-                                color: d.inventario.mpsCriticas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)',
-                              }}>{d.inventario.mpsCriticas || 0}</div>
-                              <div style={S.kpiSub}>MPs sin existencia →</div>
-                            </button>
-                            <button
-                              style={S.kpi(d.inventario.mpsBajas > 0 ? 'var(--lp-warning-600)' : 'var(--lp-border-subtle)', true)}
+                              label="Stock crítico"
+                              value={d.inventario.mpsCriticas || 0}
+                              valueColor={d.inventario.mpsCriticas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
+                              sub="MPs sin existencia →"
+                            />
+                            <Kpi
+                              accent={d.inventario.mpsBajas > 0 ? ACC.amber : ACC.mut}
                               onClick={() => navigate('/inventario?tab=mp&filter=bajo')}
-                              title="Ver MPs por debajo del mínimo"
-                            >
-                              <div style={S.kpiLabel}>Stock bajo</div>
-                              <div style={{
-                                ...S.kpiValue,
-                                color: d.inventario.mpsBajas > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)',
-                              }}>{d.inventario.mpsBajas || 0}</div>
-                              <div style={S.kpiSub}>Por debajo del mínimo →</div>
-                            </button>
+                              label="Stock bajo"
+                              value={d.inventario.mpsBajas || 0}
+                              valueColor={d.inventario.mpsBajas > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)'}
+                              sub="Por debajo del mínimo →"
+                            />
                           </>
                         )}
                         {verDevol && (
-                          <button
-                            style={S.kpi(d.devoluciones.ult30d > 0 ? '#D85A30' : 'var(--lp-border-subtle)', true)}
+                          <Kpi
+                            accent={d.devoluciones.ult30d > 0 ? ACC.amber : ACC.mut}
                             onClick={() => navigate('/devoluciones')}
-                          >
-                            <div style={S.kpiLabel}>Devoluciones 30d</div>
-                            <div style={{
-                              ...S.kpiValue,
-                              color: d.devoluciones.ult30d > 0 ? '#993C1D' : 'var(--lp-text-tertiary)',
-                            }}>{d.devoluciones.ult30d || 0}</div>
-                            <div style={S.kpiSub}>{fmt$2(d.devoluciones.monto30d || 0)} devueltos</div>
-                          </button>
+                            label="Devoluciones 30d"
+                            value={d.devoluciones.ult30d || 0}
+                            valueColor={d.devoluciones.ult30d > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)'}
+                            sub={`${fmt$2(d.devoluciones.monto30d || 0)} devueltos`}
+                          />
                         )}
                       </div>
                     </div>
@@ -794,57 +767,52 @@ export default function DashboardPage() {
                   {verSeccionCompr && (
                     <div style={S.section}>
                       <div style={S.sectionTitle}>Compras y rentabilidad</div>
-                      <div style={S.grid}>
+                      <div style={S.grid(isDesktop)}>
                         {verCompras && (
                           <>
-                            <button style={S.kpi('#D97706', true)} onClick={() => navigate('/compras')}>
-                              <div style={S.kpiLabel}>OCs activas</div>
-                              <div style={S.kpiValue}>{d.compras.ocsActivas || 0}</div>
-                              <div style={S.kpiSub}>{fmt$(d.compras.montoPendiente || 0)} pendiente</div>
-                            </button>
-                            <button
-                              style={S.kpi(d.compras.ocsVencidas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-border-subtle)', true)}
+                            <Kpi
+                              accent={ACC.amber}
                               onClick={() => navigate('/compras')}
-                            >
-                              <div style={S.kpiLabel}>OCs vencidas</div>
-                              <div style={{
-                                ...S.kpiValue,
-                                color: d.compras.ocsVencidas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)',
-                              }}>{d.compras.ocsVencidas || 0}</div>
-                              <div style={S.kpiSub}>Pasada fecha de entrega</div>
-                            </button>
+                              label="OCs activas"
+                              value={d.compras.ocsActivas || 0}
+                              sub={`${fmt$(d.compras.montoPendiente || 0)} pendiente`}
+                            />
+                            <Kpi
+                              accent={d.compras.ocsVencidas > 0 ? ACC.crit : ACC.mut}
+                              onClick={() => navigate('/compras')}
+                              label="OCs vencidas"
+                              value={d.compras.ocsVencidas || 0}
+                              valueColor={d.compras.ocsVencidas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
+                              sub="Pasada fecha de entrega"
+                            />
                           </>
                         )}
                         {verRentab && (
                           <>
-                            <button style={S.kpi('var(--lp-success-600)', true)} onClick={() => navigate('/admin?section=margenes')}>
-                              <div style={S.kpiLabel}>Margen mensual</div>
-                              <div style={S.kpiValue}>
-                                {fmt$(d.margenes.margenMensual)}
-                                {d.margenes.margenPct > 0 && (
-                                  <span style={S.trend(true)}>{d.margenes.margenPct}%</span>
-                                )}
-                              </div>
-                              <div style={S.kpiSub}>Ingresos {fmt$(d.margenes.ingresosMensual)}</div>
-                            </button>
-                            <button style={S.kpi('var(--lp-brand-600)', true)} onClick={() => navigate('/admin?section=margenes')}>
-                              <div style={S.kpiLabel}>Con precio</div>
-                              <div style={S.kpiValue}>
-                                {d.margenes.conPrecio} <span style={{ fontSize: 13, opacity: .5 }}>/ {d.margenes.totalProductos}</span>
-                              </div>
-                              <div style={S.kpiSub}>{d.margenes.totalProductos - d.margenes.conPrecio} sin precio</div>
-                            </button>
-                            <button
-                              style={S.kpi(d.margenes.noRentables > 0 ? 'var(--lp-danger-600)' : 'var(--lp-border-subtle)', true)}
+                            <Kpi
+                              accent={ACC.ok}
                               onClick={() => navigate('/admin?section=margenes')}
-                            >
-                              <div style={S.kpiLabel}>No rentables</div>
-                              <div style={{
-                                ...S.kpiValue,
-                                color: d.margenes.noRentables > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)',
-                              }}>{d.margenes.noRentables || 0}</div>
-                              <div style={S.kpiSub}>Costo &gt; precio</div>
-                            </button>
+                              label="Margen mensual"
+                              value={fmt$(d.margenes.margenMensual)}
+                              trend={d.margenes.margenPct > 0 ? `${d.margenes.margenPct}%` : null}
+                              trendPos
+                              sub={`Ingresos ${fmt$(d.margenes.ingresosMensual)}`}
+                            />
+                            <Kpi
+                              accent={ACC.brand}
+                              onClick={() => navigate('/admin?section=margenes')}
+                              label="Con precio"
+                              value={<>{d.margenes.conPrecio} <span style={{ fontSize: 13, opacity: .5 }}>/ {d.margenes.totalProductos}</span></>}
+                              sub={`${d.margenes.totalProductos - d.margenes.conPrecio} sin precio`}
+                            />
+                            <Kpi
+                              accent={d.margenes.noRentables > 0 ? ACC.crit : ACC.mut}
+                              onClick={() => navigate('/admin?section=margenes')}
+                              label="No rentables"
+                              value={d.margenes.noRentables || 0}
+                              valueColor={d.margenes.noRentables > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
+                              sub="Costo > precio"
+                            />
                           </>
                         )}
                       </div>
@@ -855,33 +823,35 @@ export default function DashboardPage() {
                   {verSeccionTraz && (
                     <div style={S.section}>
                       <div style={S.sectionTitle}>Trazabilidad — flujo de lotes</div>
-                      <div style={S.grid}>
+                      <div style={S.grid(isDesktop)}>
                         {verQC && (
                           <>
-                            <button style={S.kpi('#D97706', true)} onClick={() => navigate('/produccion')}>
-                              <div style={S.kpiLabel}>QC pendientes</div>
-                              <div style={{
-                                ...S.kpiValue,
-                                color: (d.trazabilidad.lotesQCPendientes || 0) > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)',
-                              }}>{d.trazabilidad.lotesQCPendientes || 0}</div>
-                              <div style={S.kpiSub}>Lotes producidos esperando revisión</div>
-                            </button>
-                            <button style={S.kpi('var(--lp-danger-600)', true)} onClick={() => navigate('/trazabilidad')}>
-                              <div style={S.kpiLabel}>QC retenidos</div>
-                              <div style={{
-                                ...S.kpiValue,
-                                color: (d.trazabilidad.lotesQCHold || 0) > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)',
-                              }}>{d.trazabilidad.lotesQCHold || 0}</div>
-                              <div style={S.kpiSub}>Requieren retrabajo</div>
-                            </button>
+                            <Kpi
+                              accent={ACC.amber}
+                              onClick={() => navigate('/produccion')}
+                              label="QC pendientes"
+                              value={d.trazabilidad.lotesQCPendientes || 0}
+                              valueColor={(d.trazabilidad.lotesQCPendientes || 0) > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)'}
+                              sub="Lotes producidos esperando revisión"
+                            />
+                            <Kpi
+                              accent={ACC.crit}
+                              onClick={() => navigate('/trazabilidad')}
+                              label="QC retenidos"
+                              value={d.trazabilidad.lotesQCHold || 0}
+                              valueColor={(d.trazabilidad.lotesQCHold || 0) > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
+                              sub="Requieren retrabajo"
+                            />
                           </>
                         )}
                         {verEnCamino && (
-                          <button style={S.kpi('var(--lp-success-600)', true)} onClick={() => navigate('/almacen')}>
-                            <div style={S.kpiLabel}>En camino a almacén</div>
-                            <div style={{ ...S.kpiValue }}>{d.trazabilidad.lotesEnCamino || 0}</div>
-                            <div style={S.kpiSub}>Por confirmar recepción</div>
-                          </button>
+                          <Kpi
+                            accent={ACC.ok}
+                            onClick={() => navigate('/almacen')}
+                            label="En camino a almacén"
+                            value={d.trazabilidad.lotesEnCamino || 0}
+                            sub="Por confirmar recepción"
+                          />
                         )}
                       </div>
                     </div>
@@ -891,40 +861,37 @@ export default function DashboardPage() {
             })()}
 
             {/* ════════ Sección 3 — Top productos del mes ════════
-                Solo visible para admin/compras (mismo permiso que /api/dashboard/exec).
-                Otros roles (Enrique, Josué, Luis) no necesitan ver esto. */}
+                Solo visible para admin/compras (mismo permiso que /api/dashboard/exec). */}
             {(can('admin') || can('compras')) && (
-            <div style={S.section}>
-              <div style={S.sectionTitle}>
-                Top {Math.min(5, (d.topProductos || []).length)} productos del mes
-              </div>
-              <div style={S.topPanel}>
-                {!Array.isArray(d.topProductos) ? (
-                  <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="8" x2="12" y2="12"/>
-                      <line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
-                      Backend desactualizado
+              <div style={S.section}>
+                <div style={S.sectionTitle}>
+                  Top {Math.min(5, (d.topProductos || []).length)} productos del mes
+                </div>
+                <div style={S.panel}>
+                  {!Array.isArray(d.topProductos) ? (
+                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
+                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
+                        Backend desactualizado
+                      </div>
+                      <div style={{ lineHeight: 1.5 }}>
+                        El endpoint del dashboard aún no devuelve los datos de Top productos.<br />
+                        Reinicia el server con <code style={{ background: 'var(--lp-bg-sunken)', padding: '2px 6px', borderRadius: 4 }}>reiniciar.bat</code> y haz hard refresh.
+                      </div>
                     </div>
-                    <div style={{ lineHeight: 1.5 }}>
-                      El endpoint del dashboard aún no devuelve los datos de Top productos.<br />
-                      Reinicia el server con <code style={{ background: 'var(--lp-bg-sunken)', padding: '2px 6px', borderRadius: 4 }}>reiniciar.bat</code> y haz hard refresh.
+                  ) : d.topProductos.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
+                      Sin producción registrada en el mes más reciente.
                     </div>
-                  </div>
-                ) : d.topProductos.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                    Sin producción registrada en el mes más reciente.
-                  </div>
-                ) : (() => {
+                  ) : (() => {
                     const max = Math.max(...d.topProductos.map(p => p.cubetas), 1);
-                    /* Paleta diversa para top productos — uno por rank, fácil distinguir */
-                    const COLORES_RANK = ['#7C3AED', '#0F6E56', '#D97706', '#D85A30', '#534AB7'];
+                    /* Paleta diversa por rank — solo tokens LP del tema verde */
+                    const COLORES_RANK = [ACC.brand, ACC.ok, ACC.amber, ACC.info, ACC.amberHi];
                     return d.topProductos.map((p, i) => {
                       const pct = (p.cubetas / max) * 100;
-                      const accent = COLORES_RANK[i] || '#7C3AED';
+                      const accent = COLORES_RANK[i] || ACC.brand;
                       return (
                         <div key={p.nombre} style={S.topRow}>
                           <div style={S.topRank}>{i + 1}</div>
@@ -949,39 +916,37 @@ export default function DashboardPage() {
                       );
                     });
                   })()}
+                </div>
               </div>
-            </div>
             )}
 
             {/* ════════ Sección 4 — Producción últimos 12 meses ════════
                 Solo visible para admin/compras (mismo permiso). */}
             {(can('admin') || can('compras')) && (
-            <div style={S.section}>
-              <div style={S.sectionTitle}>Producción últimos 12 meses</div>
-              <div style={S.trendPanel}>
-                {!Array.isArray(d.serie12m) ? (
-                  <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
-                      <circle cx="12" cy="12" r="10"/>
-                      <line x1="12" y1="8" x2="12" y2="12"/>
-                      <line x1="12" y1="16" x2="12.01" y2="16"/>
-                    </svg>
-                    <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
-                      Backend desactualizado
+              <div style={S.section}>
+                <div style={S.sectionTitle}>Producción últimos 12 meses</div>
+                <div style={S.panel}>
+                  {!Array.isArray(d.serie12m) ? (
+                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
+                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
+                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
+                        Backend desactualizado
+                      </div>
+                      <div style={{ lineHeight: 1.5 }}>
+                        Los datos de la serie de 12 meses aún no llegan.<br />
+                        Reinicia el server (<code style={{ background: 'var(--lp-bg-sunken)', padding: '2px 6px', borderRadius: 4 }}>reiniciar.bat</code>) y haz <code>Ctrl+Shift+R</code>.
+                      </div>
                     </div>
-                    <div style={{ lineHeight: 1.5 }}>
-                      Los datos de la serie de 12 meses aún no llegan.<br />
-                      Reinicia el server (<code style={{ background: 'var(--lp-bg-sunken)', padding: '2px 6px', borderRadius: 4 }}>reiniciar.bat</code>) y haz <code>Ctrl+Shift+R</code>.
+                  ) : d.serie12m.length < 3 ? (
+                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
+                      Se necesitan al menos 3 meses de datos para mostrar la tendencia.
                     </div>
-                  </div>
-                ) : d.serie12m.length < 3 ? (
-                  <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                    Se necesitan al menos 3 meses de datos para mostrar la tendencia.
-                  </div>
-                ) : (() => {
+                  ) : (() => {
                     const max = Math.max(...d.serie12m.map(x => x.cubetas), 1);
                     const lastIdx = d.serie12m.length - 1;
-                    const NOMBRES_MES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+                    const NOMBRES_MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
                     return (
                       <>
                         <div style={S.sparkRow}>
@@ -1018,7 +983,7 @@ export default function DashboardPage() {
                               <span style={S.trendStat}>Mejor mes: </span>
                               <span style={S.trendStatVal}>
                                 {d.statsTrend.mejorMes.cubetas.toLocaleString()} cub
-                                ({NOMBRES_MES[parseInt(d.statsTrend.mejorMes.mes.slice(5,7))-1]})
+                                ({NOMBRES_MES[parseInt(d.statsTrend.mejorMes.mes.slice(5, 7)) - 1]})
                               </span>
                             </div>
                           )}
@@ -1037,8 +1002,8 @@ export default function DashboardPage() {
                       </>
                     );
                   })()}
+                </div>
               </div>
-            </div>
             )}
           </>
         )}

@@ -5,11 +5,68 @@ import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import ProduccionFlow from '../produccion/ProduccionFlow';
 import NDAModal from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
+
+/* ── Iconos line (sin emojis) — verde Claude Design ──────────────────────
+   Reskin jun 2026: todos los glyph emoji (✕ ✓ → 🧪 ✅ 📋 📦 ●) reemplazados
+   por SVG line stroke="currentColor" para heredar el color del contexto. */
+const Icon = {
+  plus: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  ),
+  check: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+  play: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+      <path d="M8 5v14l11-7z" />
+    </svg>
+  ),
+  arrow: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
+  ),
+  x: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ),
+  trash: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    </svg>
+  ),
+  close: (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 6 6 18M6 6l12 12" />
+    </svg>
+  ),
+  empty: (
+    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <path d="M14 2v6h6M9 15l2 2 4-4" />
+    </svg>
+  ),
+};
+/* Bolita de color por fase (reemplaza el glyph "●" del mockup) */
+function Dot({ color }) {
+  return (
+    <span style={{
+      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+      display: 'inline-block', background: color,
+    }} />
+  );
+}
 
 /* ── Badge maps ──
    X3 (jun 2026): labels canónicos vienen de lib/estados.js (espejo backend).
@@ -393,7 +450,7 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
               </div>
             )}
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'inline-flex', minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' }} aria-label="Cerrar">{Icon.close}</button>
         </div>
         <div style={S.modalBody}>
           {error && (
@@ -426,9 +483,9 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
                   padding: '10px 12px', background: 'var(--lp-warning-100)',
                   border: '1.5px solid var(--lp-warning-600)', borderRadius: 8,
                   fontSize: 12, color: 'var(--lp-warning-700)', fontWeight: 600,
-                  marginBottom: 12,
+                  marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8,
                 }}>
-                  🧪 PRUEBA — heredado del pedido. No descuenta inventario.
+                  <PruebaBadge size="sm" /> Heredado del pedido. No descuenta inventario.
                 </div>
               )}
               {/* Widget de validación de stock — solo aparece si NO es prueba */}
@@ -448,16 +505,18 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
                     <div style={{
                       padding: 10, background: 'var(--lp-warning-100)',
                       color: 'var(--lp-warning-700)', borderRadius: 8, fontSize: 12,
+                      display: 'flex', alignItems: 'center', gap: 6,
                     }}>
-                      ⚠ {stockCheck.error}
+                      {Icon.x} {stockCheck.error}
                     </div>
                   )}
                   {!stockCheck.loading && stockCheck.suficiente === true && (
                     <div style={{
                       padding: 10, background: 'var(--lp-success-100)',
                       color: 'var(--lp-success-700)', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                      display: 'flex', alignItems: 'center', gap: 6,
                     }}>
-                      ✓ Stock de MP suficiente ({stockCheck.ingredientes?.length || 0} ingredientes verificados)
+                      {Icon.check} Stock de MP suficiente ({stockCheck.ingredientes?.length || 0} ingredientes verificados)
                     </div>
                   )}
                   {!stockCheck.loading && stockCheck.suficiente === false && (
@@ -466,8 +525,8 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
                       border: '1.5px solid var(--lp-danger-600)', borderRadius: 8,
                       fontSize: 12,
                     }}>
-                      <div style={{ fontWeight: 700, color: 'var(--lp-danger-700)', marginBottom: 6 }}>
-                        ⚠ Faltan {stockCheck.faltantes.length} MP{stockCheck.faltantes.length > 1 ? 's' : ''} para producir esta cantidad
+                      <div style={{ fontWeight: 700, color: 'var(--lp-danger-700)', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {Icon.x} Faltan {stockCheck.faltantes.length} MP{stockCheck.faltantes.length > 1 ? 's' : ''} para producir esta cantidad
                       </div>
                       {stockCheck.faltantes.slice(0, 6).map(f => (
                         <div key={f.mp} style={{
@@ -550,8 +609,8 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
             </div>
           )}
           {formula && (
-            <div style={{ fontSize: 11, color: 'var(--lp-success-600)', fontWeight: 600, marginTop: -8, marginBottom: 12 }}>
-              ✓ {formula}
+            <div style={{ fontSize: 11, color: 'var(--lp-success-600)', fontWeight: 600, marginTop: -8, marginBottom: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {Icon.check} {formula}
             </div>
           )}
 
@@ -692,43 +751,56 @@ function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onPr
               style={{
                 ...S.actionBtn('var(--lp-success-600)', '#fff'),
                 fontWeight: 700, padding: '8px 14px',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
               }}
+              data-id="ordenes.btn.iniciar-produccion"
+              data-rol="admin,tecnico"
               onClick={() => onProducir(o)}
               title="Abre el flujo guiado paso-a-paso con cronómetro por materia prima"
             >
-              Iniciar producción
+              {Icon.play} Iniciar producción
             </button>
           )}
           {onProducir && o.pedidoId && (o.estado === 'pendiente' || o.estado === 'en_proceso') && (
             <button
-              style={S.actionBtn('var(--lp-brand-100)', 'var(--lp-brand-700)')}
+              style={{ ...S.actionBtn('var(--lp-brand-100)', 'var(--lp-brand-700)'), display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              data-id="ordenes.btn.ir-pedido"
+              data-rol="admin,tecnico"
               onClick={() => onIrPedido && onIrPedido(o)}
               title="Esta orden viene de un pedido. Inicia producción desde la pantalla Pedidos."
             >
-              → Ir al pedido
+              Ir al pedido {Icon.arrow}
             </button>
           )}
           {transitions.map(nextState => {
             const info = ESTADO_BADGE[nextState] || {};
+            const isCancel = nextState === 'cancelada';
             return (
               <button
                 key={nextState}
-                style={S.actionBtn(
-                  nextState === 'cancelada' ? 'var(--lp-danger-100)' : 'var(--lp-brand-100)',
-                  nextState === 'cancelada' ? 'var(--lp-danger-600)' : 'var(--lp-brand-700)',
-                )}
+                style={{
+                  ...S.actionBtn(
+                    isCancel ? 'var(--lp-danger-100)' : 'var(--lp-brand-100)',
+                    isCancel ? 'var(--lp-danger-600)' : 'var(--lp-brand-700)',
+                  ),
+                  display: 'inline-flex', alignItems: 'center', gap: 5,
+                }}
+                data-id={isCancel ? 'ordenes.btn.cancelar' : 'ordenes.btn.cambiar-estado'}
+                data-rol="admin,tecnico"
                 onClick={() => onChangeStatus(o, nextState)}
               >
-                → {info.label || nextState}
+                {isCancel ? Icon.x : Icon.arrow} {info.label || nextState}
               </button>
             );
           })}
           {canDelete && (
             <button
-              style={S.actionBtn('var(--lp-danger-100)', 'var(--lp-danger-600)')}
+              style={{ ...S.actionBtn('var(--lp-danger-100)', 'var(--lp-danger-600)'), display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              data-id="ordenes.btn.eliminar"
+              data-rol="admin"
               onClick={() => onDelete(o)}
             >
-              Eliminar
+              {Icon.trash} Eliminar
             </button>
           )}
         </div>
@@ -746,7 +818,11 @@ function OrderGroup({ label, badgeCls, orders, canManage, canDelete, onChangeSta
     <div style={S.group}>
       <div style={S.groupHeader} onClick={() => setOpen(!open)}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 10, color: 'var(--lp-text-secondary)', transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none' }}>▶</span>
+          <span style={{ display: 'inline-flex', color: 'var(--lp-text-secondary)', transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none' }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+          </span>
           <span style={S.badge(badgeCls)}>{label}</span>
           <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--lp-brand-600)' }}>
             {orders.length} orden{orders.length > 1 ? 'es' : ''}
@@ -775,6 +851,10 @@ export default function OrdenesPage() {
      en líneas 1156, 1172, 1585 tiraban ReferenceError al click — botón
      "→ Ir al pedido" estaba muerto desde Sprint H. */
   const navigate = useNavigate();
+  /* Reskin verde: layout responsive. Escritorio → fases en grid ancho con
+     label + dot de color (grpPhase del mockup). Móvil → cards limpias apiladas
+     (S.ordenes del mockup móvil). */
+  const isDesktop = useIsDesktop();
   const rol = user?.rol || '';
   const userName = user?.nombre || '?';
   const [mainTab, setMainTab] = useState('ordenes');
@@ -970,7 +1050,7 @@ export default function OrdenesPage() {
     setConfirmAction({
       title: 'Cambiar estado',
       message: `¿Cambiar "${orden.codigo}" de ${ESTADO_BADGE[orden.estado]?.label || orden.estado} a ${label}?`,
-      confirmLabel: `→ ${label}`,
+      confirmLabel: `Cambiar a ${label}`,
       danger: nextState === 'cancelada',
       action: async () => {
         const updated = {
@@ -1107,14 +1187,16 @@ export default function OrdenesPage() {
                        Si ya tiene ordenId, lo indica (idempotencia). */}
                     {canManage && !yaTieneOrden && (
                       <button
-                        style={{ ...S.btnNew, padding: '6px 10px', fontSize: 11, minHeight: 36 }}
+                        style={{ ...S.btnNew, padding: '6px 10px', fontSize: 11, minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 5 }}
+                        data-id="ordenes.btn.crear-desde-pedido"
+                        data-rol="admin,tecnico"
                         onClick={() => { setPedidoOrigenModal(ped); setShowNewModal(true); }}
                         title="Crear orden vinculada a este pedido"
-                      >→ Crear Orden</button>
+                      >{Icon.plus} Crear Orden</button>
                     )}
                     {yaTieneOrden && (
-                      <span style={{ fontSize: 10, color: 'var(--lp-success-700)', fontWeight: 600 }}>
-                        ✓ Orden creada
+                      <span style={{ fontSize: 10, color: 'var(--lp-success-700)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        {Icon.check} Orden creada
                       </span>
                     )}
                   </div>
@@ -1127,8 +1209,8 @@ export default function OrdenesPage() {
             <div style={S.subTabs}>
               {[
                 { id: 'activas',     label: `Activas (${activas.length})` },
-                ...(pruebasActivas.length > 0 ? [{ id: 'pruebas', label: `🧪 Pruebas (${pruebasActivas.length})` }] : []),
-                ...(canceladas.length > 0     ? [{ id: 'canceladas', label: `✕ Canceladas (${canceladas.length})` }] : []),
+                ...(pruebasActivas.length > 0 ? [{ id: 'pruebas', label: `Pruebas (${pruebasActivas.length})` }] : []),
+                ...(canceladas.length > 0     ? [{ id: 'canceladas', label: `Canceladas (${canceladas.length})` }] : []),
                 { id: 'todas',       label: 'Historial' },
               ].map(t => (
                 <button key={t.id} style={S.subTab(t.id === subTab)} onClick={() => setSubTab(t.id)}>
@@ -1144,8 +1226,13 @@ export default function OrdenesPage() {
                   <input type="text" style={S.search} placeholder="Buscar orden..."
                     value={searchQ} onChange={e => setSearchQ(e.target.value)} />
                   {canManage && (
-                    <button style={S.btnNew} onClick={() => setShowNewModal(true)}>
-                      + Nueva Orden
+                    <button
+                      style={{ ...S.btnNew, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                      data-id="ordenes.btn.nueva"
+                      data-rol="admin,tecnico"
+                      onClick={() => setShowNewModal(true)}
+                    >
+                      {Icon.plus} Nueva Orden
                     </button>
                   )}
                 </div>
@@ -1174,7 +1261,7 @@ export default function OrdenesPage() {
 
                 {filteredActivas.length === 0 ? (
                   <div style={{ ...S.empty, padding: '60px 20px' }}>
-                    <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+                    <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--lp-text-tertiary)' }}>{Icon.empty}</div>
                     <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 8 }}>
                       {searchQ ? 'Sin resultados' : 'Sin órdenes activas'}
                     </div>
@@ -1188,14 +1275,49 @@ export default function OrdenesPage() {
                      5 produciendo, 2 envasando". Antes era grid plana de
                      20 cards mezcladas sin jerarquía. Las cards siguen
                      siendo el mismo componente OrdenCard — solo cambia
-                     el layout exterior. */
+                     el layout exterior.
+
+                     Reskin verde (jun 2026): el mockup grpPhase (ERP Escritorio)
+                     usa un label de sección con bolita de color por fase +
+                     grid ancho de cards. El mockup móvil (S.ordenes) apila las
+                     cards limpias. `gridFase` alterna grid ancho (escritorio)
+                     vs columna única (móvil) según `isDesktop`. */
                   const FASES = [
-                    { key: 'pendientes',  label: 'Pendientes de iniciar',  estados: ['pendiente','aceptado','en_proceso'] },
-                    { key: 'produciendo', label: 'En producción',           estados: ['en_produccion','produccion'] },
-                    { key: 'qc',          label: 'Control de calidad',     estados: ['qc_hold','qc_aprobado','qc'] },
-                    { key: 'envasando',   label: 'Envasado / transporte',  estados: ['en_envasado','envasado','en_recoleccion','en_camino'] },
-                    { key: 'listas',      label: 'Listas / entregadas',    estados: ['en_almacen','entregado','terminada','entregada'] },
+                    { key: 'pendientes',  label: 'Pendientes de iniciar', color: 'var(--lp-warning-600)',  estados: ['pendiente','aceptado','en_proceso'] },
+                    { key: 'produciendo', label: 'En producción',          color: 'var(--lp-brand-600)',    estados: ['en_produccion','produccion'] },
+                    { key: 'qc',          label: 'Control de calidad',     color: '#7C3AED',                estados: ['qc_hold','qc_aprobado','qc'] },
+                    { key: 'envasando',   label: 'Envasado / transporte',  color: 'var(--lp-brand-600)',    estados: ['en_envasado','envasado','en_recoleccion','en_camino'] },
+                    { key: 'listas',      label: 'Listas / entregadas',    color: 'var(--lp-success-600)',  estados: ['en_almacen','entregado','terminada','entregada'] },
                   ];
+                  /* Grid responsive: escritorio = cards anchas en grilla;
+                     móvil = una columna (cards limpias apiladas). */
+                  const gridFase = {
+                    display: 'grid',
+                    gridTemplateColumns: isDesktop
+                      ? 'repeat(auto-fill, minmax(360px, 1fr))'
+                      : '1fr',
+                    gap: 12,
+                  };
+                  /* Label de sección con bolita de color (reemplaza el "●"
+                     del mockup) + contador en pill mono. */
+                  const FaseLabel = ({ label, color, count, neutral }) => (
+                    <div style={{
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: 11, fontWeight: 800,
+                      color: neutral ? 'var(--lp-text-tertiary)' : 'var(--lp-text-secondary)',
+                      textTransform: 'uppercase', letterSpacing: '.06em',
+                      margin: '0 0 8px 2px',
+                    }}>
+                      <Dot color={color} />
+                      <span>{label}</span>
+                      <span style={{
+                        background: neutral ? 'var(--lp-bg-sunken)' : 'var(--lp-brand-100)',
+                        color: neutral ? 'var(--lp-text-secondary)' : 'var(--lp-brand-700)',
+                        borderRadius: 10, padding: '1px 8px',
+                        fontFamily: 'var(--lp-font-mono)', fontSize: 11,
+                      }}>{count}</span>
+                    </div>
+                  );
                   const porFase = {};
                   FASES.forEach(f => { porFase[f.key] = []; });
                   const otras = [];
@@ -1209,25 +1331,8 @@ export default function OrdenesPage() {
                     <>
                       {FASES.filter(f => porFase[f.key].length > 0).map(f => (
                         <div key={f.key} style={{ marginBottom: 18 }}>
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            fontSize: 11, fontWeight: 800, color: 'var(--lp-text-secondary)',
-                            textTransform: 'uppercase', letterSpacing: '.06em',
-                            margin: '0 0 8px 2px',
-                          }}>
-                            <span>{f.label}</span>
-                            <span style={{
-                              background: 'var(--lp-brand-100)',
-                              color: 'var(--lp-brand-700)',
-                              borderRadius: 10, padding: '1px 8px',
-                              fontFamily: 'var(--lp-font-mono)', fontSize: 11,
-                            }}>{porFase[f.key].length}</span>
-                          </div>
-                          <div style={{
-                            display: 'grid',
-                            gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))',
-                            gap: 12,
-                          }}>
+                          <FaseLabel label={f.label} color={f.color} count={porFase[f.key].length} />
+                          <div style={gridFase}>
                             {porFase[f.key].map(o => (
                               <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
                                 onChangeStatus={handleChangeStatus} onDelete={handleDelete}
@@ -1239,20 +1344,8 @@ export default function OrdenesPage() {
                       ))}
                       {otras.length > 0 && (
                         <div style={{ marginBottom: 18 }}>
-                          <div style={{
-                            display: 'flex', alignItems: 'center', gap: 8,
-                            fontSize: 11, fontWeight: 800, color: 'var(--lp-text-tertiary)',
-                            textTransform: 'uppercase', letterSpacing: '.06em',
-                            margin: '0 0 8px 2px',
-                          }}>
-                            <span>Otros estados</span>
-                            <span style={{
-                              background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)',
-                              borderRadius: 10, padding: '1px 8px',
-                              fontFamily: 'var(--lp-font-mono)', fontSize: 11,
-                            }}>{otras.length}</span>
-                          </div>
-                          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))', gap:12 }}>
+                          <FaseLabel label="Otros estados" color="var(--lp-border-strong)" count={otras.length} neutral />
+                          <div style={gridFase}>
                             {otras.map(o => (
                               <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
                                 onChangeStatus={handleChangeStatus} onDelete={handleDelete}
@@ -1272,7 +1365,7 @@ export default function OrdenesPage() {
               pruebasActivas.length === 0 ? (
                 <div style={S.empty}>Sin órdenes de prueba activas.</div>
               ) : (
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))', gap:12 }}>
+                <div style={{ display:'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap:12 }}>
                   {pruebasActivas.map(o => (
                     <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
                       onChangeStatus={handleChangeStatus} onDelete={handleDelete}
@@ -1287,7 +1380,7 @@ export default function OrdenesPage() {
               canceladas.length === 0 ? (
                 <div style={S.empty}>Sin órdenes canceladas.</div>
               ) : (
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(360px, 1fr))', gap:12 }}>
+                <div style={{ display:'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap:12 }}>
                   {canceladas.map(o => (
                     <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
                       onChangeStatus={handleChangeStatus} onDelete={handleDelete} />
@@ -1313,12 +1406,12 @@ export default function OrdenesPage() {
         {/* ════════ ALMACÉN TERÁN TAB ════════ */}
         {mainTab === 'pedidos' && (
           <PedidosTab pedidos={pedidos} rol={rol} userName={userName}
-            formulas={formulas} onReload={reloadPed} showToast={showToast} navigate={navigate} />
+            formulas={formulas} onReload={reloadPed} showToast={showToast} navigate={navigate} isDesktop={isDesktop} />
         )}
 
         {/* ════════ OC MP TAB ════════ */}
         {mainTab === 'compras' && (
-          <OCMPTab rol={rol} userName={userName} showToast={showToast} />
+          <OCMPTab rol={rol} userName={userName} showToast={showToast} isDesktop={isDesktop} />
         )}
       </div>
 
@@ -1395,8 +1488,8 @@ export default function OrdenesPage() {
 
       {/* ── Toast ── */}
       {toastMsg && (
-        <div style={S.toast}>
-          <span style={{ marginRight: 8 }}>✓</span>
+        <div style={{ ...S.toast, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {Icon.check}
           {toastMsg}
         </div>
       )}
@@ -1472,7 +1565,7 @@ function NuevoPedidoModal({ formulas, userName, onClose, onSuccess }) {
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>Nuevo Pedido a Fábrica</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'inline-flex', minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' }} aria-label="Cerrar">{Icon.close}</button>
         </div>
         <div style={S.modalBody}>
           {error && (
@@ -1510,8 +1603,8 @@ function NuevoPedidoModal({ formulas, userName, onClose, onSuccess }) {
             </div>
           )}
           {producto && (
-            <div style={{ fontSize: 11, color: 'var(--lp-success-600)', fontWeight: 600, marginTop: -8, marginBottom: 12 }}>
-              ✓ {producto}
+            <div style={{ fontSize: 11, color: 'var(--lp-success-600)', fontWeight: 600, marginTop: -8, marginBottom: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+              {Icon.check} {producto}
             </div>
           )}
 
@@ -1553,7 +1646,7 @@ function NuevoPedidoModal({ formulas, userName, onClose, onSuccess }) {
   );
 }
 
-function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, navigate }) {
+function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, navigate, isDesktop }) {
   const [showNew, setShowNew] = useState(false);
   const [subTab, setSubTab] = useState('activos');
   const [searchQ, setSearchQ] = useState('');
@@ -1614,8 +1707,13 @@ function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, nav
         <input type="text" style={S.search} placeholder="Buscar pedido..."
           value={searchQ} onChange={e => setSearchQ(e.target.value)} />
         {canCreate && (
-          <button style={S.btnNew} onClick={() => setShowNew(true)}>
-            + Nuevo Pedido
+          <button
+            style={{ ...S.btnNew, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            data-id="ordenes.btn.nuevo-pedido"
+            data-rol="admin,almacen"
+            onClick={() => setShowNew(true)}
+          >
+            {Icon.plus} Nuevo Pedido
           </button>
         )}
       </div>
@@ -1645,7 +1743,7 @@ function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, nav
       {/* List */}
       {filtered.length === 0 ? (
         <div style={{ ...S.empty, padding: '60px 20px' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>{subTab === 'activos' ? '📋' : '📦'}</div>
+          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--lp-text-tertiary)' }}>{Icon.empty}</div>
           <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 8 }}>
             {searchQ ? 'Sin resultados' : subTab === 'activos' ? 'Sin pedidos activos' : 'Sin historial'}
           </div>
@@ -1654,15 +1752,16 @@ function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, nav
           </div>
         </div>
       ) : (
-        filtered.map(p => {
+        <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap: 12 }}>
+        {filtered.map(p => {
           const est = PED_ESTADO[p.estado] || { cls: 'neutral', label: p.estado };
           const isPrueba = p.esPrueba === true;
           return (
-            <div key={p.id} style={S.card(isPrueba)}>
+            <div key={p.id} style={{ ...S.card(isPrueba), marginBottom: 0 }}>
               <div style={S.cardHeader}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <span style={S.cardCode}>{p.id}</span>
-                  {isPrueba && <span style={S.badge('warn')}>🧪 PRUEBA</span>}
+                  {isPrueba && <PruebaBadge size="sm" />}
                   <span style={S.badge(est.cls)}>{est.label}</span>
                 </div>
                 <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{p.fecha}</span>
@@ -1675,7 +1774,8 @@ function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, nav
               </div>
             </div>
           );
-        })
+        })}
+        </div>
       )}
 
       {/* Modal nuevo pedido — al crear se redirige a /pedidos para que el técnico
@@ -1723,7 +1823,7 @@ const OC_PRIO_BADGE = {
   baja:    { cls: 'neutral', label: 'BAJA' },
 };
 
-function OCMPTab({ rol, userName, showToast }) {
+function OCMPTab({ rol, userName, showToast, isDesktop }) {
   const [ocs, setOcs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
@@ -1793,11 +1893,16 @@ function OCMPTab({ rol, userName, showToast }) {
         ))}
       </div>
 
-      {/* Toolbar + Nueva Solicitud */}
+      {/* Toolbar + Nueva Solicitud → Arely (compras) */}
       {canSolicitar && (
         <div style={{ ...S.toolbar, justifyContent: 'flex-end' }}>
-          <button style={S.btnNew} onClick={() => setShowNew(true)}>
-            + Nueva Solicitud
+          <button
+            style={{ ...S.btnNew, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            data-id="ordenes.btn.nueva-solicitud-oc"
+            data-rol="admin,tecnico,compras"
+            onClick={() => setShowNew(true)}
+          >
+            {Icon.plus} Nueva Solicitud
           </button>
         </div>
       )}
@@ -1835,7 +1940,9 @@ function OCMPTab({ rol, userName, showToast }) {
           )}
         </div>
       ) : (
-        filtered.map(oc => <OCCard key={oc.id} oc={oc} />)
+        <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap: 12 }}>
+          {filtered.map(oc => <OCCard key={oc.id} oc={oc} />)}
+        </div>
       )}
 
       {showNew && (
@@ -1990,10 +2097,11 @@ function SolicitudMPModal({ userName, onClose, onSuccess }) {
               Compras (Arely) recibirá una notificación
             </div>
           </div>
-          <button onClick={onClose} style={{
-            background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
-            color: 'var(--lp-text-tertiary)', lineHeight: 1, padding: 0,
-          }}>×</button>
+          <button onClick={onClose} aria-label="Cerrar" style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--lp-text-tertiary)', padding: 0,
+            display: 'inline-flex', minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center',
+          }}>{Icon.close}</button>
         </div>
 
         <div style={S.modalBody}>
@@ -2032,19 +2140,21 @@ function SolicitudMPModal({ userName, onClose, onSuccess }) {
                 onClick={() => removeItem(idx)}
                 disabled={items.length === 1}
                 style={{
-                  ...S.btnSecondary, minHeight: 38, padding: '8px 12px',
+                  ...S.btnSecondary, minHeight: 44, padding: '8px 12px',
                   opacity: items.length === 1 ? 0.4 : 1,
                   cursor: items.length === 1 ? 'not-allowed' : 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
                 }}
+                aria-label="Quitar MP"
                 title="Quitar"
-              >×</button>
+              >{Icon.x}</button>
             </div>
           ))}
           <button type="button" onClick={addItem} style={{
-            ...S.btnSecondary, fontSize: 12, padding: '6px 12px', minHeight: 36,
-            marginBottom: 14,
+            ...S.btnSecondary, fontSize: 12, padding: '6px 12px', minHeight: 44,
+            marginBottom: 14, display: 'inline-flex', alignItems: 'center', gap: 5,
           }}>
-            + Agregar otra MP
+            {Icon.plus} Agregar otra MP
           </button>
 
           <label style={S.fieldLabel}>Prioridad</label>

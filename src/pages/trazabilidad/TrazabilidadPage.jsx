@@ -1,10 +1,24 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { ESTADO_LOTE_LABEL } from '../../lib/loteTransiciones';
 import PruebaBadge from '../../components/ui/PruebaBadge';
+import QRModal, { QRScanner } from '../../components/QRModal';
+import { useAuth } from '../../context/AuthContext';
+import useConfirm from '../../hooks/useConfirm';
+import useIsDesktop from '../../hooks/useIsDesktop';
+
+/* ════════════════════════════════════════════════════════════════════════
+   TrazabilidadPage — Reskin "Claude Design" verde (jun 2026).
+   Cada lote en su propia card con su timeline INDIVIDUAL (Sprint S: NO
+   pipeline agregado). Responsive: escritorio = timeline ancho; móvil =
+   timeline vertical compacto. Tokens var(--lp-*) (verde). Sin emojis (SVG
+   line). §7: Escanear QR (rol amplio) + Lote manual (admin) cableados.
+   Lógica conservada: /api/trazabilidad, realtime, búsqueda, PruebaBadge,
+   expand/colapso de sublotes, estados canónicos.
+   ════════════════════════════════════════════════════════════════════════ */
 
 /* ── SVG Icons (stroke, same style as nav) ── */
 const ICONS = {
@@ -19,28 +33,31 @@ const ICONS = {
   check: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
   fabrica: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
   pin: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  qr: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M21 21v-3M14 21h3"/></svg>,
+  plus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
+  search: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
 };
 
-/* X3 (jun 2026): labels canónicos importados de lib/loteTransiciones.js,
-   bg/fg local porque TrazabilidadPage usa una paleta pastel distinta. */
+/* labels canónicos importados de lib/loteTransiciones.js. Cada estado lleva
+   bg/fg en tokens verdes (paleta del rediseño Claude Design). */
 const ESTADO_BG_FG = {
   producido:       { bg: 'var(--lp-brand-100)',   fg: 'var(--lp-brand-700)' },
-  qc_aprobado:     { bg: '#D1FAE5',              fg: '#065F46' },
-  qc_hold:         { bg: 'var(--lp-danger-100)',  fg: 'var(--lp-danger-600)' },
-  en_envasado:     { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
-  envasado:        { bg: '#DBEAFE',              fg: '#1E40AF' },
-  en_recoleccion:  { bg: '#EDE9FE',              fg: '#7C3AED' },
-  en_camino:       { bg: '#FEF3C7',              fg: '#92400E' },
-  en_almacen:      { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
-  reenvasado:      { bg: '#FAECE7',              fg: '#993C1D' },
-  entregado:       { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-700)' },
+  qc_aprobado:     { bg: 'var(--lp-success-100)',  fg: 'var(--lp-success-700)' },
+  qc_hold:         { bg: 'var(--lp-danger-100)',   fg: 'var(--lp-danger-600)' },
+  en_envasado:     { bg: 'var(--lp-warning-100)',  fg: 'var(--lp-warning-600)' },
+  envasado:        { bg: 'var(--lp-info-50)',      fg: 'var(--lp-info-600)' },
+  en_recoleccion:  { bg: 'var(--lp-brand-50)',     fg: 'var(--lp-brand-600)' },
+  en_camino:       { bg: 'var(--lp-warning-100)',  fg: 'var(--lp-warning-600)' },
+  en_almacen:      { bg: 'var(--lp-success-100)',  fg: 'var(--lp-success-600)' },
+  reenvasado:      { bg: 'var(--lp-info-50)',      fg: 'var(--lp-info-600)' },
+  entregado:       { bg: 'var(--lp-success-100)',  fg: 'var(--lp-success-700)' },
 };
 const ESTADO_CONFIG = Object.keys(ESTADO_BG_FG).reduce((acc, k) => {
   acc[k] = { label: ESTADO_LOTE_LABEL[k] || k, ...ESTADO_BG_FG[k] };
   return acc;
 }, { reenvasado: { label: 'Re-envasado', ...ESTADO_BG_FG.reenvasado } });
 
-/* ── Pipeline steps (ordered) ── */
+/* ── Pipeline steps (ordered) — solo para ubicar el avance del lote ── */
 const PIPELINE_STEPS = [
   { key: 'orden',          icon: 'orden',       label: 'Orden' },
   { key: 'producido',      icon: 'produccion',  label: 'Producido' },
@@ -53,105 +70,74 @@ const PIPELINE_STEPS = [
   { key: 'entregado',      icon: 'check',       label: 'Entregado' },
 ];
 
-/* ── Styles ── */
+/* ── Estilos ── */
 const S = {
-  wrap: { padding: '0 20px 100px' },
+  wrap: { padding: '0 20px 100px', maxWidth: 1180, margin: '0 auto' },
+  wrapDesk: { padding: '0 32px 80px', maxWidth: 1180, margin: '0 auto' },
+
+  /* Toolbar §7: buscador + Escanear QR + Lote manual */
   toolbar: {
-    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap',
+    display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap',
+  },
+  searchBox: {
+    display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 200,
+    height: 46, padding: '0 14px', borderRadius: 13,
+    border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)',
   },
   search: {
-    flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
-    border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
-    color: 'var(--lp-text-primary)', boxSizing: 'border-box',
+    flex: 1, border: 'none', outline: 'none', background: 'transparent',
+    fontSize: 14, fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-primary)',
   },
-  filterPill: (active) => ({
-    padding: '6px 14px', fontSize: 11, fontWeight: active ? 600 : 500,
-    borderRadius: 20, border: 'none', cursor: 'pointer',
-    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
-    color: active ? '#fff' : 'var(--lp-text-secondary)',
-    fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+  /* Botones NO 100% width en escritorio; ≥44px touch en móvil */
+  btnGhost: (full) => ({
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    minHeight: 46, padding: '0 16px', borderRadius: 12,
+    border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)',
+    color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-sans)',
+    fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
+    ...(full ? { flex: 1 } : {}),
+  }),
+  btnPrimary: (full) => ({
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    minHeight: 46, padding: '0 16px', borderRadius: 12, border: 'none',
+    background: 'var(--lp-brand-600)', color: '#fff',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600,
+    cursor: 'pointer', whiteSpace: 'nowrap',
+    ...(full ? { flex: 1 } : {}),
   }),
 
-  /* ── Pipeline Track (Propuesta C) ── */
-  trackWrap: {
-    position: 'relative', overflowX: 'auto', padding: '8px 0 20px',
-    marginBottom: 16, WebkitOverflowScrolling: 'touch',
-    /* En móvil mostramos scrollbar fino para que el usuario sepa que el
-       pipeline es ancho y puede deslizar horizontalmente. Antes era 'none'
-       y la affordance estaba oculta. */
-    scrollbarWidth: 'thin',
-  },
-  trackInner: { position: 'relative', minWidth: 720, padding: '0 8px' },
-  trackLine: {
-    position: 'absolute', top: 19, left: 32, right: 32, height: 3,
-    background: 'var(--lp-border-subtle)', borderRadius: 2, zIndex: 0,
-  },
-  trackFill: (pct) => ({
-    height: '100%', width: `${pct}%`, borderRadius: 2,
-    background: 'var(--lp-brand-600)', transition: 'width .4s ease',
-  }),
-  trackNodes: {
-    display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1,
-  },
-  trackNode: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    cursor: 'pointer', width: 68,
-  },
-  trackCircle: (state) => {
-    // state: 'done' | 'active' | 'optional' | 'default'
-    const base = {
-      width: 38, height: 38, borderRadius: '50%', display: 'flex',
-      alignItems: 'center', justifyContent: 'center',
-      transition: 'all .15s', border: '2.5px solid var(--lp-border-subtle)',
-      background: 'var(--lp-bg-raised)',
-    };
-    if (state === 'done') return { ...base, borderColor: '#0F6E56', background: '#E1F5EE' };
-    if (state === 'active') return { ...base, borderColor: 'var(--lp-brand-600)', background: '#EEEDFE', boxShadow: '0 0 0 3px rgba(99,90,183,0.12)' };
-    if (state === 'optional') return { ...base, opacity: 0.35 };
-    return base;
-  },
-  trackIconColor: (state) => {
-    if (state === 'done') return '#085041';
-    if (state === 'active') return 'var(--lp-brand-700)';
-    return 'var(--lp-text-tertiary)';
-  },
-  trackLabel: (state) => ({
-    fontSize: 11, fontWeight: state === 'active' ? 700 : 500, marginTop: 5,
-    color: state === 'active' ? 'var(--lp-brand-700)' : state === 'done' ? '#0F6E56' : 'var(--lp-text-secondary)',
-    textAlign: 'center', lineHeight: 1.15, maxWidth: 64,
-  }),
-  trackCount: (state) => ({
-    fontSize: 11, fontWeight: 600, fontFamily: 'var(--lp-font-mono)', marginTop: 2,
-    color: state === 'active' ? 'var(--lp-brand-600)' : state === 'done' ? '#0F6E56' : 'var(--lp-text-tertiary)',
-    background: state === 'active' ? 'var(--lp-brand-100)' : state === 'done' ? '#E1F5EE' : 'transparent',
-    padding: state === 'active' || state === 'done' ? '0 6px' : '0',
-    borderRadius: 6, minWidth: 14, textAlign: 'center',
+  filterPill: (active) => ({
+    padding: '7px 14px', fontSize: 12, fontWeight: active ? 700 : 600,
+    borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
+    border: active ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-raised)',
+    color: active ? '#fff' : 'var(--lp-text-secondary)',
+    fontFamily: 'var(--lp-font-sans)',
   }),
 
   /* ── Cards ── */
   card: {
     background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius)', overflow: 'hidden', marginBottom: 10,
+    borderRadius: 'var(--lp-radius-lg)', overflow: 'hidden', marginBottom: 12,
   },
-  cardMain: { padding: '14px 16px', cursor: 'pointer' },
+  cardMain: { padding: '15px 16px', cursor: 'pointer' },
   cardHeader: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between',
     gap: 8, marginBottom: 6,
   },
   loteCode: {
-    fontWeight: 700, fontSize: 12, color: 'var(--lp-brand-600)',
-    fontFamily: 'var(--lp-font-mono)',
+    fontWeight: 700, fontSize: 13, color: 'var(--lp-brand-600)',
+    fontFamily: 'var(--lp-font-mono)', letterSpacing: '.01em',
   },
   badge: (bg, fg) => ({
-    display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 600,
-    borderRadius: 6, background: bg, color: fg,
+    display: 'inline-flex', alignItems: 'center', padding: '3px 10px', fontSize: 11,
+    fontWeight: 600, borderRadius: 999, background: bg, color: fg,
   }),
-  productName: { fontSize: 14, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 4 },
-  meta: { fontSize: 12, color: 'var(--lp-text-secondary)' },
+  productName: { fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)', marginBottom: 3 },
+  meta: { fontSize: 12.5, color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-mono)' },
   progress: {
-    height: 6, borderRadius: 3, background: 'var(--lp-border-subtle)',
-    marginTop: 8, overflow: 'hidden',
+    height: 6, borderRadius: 3, background: 'var(--lp-bg-sunken)',
+    marginTop: 10, overflow: 'hidden',
   },
   progressBar: (pct) => ({
     height: '100%', borderRadius: 3, width: `${Math.min(pct, 100)}%`,
@@ -163,31 +149,36 @@ const S = {
   },
   sublote: {
     display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0',
-    borderBottom: '1px solid var(--lp-bg-sunken)', fontSize: 12,
+    borderBottom: '1px solid var(--lp-bg-sunken)', fontSize: 12.5,
+    color: 'var(--lp-text-secondary)',
   },
   subloteCod: {
     fontWeight: 600, fontFamily: 'var(--lp-font-mono)', fontSize: 11,
     color: 'var(--lp-brand-600)', minWidth: 80,
   },
-  faseBadge: (fase) => ({
-    display: 'inline-flex', padding: '1px 6px', fontSize: 11, fontWeight: 600,
-    borderRadius: 4,
-    background: fase === 1 ? '#EDE9FE' : '#DBEAFE',
-    color: fase === 1 ? '#7C3AED' : '#1E40AF',
+  faseBadge: (granel) => ({
+    display: 'inline-flex', padding: '1px 7px', fontSize: 10.5, fontWeight: 600,
+    borderRadius: 999,
+    background: granel ? 'var(--lp-brand-50)' : 'var(--lp-info-50)',
+    color: granel ? 'var(--lp-brand-700)' : 'var(--lp-info-600)',
   }),
-  empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '40px 0', fontSize: 13 },
+  seclbl: {
+    fontSize: 12, fontWeight: 600, textTransform: 'uppercase',
+    letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', marginBottom: 12,
+  },
+  empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '48px 0', fontSize: 13.5 },
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
   kpiGrid: {
     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-    gap: 10, marginBottom: 16,
+    gap: 12, marginBottom: 16,
   },
   kpi: (accent) => ({
-    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-sm)',
+    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
     border: '1.5px solid var(--lp-border-subtle)', padding: '14px 16px',
     borderTop: `3px solid ${accent}`, textAlign: 'center',
   }),
-  kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-tertiary)' },
-  kpiValue: { fontSize: 24, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 },
+  kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--lp-text-tertiary)' },
+  kpiValue: { fontSize: 26, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 },
 };
 
 /* ── Helper: determine pipeline position index for a given estado ── */
@@ -198,7 +189,7 @@ function pipelineIndex(estado) {
   return idx >= 0 ? idx : -1;
 }
 
-/* Z7 (jun 2026): tiempo relativo legible para la bitácora */
+/* tiempo relativo legible para la bitácora */
 function _tiempoRelativo(fechaISO) {
   if (!fechaISO) return '';
   try {
@@ -219,180 +210,145 @@ function _tiempoRelativo(fechaISO) {
   } catch { return ''; }
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   LoteHistorialTimeline — Sprint S (jun 2026).
-   Trazabilidad INDIVIDUAL del lote, dentro de su propia card.
-   Reemplaza al pipeline general agregado (que sumaba lotes en lugar de
-   mostrar el rastro real de cada uno). Muestra:
-     1. Mini-pipeline horizontal: pasos pasados (verde) · paso actual
-        (azul activo) · pasos pendientes (gris)
-     2. Timeline detallado con fechas, usuarios y notas, derivado de
-        lote.historial y lote.sublotes[].historial
-   ═══════════════════════════════════════════════════════════════════════ */
-function LoteHistorialTimeline({ lote }) {
-  const currentIdx = pipelineIndex(lote.estado);
-
-  /* Construir lista cronológica de eventos relevantes del lote y sus
-     sublotes para mostrar quién hizo qué y cuándo. */
-  const eventos = useMemo(() => {
-    const list = [];
-    /* Historial del lote */
-    (lote.historial || []).forEach(h => {
+/* Construye eventos cronológicos del lote + sus sublotes (lote.historial,
+   sublote.historial). Si no hay historial, sintetiza el evento inicial. */
+function buildEventos(lote) {
+  const list = [];
+  (lote.historial || []).forEach(h => {
+    if (!h || !h.fecha) return;
+    list.push({
+      fecha: h.fecha, usuario: h.usuario || 'sistema',
+      estado: h.estado || h.accion || '—', nota: h.nota || '', scope: 'lote',
+    });
+  });
+  (lote.sublotes || []).forEach(s => {
+    (s.historial || []).forEach(h => {
       if (!h || !h.fecha) return;
       list.push({
-        fecha: h.fecha,
-        usuario: h.usuario || 'sistema',
+        fecha: h.fecha, usuario: h.usuario || 'sistema',
         estado: h.estado || h.accion || '—',
-        nota: h.nota || '',
-        scope: 'lote',
+        nota: h.nota || `Sublote ${s.cod || ''}`, scope: 'sublote', subloteCod: s.cod,
       });
     });
-    /* Historial de cada sublote (cuando Luis recoge, Josué recibe, etc.) */
-    (lote.sublotes || []).forEach(s => {
-      (s.historial || []).forEach(h => {
-        if (!h || !h.fecha) return;
-        list.push({
-          fecha: h.fecha,
-          usuario: h.usuario || 'sistema',
-          estado: h.estado || h.accion || '—',
-          nota: h.nota || `Sublote ${s.cod || ''}`,
-          scope: 'sublote',
-          subloteCod: s.cod,
-        });
-      });
+  });
+  if (list.length === 0 && lote.fecha) {
+    list.push({
+      fecha: lote.fecha, usuario: lote.usuario || 'sistema',
+      estado: 'producido', nota: 'Lote creado', scope: 'lote',
     });
-    /* Si no hay historial pero hay fecha del lote, agregar evento inicial */
-    if (list.length === 0 && lote.fecha) {
-      list.push({
-        fecha: lote.fecha,
-        usuario: lote.usuario || 'sistema',
-        estado: 'producido',
-        nota: 'Lote creado',
-        scope: 'lote',
-      });
-    }
-    return list.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
-  }, [lote]);
+  }
+  return list.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LoteTimeline — trazabilidad INDIVIDUAL del lote dentro de su card.
+   Timeline VERTICAL (referencia Trazabilidad.html / S.traza / vtl()):
+     · dot verde con check = etapa completada, con línea verde
+     · dot anillo verde con pulso = etapa actual
+     · dot anillo gris = etapa pendiente
+   Cada fila: etapa (mono no — nombre legible) + hora en mono a la derecha,
+   responsable, y nota opcional. isDesktop → más aire y dots grandes.
+   ═══════════════════════════════════════════════════════════════════════ */
+function LoteTimeline({ lote, isDesktop }) {
+  const eventos = useMemo(() => buildEventos(lote), [lote]);
+
+  /* Etiqueta legible del evento (estado canónico → label) */
+  const labelEvento = (estado) => {
+    const cfg = ESTADO_CONFIG[estado];
+    return (cfg && cfg.label) || ESTADO_LOTE_LABEL[estado] || estado;
+  };
+
+  const lastIdx = eventos.length - 1;
+  const dotSize = isDesktop ? 18 : 16;
+  const railLeft = dotSize / 2;          // centro del dot
+  const padLeft = dotSize + 16;          // sangría del contenido
 
   return (
-    <div style={{ padding: '12px 0 0' }}>
-      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 8 }}>
-        Trazabilidad de este lote
-      </div>
-
-      {/* Z7 (jun 2026): mini-pipeline horizontal del lote — más compacto.
-          Antes minWidth:580 forzaba scroll en móvil; ahora 360 para que
-          quepa en 375px con margen y solo scrollea cuando todos los pasos
-          tienen labels largos. Iconos más chicos (26→26 sin cambio) pero
-          padding mejor. */}
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 4 }}>
-        <div style={{ display: 'flex', gap: 0, minWidth: 360, position: 'relative', padding: '6px 4px' }}>
-          {/* Línea de fondo */}
-          <div style={{
-            position: 'absolute', top: 18, left: 20, right: 20, height: 2,
-            background: 'var(--lp-border-subtle)', zIndex: 0,
-          }}>
-            <div style={{
-              height: '100%',
-              width: currentIdx > 0 ? `${(currentIdx / (PIPELINE_STEPS.length - 1)) * 100}%` : '0%',
-              background: 'var(--lp-success-500)',
-              transition: 'width .3s ease',
-            }} />
-          </div>
-          {PIPELINE_STEPS.map((step, i) => {
-            const done = i < currentIdx;
-            const current = i === currentIdx;
-            const optional = step.key === 'reenvasado' && !((lote.sublotes || []).some(s => s.tipo === 'tote' || s.fase === 1));
-            const bg = current ? 'var(--lp-brand-600)'
-                     : done    ? 'var(--lp-success-500)'
-                     : optional? 'transparent'
-                     :           'var(--lp-bg-sunken)';
-            const fg = current || done ? '#fff' : optional ? 'var(--lp-text-disabled)' : 'var(--lp-text-tertiary)';
-            const border = optional ? '1.5px dashed var(--lp-border-default)' : 'none';
-            return (
-              <div key={step.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative', zIndex: 1, minWidth: 48 }}>
+    <div>
+      <div style={S.seclbl}>Bitácora del lote ({eventos.length})</div>
+      <div style={{ position: 'relative' }}>
+        {eventos.map((ev, i) => {
+          const done = i < lastIdx;
+          const current = i === lastIdx;
+          const cfg = ESTADO_CONFIG[ev.estado] || { bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
+          const rel = _tiempoRelativo(ev.fecha);
+          const fecha = ev.fecha ? `${ev.fecha.slice(0, 10)} ${ev.fecha.slice(11, 16)}` : '—';
+          return (
+            <div key={i} style={{
+              position: 'relative', paddingLeft: padLeft,
+              paddingBottom: i < lastIdx ? (isDesktop ? 20 : 16) : 0,
+            }}>
+              {/* Línea conectora (no en el último) */}
+              {i < lastIdx && (
                 <div style={{
-                  width: current ? 34 : 28, height: current ? 34 : 28, borderRadius: '50%',
-                  background: bg, color: fg, border,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 14, marginBottom: 4,
-                  boxShadow: current ? '0 0 0 4px var(--lp-brand-100)' : 'none',
-                  transition: 'all .2s',
-                }}>
-                  {done ? (
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="20 6 9 17 4 12"/>
-                    </svg>
-                  ) : ICONS[step.icon]}
-                </div>
-                <span style={{
-                  fontSize: 9.5, fontWeight: current ? 700 : 500,
-                  color: current ? 'var(--lp-brand-700)' : done ? 'var(--lp-success-700)' : 'var(--lp-text-tertiary)',
-                  textAlign: 'center', maxWidth: 62, lineHeight: 1.2,
-                }}>{step.label}</span>
+                  position: 'absolute', left: railLeft - 1, top: dotSize, bottom: -2,
+                  width: 2, background: 'var(--lp-brand-600)',
+                }} />
+              )}
+              {/* Dot */}
+              <div style={{
+                position: 'absolute', left: 0, top: 1,
+                width: dotSize, height: dotSize, borderRadius: '50%',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: done ? 'var(--lp-brand-600)'
+                          : current ? 'var(--lp-bg-raised)' : 'var(--lp-bg-raised)',
+                border: done ? 'none'
+                      : current ? '2px solid var(--lp-brand-600)' : '2px solid var(--lp-border-subtle)',
+                boxShadow: current ? '0 0 0 4px var(--lp-brand-100)' : 'none',
+              }}>
+                {done && (
+                  <svg width={dotSize - 6} height={dotSize - 6} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6L9 17l-5-5"/>
+                  </svg>
+                )}
+                {current && (
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--lp-brand-600)' }} />
+                )}
               </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Timeline detallado */}
-      {eventos.length > 0 && (
-        <div style={{ marginTop: 12, borderTop: '1px solid var(--lp-border-subtle)', paddingTop: 10 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 }}>
-            Bitácora ({eventos.length} eventos)
-          </div>
-          <div style={{ position: 'relative', paddingLeft: 14 }}>
-            {/* Línea vertical de la timeline */}
-            <div style={{
-              position: 'absolute', left: 4, top: 4, bottom: 4, width: 2,
-              background: 'var(--lp-border-subtle)',
-            }} />
-            {eventos.map((ev, i) => {
-              const cfg = ESTADO_CONFIG[ev.estado] || { bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)', label: ev.estado };
-              return (
-                <div key={i} style={{ position: 'relative', paddingLeft: 14, paddingBottom: 8 }}>
-                  <div style={{
-                    position: 'absolute', left: -4, top: 5, width: 10, height: 10, borderRadius: '50%',
-                    background: cfg.fg, border: '2px solid var(--lp-bg-raised)',
-                  }} />
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span style={{
-                      fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 4,
-                      background: cfg.bg, color: cfg.fg, textTransform: 'uppercase', letterSpacing: '.04em',
-                    }}>{cfg.label || ev.estado}</span>
-                    {ev.scope === 'sublote' && (
-                      <span style={{ fontSize: 10, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>
-                        {ev.subloteCod}
-                      </span>
-                    )}
-                    <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-                      {ev.fecha?.slice(0, 10)} {ev.fecha?.slice(11, 16)} · {ev.usuario}
-                    </span>
-                    {(() => {
-                      const rel = _tiempoRelativo(ev.fecha);
-                      return rel ? (
-                        <span style={{ fontSize: 10, color: 'var(--lp-text-disabled)', fontStyle: 'italic' }}>
-                          {rel}
-                        </span>
-                      ) : null;
-                    })()}
-                  </div>
-                  {ev.nota && (
-                    <div style={{ fontSize: 11, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{ev.nota}</div>
+              {/* Contenido */}
+              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{
+                  fontSize: isDesktop ? 14.5 : 13.5,
+                  fontWeight: current || done ? 600 : 500,
+                  color: current || done ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)',
+                }}>
+                  {labelEvento(ev.estado)}
+                </span>
+                <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 11, color: 'var(--lp-text-tertiary)', flexShrink: 0 }}>
+                  {fecha}
+                </span>
+              </div>
+              {ev.usuario && ev.usuario !== '—' && (
+                <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
+                  Responsable: <b style={{ color: 'var(--lp-text-primary)', fontWeight: 600 }}>{ev.usuario}</b>
+                  {ev.scope === 'sublote' && ev.subloteCod && (
+                    <span style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)', marginLeft: 6 }}>· {ev.subloteCod}</span>
                   )}
+                  {rel && <span style={{ color: 'var(--lp-text-disabled)', fontStyle: 'italic', marginLeft: 6 }}>· {rel}</span>}
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
+              )}
+              {ev.nota && (
+                <div style={{
+                  fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 6,
+                  padding: '9px 11px', borderRadius: 11, background: 'var(--lp-bg-sunken)',
+                  lineHeight: 1.45, borderLeft: `3px solid ${cfg.fg}`,
+                }}>
+                  {ev.nota}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {eventos.length === 0 && (
+          <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)' }}>Sin eventos registrados.</div>
+        )}
+      </div>
     </div>
   );
 }
 
 /* ── Lote Card ── */
-function LoteCard({ lote }) {
+function LoteCard({ lote, isDesktop, onShowQR }) {
   const [open, setOpen] = useState(false);
   const est = ESTADO_CONFIG[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
   const sublotes = lote.sublotes || [];
@@ -412,179 +368,141 @@ function LoteCard({ lote }) {
   const pct = litTotal > 0 ? Math.round((litUsed / litTotal) * 100) : 0;
   const isPrueba = lote.esPrueba === true;
   const hasTotes = sublotes.some(s => s.tipo === 'tote' || s.fase === 1);
+  const idx = pipelineIndex(lote.estado);
+  const curStep = idx >= 0 ? PIPELINE_STEPS[Math.min(idx, PIPELINE_STEPS.length - 1)] : null;
 
   return (
-    <div style={{ ...S.card, ...(isPrueba ? { border: '1.5px solid var(--lp-warning-200)', background: 'var(--lp-warning-50)' } : {}) }}>
+    <div style={{ ...S.card, ...(isPrueba ? { border: '1.5px solid var(--lp-warning-500)', background: 'var(--lp-warning-50)' } : {}) }}>
       <div style={S.cardMain} onClick={() => setOpen(!open)}>
         <div style={S.cardHeader}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={S.loteCode}>{lote.codigoLote || lote.id}</span>
             {isPrueba && <PruebaBadge size="sm" />}
             <span style={S.badge(est.bg, est.fg)}>{est.label}</span>
-            {hasTotes && <span style={S.badge('#EDE9FE', '#7C3AED')}>2 fases</span>}
+            {hasTotes && <span style={S.badge('var(--lp-brand-50)', 'var(--lp-brand-700)')}>2 fases</span>}
           </div>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-            style={{ color: 'var(--lp-text-disabled)', transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none', flexShrink: 0 }}>
-            <polyline points="9 18 15 12 9 6"/>
-          </svg>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {/* QR del lote — abre QRModal con el lote */}
+            <button
+              data-id="traza.btn.ver-qr"
+              data-rol="admin,tecnico,almacen,compras,recolector,inventario"
+              onClick={(e) => { e.stopPropagation(); onShowQR && onShowQR(lote); }}
+              title="Ver / imprimir QR del lote"
+              style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)',
+                color: 'var(--lp-text-secondary)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {ICONS.qr}
+            </button>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+              style={{ color: 'var(--lp-text-disabled)', transition: 'transform .2s', transform: open ? 'rotate(90deg)' : 'none' }}>
+              <polyline points="9 18 15 12 9 6"/>
+            </svg>
+          </div>
         </div>
         <div style={S.productName}>{lote.producto || lote.formula || lote.nombre || '—'}</div>
         {lote.ordenCodigo && (
-          <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
             <span style={{ color: 'var(--lp-text-disabled)', display: 'inline-flex' }}>{ICONS.orden}</span>
             {lote.ordenCodigo}
           </div>
         )}
         <div style={S.meta}>
-          {lote.cantidad && `${lote.cantidad} cubetas`}
-          {litTotal > 0 && ` · ${litTotal}L total`}
-          {sublotes.length > 0 && ` · ${sublotes.length} sublote${sublotes.length > 1 ? 's' : ''}`}
-          {lote.fecha && ` · ${lote.fecha.slice(0, 10)}`}
+          {lote.cantidad ? `${lote.cantidad} cub` : ''}
+          {litTotal > 0 ? `${lote.cantidad ? ' · ' : ''}${litTotal} L` : ''}
+          {sublotes.length > 0 ? ` · ${sublotes.length} sublote${sublotes.length > 1 ? 's' : ''}` : ''}
+          {lote.fecha ? ` · ${lote.fecha.slice(0, 10)}` : ''}
         </div>
-        {litTotal > 0 && (
-          <div style={S.progress}><div style={S.progressBar(pct)} /></div>
+        {/* Mini indicador de etapa actual (sin pipeline agregado) */}
+        {curStep && !open && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, fontSize: 12, color: 'var(--lp-text-secondary)' }}>
+            <span style={{ color: 'var(--lp-brand-600)', display: 'inline-flex' }}>{ICONS[curStep.icon]}</span>
+            Etapa: <b style={{ color: 'var(--lp-text-primary)', fontWeight: 600 }}>{curStep.label}</b>
+          </div>
         )}
         {litTotal > 0 && (
-          <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4, textAlign: 'right' }}>
-            {litUsed}L / {litTotal}L ({pct}%)
-          </div>
+          <>
+            <div style={S.progress}><div style={S.progressBar(pct)} /></div>
+            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4, textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>
+              {litUsed} L / {litTotal} L ({pct}%)
+            </div>
+          </>
         )}
       </div>
 
-      {/* FIX jun 2026 (Sprint S): trazabilidad individual de ESTE lote,
-          ya no agregada arriba. Aparece siempre al expandir, aunque no
-          haya sublotes (ej. lote recién producido). */}
+      {/* Trazabilidad individual de ESTE lote (Sprint S). Aparece al expandir,
+          aunque no haya sublotes. Escritorio: timeline + sublotes en grid de
+          2 columnas para aprovechar el ancho; móvil: apilado. */}
       {open && (
         <div style={S.sublotesWrap}>
-          <LoteHistorialTimeline lote={lote} />
-        </div>
-      )}
+          <div style={{
+            display: isDesktop && sublotes.length > 0 ? 'grid' : 'block',
+            gridTemplateColumns: isDesktop && sublotes.length > 0 ? '1.2fr 1fr' : undefined,
+            gap: isDesktop ? 28 : 0, paddingTop: 14,
+          }}>
+            <LoteTimeline lote={lote} isDesktop={isDesktop} />
 
-      {open && sublotes.length > 0 && (
-        <div style={S.sublotesWrap}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', padding: '10px 0 6px', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-            Sublotes
+            {sublotes.length > 0 && (
+              <div style={{ marginTop: isDesktop ? 0 : 16 }}>
+                <div style={S.seclbl}>Sublotes ({sublotes.length})</div>
+                {sublotes.map((sub, i) => {
+                  const isTote = sub.tipo === 'tote' || sub.fase === 1 || sub.claseSublote === 'tote';
+                  const desdeTote = sub.fromTote || sub.esHijoDe;
+                  const hijosDelTote = isTote ? sublotes.filter(h => h.fromTote === sub.cod || h.esHijoDe === sub.cod) : [];
+                  const litHijos = hijosDelTote.reduce((a, h) => a + (Number(h.lit) || 0), 0);
+                  const litRestTote = isTote ? Math.max(0, (Number(sub.lit) || 0) - litHijos) : 0;
+                  return (
+                    <div key={sub.cod || i} style={{
+                      ...S.sublote,
+                      marginLeft: desdeTote ? 14 : 0,
+                      borderLeft: desdeTote ? '3px solid var(--lp-info-600)' : undefined,
+                      paddingLeft: desdeTote ? 10 : 0,
+                      flexWrap: 'wrap',
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, flexWrap: 'wrap' }}>
+                        {desdeTote && <span style={{ fontSize: 12, color: 'var(--lp-info-600)' }}>↳</span>}
+                        <span style={S.subloteCod}>{sub.cod || `#${i + 1}`}</span>
+                        {isTote && <span style={S.faseBadge(true)}>Granel</span>}
+                        {sub.fase === 2 && desdeTote && <span style={S.faseBadge(false)}>Retail</span>}
+                        <span style={{ flex: 1 }}>
+                          {sub.tipo}{sub.env ? ` · ${sub.env}` : ''}{sub.marca ? ` · ${sub.marca}` : ''}
+                          {sub.qty ? ` · x${sub.qty}` : ''}
+                          {sub.lit ? ` · ${sub.lit}L` : ''}
+                        </span>
+                        {sub.tapa && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{sub.tapa}</span>}
+                        {sub.esMerma && <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-600)')}>Merma</span>}
+                        {sub.consumido && <span style={S.badge('var(--lp-success-100)', 'var(--lp-success-700)')}>Consumido</span>}
+                        <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                          {sub.ub === 'teran' ? ICONS.pin : ICONS.fabrica}
+                          {sub.ub === 'teran' ? ' Teran' : ' Fabrica'}
+                        </span>
+                      </div>
+                      {isTote && hijosDelTote.length > 0 && (
+                        <div style={{ width: '100%', fontSize: 10.5, color: 'var(--lp-text-tertiary)', paddingLeft: 80, fontFamily: 'var(--lp-font-mono)' }}>
+                          {litHijos.toFixed(0)}L reenvasado → {litRestTote.toFixed(0)}L pendiente en tote
+                        </div>
+                      )}
+                      {desdeTote && (
+                        <div style={{ width: '100%', fontSize: 10.5, color: 'var(--lp-info-600)', paddingLeft: 80 }}>
+                          ↳ reenvasado desde tote {desdeTote}
+                        </div>
+                      )}
+                      {sub.fecha && (
+                        <div style={{ width: '100%', fontSize: 10.5, color: 'var(--lp-text-tertiary)', paddingLeft: 80, fontFamily: 'var(--lp-font-mono)' }}>
+                          {sub.fecha.slice(0, 10)} {sub.fecha.slice(11, 16)}{sub.usuario ? ` · ${sub.usuario}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
-          {sublotes.map((sub, i) => {
-            const isTote = sub.tipo === 'tote' || sub.fase === 1 || sub.claseSublote === 'tote';
-            const desdeTote = sub.fromTote || sub.esHijoDe;
-            const hijosDelTote = isTote ? sublotes.filter(h => h.fromTote === sub.cod || h.esHijoDe === sub.cod) : [];
-            const litHijos = hijosDelTote.reduce((a, h) => a + (Number(h.lit) || 0), 0);
-            const litRestTote = isTote ? Math.max(0, (Number(sub.lit) || 0) - litHijos) : 0;
-            return (
-            <div key={sub.cod || i} style={{
-              ...S.sublote,
-              marginLeft: desdeTote ? 16 : 0,
-              borderLeft: desdeTote ? '3px solid #1E40AF' : undefined,
-              paddingLeft: desdeTote ? 10 : 0,
-              flexWrap: 'wrap',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, flexWrap: 'wrap' }}>
-                {desdeTote && <span style={{ fontSize: 11, color: '#1E40AF' }}>↳</span>}
-                <span style={S.subloteCod}>{sub.cod || `#${i + 1}`}</span>
-                {isTote && <span style={S.faseBadge(1)}>Granel</span>}
-                {sub.fase === 2 && desdeTote && <span style={S.faseBadge(2)}>Retail</span>}
-                <span style={{ flex: 1 }}>
-                  {sub.tipo}{sub.env ? ` · ${sub.env}` : ''}{sub.marca ? ` · ${sub.marca}` : ''}
-                  {sub.qty ? ` · x${sub.qty}` : ''}
-                  {sub.lit ? ` · ${sub.lit}L` : ''}
-                </span>
-                {sub.tapa && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{sub.tapa}</span>}
-                {sub.esMerma && <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-600)')}>Merma</span>}
-                {sub.consumido && <span style={S.badge('#D1FAE5', '#065F46')}>Consumido</span>}
-                <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>
-                  {sub.ub === 'teran' ? ICONS.pin : ICONS.fabrica}
-                  {sub.ub === 'teran' ? ' Teran' : ' Fabrica'}
-                </span>
-              </div>
-              {/* Trazabilidad de envasado */}
-              {isTote && hijosDelTote.length > 0 && (
-                <div style={{ width: '100%', fontSize: 10, color: 'var(--lp-text-tertiary)', paddingLeft: 80 }}>
-                  {litHijos.toFixed(0)}L reenvasado → {litRestTote.toFixed(0)}L pendiente en tote
-                </div>
-              )}
-              {desdeTote && (
-                <div style={{ width: '100%', fontSize: 10, color: '#1E40AF', paddingLeft: 80 }}>
-                  ↳ reenvasado desde tote {desdeTote}
-                </div>
-              )}
-              {sub.fecha && (
-                <div style={{ width: '100%', fontSize: 10, color: 'var(--lp-text-tertiary)', paddingLeft: 80 }}>
-                  {sub.fecha.slice(0, 10)} {sub.fecha.slice(11, 16)}{sub.usuario ? ` · ${sub.usuario}` : ''}
-                </div>
-              )}
-            </div>
-            );
-          })}
         </div>
       )}
-
-      {/* (jun 2026 Sprint S): se eliminó el bloque "Sin sublotes registrados"
-          — el timeline ya muestra el estado y eventos del lote, así que esa
-          info no aporta. */}
-    </div>
-  );
-}
-
-/* ── Pipeline Track Component ── */
-function PipelineTrack({ estadoCounts, filter, setFilter }) {
-  const total = PIPELINE_STEPS.length;
-
-  // Calculate progress fill: percentage based on where most lotes are
-  const progressPct = useMemo(() => {
-    let maxIdx = 0;
-    PIPELINE_STEPS.forEach((step, i) => {
-      if ((estadoCounts[step.key] || 0) > 0) maxIdx = i;
-    });
-    // Also count "envasado" as reaching step 3 (en_envasado position)
-    if ((estadoCounts['envasado'] || 0) > 0) maxIdx = Math.max(maxIdx, 3);
-    return total > 1 ? Math.round((maxIdx / (total - 1)) * 100) : 0;
-  }, [estadoCounts, total]);
-
-  return (
-    <div style={S.trackWrap}>
-      <div style={S.trackInner}>
-        {/* Background line + progress fill */}
-        <div style={S.trackLine}>
-          <div style={S.trackFill(progressPct)} />
-        </div>
-
-        {/* Nodes */}
-        <div style={S.trackNodes}>
-          {PIPELINE_STEPS.map((step) => {
-            // For "en_envasado", also count "envasado" state
-            let count = estadoCounts[step.key] || 0;
-            if (step.key === 'en_envasado') count += (estadoCounts['envasado'] || 0);
-
-            const isActive = filter === step.key || (step.key === 'en_envasado' && filter === 'envasado');
-            const hasLotes = count > 0;
-            // Determine node visual state
-            let nodeState = 'default';
-            if (isActive) nodeState = 'active';
-            else if (hasLotes) nodeState = 'done';
-            else if (step.key === 'reenvasado') nodeState = 'optional';
-
-            const iconColor = S.trackIconColor(nodeState);
-
-            return (
-              <div
-                key={step.key}
-                style={S.trackNode}
-                onClick={() => setFilter(isActive ? 'todos' : step.key)}
-                title={`${step.label}: ${count} lote${count !== 1 ? 's' : ''}`}
-              >
-                <div style={S.trackCircle(nodeState)}>
-                  <span style={{ color: iconColor, display: 'flex', alignItems: 'center' }}>
-                    {ICONS[step.icon]}
-                  </span>
-                </div>
-                <span style={S.trackLabel(nodeState)}>{step.label}</span>
-                <span style={S.trackCount(nodeState)}>{count || '·'}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
@@ -593,37 +511,39 @@ function PipelineTrack({ estadoCounts, filter, setFilter }) {
 /* MAIN PAGE                                                         */
 /* ================================================================ */
 export default function TrazabilidadPage() {
+  const isDesktop = useIsDesktop();
+  const { user } = useAuth();
+  const rol = user?.rol || '';
+  const esAdmin = rol === 'admin';
+
   const { query, debouncedQuery, setQuery } = useSearch(200);
   const [filter, setFilter] = useState('todos');
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [qrLote, setQrLote] = useState(null);
+  const [toast, setToast] = useState(null);
+  const [confirm, ConfirmEl] = useConfirm();
+
   const { data: trazData, loading, reload } = useApiData(() => api.getTrazabilidad(), [], 8000);
 
-  /* FIX jun 2026 (K1): trazabilidad es la fuente de verdad cross-rol —
-     toda transición de lote/sublote debe reflejarse al instante. */
+  /* trazabilidad es la fuente de verdad cross-rol — toda transición de
+     lote/sublote debe reflejarse al instante. */
   useRealtimeSync({
     onTrazabilidad: () => reload(),
   });
 
+  const showToast = useCallback((msg, isErr = false) => {
+    setToast({ msg, isErr });
+    setTimeout(() => setToast(null), 3200);
+  }, []);
+
   const lotes = useMemo(() => {
     const arr = trazData?.data || (Array.isArray(trazData) ? trazData : []);
-    /* Filtrar lotes con soft-delete (eliminado:true del script de limpieza
-       o del admin). El backend los mantiene para auditoría, el frontend no. */
+    /* Filtrar lotes con soft-delete (eliminado:true). El backend los mantiene
+       para auditoría, el frontend no los muestra. */
     return (Array.isArray(arr) ? arr : []).filter(l => l && !l.eliminado);
   }, [trazData]);
 
-  /* Estado counts for pipeline — "orden" counts any lote with ordenCodigo */
-  const estadoCounts = useMemo(() => {
-    const c = {};
-    let ordenCount = 0;
-    lotes.forEach(l => {
-      const st = l.estado || 'producido';
-      c[st] = (c[st] || 0) + 1;
-      if (l.ordenCodigo) ordenCount++;
-    });
-    c.orden = ordenCount;
-    return c;
-  }, [lotes]);
-
-  /* Filters */
+  /* Filters por estado (con contadores) */
   const filters = useMemo(() => {
     const all = [{ id: 'todos', label: 'Todos' }];
     const counts = {};
@@ -641,11 +561,7 @@ export default function TrazabilidadPage() {
   const filtered = useMemo(() => {
     let arr = lotes;
     if (filter !== 'todos') {
-      if (filter === 'orden') {
-        // Show all lotes that have an ordenCodigo
-        arr = arr.filter(l => !!l.ordenCodigo);
-      } else if (filter === 'en_envasado') {
-        // "en_envasado" filter also shows "envasado" state
+      if (filter === 'en_envasado') {
         arr = arr.filter(l => l.estado === 'en_envasado' || l.estado === 'envasado');
       } else {
         arr = arr.filter(l => l.estado === filter);
@@ -672,6 +588,75 @@ export default function TrazabilidadPage() {
     return { total, lotesHoy, envasados, enProceso };
   }, [lotes]);
 
+  /* §7: Escanear QR → busca el lote escaneado y lo trae al buscador.
+     Reutiliza el QRScanner compartido (BarcodeDetector / jsQR / manual). */
+  const handleScanResult = useCallback((parsed) => {
+    setScannerOpen(false);
+    const cod = (parsed && (parsed.cod || parsed.codigoLote || parsed.raw)) || '';
+    if (!cod) { showToast('No se pudo leer el QR.', true); return; }
+    const match = lotes.find(l =>
+      (l.codigoLote || '').toLowerCase() === String(cod).toLowerCase() ||
+      (l.id || '').toLowerCase() === String(cod).toLowerCase()
+    );
+    if (match) {
+      setQuery(match.codigoLote || match.id || String(cod));
+      setFilter('todos');
+      showToast(`Lote ${match.codigoLote || match.id} localizado.`);
+    } else {
+      setQuery(String(cod));
+      setFilter('todos');
+      showToast(`Buscando "${cod}" — sin coincidencia exacta.`, true);
+    }
+  }, [lotes, setQuery, showToast]);
+
+  /* §7: + Lote manual (solo admin) → crea un lote en trazabilidad vía
+     api.crearLote (server asigna código canónico LP-YYYYMMDD-NNN dentro del
+     mutex). Pide producto y cantidad; NO inventa datos extra. */
+  const handleLoteManual = useCallback(async () => {
+    if (!esAdmin) return;
+    const producto = await confirm('Registra un lote manualmente (sin pasar por producción). Quedará auditado.', {
+      title: '+ Lote manual',
+      confirmText: 'Continuar',
+      prompt: { label: 'Producto / fórmula', placeholder: 'Ej. Vinílica azul rey 19L', required: true },
+    });
+    if (!producto) return;
+    const cantStr = await confirm('¿Cuántas cubetas?', {
+      title: '+ Lote manual',
+      confirmText: 'Crear lote',
+      prompt: { label: 'Cantidad (cubetas)', placeholder: '0', required: true },
+    });
+    if (!cantStr) return;
+    const cantidad = Number(cantStr);
+    if (!Number.isFinite(cantidad) || cantidad <= 0) {
+      showToast('Cantidad inválida.', true);
+      return;
+    }
+    const ahora = new Date().toISOString();
+    const litPerUnit = 19;
+    const lotePayload = {
+      ordenId: '', ordenCodigo: '',
+      producto: producto.trim(), nombre: producto.trim(),
+      cantidad,
+      litPerUnit,
+      litrosTotal: cantidad * litPerUnit,
+      estado: 'producido',
+      esPrueba: false,
+      fecha: ahora,
+      usuario: user?.nombre || user?.usuario || 'admin',
+      sublotes: [],
+      manual: true,
+      historial: [{ estado: 'producido', fecha: ahora, usuario: user?.nombre || user?.usuario || 'admin', nota: 'Lote registrado manualmente (admin).' }],
+    };
+    try {
+      const res = await api.crearLote(lotePayload);
+      if (!res?.ok || !res?.lote) throw new Error(res?.error || 'No se pudo crear el lote');
+      showToast(`Lote ${res.lote.codigoLote || res.lote.id} creado.`);
+      reload();
+    } catch (e) {
+      showToast(e?.message || 'Error al crear lote.', true);
+    }
+  }, [esAdmin, confirm, showToast, reload, user]);
+
   if (loading) {
     return (
       <>
@@ -684,7 +669,7 @@ export default function TrazabilidadPage() {
   return (
     <>
       <TopBar title="Trazabilidad" />
-      <div style={S.wrap}>
+      <div style={isDesktop ? S.wrapDesk : S.wrap}>
         {/* KPIs */}
         <div style={S.kpiGrid}>
           <div style={S.kpi('var(--lp-brand-600)')}>
@@ -699,31 +684,51 @@ export default function TrazabilidadPage() {
             <div style={S.kpiLabel}>En Proceso</div>
             <div style={S.kpiValue}>{kpis.enProceso}</div>
           </div>
-          <div style={S.kpi('#7C3AED')}>
+          <div style={S.kpi('var(--lp-brand-500)')}>
             <div style={S.kpiLabel}>Envasados</div>
             <div style={S.kpiValue}>{kpis.envasados}</div>
           </div>
         </div>
 
-        {/* FIX jun 2026 (Sprint S): se eliminó el PipelineTrack general que
-            agregaba contadores de todos los lotes. La trazabilidad ahora vive
-            DENTRO de cada card individual (LoteHistorialTimeline), porque
-            cada lote tiene su propio rastro y mezclarlos confundía al
-            usuario sobre el avance real de un pedido específico. */}
-
-        {/* Toolbar */}
+        {/* Toolbar §7: buscador + Escanear QR (rol amplio) + Lote manual (admin).
+            En escritorio los botones van a la derecha del buscador y NO se
+            estiran al 100%; en móvil ocupan fila propia con touch ≥46px. */}
         <div style={S.toolbar}>
-          <input
-            type="text"
-            style={S.search}
-            placeholder="Buscar lote, producto, orden..."
-            value={query}
-            onChange={e => setQuery(e.target.value)}
-          />
+          <div style={S.searchBox}>
+            <span style={{ color: 'var(--lp-text-tertiary)', display: 'inline-flex' }}>{ICONS.search}</span>
+            <input
+              data-id="traza.input.buscar"
+              data-rol="admin,tecnico,almacen,compras,recolector,inventario"
+              type="text"
+              style={S.search}
+              placeholder="Buscar lote, producto, orden o escanear QR..."
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+            />
+          </div>
+          <button
+            data-id="traza.btn.escanear-qr"
+            data-rol="admin,tecnico,almacen,compras,recolector,inventario"
+            style={S.btnGhost(!isDesktop)}
+            onClick={() => setScannerOpen(true)}
+          >
+            {ICONS.qr} Escanear QR
+          </button>
+          {esAdmin && (
+            <button
+              data-id="traza.btn.lote-manual"
+              data-rol="admin"
+              title="Solo admin"
+              style={S.btnPrimary(!isDesktop)}
+              onClick={handleLoteManual}
+            >
+              {ICONS.plus} Lote manual
+            </button>
+          )}
         </div>
 
-        {/* Filter pills */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
+        {/* Filter pills por estado (folios mono, scrollable en móvil) */}
+        <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4, flexWrap: isDesktop ? 'wrap' : 'nowrap' }}>
           {filters.map(f => (
             <button key={f.id} style={S.filterPill(f.id === filter)} onClick={() => setFilter(f.id)}>
               {f.label}
@@ -731,15 +736,51 @@ export default function TrazabilidadPage() {
           ))}
         </div>
 
-        {/* Lote cards */}
+        {/* Lote cards — cada uno con su timeline individual */}
         {filtered.length === 0 ? (
           <div style={S.empty}>
             {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` : 'Sin lotes registrados.'}
           </div>
         ) : (
-          filtered.map(lote => <LoteCard key={lote.id || lote.codigoLote} lote={lote} />)
+          filtered.map(lote => (
+            <LoteCard
+              key={lote.id || lote.codigoLote}
+              lote={lote}
+              isDesktop={isDesktop}
+              onShowQR={setQrLote}
+            />
+          ))
         )}
       </div>
+
+      {/* §7: Scanner QR compartido (no se modifica QRModal.jsx) */}
+      {scannerOpen && (
+        <QRScanner
+          onResult={handleScanResult}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
+
+      {/* QR del lote — modal compartido (no se modifica QRModal.jsx) */}
+      {qrLote && <QRModal lote={qrLote} onClose={() => setQrLote(null)} />}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 90px)',
+          left: '50%', transform: 'translateX(-50%)', zIndex: 1200,
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '12px 18px', borderRadius: 12,
+          background: toast.isErr ? 'var(--lp-danger-100)' : 'var(--lp-brand-600)',
+          color: toast.isErr ? 'var(--lp-danger-600)' : '#fff',
+          fontSize: 13, fontWeight: 600, fontFamily: 'var(--lp-font-sans)',
+          boxShadow: '0 8px 28px -10px rgba(20,30,25,.4)', maxWidth: '90vw',
+        }}>
+          {toast.isErr ? <span aria-hidden="true">✕</span> : ICONS.check}
+          <span>{toast.msg}</span>
+        </div>
+      )}
+      {ConfirmEl}
     </>
   );
 }

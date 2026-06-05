@@ -1,46 +1,142 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   ReportesPage — Control continuo de inventarios
+   ReportesPage — Control continuo de inventarios · reskin verde "Claude Design"
 
-   Sub-tabs:
-     • Cierre mensual: preview del mes actual + botón "Cerrar mes" (admin)
-     • Histórico mensual: tabla de los últimos 12 meses con KPIs principales
-     • Detalle snapshot: drill-down de un mes específico (al click en histórico)
-     • Trimestral: comparativa Q vs Q anterior
+   Responsive (useIsDesktop):
+     • Escritorio → header h1/psub, KPIs g4, gráficas SVG anchas, las 6
+       sub-secciones como segmented tabs scrollable.
+     • Móvil → header compacto, KPIs g2, las 6 sub-secciones via BOTTOM-SHEET
+       (selector con grid, no 6 tabs apretadas). Default = Cierre (resumen).
+
+   Sub-secciones (§9 conservadas íntegras, con su contenido real):
+     1. Cierre mensual   — preview del mes + cerrar mes (admin)
+     2. Histórico        — tabla de cierres mensuales + export Excel
+     3. Trimestral       — agregado Q vs Q anterior
+     4. Análisis avanzado— Pareto causas + rotación familia + stock muerto
+     5. Estratégico      — comparativa anual SVG + lead times + ABC + stockout
+     6. Catálogo causas  — CRUD de causas raíz (admin)
+
+   Reskin VISUAL: tokens var(--lp-*) verde, sin emojis (SVG line), cifras mono,
+   touch ≥44px, botones nunca 100% width en escritorio. Lógica intacta:
+   endpoints /api/reports/*, snapshot/IRA/ABC, SVG charts existentes,
+   Import/Export gateado compras/admin.
    ════════════════════════════════════════════════════════════════════════════ */
 import { useState, useEffect, useCallback } from 'react';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
-import PageTabs from '../../components/ui/PageTabs';
 import HelpHint from '../../components/HelpHint';
 import useConfirm from '../../hooks/useConfirm';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import CausasManager from './CausasManager';
 import EstrategicoTab from './EstrategicoTab';
 
+/* ── Paleta de gráficas — todo vía token verde (sin hex sueltos) ──
+   Acentos secundarios mapeados a tokens existentes del DS verde. */
+const CHART = {
+  brand:  'var(--lp-brand-600)',   // verde marca (serie principal)
+  brand2: 'var(--lp-brand-300)',   // verde claro (barras no-último mes)
+  info:   'var(--lp-info-600)',    // azul (margen / cobertura)
+  amber:  'var(--lp-warning-600)', // ámbar (salidas / devoluciones)
+  danger: 'var(--lp-danger-600)',  // rojo (críticas / causa #1)
+  success:'var(--lp-success-600)', // verde ok
+};
+
 const S = {
+  /* layout */
   wrap: { padding: '0 20px 100px' },
+  wrapDesk: { padding: '0 24px 60px', maxWidth: 1180 },
+  h1: { fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--lp-text-primary)' },
+  psub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3, marginBottom: 16 },
+
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 'var(--lp-radius-sm)', fontSize: 12, marginBottom: 12 },
-  loading: { textAlign: 'center', padding: 40, color: 'var(--lp-text-tertiary)' },
-  kpiGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, marginBottom: 18 },
-  kpi: (accent) => ({
-    background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
-    borderTop: '2px solid ' + accent, borderRadius: 'var(--lp-radius)', padding: '12px 14px',
-    fontFamily: 'var(--lp-font-sans)', minHeight: 80,
+  loading: { textAlign: 'center', padding: 40, color: 'var(--lp-text-tertiary)', fontSize: 13 },
+
+  /* KPI grid — g2 móvil / g4 escritorio */
+  kpiGrid: (desktop) => ({
+    display: 'grid',
+    gridTemplateColumns: desktop ? 'repeat(auto-fill, minmax(190px, 1fr))' : '1fr 1fr',
+    gap: 10, marginBottom: 18,
   }),
-  kpiLabel: { fontSize: 10, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em' },
-  kpiVal: { fontSize: 20, fontWeight: 800, marginTop: 3, color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)' },
-  kpiSub: { fontSize: 10, color: 'var(--lp-text-tertiary)', marginTop: 4 },
-  section: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 14 },
-  sectionTitle: { fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.08em', marginBottom: 10 },
-  table: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
-  th: { textAlign: 'left', padding: '8px 10px', background: 'var(--lp-bg-sunken)', fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-secondary)', borderBottom: '1.5px solid var(--lp-border-subtle)' },
-  td: { padding: '8px 10px', borderBottom: '1px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-sans)' },
-  tdNum: { padding: '8px 10px', borderBottom: '1px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-mono)', textAlign: 'right' },
-  btnPrimary: { padding: '10px 18px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--lp-radius-sm)', border: 'none', background: 'var(--lp-brand-600)', color: '#fff', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' },
-  btnSuccess: { padding: '10px 18px', fontSize: 13, fontWeight: 700, borderRadius: 'var(--lp-radius-sm)', border: 'none', background: 'var(--lp-success-600)', color: '#fff', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' },
-  btnGhost: { padding: '8px 14px', fontSize: 12, fontWeight: 600, borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-primary)' },
-  badge: (bg, fg) => ({ display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700, borderRadius: 4, background: bg, color: fg, textTransform: 'uppercase', letterSpacing: '.04em' }),
-  alertBox: { background: 'var(--lp-warning-100)', border: '1px solid var(--lp-warning-300)', color: 'var(--lp-warning-700)', padding: '10px 12px', borderRadius: 'var(--lp-radius-sm)', fontSize: 12, marginBottom: 12 },
+  kpi: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 14px', fontFamily: 'var(--lp-font-sans)', minHeight: 78 },
+  kdot: { display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 },
+  dot: (c) => ({ width: 7, height: 7, borderRadius: 999, flexShrink: 0, background: c, display: 'inline-block' }),
+  kpiLabel: { fontSize: 11, fontWeight: 600, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.03em' },
+  kpiVal: { fontSize: 21, fontWeight: 700, color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)', display: 'flex', alignItems: 'baseline', gap: 6 },
+  kpiSub: { fontSize: 11, color: 'var(--lp-text-secondary)', marginTop: 4 },
+
+  /* secciones / paneles / tablas */
+  section: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 16, padding: 16, marginBottom: 14 },
+  sectionTitle: { fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 12 },
+  table: { width: '100%', borderCollapse: 'collapse', fontSize: 12.5 },
+  th: { textAlign: 'left', padding: '10px 12px', background: 'var(--lp-bg-sunken)', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--lp-text-tertiary)', borderBottom: '1px solid var(--lp-border-subtle)', whiteSpace: 'nowrap', fontWeight: 700 },
+  td: { padding: '10px 12px', borderBottom: '1px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-primary)' },
+  tdNum: { padding: '10px 12px', borderBottom: '1px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-mono)', textAlign: 'right', fontWeight: 600, color: 'var(--lp-text-primary)' },
+
+  /* botones (auto-width en escritorio, ≥44 touch) */
+  btnPrimary: { padding: '12px 18px', minHeight: 44, fontSize: 13.5, fontWeight: 600, borderRadius: 12, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', display: 'inline-flex', alignItems: 'center', gap: 8 },
+  btnGhost: { padding: '0 14px', minHeight: 44, fontSize: 13, fontWeight: 600, borderRadius: 12, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 7, whiteSpace: 'nowrap' },
+  btnGhostSm: { padding: '0 12px', minHeight: 36, fontSize: 12.5, fontWeight: 600, borderRadius: 10, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-secondary)', display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', textDecoration: 'none' },
+
+  badge: (bg, fg) => ({ display: 'inline-flex', alignItems: 'center', padding: '3px 9px', fontSize: 10.5, fontWeight: 700, borderRadius: 999, background: bg, color: fg, textTransform: 'uppercase', letterSpacing: '.03em' }),
+  alertBox: { background: 'var(--lp-warning-50)', border: '1px solid var(--lp-warning-100)', color: 'var(--lp-warning-700)', padding: '11px 13px', borderRadius: 12, fontSize: 12.5, marginBottom: 12 },
+
+  /* form controls */
+  field: { padding: '0 12px', height: 44, border: '1px solid var(--lp-border-subtle)', borderRadius: 12, fontSize: 14, fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', outline: 'none', boxSizing: 'border-box' },
+  fieldMono: { padding: '0 12px', height: 44, border: '1px solid var(--lp-border-subtle)', borderRadius: 12, width: 110, fontSize: 14, fontFamily: 'var(--lp-font-mono)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', outline: 'none', boxSizing: 'border-box' },
+  lbl: { fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-secondary)' },
+
+  /* segmented (sub-secciones escritorio) */
+  segWrap: { display: 'flex', gap: 6, padding: 4, background: 'var(--lp-bg-sunken)', borderRadius: 999, marginBottom: 18, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' },
+  seg: (on) => ({
+    flex: '0 0 auto', padding: '9px 16px', minHeight: 40, borderRadius: 999, border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: on ? 600 : 500,
+    background: on ? 'var(--lp-brand-600)' : 'transparent',
+    color: on ? '#fff' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap', transition: 'all .15s',
+  }),
+
+  /* selector móvil (abre bottom-sheet) */
+  secSelector: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+    width: '100%', height: 48, padding: '0 16px', marginBottom: 16,
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 14, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+  },
+  secSelLabel: { fontSize: 14.5, fontWeight: 600, color: 'var(--lp-text-primary)' },
+  secSelHint: { fontSize: 11, fontWeight: 600, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em' },
+
+  /* bottom-sheet */
+  sheetOverlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
+  sheet: { background: 'var(--lp-bg-base)', width: '100%', maxWidth: 460, borderRadius: '24px 24px 0 0', padding: '8px 18px calc(22px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.22)' },
+  sheetGrab: { width: 40, height: 4, borderRadius: 999, background: 'var(--lp-border-strong)', margin: '8px auto 14px' },
+  sheetTitle: { fontSize: 12, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 2px 12px' },
+  sheetGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  sheetItem: (on) => ({
+    display: 'flex', flexDirection: 'column', gap: 8, padding: '16px 14px', minHeight: 88,
+    borderRadius: 16, cursor: 'pointer', textAlign: 'left', fontFamily: 'var(--lp-font-sans)',
+    border: on ? '1.5px solid var(--lp-brand-600)' : '1px solid var(--lp-border-subtle)',
+    background: on ? 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)' : 'var(--lp-bg-raised)',
+  }),
+  sheetItemLabel: (on) => ({ fontSize: 14, fontWeight: 600, color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-primary)' }),
+  sheetItemSub: { fontSize: 11, color: 'var(--lp-text-tertiary)', lineHeight: 1.35 },
+
+  empty: { padding: 20, fontSize: 12.5, color: 'var(--lp-text-tertiary)' },
+};
+
+/* ── SVG icon helper (line, currentColor) ── */
+const Icon = ({ d, size = 18, fill = 'none' }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    {Array.isArray(d) ? d.map((p, i) => <path key={i} d={p} />) : <path d={d} />}
+  </svg>
+);
+const IC = {
+  check: 'M20 6 9 17l-5-5',
+  refresh: ['M21 12a9 9 0 1 1-3-6.7', 'M21 3v6h-6'],
+  download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
+  upload: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'M17 8l-5-5-5 5', 'M12 3v12'],
+  eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z'],
+  back: 'M19 12H5M12 19l-7-7 7-7',
+  chevron: 'M9 18l6-6-6-6',
 };
 
 const fmt$ = (n) => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
@@ -54,8 +150,27 @@ function periodoLabel(p) {
   return MESES_ES[M - 1] + ' ' + Y;
 }
 
+/* KPI card reusable (mockup: dot + label + valor mono + trend + sub) */
+function KPI({ label, value, sub, accent = CHART.brand, trend, trendUp }) {
+  return (
+    <div style={S.kpi}>
+      <div style={S.kdot(accent)}>
+        <span style={S.dot(accent)} />
+        <span style={S.kpiLabel}>{label}</span>
+      </div>
+      <div style={S.kpiVal}>
+        {value}
+        {trend != null && (
+          <span style={{ fontSize: 11, fontWeight: 700, color: trendUp ? CHART.success : CHART.danger }}>{trend}</span>
+        )}
+      </div>
+      {sub != null && <div style={S.kpiSub}>{sub}</div>}
+    </div>
+  );
+}
+
 /* ── Tab: Cierre mensual ─────────────────────────────────────────────────── */
-function CierreMensualTab({ esAdmin, confirm, onCierre }) {
+function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
@@ -83,8 +198,7 @@ function CierreMensualTab({ esAdmin, confirm, onCierre }) {
     if (!ok) return;
     setClosing(true); setErr('');
     try {
-      const r = await api.cerrarMes(mesAnterior, false);
-      onCierre?.(r.snapshot);
+      await api.cerrarMes(mesAnterior, false);
       cargar();
     } catch (e) {
       if (e?.data?.existe) {
@@ -94,8 +208,7 @@ function CierreMensualTab({ esAdmin, confirm, onCierre }) {
         );
         if (ok2) {
           try {
-            const r2 = await api.cerrarMes(mesAnterior, true);
-            onCierre?.(r2.snapshot);
+            await api.cerrarMes(mesAnterior, true);
             cargar();
           } catch (e2) { setErr(e2.message); }
         }
@@ -125,47 +238,15 @@ function CierreMensualTab({ esAdmin, confirm, onCierre }) {
         </div>
       )}
 
-      <div style={S.kpiGrid}>
-        <div style={S.kpi('#7C3AED')}>
-          <div style={S.kpiLabel}>Valor inventario MP</div>
-          <div style={S.kpiVal}>{fmt$(k.valorMP)}</div>
-          <div style={S.kpiSub}>{k.mpsTotales} MPs · {k.ptsTotales} PTs</div>
-        </div>
-        <div style={S.kpi(k.iraGlobal != null && k.iraGlobal >= 95 ? 'var(--lp-success-600)' : 'var(--lp-warning-600)')}>
-          <div style={S.kpiLabel}>IRA Global</div>
-          <div style={S.kpiVal}>{fmtPct(k.iraGlobal)}</div>
-          <div style={S.kpiSub}>Meta ≥95%</div>
-        </div>
-        <div style={S.kpi(k.coberturaMes >= 30 ? 'var(--lp-success-600)' : 'var(--lp-warning-600)')}>
-          <div style={S.kpiLabel}>Cobertura mes</div>
-          <div style={S.kpiVal}>{fmtPct(k.coberturaMes)}</div>
-          <div style={S.kpiSub}>{k.mpsContadasEnMes} de {k.mpsTotales} contadas</div>
-        </div>
-        <div style={S.kpi(k.mpsCriticas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-border-subtle)')}>
-          <div style={S.kpiLabel}>Stock crítico</div>
-          <div style={S.kpiVal}>{k.mpsCriticas}</div>
-          <div style={S.kpiSub}>MPs sin existencia</div>
-        </div>
-        <div style={S.kpi(k.mpsBajas > 0 ? 'var(--lp-warning-600)' : 'var(--lp-border-subtle)')}>
-          <div style={S.kpiLabel}>Stock bajo</div>
-          <div style={S.kpiVal}>{k.mpsBajas}</div>
-          <div style={S.kpiSub}>Bajo el mínimo</div>
-        </div>
-        <div style={S.kpi('#0F6E56')}>
-          <div style={S.kpiLabel}>Ajustes netos</div>
-          <div style={S.kpiVal}>{fmtN(k.ajustesNetos, 1)}</div>
-          <div style={S.kpiSub}>kg neto del periodo</div>
-        </div>
-        <div style={S.kpi('#0F6E56')}>
-          <div style={S.kpiLabel}>Entradas mes</div>
-          <div style={S.kpiVal}>{fmtN(k.entradasMes, 0)}</div>
-          <div style={S.kpiSub}>kg recibidos</div>
-        </div>
-        <div style={S.kpi('#D97706')}>
-          <div style={S.kpiLabel}>Salidas mes</div>
-          <div style={S.kpiVal}>{fmtN(k.salidasMes, 0)}</div>
-          <div style={S.kpiSub}>kg consumidos</div>
-        </div>
+      <div style={S.kpiGrid(isDesktop)}>
+        <KPI label="Valor inventario MP" accent={CHART.info} value={fmt$(k.valorMP)} sub={`${k.mpsTotales} MPs · ${k.ptsTotales} PTs`} />
+        <KPI label="IRA Global" accent={k.iraGlobal != null && k.iraGlobal >= 95 ? CHART.success : CHART.amber} value={fmtPct(k.iraGlobal)} sub="Meta ≥95%" />
+        <KPI label="Cobertura mes" accent={k.coberturaMes >= 30 ? CHART.success : CHART.amber} value={fmtPct(k.coberturaMes)} sub={`${k.mpsContadasEnMes} de ${k.mpsTotales} contadas`} />
+        <KPI label="Stock crítico" accent={k.mpsCriticas > 0 ? CHART.danger : 'var(--lp-border-strong)'} value={k.mpsCriticas} sub="MPs sin existencia" />
+        <KPI label="Stock bajo" accent={k.mpsBajas > 0 ? CHART.amber : 'var(--lp-border-strong)'} value={k.mpsBajas} sub="Bajo el mínimo" />
+        <KPI label="Ajustes netos" accent={CHART.brand} value={fmtN(k.ajustesNetos, 1)} sub="kg neto del periodo" />
+        <KPI label="Entradas mes" accent={CHART.brand} value={fmtN(k.entradasMes, 0)} sub="kg recibidos" />
+        <KPI label="Salidas mes" accent={CHART.amber} value={fmtN(k.salidasMes, 0)} sub="kg consumidos" />
       </div>
 
       <div style={S.section}>
@@ -196,10 +277,12 @@ function CierreMensualTab({ esAdmin, confirm, onCierre }) {
       </div>
 
       {esAdmin && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-          <button style={S.btnGhost} onClick={cargar}>Refrescar</button>
-          <button style={S.btnPrimary} onClick={handleCerrar} disabled={closing}>
-            {closing ? 'Cerrando…' : '✓ Cerrar mes anterior'}
+        <div style={{ display: 'flex', justifyContent: isDesktop ? 'flex-end' : 'stretch', gap: 10, flexWrap: 'wrap' }}>
+          <button style={S.btnGhost} onClick={cargar}>
+            <Icon d={IC.refresh} size={16} /> Refrescar
+          </button>
+          <button style={{ ...S.btnPrimary, opacity: closing ? 0.6 : 1, flex: isDesktop ? '0 0 auto' : 1, justifyContent: 'center' }} onClick={handleCerrar} disabled={closing}>
+            <Icon d={IC.check} size={16} /> {closing ? 'Cerrando…' : 'Cerrar mes anterior'}
           </button>
         </div>
       )}
@@ -226,7 +309,7 @@ function HistoricoTab({ onSelectPeriodo }) {
     return (
       <div style={S.section}>
         <p style={{ margin: 0, fontSize: 13, color: 'var(--lp-text-secondary)' }}>
-          Aún no hay snapshots cerrados. Cierra el primer mes desde el tab "Cierre mensual" para comenzar a construir el histórico.
+          Aún no hay snapshots cerrados. Cierra el primer mes desde "Cierre mensual" para comenzar a construir el histórico.
         </p>
       </div>
     );
@@ -281,8 +364,14 @@ function HistoricoTab({ onSelectPeriodo }) {
                 <td style={S.tdNum}>{fmtN(f.kpis.ajustesNetos, 1)}</td>
                 <td style={S.td}>{f.cerradoPor || '—'}</td>
                 <td style={S.td}>
-                  <button style={S.btnGhost} onClick={() => onSelectPeriodo?.(f.periodo)}>Ver</button>
-                  <a href={api.urlExportSnapshot(f.periodo)} style={{ ...S.btnGhost, marginLeft: 6, textDecoration: 'none', display: 'inline-block' }}>↓ Excel</a>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <button style={S.btnGhostSm} onClick={() => onSelectPeriodo?.(f.periodo)}>
+                      <Icon d={IC.eye} size={14} /> Ver
+                    </button>
+                    <a href={api.urlExportSnapshot(f.periodo)} style={S.btnGhostSm}>
+                      <Icon d={IC.download} size={14} /> Excel
+                    </a>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -294,7 +383,7 @@ function HistoricoTab({ onSelectPeriodo }) {
 }
 
 /* ── Tab: Detalle snapshot ────────────────────────────────────────────────── */
-function DetalleSnapshot({ periodo, onClose }) {
+function DetalleSnapshot({ periodo, onClose, isDesktop }) {
   const [snap, setSnap] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -315,22 +404,26 @@ function DetalleSnapshot({ periodo, onClose }) {
 
   return (
     <>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, marginBottom: 14 }}>
-        <h2 style={{ margin: 0, fontSize: 18 }}>Snapshot {periodoLabel(snap.periodo)}</h2>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)' }}>Snapshot {periodoLabel(snap.periodo)}</h2>
         {snap.cerradoPor && <span style={S.badge('var(--lp-success-100)', 'var(--lp-success-700)')}>cerrado</span>}
         <span style={{ marginLeft: 'auto', display: 'flex', gap: 8 }}>
-          <a href={api.urlExportSnapshot(snap.periodo)} style={{ ...S.btnGhost, textDecoration: 'none' }}>↓ Excel</a>
-          <button style={S.btnGhost} onClick={onClose}>← Volver</button>
+          <a href={api.urlExportSnapshot(snap.periodo)} style={S.btnGhostSm}>
+            <Icon d={IC.download} size={14} /> Excel
+          </a>
+          <button style={S.btnGhostSm} onClick={onClose}>
+            <Icon d={IC.back} size={14} /> Volver
+          </button>
         </span>
       </div>
 
-      <div style={S.kpiGrid}>
-        <div style={S.kpi('#7C3AED')}><div style={S.kpiLabel}>Valor MP</div><div style={S.kpiVal}>{fmt$(k.valorMP)}</div></div>
-        <div style={S.kpi('var(--lp-success-600)')}><div style={S.kpiLabel}>IRA Global</div><div style={S.kpiVal}>{fmtPct(k.iraGlobal)}</div></div>
-        <div style={S.kpi('var(--lp-brand-600)')}><div style={S.kpiLabel}>Cobertura</div><div style={S.kpiVal}>{fmtPct(k.coberturaMes)}</div></div>
-        <div style={S.kpi('var(--lp-danger-600)')}><div style={S.kpiLabel}>Críticas</div><div style={S.kpiVal}>{k.mpsCriticas}</div></div>
-        <div style={S.kpi('var(--lp-warning-600)')}><div style={S.kpiLabel}>Bajas</div><div style={S.kpiVal}>{k.mpsBajas}</div></div>
-        <div style={S.kpi('#0F6E56')}><div style={S.kpiLabel}>Rotación</div><div style={S.kpiVal}>{fmtN(k.rotacion, 2)}</div></div>
+      <div style={S.kpiGrid(isDesktop)}>
+        <KPI label="Valor MP" accent={CHART.info} value={fmt$(k.valorMP)} />
+        <KPI label="IRA Global" accent={CHART.success} value={fmtPct(k.iraGlobal)} />
+        <KPI label="Cobertura" accent={CHART.brand} value={fmtPct(k.coberturaMes)} />
+        <KPI label="Críticas" accent={CHART.danger} value={k.mpsCriticas} />
+        <KPI label="Bajas" accent={CHART.amber} value={k.mpsBajas} />
+        <KPI label="Rotación" accent={CHART.brand} value={fmtN(k.rotacion, 2)} />
       </div>
 
       {snap.varianzasFlagged?.length > 0 && (
@@ -362,7 +455,7 @@ function DetalleSnapshot({ periodo, onClose }) {
 }
 
 /* ── Tab: Trimestral ─────────────────────────────────────────────────────── */
-function TrimestralTab() {
+function TrimestralTab({ isDesktop }) {
   const now = new Date();
   const qActual = Math.floor(now.getMonth() / 3) + 1;
   const [year, setYear] = useState(now.getFullYear());
@@ -386,13 +479,11 @@ function TrimestralTab() {
         Agregado de 3 meses con comparativa contra el trimestre anterior. Útil para juntas con dirección y para decisiones estratégicas (cambios de mínimos, discontinuación de MPs, renegociación con proveedores).
       </HelpHint>
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'center' }}>
-        <label style={{ fontSize: 12, fontWeight: 600 }}>Año:</label>
-        <input type="number" inputMode="decimal" value={year} onChange={e => setYear(parseInt(e.target.value) || year)}
-          style={{ padding: '8px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-sm)', width: 100, fontSize: 13, fontFamily: 'var(--lp-font-mono)' }} />
-        <label style={{ fontSize: 12, fontWeight: 600 }}>Trimestre:</label>
-        <select value={q} onChange={e => setQ(parseInt(e.target.value))}
-          style={{ padding: '8px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-sm)', fontSize: 13 }}>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <label style={S.lbl}>Año:</label>
+        <input type="number" inputMode="numeric" value={year} onChange={e => setYear(parseInt(e.target.value) || year)} style={S.fieldMono} />
+        <label style={S.lbl}>Trimestre:</label>
+        <select value={q} onChange={e => setQ(parseInt(e.target.value))} style={{ ...S.field, height: 44, width: 'auto' }}>
           <option value={1}>Q1 (Ene-Mar)</option>
           <option value={2}>Q2 (Abr-Jun)</option>
           <option value={3}>Q3 (Jul-Sep)</option>
@@ -404,47 +495,23 @@ function TrimestralTab() {
       {err && <div style={S.err}>{err}</div>}
       {data && (
         <>
-          <div style={S.kpiGrid}>
-            <div style={S.kpi('#7C3AED')}>
-              <div style={S.kpiLabel}>Valor inicial Q</div>
-              <div style={S.kpiVal}>{fmt$(data.agregado.valorInicial)}</div>
-            </div>
-            <div style={S.kpi('#7C3AED')}>
-              <div style={S.kpiLabel}>Valor final Q</div>
-              <div style={S.kpiVal}>{fmt$(data.agregado.valorFinal)}</div>
-              <div style={S.kpiSub}>
-                {data.agregado.deltaPct != null && (
-                  <span style={{ color: data.agregado.deltaPct >= 0 ? 'var(--lp-success-700)' : 'var(--lp-danger-700)' }}>
-                    {data.agregado.deltaPct >= 0 ? '↑' : '↓'} {Math.abs(data.agregado.deltaPct)}%
-                  </span>
-                )}
-              </div>
-            </div>
-            <div style={S.kpi('#0F6E56')}>
-              <div style={S.kpiLabel}>Entradas trimestre</div>
-              <div style={S.kpiVal}>{fmtN(data.agregado.entradasTotal, 0)}</div>
-              <div style={S.kpiSub}>kg recibidos</div>
-            </div>
-            <div style={S.kpi('#D97706')}>
-              <div style={S.kpiLabel}>Salidas trimestre</div>
-              <div style={S.kpiVal}>{fmtN(data.agregado.salidasTotal, 0)}</div>
-              <div style={S.kpiSub}>kg consumidos</div>
-            </div>
-            <div style={S.kpi(data.agregado.iraPromedio >= 95 ? 'var(--lp-success-600)' : 'var(--lp-warning-600)')}>
-              <div style={S.kpiLabel}>IRA promedio Q</div>
-              <div style={S.kpiVal}>{fmtPct(data.agregado.iraPromedio)}</div>
-              <div style={S.kpiSub}>
-                {data.comparativa.tendenciaIRA != null && (
-                  <span style={{ color: data.comparativa.tendenciaIRA >= 0 ? 'var(--lp-success-700)' : 'var(--lp-danger-700)' }}>
-                    {data.comparativa.tendenciaIRA >= 0 ? '↑' : '↓'} {Math.abs(data.comparativa.tendenciaIRA)}pp vs {data.comparativa.qAnterior}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div style={S.kpi('var(--lp-brand-600)')}>
-              <div style={S.kpiLabel}>Cobertura prom</div>
-              <div style={S.kpiVal}>{fmtPct(data.agregado.coberturaPromedio)}</div>
-            </div>
+          <div style={S.kpiGrid(isDesktop)}>
+            <KPI label="Valor inicial Q" accent={CHART.info} value={fmt$(data.agregado.valorInicial)} />
+            <KPI label="Valor final Q" accent={CHART.info} value={fmt$(data.agregado.valorFinal)}
+              sub={data.agregado.deltaPct != null && (
+                <span style={{ color: data.agregado.deltaPct >= 0 ? CHART.success : CHART.danger, fontWeight: 700 }}>
+                  {data.agregado.deltaPct >= 0 ? '↑' : '↓'} {Math.abs(data.agregado.deltaPct)}%
+                </span>
+              )} />
+            <KPI label="Entradas trimestre" accent={CHART.brand} value={fmtN(data.agregado.entradasTotal, 0)} sub="kg recibidos" />
+            <KPI label="Salidas trimestre" accent={CHART.amber} value={fmtN(data.agregado.salidasTotal, 0)} sub="kg consumidos" />
+            <KPI label="IRA promedio Q" accent={data.agregado.iraPromedio >= 95 ? CHART.success : CHART.amber} value={fmtPct(data.agregado.iraPromedio)}
+              sub={data.comparativa.tendenciaIRA != null && (
+                <span style={{ color: data.comparativa.tendenciaIRA >= 0 ? CHART.success : CHART.danger, fontWeight: 700 }}>
+                  {data.comparativa.tendenciaIRA >= 0 ? '↑' : '↓'} {Math.abs(data.comparativa.tendenciaIRA)}pp vs {data.comparativa.qAnterior}
+                </span>
+              )} />
+            <KPI label="Cobertura prom" accent={CHART.brand} value={fmtPct(data.agregado.coberturaPromedio)} />
           </div>
 
           <div style={S.section}>
@@ -524,14 +591,14 @@ function AnalisisAvanzadoTab() {
 
       {/* ═══════════ Pareto de causas raíz ═══════════ */}
       <div style={S.section}>
-        <div style={{ ...S.sectionTitle, display: 'flex', justifyContent: 'space-between' }}>
+        <div style={{ ...S.sectionTitle, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
           <span>Pareto de causas raíz (últimos 90 días)</span>
           {pareto && <span style={{ fontWeight: 400, color: 'var(--lp-text-tertiary)', textTransform: 'none', letterSpacing: 0 }}>
             {pareto.totalVarianzas} varianzas · Δ absoluto {fmtN(pareto.totalAjusteAbsoluto, 1)} kg
           </span>}
         </div>
         {!pareto || pareto.filas.length === 0 ? (
-          <div style={{ padding: 20, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+          <div style={S.empty}>
             Sin varianzas aprobadas con causa raíz en el periodo. Aprueba sesiones de conteo con causas asignadas para empezar a construir este análisis.
           </div>
         ) : (
@@ -541,7 +608,7 @@ function AnalisisAvanzadoTab() {
               <th style={S.th}>Eventos</th>
               <th style={S.th}>% del total</th>
               <th style={S.th}>Acumulado %</th>
-              <th style={S.th} style={{ ...S.th, minWidth: 200 }}>Distribución</th>
+              <th style={{ ...S.th, minWidth: 200 }}>Distribución</th>
               <th style={S.th}>Δ absoluto kg</th>
             </tr></thead>
             <tbody>
@@ -554,12 +621,12 @@ function AnalisisAvanzadoTab() {
                   <td style={S.tdNum}>{f.count}</td>
                   <td style={S.tdNum}>{f.countPct}%</td>
                   <td style={S.tdNum}>{f.acumuladoPct}%</td>
-                  <td style={{ padding: '8px 10px' }}>
-                    <div style={{ background: 'var(--lp-bg-sunken)', borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                  <td style={{ padding: '10px 12px' }}>
+                    <div style={{ background: 'var(--lp-bg-sunken)', borderRadius: 999, height: 8, overflow: 'hidden' }}>
                       <div style={{
                         width: ((f.count / maxParetoCount) * 100) + '%',
-                        height: '100%',
-                        background: i === 0 ? 'var(--lp-danger-600)' : i < 3 ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)',
+                        height: '100%', borderRadius: 999,
+                        background: i === 0 ? CHART.danger : i < 3 ? CHART.amber : CHART.brand,
                       }} />
                     </div>
                   </td>
@@ -575,9 +642,7 @@ function AnalisisAvanzadoTab() {
       <div style={S.section}>
         <div style={S.sectionTitle}>Rotación por familia (mes en curso)</div>
         {!rotacion || rotacion.filas.length === 0 ? (
-          <div style={{ padding: 20, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-            Sin movimientos en el mes en curso.
-          </div>
+          <div style={S.empty}>Sin movimientos en el mes en curso.</div>
         ) : (
           <div className="table-scroll"><table style={S.table}>
             <thead><tr>
@@ -612,12 +677,12 @@ function AnalisisAvanzadoTab() {
 
       {/* ═══════════ Stock muerto ═══════════ */}
       <div style={S.section}>
-        <div style={{ ...S.sectionTitle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ ...S.sectionTitle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
           <span>Stock muerto — MPs sin movimiento</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 11, fontWeight: 400, textTransform: 'none', letterSpacing: 0 }}>
             <label style={{ color: 'var(--lp-text-secondary)' }}>Umbral:</label>
             <select value={diasMuerto} onChange={e => setDiasMuerto(parseInt(e.target.value))}
-              style={{ padding: '6px 10px', fontSize: 12, border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-sm)' }}>
+              style={{ ...S.field, height: 40, width: 'auto', fontSize: 12.5 }}>
               <option value={30}>30 días</option>
               <option value={60}>60 días</option>
               <option value={90}>90 días</option>
@@ -628,8 +693,8 @@ function AnalisisAvanzadoTab() {
         </div>
 
         {!stockMuerto || stockMuerto.filas.length === 0 ? (
-          <div style={{ padding: 20, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-            ✓ Sin MPs muertas en el umbral seleccionado. Buen control de rotación.
+          <div style={S.empty}>
+            Sin MPs muertas en el umbral seleccionado. Buen control de rotación.
           </div>
         ) : (
           <>
@@ -682,81 +747,122 @@ function AnalisisAvanzadoTab() {
   );
 }
 
+/* ── Definición de las 6 sub-secciones (§9) ──────────────────────────────── */
+const SECCIONES = [
+  { id: 'cierre',      label: 'Cierre',       full: 'Cierre mensual',    sub: 'Preview del mes + cerrar mes' },
+  { id: 'historico',   label: 'Histórico',    full: 'Histórico mensual', sub: 'Serie de cierres anteriores' },
+  { id: 'trimestral',  label: 'Trimestral',   full: 'Trimestral',        sub: 'Agregado Q vs Q anterior' },
+  { id: 'analisis',    label: 'Análisis',     full: 'Análisis avanzado', sub: 'Pareto · rotación · stock muerto' },
+  { id: 'estrategico', label: 'Estratégico',  full: 'Estratégico',       sub: 'Anual · lead times · ABC' },
+  { id: 'causas',      label: 'Causas',       full: 'Catálogo de causas', sub: 'Causas raíz (editable · admin)' },
+];
+
+/* ── Bottom-sheet de secciones (móvil) ───────────────────────────────────── */
+function SeccionesSheet({ active, onPick, onClose }) {
+  return (
+    <div style={S.sheetOverlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.sheet} onClick={e => e.stopPropagation()}>
+        <div style={S.sheetGrab} />
+        <div style={S.sheetTitle}>Secciones de reportes</div>
+        <div style={S.sheetGrid}>
+          {SECCIONES.map(sec => {
+            const on = sec.id === active;
+            return (
+              <button key={sec.id} style={S.sheetItem(on)} onClick={() => onPick(sec.id)}>
+                <span style={S.sheetItemLabel(on)}>{sec.full}</span>
+                <span style={S.sheetItemSub}>{sec.sub}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Componente principal ────────────────────────────────────────────────── */
 export default function ReportesPage() {
   const { user } = useAuth();
   const [confirm, ConfirmEl] = useConfirm();
+  const isDesktop = useIsDesktop();
   const [activeTab, setActiveTab] = useState('cierre');
   const [detallePeriodo, setDetallePeriodo] = useState(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const esAdmin = user?.rol === 'admin';
+  const puedeImportExport = esAdmin || user?.rol === 'compras';
+
+  const activeSec = SECCIONES.find(s => s.id === activeTab) || SECCIONES[0];
+
+  const selectTab = (id) => { setActiveTab(id); setDetallePeriodo(null); };
+
+  /* Export gateado compras/admin (data-id reportes.btn.exportar).
+     Usa el endpoint REAL existente: snapshot xlsx del mes en curso.
+     (No hay endpoint de import de reportes en el backend — ver flag en el reporte.) */
+  const handleExport = () => {
+    const d = new Date();
+    const per = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+    window.location.href = api.urlExportSnapshot(per);
+  };
 
   return (
     <div>
       <TopBar title="Reportes de inventario" />
-      <div style={S.wrap}>
-        <PageTabs
-          tabs={[
-            { id: 'cierre', label: 'Cierre mensual', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2,
-            }) },
-            { id: 'historico', label: 'Histórico mensual', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2,
-            }) },
-            { id: 'trimestral', label: 'Trimestral', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2,
-            }) },
-            { id: 'analisis', label: 'Análisis avanzado', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2,
-            }) },
-            { id: 'estrategico', label: 'Estratégico', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2,
-            }) },
-            { id: 'causas', label: 'Catálogo causas', style: (active) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-              color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)', marginBottom: -2,
-            }) },
-          ]}
-          activeTab={activeTab}
-          onChange={(t) => { setActiveTab(t); setDetallePeriodo(null); }}
-          style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--lp-border-subtle)', marginBottom: 16, overflowX: 'auto' }}
-        />
+      <div style={{ ...S.wrap, ...(isDesktop ? S.wrapDesk : {}) }}>
+        <div style={S.h1}>Reportes</div>
+        <div style={S.psub}>
+          {detallePeriodo ? 'Detalle de snapshot' : (isDesktop ? activeSec.full : `Sección · ${activeSec.full}`)}
+        </div>
+
+        {/* Selector de secciones: segmented escritorio / botón→bottom-sheet móvil */}
+        {isDesktop ? (
+          <div style={S.segWrap}>
+            {SECCIONES.map(sec => (
+              <button key={sec.id} style={S.seg(sec.id === activeTab && !detallePeriodo)} onClick={() => selectTab(sec.id)}>
+                {sec.full}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <button style={S.secSelector} onClick={() => setSheetOpen(true)}>
+            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+              <span style={S.secSelHint}>Sección</span>
+              <span style={S.secSelLabel}>{activeSec.full}</span>
+            </span>
+            <Icon d={IC.chevron} size={20} />
+          </button>
+        )}
+
+        {/* Export — gateado compras/admin. (Import de reportes no tiene endpoint backend — flag.) */}
+        {puedeImportExport && !detallePeriodo && (
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            <button data-id="reportes.btn.exportar" style={S.btnGhost} onClick={handleExport}>
+              <Icon d={IC.download} size={16} /> Exportar Excel
+            </button>
+          </div>
+        )}
 
         {detallePeriodo ? (
-          <DetalleSnapshot periodo={detallePeriodo} onClose={() => setDetallePeriodo(null)} />
+          <DetalleSnapshot periodo={detallePeriodo} onClose={() => setDetallePeriodo(null)} isDesktop={isDesktop} />
         ) : (
           <>
-            {activeTab === 'cierre' && <CierreMensualTab esAdmin={esAdmin} confirm={confirm} />}
+            {activeTab === 'cierre' && <CierreMensualTab esAdmin={esAdmin} confirm={confirm} isDesktop={isDesktop} />}
             {activeTab === 'historico' && <HistoricoTab onSelectPeriodo={setDetallePeriodo} />}
-            {activeTab === 'trimestral' && <TrimestralTab />}
+            {activeTab === 'trimestral' && <TrimestralTab isDesktop={isDesktop} />}
             {activeTab === 'analisis' && <AnalisisAvanzadoTab />}
             {activeTab === 'estrategico' && <EstrategicoTab />}
             {activeTab === 'causas' && <CausasManager />}
           </>
         )}
       </div>
+
+      {!isDesktop && sheetOpen && (
+        <SeccionesSheet
+          active={activeTab}
+          onPick={(id) => { selectTab(id); setSheetOpen(false); }}
+          onClose={() => setSheetOpen(false)}
+        />
+      )}
+
       {ConfirmEl}
     </div>
   );
