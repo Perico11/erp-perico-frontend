@@ -3,7 +3,7 @@ import api from '../../../services/api';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(26, 24, 21, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto' },
-  modal: { background: '#fff', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 440, width: '92%' },
+  modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 440, width: '92%' },
   title: { fontSize: 16, fontWeight: 700, color: 'var(--lp-danger-700)', marginBottom: 8 },
   warning: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: '10px 12px', borderRadius: 8, fontSize: 12, marginBottom: 14, lineHeight: 1.5 },
   label: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6 },

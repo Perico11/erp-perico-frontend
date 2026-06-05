@@ -17,7 +17,7 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
   },
   modal: {
-    background: '#FFFFFF', color: '#1A1815',
+    background: 'var(--lp-bg-raised)', color: '#1A1815',
     borderRadius: 12, width: '100%', maxWidth: 560,
     maxHeight: 'calc(100vh - 32px)', maxBlockSize: 'calc(100dvh - 32px)',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
@@ -37,7 +37,7 @@ const S = {
   },
   body: {
     padding: '18px 20px', overflowY: 'auto', flex: 1,
-    background: '#FFFFFF', color: '#1A1815',
+    background: 'var(--lp-bg-raised)', color: '#1A1815',
   },
   footer: {
     padding: '12px 20px', borderTop: '1px solid #E5E1DA',
@@ -63,21 +63,21 @@ const S = {
   input: {
     width: '100%', padding: '12px 14px', fontSize: 16,
     border: '1.5px solid #E5E1DA', borderRadius: 8,
-    background: '#FFFFFF', color: '#1A1815',
+    background: 'var(--lp-bg-raised)', color: '#1A1815',
     boxSizing: 'border-box', outline: 'none',
     colorScheme: 'light', fontFamily: 'inherit',
   },
   inputSm: {
     width: '100%', padding: '10px 12px', fontSize: 14,
     border: '1.5px solid #E5E1DA', borderRadius: 6,
-    background: '#FFFFFF', color: '#1A1815',
+    background: 'var(--lp-bg-raised)', color: '#1A1815',
     boxSizing: 'border-box', outline: 'none',
   },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
   textarea: {
     width: '100%', padding: '10px 12px', fontSize: 13,
     border: '1.5px solid #E5E1DA', borderRadius: 8,
-    background: '#FFFFFF', color: '#1A1815',
+    background: 'var(--lp-bg-raised)', color: '#1A1815',
     minHeight: 140, resize: 'vertical', boxSizing: 'border-box',
     outline: 'none', fontFamily: 'monospace',
   },

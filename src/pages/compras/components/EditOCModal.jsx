@@ -20,11 +20,11 @@ const PRIORIDADES = [
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(26, 24, 21, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto' },
-  modal: { background: '#fff', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 640, width: '92%', maxHeight: '92vh', overflowY: 'auto' },
+  modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 640, width: '92%', maxHeight: '92vh', overflowY: 'auto' },
   title: { fontSize: 16, fontWeight: 700, color: 'var(--lp-brand-600)', marginBottom: 16 },
   label: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6 },
   input: { width: '100%', padding: '10px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--lp-font-sans)', boxSizing: 'border-box' },
-  select: { width: '100%', padding: '10px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, fontSize: 13, background: '#fff', boxSizing: 'border-box' },
+  select: { width: '100%', padding: '10px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, fontSize: 13, background: 'var(--lp-bg-raised)', boxSizing: 'border-box' },
   fieldGroup: { marginBottom: 12 },
   grid2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 },
   itemBox: { background: 'var(--lp-bg-sunken)', borderRadius: 8, padding: 10, marginBottom: 8, fontSize: 12 },

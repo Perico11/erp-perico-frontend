@@ -26,7 +26,7 @@ const S = {
   },
   dialog: (maxWidthPx) => ({
     /* Hex explícitos para inmunidad al dark mode del SO en móvil. */
-    background: '#FFFFFF',
+    background: 'var(--lp-bg-raised)',
     color: '#1A1815',
     borderRadius: 'var(--lp-radius)',
     boxShadow: '0 24px 60px rgba(0, 0, 0, 0.35)',
@@ -64,7 +64,7 @@ const S = {
     overflowY: 'auto',
     flex: 1,
     /* Hex explícito — el dark mode del SO no puede invertir esto. */
-    background: '#FFFFFF',
+    background: 'var(--lp-bg-raised)',
     color: '#1A1815',
   },
   footer: {
@@ -93,7 +93,7 @@ const S = {
     /* MÓVIL: 16px previene el zoom-on-focus de iOS Safari (zooms si <16px). */
     fontSize: 16, fontFamily: 'var(--lp-font-sans)',
     /* HEX EXPLÍCITO (no tokens) para inmunidad al dark mode del SO. */
-    background: '#FFFFFF', color: '#1A1815',
+    background: 'var(--lp-bg-raised)', color: '#1A1815',
     resize: 'vertical', minHeight: 80, boxSizing: 'border-box',
     outline: 'none',
     colorScheme: 'light',
@@ -105,7 +105,7 @@ const S = {
     /* MÓVIL: 16px previene zoom-on-focus de iOS Safari. */
     fontSize: 16,
     fontFamily: numeric ? 'var(--lp-font-mono)' : 'var(--lp-font-sans)',
-    background: '#FFFFFF', color: '#1A1815',
+    background: 'var(--lp-bg-raised)', color: '#1A1815',
     boxSizing: 'border-box', outline: 'none',
     letterSpacing: numeric ? '0.3em' : 'normal',
     textAlign: numeric ? 'center' : 'left',

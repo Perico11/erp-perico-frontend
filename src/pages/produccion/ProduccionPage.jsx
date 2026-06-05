@@ -102,7 +102,7 @@ const S = {
   fieldInput: {
     width: '100%', padding: '10px 12px', borderRadius: 8,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     boxSizing: 'border-box', marginBottom: 12,
   },
   toast: {

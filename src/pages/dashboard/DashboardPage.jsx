@@ -159,7 +159,7 @@ const S = {
     textAlign: 'left', width: '100%',
   },
   heroIcon: {
-    width: 42, height: 42, borderRadius: 10, background: '#fff',
+    width: 42, height: 42, borderRadius: 10, background: 'var(--lp-bg-raised)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   heroText: { flex: 1, minWidth: 0 },

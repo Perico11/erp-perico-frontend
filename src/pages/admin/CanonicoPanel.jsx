@@ -44,25 +44,25 @@ const S = {
     backdropFilter: 'blur(3px)',
   },
   modalCard: {
-    background: '#FFF', color: '#1A1815', borderRadius: 12, width: '100%', maxWidth: 480,
+    background: 'var(--lp-bg-raised)', color: '#1A1815', borderRadius: 12, width: '100%', maxWidth: 480,
     padding: 24, boxShadow: '0 24px 60px rgba(0,0,0,.35)', colorScheme: 'light',
   },
   modalTitle: { fontSize: 16, fontWeight: 700, marginBottom: 12 },
   label: { display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#5A5550', marginBottom: 6, marginTop: 14 },
   input: {
     width: '100%', padding: '12px 14px', fontSize: 16, border: '1.5px solid #E5E1DA',
-    borderRadius: 8, background: '#FFF', color: '#1A1815', boxSizing: 'border-box',
+    borderRadius: 8, background: 'var(--lp-bg-raised)', color: '#1A1815', boxSizing: 'border-box',
     outline: 'none', fontFamily: 'inherit', colorScheme: 'light',
   },
   inputTOTP: {
     width: '100%', padding: '14px 14px', fontSize: 24, letterSpacing: '0.4em',
     fontFamily: 'monospace', textAlign: 'center', border: '2px solid #8E27E2',
-    borderRadius: 8, background: '#FFF', color: '#1A1815', boxSizing: 'border-box',
+    borderRadius: 8, background: 'var(--lp-bg-raised)', color: '#1A1815', boxSizing: 'border-box',
     outline: 'none', colorScheme: 'light',
   },
   textarea: {
     width: '100%', padding: '10px 12px', fontSize: 13, border: '1.5px solid #E5E1DA',
-    borderRadius: 8, background: '#FFF', color: '#1A1815', minHeight: 70, resize: 'vertical',
+    borderRadius: 8, background: 'var(--lp-bg-raised)', color: '#1A1815', minHeight: 70, resize: 'vertical',
     boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', colorScheme: 'light',
   },
   deltaTable: {

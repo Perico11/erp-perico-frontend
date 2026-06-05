@@ -23,7 +23,7 @@ export function ndaYaAceptado(user, context) {
 
 const S = {
   overlay: { position:'fixed', inset:0, background:'rgba(15,12,8,.92)', backdropFilter:'blur(10px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:99998, padding:16 },
-  modal: { background:'#fff', borderRadius:14, maxWidth:680, width:'100%', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 30px 60px rgba(0,0,0,.5)', overflow:'hidden', fontFamily:'var(--lp-font-sans)' },
+  modal: { background:'var(--lp-bg-raised)', borderRadius:14, maxWidth:680, width:'100%', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 30px 60px rgba(0,0,0,.5)', overflow:'hidden', fontFamily:'var(--lp-font-sans)' },
   header: { background:'linear-gradient(135deg, #7c1d1d 0%, #b91c1c 100%)', padding:'20px 24px', color:'#fff' },
   iconLine: { display:'flex', alignItems:'center', gap:12 },
   iconBox: { width:44, height:44, borderRadius:12, background:'rgba(255,255,255,.18)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 },
@@ -44,7 +44,7 @@ const S = {
   metaLabel: { fontSize:11, textTransform:'uppercase', fontWeight:700, letterSpacing:'.06em' },
   metaValue: { fontWeight:600, color:'var(--lp-text-primary)', fontSize:12 },
   footer: { padding:'14px 24px', borderTop:'1px solid var(--lp-border-subtle)', background:'var(--lp-bg-base)', display:'flex', gap:10 },
-  btnReject: { flex:'0 0 auto', padding:'11px 18px', background:'#fff', color:'#7c1d1d', border:'1.5px solid #fecaca', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' },
+  btnReject: { flex:'0 0 auto', padding:'11px 18px', background:'var(--lp-bg-raised)', color:'#7c1d1d', border:'1.5px solid #fecaca', borderRadius:8, fontSize:13, fontWeight:700, cursor:'pointer', fontFamily:'inherit' },
   btnAccept: { flex:1, padding:'11px 18px', background:'linear-gradient(135deg, #15803d, #16a34a)', color:'#fff', border:'none', borderRadius:8, fontSize:13, fontWeight:800, cursor:'pointer', fontFamily:'inherit', boxShadow:'0 2px 8px rgba(21,128,61,.3)' },
 };
 

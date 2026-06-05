@@ -40,7 +40,7 @@ const S = {
   stepTitle: { fontSize: 14, fontWeight: 700, marginBottom: 4 },
   stepText: { fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 },
   qrBox: {
-    background: '#fff', padding: 14, borderRadius: 10,
+    background: 'var(--lp-bg-raised)', padding: 14, borderRadius: 10,
     border: '2px dashed var(--lp-brand-300)', textAlign: 'center',
     margin: '16px auto', maxWidth: 280,
   },
@@ -55,7 +55,7 @@ const S = {
   inputTOTP: {
     width: 200, padding: '14px 14px', fontSize: 24, letterSpacing: '0.4em',
     fontFamily: 'monospace', textAlign: 'center', border: '2px solid #8E27E2',
-    borderRadius: 8, background: '#FFF', color: '#1A1815',
+    borderRadius: 8, background: 'var(--lp-bg-raised)', color: '#1A1815',
     outline: 'none', colorScheme: 'light',
   },
   btn: (kind) => ({

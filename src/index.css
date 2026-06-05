@@ -566,9 +566,17 @@ input:not(:-webkit-autofill) {
      de Luis cuando hay sublotes esperando). El glow simula respiración
      sin ser molesto. La regla prefers-reduced-motion abajo lo anula. */
   @keyframes lpPulse {
-    0%, 100% { box-shadow: 0 8px 28px rgba(37,99,235,.32); }
-    50%      { box-shadow: 0 10px 36px rgba(37,99,235,.55); }
+    0%, 100% { box-shadow: 0 8px 28px rgba(29,158,117,.30); }
+    50%      { box-shadow: 0 10px 36px rgba(29,158,117,.52); }
   }
+
+  /* AB1 (jun 2026): shake para error de PIN en login (HANDOFF). */
+  @keyframes lpShake {
+    0%, 100% { transform: translateX(0); }
+    15%, 45%, 75% { transform: translateX(-8px); }
+    30%, 60%, 90% { transform: translateX(8px); }
+  }
+  .lp-shake { animation: lpShake .42s cubic-bezier(.36,.07,.19,.97); }
 }
 
 /* Reducir motion para usuarios que lo prefieren */

@@ -20,7 +20,7 @@ const S = {
   search: {
     flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
   card: {
@@ -90,7 +90,7 @@ const S = {
   fieldInput: {
     width: '100%', padding: '10px 12px', borderRadius: 8,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     boxSizing: 'border-box', marginBottom: 12,
   },
   btnPrimary: {

@@ -30,7 +30,7 @@ const S = {
     overflow: 'auto',
   },
   modal: {
-    background: '#fff',
+    background: 'var(--lp-bg-raised)',
     borderRadius: 'var(--lp-radius)',
     padding: 24,
     maxWidth: 560,
@@ -68,7 +68,7 @@ const S = {
     borderRadius: 8,
     fontSize: 13,
     fontFamily: 'var(--lp-font-sans)',
-    background: '#fff',
+    background: 'var(--lp-bg-raised)',
     boxSizing: 'border-box',
   },
   fieldGroup: {

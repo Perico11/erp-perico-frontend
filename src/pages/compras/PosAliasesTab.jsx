@@ -35,7 +35,7 @@ const S = {
   search: {
     flex: 1, minWidth: 220, padding: '10px 14px', borderRadius: 8,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: '#fff', boxSizing: 'border-box',
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', boxSizing: 'border-box',
   },
 
   cardGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 10 },
@@ -94,7 +94,7 @@ const S = {
   fieldLabel: { fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)',
                 textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6, display: 'block' },
   select: { width: '100%', padding: '10px 12px', borderRadius: 8, fontSize: 13,
-            border: '1.5px solid var(--lp-border-subtle)', background: '#fff',
+            border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)',
             boxSizing: 'border-box', marginBottom: 12, fontFamily: 'inherit' },
 };
 

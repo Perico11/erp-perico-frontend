@@ -33,7 +33,7 @@ const S = {
   search: {
     flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
   table: {
@@ -804,7 +804,7 @@ function FlagPopup({ flags, anchorRect, onClose }) {
         zIndex: 9999,
         left: `${left}px`,
         top: `${top}px`,
-        background: '#fff',
+        background: 'var(--lp-bg-raised)',
         border: '1px solid var(--lp-border-default, #d4d2c8)',
         borderRadius: 8,
         boxShadow: '0 4px 16px rgba(0,0,0,.12)',

@@ -71,7 +71,7 @@ const S = {
   search: {
     flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-    fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
+    fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
   sectionHeader: (bg, fg) => ({
@@ -116,7 +116,7 @@ const S = {
   editInput: {
     width: 70, padding: '4px 8px', borderRadius: 6, fontSize: 13,
     border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-mono)',
-    textAlign: 'right', background: '#fff', outline: 'none',
+    textAlign: 'right', background: 'var(--lp-bg-raised)', outline: 'none',
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
   saveBtn: {
@@ -152,12 +152,12 @@ const S = {
   fieldInput: {
     width: '100%', padding: '10px 14px', borderRadius: 8, fontSize: 13,
     border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-sans)',
-    background: '#fff', outline: 'none', color: 'var(--lp-text-primary)', boxSizing: 'border-box',
+    background: 'var(--lp-bg-raised)', outline: 'none', color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
   fieldSelect: {
     width: '100%', padding: '10px 14px', borderRadius: 8, fontSize: 13,
     border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'var(--lp-font-sans)',
-    background: '#fff', color: 'var(--lp-text-primary)', boxSizing: 'border-box',
+    background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
   modalFooter: {
     display: 'flex', gap: 8, justifyContent: 'flex-end',
@@ -241,7 +241,7 @@ function RecepcionModal({ mpList, onClose, onSuccess }) {
             {search && !mp && filteredMPs.length > 0 && (
               <div style={{
                 maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)',
-                borderRadius: 8, marginTop: 4, background: '#fff',
+                borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)',
               }}>
                 {filteredMPs.slice(0, 15).map(m => (
                   <div key={m} onClick={() => { setMp(m); setSearch(''); }}
@@ -1382,7 +1382,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
           style={{
             flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
             border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-            fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
+            fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
           }}
         />
       </div>

@@ -3,7 +3,7 @@ import api from '../../../services/api';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(26, 24, 21, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto' },
-  modal: { background: '#fff', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 580, width: '92%', maxHeight: '92vh', overflowY: 'auto' },
+  modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 580, width: '92%', maxHeight: '92vh', overflowY: 'auto' },
   title: { fontSize: 16, fontWeight: 700, color: 'var(--lp-success-700)', marginBottom: 16 },
   label: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6 },
   input: { width: '100%', padding: '10px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--lp-font-sans)', boxSizing: 'border-box' },
@@ -18,9 +18,9 @@ const S = {
   btnSuccess: { background: 'var(--lp-success-600)', color: '#fff' },
   btnGhost: { background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-primary)' },
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: '8px 12px', borderRadius: 6, fontSize: 12, marginBottom: 10 },
-  canvas: { border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, width: '100%', cursor: 'crosshair', touchAction: 'none', background: '#fff' },
+  canvas: { border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, width: '100%', cursor: 'crosshair', touchAction: 'none', background: 'var(--lp-bg-raised)' },
   canvasHint: { fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4 },
-  clearBtn: { padding: '4px 10px', fontSize: 11, fontWeight: 600, border: '1px solid var(--lp-border-subtle)', borderRadius: 6, background: '#fff', cursor: 'pointer' },
+  clearBtn: { padding: '4px 10px', fontSize: 11, fontWeight: 600, border: '1px solid var(--lp-border-subtle)', borderRadius: 6, background: 'var(--lp-bg-raised)', cursor: 'pointer' },
 };
 
 export default function RecibirOCModal({ oc, onClose, onSaved }) {

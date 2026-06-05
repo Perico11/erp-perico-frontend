@@ -148,7 +148,7 @@ const S = {
     width: '100%', padding: '9px 12px', fontSize: 13,
     borderRadius: 'var(--lp-radius-sm)',
     border: '1.5px solid var(--lp-border-subtle)',
-    fontFamily: 'inherit', background: '#fff',
+    fontFamily: 'inherit', background: 'var(--lp-bg-raised)',
     boxSizing: 'border-box', minHeight: 38,
   },
   colorChips: { display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 },
@@ -177,7 +177,7 @@ const S = {
   /* Fuente: grid de cards */
   fontGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8 },
   fontCard: (active) => ({
-    background: '#fff',
+    background: 'var(--lp-bg-raised)',
     border: active ? '2px solid var(--lp-brand-600)' : '1.5px solid var(--lp-border-subtle)',
     borderRadius: 'var(--lp-radius-sm)', padding: '12px 10px',
     cursor: 'pointer', textAlign: 'center',
@@ -197,7 +197,7 @@ const S = {
   /* Logos grid */
   logoGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 },
   logoCard: (active) => ({
-    background: '#fff',
+    background: 'var(--lp-bg-raised)',
     border: active ? '2px solid var(--lp-brand-600)' : '1.5px solid var(--lp-border-subtle)',
     borderRadius: 'var(--lp-radius-sm)', padding: 8, cursor: 'pointer',
     textAlign: 'center',
@@ -219,11 +219,11 @@ const S = {
   },
   previewTopbar: {
     display: 'flex', alignItems: 'center', gap: 10,
-    padding: 10, background: '#fff', borderRadius: 6,
+    padding: 10, background: 'var(--lp-bg-raised)', borderRadius: 6,
     border: '1.5px solid var(--lp-border-subtle)', marginBottom: 10,
   },
   previewKPI: (color) => ({
-    background: '#fff', borderTop: `3px solid ${color}`,
+    background: 'var(--lp-bg-raised)', borderTop: `3px solid ${color}`,
     borderRadius: 6, padding: '10px 12px',
     border: '1.5px solid var(--lp-border-subtle)', borderTopWidth: 3,
     marginBottom: 10,

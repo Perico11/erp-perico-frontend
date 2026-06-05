@@ -38,7 +38,7 @@ const S = {
   search: {
     flex:1, minWidth:200, padding:'10px 14px', borderRadius:8,
     border:'1.5px solid var(--lp-border-subtle)', fontSize:13,
-    fontFamily:'var(--lp-font-sans)', background:'#fff', boxSizing:'border-box',
+    fontFamily:'var(--lp-font-sans)', background:'var(--lp-bg-raised)', boxSizing:'border-box',
   },
 
   cardGrid: {

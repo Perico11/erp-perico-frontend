@@ -8,7 +8,9 @@ const S = {
     minHeight: '100dvh',
     width: '100%',
     maxWidth: '100vw',
-    background: 'linear-gradient(180deg, #F5F0E8 0%, #EBE6DD 100%)',
+    /* HANDOFF jun 2026: fondo calm forest con glow verde sutil arriba.
+       Usa tokens → flipea solo en modo oscuro (glow mint sobre fondo oscuro). */
+    background: 'radial-gradient(120% 60% at 50% 0%, color-mix(in srgb, var(--lp-brand-600) 7%, var(--lp-bg-base)) 0%, var(--lp-bg-base) 60%)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     padding: 0,
     fontFamily: 'var(--lp-font-sans)',
@@ -19,7 +21,7 @@ const S = {
   card: {
     width: '100%',
     maxWidth: 400,
-    background: '#fff',
+    background: 'var(--lp-bg-raised)',
     borderRadius: 20,
     boxShadow: '0 12px 40px rgba(0,0,0,.08)',
     overflow: 'hidden',
@@ -40,7 +42,7 @@ const S = {
   logoImg: {
     width: 72, height: 72, objectFit: 'contain',
     borderRadius: 14, border: '1.5px solid var(--lp-border-subtle)',
-    padding: 6, background: '#fff',
+    padding: 6, background: 'var(--lp-bg-raised)',
     display: 'block', margin: '0 auto',
   },
   logoFallback: {
@@ -65,7 +67,7 @@ const S = {
     width: '100%', padding: '12px 14px', borderRadius: 10,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 14,
     fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-primary)',
-    background: '#fff', outline: 'none', boxSizing: 'border-box',
+    background: 'var(--lp-bg-raised)', outline: 'none', boxSizing: 'border-box',
   },
   btn: {
     width: '100%', padding: '14px 20px', borderRadius: 10,
@@ -160,6 +162,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState('name');
   const [logoOk, setLogoOk] = useState(true);
+  const [shake, setShake] = useState(false); /* AB1: trigger animación shake en error de PIN */
   const nameRef = useRef(null);
 
   /* NO auto-focus: iOS Safari abre el teclado solo, después al tocar la barra
@@ -194,12 +197,19 @@ export default function LoginPage() {
     setError('');
     try {
       await login(nombre.trim(), pinVal);
-      navigate('/', { replace: true });
-    } catch (err) {
-      setError(err.message || 'Error de acceso');
-      setPin('');
-    } finally {
+      /* AB1 (HANDOFF): pantalla de éxito breve "Hola, {nombre} · Preparando
+         todo…" antes de entrar — toque cálido es-MX. */
       setLoading(false);
+      setStep('success');
+      setTimeout(() => navigate('/', { replace: true }), 850);
+    } catch (err) {
+      /* Mensaje genérico por seguridad (no revelar si fue usuario o PIN). */
+      setError(err.message || 'Usuario o PIN incorrecto.');
+      setPin('');
+      setLoading(false);
+      /* Disparar shake en los puntos del PIN */
+      setShake(true);
+      setTimeout(() => setShake(false), 450);
     }
   };
 
@@ -243,7 +253,27 @@ export default function LoginPage() {
     <div style={S.page}>
       <div className="login-card">
         <div style={S.cardBody}>
-          {step === 'name' ? (
+          {step === 'success' ? (
+            /* AB1 (HANDOFF): pantalla de éxito cálida antes de entrar */
+            <div style={{ textAlign: 'center', padding: '32px 8px 24px' }}>
+              <div style={{
+                width: 64, height: 64, borderRadius: '50%', margin: '0 auto 18px',
+                background: 'color-mix(in srgb, var(--lp-brand-600) 16%, transparent)',
+                color: 'var(--lp-brand-600)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              </div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--lp-text-primary)' }}>
+                Hola, {nombre.trim()}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
+                Preparando todo…
+              </div>
+            </div>
+          ) : step === 'name' ? (
             /* SIN <form>: en iOS Safari PWA standalone, el form se auto-submitea
                cuando el usuario toca la barra de autofill arriba del teclado.
                Eso causa el "reinicio sin parar" reportado. Usamos div + button onClick. */
@@ -312,7 +342,7 @@ export default function LoginPage() {
               <div style={S.pinSub}>Ingresa tu PIN — usa el teclado o los botones</div>
 
               {/* PIN dots */}
-              <div style={S.dots}>
+              <div style={S.dots} className={shake ? 'lp-shake' : undefined}>
                 {[0,1,2,3].map(i => (
                   <div key={i} style={i < pin.length ? S.dotOn : S.dotOff} />
                 ))}
