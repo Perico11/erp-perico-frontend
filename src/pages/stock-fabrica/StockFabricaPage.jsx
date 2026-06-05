@@ -199,6 +199,57 @@ const S = {
     fontFamily: 'var(--lp-font-sans)', background: '#fff', outline: 'none',
     boxSizing: 'border-box', marginBottom: 12, appearance: 'auto',
   },
+  /* ── Z8 (jun 2026): formulario guiado de envasado ─────────────────── */
+  stepBar: {
+    display: 'flex', alignItems: 'center', gap: 6,
+    marginBottom: 16, flexWrap: 'wrap',
+  },
+  stepChip: (st /* done | current | pending */) => ({
+    display: 'flex', alignItems: 'center', gap: 6,
+    fontSize: 11, fontWeight: st === 'current' ? 700 : 600,
+    color: st === 'pending' ? 'var(--lp-text-tertiary)'
+         : st === 'current' ? 'var(--lp-brand-700)'
+         : 'var(--lp-success-700)',
+  }),
+  stepNum: (st) => ({
+    width: 18, height: 18, borderRadius: '50%',
+    background: st === 'pending' ? 'var(--lp-bg-sunken)'
+             : st === 'current' ? 'var(--lp-brand-600)'
+             : 'var(--lp-success-600)',
+    color: st === 'pending' ? 'var(--lp-text-tertiary)' : '#fff',
+    fontSize: 9, fontWeight: 800, fontFamily: 'var(--lp-font-mono)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  }),
+  stepSep: { width: 12, height: 1, background: 'var(--lp-border-default)' },
+  presoGrid: {
+    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(86px, 1fr))',
+    gap: 8, marginBottom: 16,
+  },
+  presoCard: (active, disabled) => ({
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+    padding: '12px 8px', borderRadius: 'var(--lp-radius-sm)',
+    border: '1.5px solid ' + (active ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
+    background: active ? 'var(--lp-brand-50)' : (disabled ? 'var(--lp-bg-sunken)' : 'var(--lp-bg-raised)'),
+    color: active ? 'var(--lp-brand-700)' : (disabled ? 'var(--lp-text-tertiary)' : 'var(--lp-text-secondary)'),
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.45 : 1,
+    fontFamily: 'var(--lp-font-sans)', minHeight: 76,
+    transition: 'all .15s', textAlign: 'center',
+  }),
+  presoNombre: { fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
+  presoCap: { fontSize: 10, opacity: .8, fontFamily: 'var(--lp-font-mono)' },
+  ticket: {
+    background: 'var(--lp-bg-sunken)',
+    border: '1.5px dashed var(--lp-border-default)',
+    borderRadius: 'var(--lp-radius-sm)',
+    padding: '12px 14px', marginTop: 4,
+  },
+  ticketRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    fontSize: 12, padding: '3px 0',
+  },
+  ticketKey: { color: 'var(--lp-text-tertiary)', fontWeight: 600 },
+  ticketVal: { color: 'var(--lp-text-primary)', fontWeight: 700, fontFamily: 'var(--lp-font-mono)' },
   toast: {
     position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
     padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 1001,
@@ -211,6 +262,31 @@ const S = {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
   },
 };
+
+/* Z8 (jun 2026): metadata de presentaciones con iconos SVG inline.
+   Reemplaza el <select> plano por tarjetas visuales touch-friendly. */
+const PRESENTACIONES_META = [
+  {
+    key: 'cubeta', nombre: 'Cubeta', cap: '19 L',
+    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14l-1.2 12.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 7Z"/><path d="M4 7h16"/><path d="M9 4h6l1 3H8l1-3Z"/></svg>),
+  },
+  {
+    key: 'galon', nombre: 'Galón', cap: '3.785 L',
+    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3h4v2.5l2.5 1.8A3 3 0 0 1 18 9.7V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9.7a3 3 0 0 1 1.5-2.4L10 5.5V3Z"/><path d="M6 12h12"/></svg>),
+  },
+  {
+    key: 'litro', nombre: 'Litro', cap: '1 L',
+    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6v3l1 2v13a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V7l1-2V2Z"/><path d="M8 11h8"/></svg>),
+  },
+  {
+    key: 'otros', nombre: 'Otros', cap: 'bote/funda',
+    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>),
+  },
+  {
+    key: 'tote', nombre: 'TOTE', cap: 'granel',
+    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="8" ry="2.6"/><path d="M4 5v14a8 2.6 0 0 0 16 0V5"/><path d="M4 12a8 2.6 0 0 0 16 0"/></svg>),
+  },
+];
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /* ENVASADO MODAL                                                     */
@@ -403,10 +479,43 @@ function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
     <div style={S.overlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>Envasar Lote</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">✕</button>
+          <span style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
+            Envasar Lote
+            {lote.esPrueba && <PruebaBadge size="sm" />}
+          </span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4 }} aria-label="Cerrar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
         </div>
         <div style={S.modalBody}>
+          {/* Z8: step bar guía — pasos adaptativos según presentación.
+              TOTE: 2 pasos (Presentación · Litros). Cubeta: 4 (Pres · Envase ·
+              Tapa · Cantidad). Galón/Litro/Otros: 3 (Pres · Envase · Cantidad). */}
+          {(() => {
+            const pasos = [{ k: 'preso', label: 'Presentación', ok: !!tipo }];
+            if (!isTote) pasos.push({ k: 'envase', label: 'Envase', ok: !!subKey });
+            if (usaTapa) pasos.push({ k: 'tapa', label: 'Tapa', ok: !!tapaEfectiva });
+            pasos.push({ k: 'cant', label: isTote ? 'Litros' : 'Cantidad', ok: parseFloat(qty) > 0 });
+            /* el "actual" es el primer paso no-ok */
+            const idxActual = pasos.findIndex(p => !p.ok);
+            const nodes = [];
+            pasos.forEach((p, i) => {
+              const st = p.ok ? 'done' : (i === idxActual ? 'current' : 'pending');
+              nodes.push(
+                <span key={p.k} style={S.stepChip(st)}>
+                  <span style={S.stepNum(st)}>
+                    {st === 'done' ? (
+                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                    ) : (i + 1)}
+                  </span>
+                  {p.label}
+                </span>
+              );
+              if (i < pasos.length - 1) nodes.push(<span key={'sep' + p.k} style={S.stepSep} />);
+            });
+            return <div style={S.stepBar}>{nodes}</div>;
+          })()}
+
           {error && (
             <div style={{
               padding: '10px 14px',
@@ -432,19 +541,31 @@ function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
             </div>
           </div>
 
-          <label style={S.fieldLabel}>Presentacion</label>
-          <select style={S.fieldSelect} value={tipo} onChange={e => setTipo(e.target.value)}>
-            <option value="cubeta" disabled={haySublotesTote}>Cubeta (19L)</option>
-            <option value="galon"  disabled={haySublotesTote}>Galón (3.785L)</option>
-            <option value="litro"  disabled={haySublotesTote}>Litro (1L)</option>
-            {/* FIX jun 2026: agregada opción "Otros" que faltaba. envases.json
-               tiene categoria "otros" con 10 subcategorías (bote-plastico,
-               paquete, funda, tubo, etc.) que antes eran inalcanzables. */}
-            <option value="otros"  disabled={haySublotesTote}>Otros (bote, paquete, funda, tubo...)</option>
-            <option value="tote"   disabled={haySublotesFinales}>
-              TOTE / Granel — contenedor para reenvasar en Terán
-            </option>
-          </select>
+          <label style={S.fieldLabel}>Presentación</label>
+          {/* Z8: tarjetas visuales en vez de <select>. Auto-completar marca/tapa
+             sigue funcionando igual al cambiar de tipo (efecto del setTipo).
+             La regla TOTE-indivisible deshabilita visualmente las opciones
+             incompatibles según lo ya envasado. */}
+          <div style={S.presoGrid}>
+            {PRESENTACIONES_META.map(p => {
+              const disabled = p.key === 'tote' ? haySublotesFinales : haySublotesTote;
+              const active = tipo === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => setTipo(p.key)}
+                  style={S.presoCard(active, disabled)}
+                  title={p.key === 'tote' ? 'TOTE / Granel — contenedor para reenvasar en Terán' : `${p.nombre} (${p.cap})`}
+                >
+                  <span>{p.icon}</span>
+                  <span style={S.presoNombre}>{p.nombre}</span>
+                  <span style={S.presoCap}>{p.cap}</span>
+                </button>
+              );
+            })}
+          </div>
           {(haySublotesFinales || haySublotesTote) && (
             <div style={{
               padding: '8px 10px', marginBottom: 12,
@@ -568,19 +689,50 @@ function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
             placeholder={isTote ? `Ej: ${Math.min(rest, 1000).toFixed(0)}` : `Ej: ${Math.min(maxUnidades, 30)}`}
             value={qty} onChange={e => setQty(e.target.value)} />
 
+          {/* Z8: preview tipo "ticket" — resumen visual claro de lo que se
+             va a crear antes de confirmar. Reemplaza la línea de texto densa. */}
           {qty && parseFloat(qty) > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 8 }}>
-              {isTote
-                ? <>Tote granel: <strong>{litTotal.toFixed(1)} L</strong></>
-                : <>{parseInt(qty)} {tipo}(s) x {litPorUnidad}L = <strong>{litTotal.toFixed(1)} L</strong></>
-              }
-              {' · '}Quedaran: <strong>{Math.max(0, rest - litTotal).toFixed(1)} L</strong>
-              {usaTapa && tapaInfo && parseInt(qty) > 0 && (
-                <div style={{ marginTop: 4, fontSize: 11 }}>
-                  Tapa: <strong>{tapaInfo.color_nombre || tapaInfo.nombre}</strong>
-                  {' · '}stock después: <strong style={{ color: stockTapaInsuf ? 'var(--lp-danger-600)' : 'inherit' }}>
+            <div style={S.ticket}>
+              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
+                Resumen del sublote
+              </div>
+              <div style={S.ticketRow}>
+                <span style={S.ticketKey}>Presentación</span>
+                <span style={S.ticketVal}>
+                  {isTote ? `TOTE granel` : `${parseInt(qty)} × ${PRESENTACIONES_META.find(p => p.key === tipo)?.nombre || tipo}`}
+                </span>
+              </div>
+              {!isTote && (
+                <div style={S.ticketRow}>
+                  <span style={S.ticketKey}>Marca / envase</span>
+                  <span style={S.ticketVal}>{subcatActual?.nombre || marca || '—'}</span>
+                </div>
+              )}
+              {usaTapa && tapaInfo && (
+                <div style={S.ticketRow}>
+                  <span style={S.ticketKey}>Tapa</span>
+                  <span style={{ ...S.ticketVal, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 12, height: 12, borderRadius: '50%', background: tapaInfo.color || '#999', border: '1px solid var(--lp-border-subtle)' }} />
+                    {tapaInfo.color_nombre || tapaInfo.nombre}
+                  </span>
+                </div>
+              )}
+              <div style={S.ticketRow}>
+                <span style={S.ticketKey}>Volumen</span>
+                <span style={S.ticketVal}>{litTotal.toFixed(1)} L</span>
+              </div>
+              <div style={{ ...S.ticketRow, borderTop: '1px dashed var(--lp-border-default)', marginTop: 4, paddingTop: 6 }}>
+                <span style={S.ticketKey}>Quedará en lote</span>
+                <span style={{ ...S.ticketVal, color: (rest - litTotal) < 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
+                  {Math.max(0, rest - litTotal).toFixed(1)} L
+                </span>
+              </div>
+              {usaTapa && tapaInfo && (
+                <div style={S.ticketRow}>
+                  <span style={S.ticketKey}>Tapas restantes</span>
+                  <span style={{ ...S.ticketVal, color: stockTapaInsuf ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
                     {Math.max(0, (tapaInfo.stock || 0) - parseInt(qty))}
-                  </strong>
+                  </span>
                 </div>
               )}
             </div>
