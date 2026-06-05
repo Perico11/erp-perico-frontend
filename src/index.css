@@ -28,23 +28,27 @@
   --lp-border-subtle: rgba(20,36,31,.08);
   --lp-border-default: rgba(20,36,31,.12);
   --lp-border-strong: rgba(20,36,31,.18);
-  --lp-success-50: #F0FDF4;
-  --lp-success-100: #DCFCE7;
-  --lp-success-500: #22C55E;
-  --lp-success-600: #16A34A;
-  --lp-success-700: #15803D;
-  --lp-warning-50: #FFFBEB;
-  --lp-warning-100: #FEF3C7;
-  --lp-warning-500: #F59E0B;
-  --lp-warning-600: #D97706;
-  --lp-warning-700: #B45309;
-  --lp-danger-50: #FEF2F2;
-  --lp-danger-100: #FEE2E2;
-  --lp-danger-500: #EF4444;
-  --lp-danger-600: #DC2626;
-  --lp-danger-700: #B91C1C;
-  --lp-info-50: #EFF6FF;
-  --lp-info-600: #2563EB;
+  /* Estados (claro) — palette "calm forest" del mockup Claude Design:
+     OK = verde marca, Bajo = ocre #C98A2B, Crítico = terracota #C8553B,
+     info = azul polvo #3E7BB6. (Antes eran rojos/naranjas/azules vivos que
+     no coincidían con el documento.) */
+  --lp-success-50: #E6F5EE;
+  --lp-success-100: #C5E9D9;
+  --lp-success-500: #2BB587;
+  --lp-success-600: #1D9E75;
+  --lp-success-700: #178060;
+  --lp-warning-50: #FAF3E4;
+  --lp-warning-100: #F1E3C4;
+  --lp-warning-500: #C98A2B;
+  --lp-warning-600: #C98A2B;
+  --lp-warning-700: #9C6B1E;
+  --lp-danger-50: #FAEDE8;
+  --lp-danger-100: #F1D8CF;
+  --lp-danger-500: #C8553B;
+  --lp-danger-600: #C8553B;
+  --lp-danger-700: #A23E29;
+  --lp-info-50: #ECF2F8;
+  --lp-info-600: #3E7BB6;
   --lp-font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
   --lp-font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --lp-radius: 14px;
@@ -489,7 +493,15 @@ input:not(:-webkit-autofill) {
 @media (min-width: 1024px) {
   .sidebar-desktop { display: flex !important; }
   .bottom-nav-mobile { display: none !important; }
-  .main-content { margin-left: 240px; padding-bottom: 16px; }
+  /* Contenido contenido y centrado como el mockup (no estirado a todo el monitor).
+     Columna ~1100px centrada en el área a la derecha del sidebar (244px). En
+     pantallas ≤~1344px el padding es 0 y el contenido usa el ancho disponible. */
+  .main-content {
+    margin-left: 240px;
+    padding-bottom: 16px;
+    padding-left: max(0px, calc((100vw - 240px - 1100px) / 2));
+    padding-right: max(0px, calc((100vw - 240px - 1100px) / 2));
+  }
   .topbar-right-mobile { display: none !important; }
   .donut-row-mobile { display: none !important; }
   .donut-row-desktop { display: flex !important; }
