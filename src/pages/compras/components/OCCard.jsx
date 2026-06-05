@@ -3,6 +3,18 @@ import { useAuth } from '../../../context/AuthContext';
 import EditOCModal from './EditOCModal';
 import RecibirOCModal from './RecibirOCModal';
 import EliminarOCModal from './EliminarOCModal';
+import AprobarOCModal from './AprobarOCModal';
+import RegistrarPagoModal from './RegistrarPagoModal';
+
+/* AC (jun 2026): días para vencer un crédito (negativo = vencido) */
+function _diasVence(fechaVencimientoISO) {
+  if (!fechaVencimientoISO) return null;
+  try {
+    const v = new Date(fechaVencimientoISO.slice(0, 10) + 'T00:00:00');
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    return Math.round((v - hoy) / (24 * 3600 * 1000));
+  } catch { return null; }
+}
 
 const PRESENTACIONES_COMPRAS = [
   { v: 'cubeta_20', lbl: 'CUBETA / 20 kg' },
@@ -131,7 +143,16 @@ export default function OCCard({ oc, onRefresh }) {
   const [showEdit, setShowEdit] = useState(false);
   const [showRecibir, setShowRecibir] = useState(false);
   const [showEliminar, setShowEliminar] = useState(false);
+  const [showAprobar, setShowAprobar] = useState(false);
+  const [showPago, setShowPago] = useState(false);
   const refresh = () => onRefresh && onRefresh();
+
+  /* AC (jun 2026): estado de pago/aprobación de la OC */
+  const necesitaAprobar = isActive && !oc.aprobada && !oc.pago && can('compras');
+  const esCreditoSinPagar = oc.pago === 'credito' && !oc.pagada;
+  const dias = esCreditoSinPagar ? _diasVence(oc.fechaVencimiento) : null;
+  const vencida = esCreditoSinPagar && dias != null && dias < 0;
+  const porVencer = esCreditoSinPagar && dias != null && dias >= 0 && dias <= 5;
 
   const totalKg = useMemo(() => {
     return (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0), 0);
@@ -145,7 +166,11 @@ export default function OCCard({ oc, onRefresh }) {
     ? S.stripeRecibida
     : oc.eliminada || oc.estado === 'eliminada'
       ? S.stripeEliminada
-      : S.stripePendiente;
+      : vencida
+        ? { background: 'var(--lp-danger-600)' }
+        : porVencer
+          ? { background: 'var(--lp-warning-600)' }
+          : S.stripePendiente;
 
   const handlePrint = () => {
     window.open(`/api/compras/oc/${oc.id}/print`, '_blank');
@@ -178,9 +203,7 @@ export default function OCCard({ oc, onRefresh }) {
             {oc.creadoPor || '?'}
           </span>
           {oc.almacenDestino && (
-            <span>
-              📦 {oc.almacenDestino}
-            </span>
+            <span>{oc.almacenDestino}</span>
           )}
           <span style={S.badge(
             oc.estado === 'recibida' || oc.estado === 'completada'
@@ -257,20 +280,61 @@ export default function OCCard({ oc, onRefresh }) {
         </div>
       )}
 
+      {/* AC (jun 2026): info de forma de pago / vencimiento del crédito */}
+      {oc.pago && (
+        <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          {oc.pago === 'contado' && (
+            <span style={S.badge('var(--lp-success-100)', 'var(--lp-success-700)')}>Contado{oc.comprobanteNombre ? ' · comprobante' : ''}</span>
+          )}
+          {oc.pago === 'credito' && oc.pagada && (
+            <span style={S.badge('var(--lp-success-100)', 'var(--lp-success-700)')}>Crédito · pagada</span>
+          )}
+          {vencida && (
+            <span style={S.badge('var(--lp-danger-100)', 'var(--lp-danger-700)')}>Crédito vencido hace {Math.abs(dias)}d</span>
+          )}
+          {porVencer && (
+            <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-700)')}>Crédito vence en {dias}d</span>
+          )}
+          {esCreditoSinPagar && !vencida && !porVencer && (
+            <span style={S.badge('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Crédito · vence {oc.fechaVencimiento ? oc.fechaVencimiento.slice(0, 10) : ''}</span>
+          )}
+        </div>
+      )}
+
       {/* Actions */}
       <div style={S.buttons}>
+        {/* AC: Aprobar es la acción dominante para OCs sin forma de pago */}
+        {necesitaAprobar && (
+          <button
+            style={{ ...S.btn, ...S.btnPrimary }}
+            onClick={() => setShowAprobar(true)}
+            title="Aprobar OC: forma de pago + comprobante"
+          >
+            Revisar y aprobar
+          </button>
+        )}
+        {/* AC: Registrar pago de crédito sin pagar */}
+        {esCreditoSinPagar && can('compras') && (
+          <button
+            style={{ ...S.btn, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' }}
+            onClick={() => setShowPago(true)}
+            title="Registrar el pago del crédito (sube comprobante)"
+          >
+            Registrar pago
+          </button>
+        )}
         {!isSolicitud && !oc.eliminada && oc.estado !== 'eliminada' && can('compras') && (
           <button
             style={{ ...S.btn, ...S.btnSuccess }}
             onClick={handlePrint}
             title="Imprimir OC formal"
           >
-            🖨️ Imprimir
+            Imprimir OC
           </button>
         )}
         {isActive && can('compras') && (
           <button
-            style={{ ...S.btn, ...S.btnPrimary }}
+            style={{ ...S.btn, ...S.btnGhost }}
             onClick={() => setShowEdit(true)}
             title="Editar detalles de la OC"
           >
@@ -283,7 +347,7 @@ export default function OCCard({ oc, onRefresh }) {
             onClick={() => setShowRecibir(true)}
             title="Registrar recepción"
           >
-            Recibir
+            Recibir MP
           </button>
         )}
         {isActive && can('configuracion') && (
@@ -297,6 +361,12 @@ export default function OCCard({ oc, onRefresh }) {
         )}
       </div>
 
+      {showAprobar && (
+        <AprobarOCModal oc={oc} onClose={() => setShowAprobar(false)} onSaved={refresh} />
+      )}
+      {showPago && (
+        <RegistrarPagoModal oc={oc} onClose={() => setShowPago(false)} onSaved={refresh} />
+      )}
       {showEdit && (
         <EditOCModal oc={oc} onClose={() => setShowEdit(false)} onSaved={refresh} />
       )}

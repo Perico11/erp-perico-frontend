@@ -315,6 +315,9 @@ const api = {
     request('POST', '/api/compras/oc/recibir', { id, items, firma, recibidoPor, qcMP }),
   eliminarOC: (id, motivo, codigo) =>
     request('POST', '/api/compras/oc/eliminar', { id, motivo, codigo }),
+  /* AC1/AC2 (jun 2026): aprobar OC con forma de pago + comprobante, y registrar pago */
+  aprobarOC: (data) => request('POST', '/api/compras/oc/aprobar', data),
+  registrarPagoOC: (data) => request('POST', '/api/compras/oc/registrar-pago', data),
 
   /* ── Reports ── */
   getReportProduction: (year) => request('GET', `/api/reports/production-monthly?year=${year}`),
