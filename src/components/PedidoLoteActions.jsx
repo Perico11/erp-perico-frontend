@@ -260,6 +260,26 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
     (userRol === 'almacen' || userRol === 'admin') &&
     sublotes.some(s => s.estado === 'envasado' && !s.esMerma);
 
+  /* FIX jun 2026 (Sprint O4): atajos para Josué en la card del pedido.
+     - Si hay sublotes 'en_camino' → botón "Recibir (escanear)" lleva a la
+       pantalla canónica /almacen-recepcion donde está el scanner QR.
+     - Si hay TOTEs 'tote_activo' (ya recibidos en Terán, esperando re-envase)
+       → botón "Re-envasar TOTE" lleva al buffer en la misma pantalla.
+     Ambos NAVEGAN (no duplican UI) — la fuente de verdad sigue siendo
+     AlmacenRecepcionPage; aquí solo damos el shortcut contextual. */
+  const sublotesEnCamino = sublotes.filter(s => s.estado === 'en_camino' && !s.esMerma);
+  const totesActivos = sublotes.filter(s => {
+    const esTote = s.claseSublote === 'tote' || s.tipo === 'tote' || s.fase === 1;
+    if (!esTote || s.esMerma) return false;
+    if (s.estado === 'tote_vaciado' || s.estado === 'cancelado') return false;
+    const lr = typeof s.litrosRestante === 'number' ? s.litrosRestante : Number(s.lit) || 0;
+    return lr > 0.5 && (s.ub === 'teran' || s.estado === 'tote_activo');
+  });
+  const puedeRecibirEnTeran = sublotesEnCamino.length > 0
+    && (userRol === 'almacen' || userRol === 'admin');
+  const puedeReenvasarTote = totesActivos.length > 0
+    && (userRol === 'almacen' || userRol === 'admin' || userRol === 'tecnico');
+
   const handleEnviarRecolectar = async () => {
     setBusy('enviarRecolectar');
     try {
@@ -317,6 +337,45 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
               {busy === 'enviarRecolectar' ? '…' : '🚚 Enviar a recolectar'}
             </button>
           )}
+
+          {/* O4: shortcut a recepción Terán cuando hay sublotes en camino */}
+          {puedeRecibirEnTeran && (
+            <button
+              style={{
+                ...S.btn('warn'),
+                padding: '11px 14px',
+                fontSize: 12.5,
+                minHeight: 44,
+                gridColumn: '1 / -1',
+                marginBottom: 4,
+              }}
+              onClick={() => navigate('/almacen-recepcion')}
+              title={`${sublotesEnCamino.length} sublote(s) en camino — escanear QR para recibir`}
+            >
+              Recibir en Terán · escanear QR ({sublotesEnCamino.length})
+            </button>
+          )}
+
+          {/* O4: shortcut a re-envasar TOTE en Terán */}
+          {puedeReenvasarTote && (
+            <button
+              style={{
+                ...S.btn('info'),
+                padding: '11px 14px',
+                fontSize: 12.5,
+                minHeight: 44,
+                gridColumn: '1 / -1',
+                marginBottom: 4,
+                background: '#7C3AED', /* púrpura — color canónico del TOTE en toda la app */
+                color: '#fff',
+              }}
+              onClick={() => navigate('/almacen-recepcion')}
+              title={`${totesActivos.length} TOTE(s) activos — re-envasar en cubeta/galón/litro`}
+            >
+              Re-envasar TOTE en Terán ({totesActivos.length})
+            </button>
+          )}
+
           <div style={S.actions}>
             {acciones.map(a => renderBoton(a))}
             {puedeEnvasar && (
@@ -329,7 +388,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
                 Ver sublotes
               </button>
             )}
-            {!acciones.length && !puedeEnvasar && !tieneSublotes && !puedeEnviarRecolectar && (
+            {!acciones.length && !puedeEnvasar && !tieneSublotes && !puedeEnviarRecolectar && !puedeRecibirEnTeran && !puedeReenvasarTote && (
               <span style={{ ...S.sublotesResumen, gridColumn: '1 / -1' }}>
                 Sin acciones disponibles para tu rol en este estado.
               </span>
