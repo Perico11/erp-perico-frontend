@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
@@ -8,8 +9,9 @@ import { useAuth } from '../../context/AuthContext';
 import PrediccionIATab from './PrediccionIATab';
 import ForecastIATab from './ForecastIATab';
 import PrediccionPedidosTab from './PrediccionPedidosTab';
-import PosAliasesTab from './PosAliasesTab';
-import SATPanel from '../admin/SATPanel';
+/* NOTA (§9): POS Aliases y SAT/CFDI salieron a pantallas propias (/pos-aliases, /sat).
+   Sus componentes (PosAliasesTab / SATPanel) ya NO se montan aquí — viven en
+   PosAliasesPage.jsx y SATPage.jsx respectivamente. */
 import HelpHint from '../../components/HelpHint';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 import PageTabs from '../../components/ui/PageTabs';
@@ -1465,10 +1467,26 @@ function MRPTab({ mrpData, onCrearOC }) {
 /* ══════════════════════════════════════════════════════════════════ */
 /* MAIN COMPONENT                                                    */
 /* ══════════════════════════════════════════════════════════════════ */
-export default function ComprasPage() {
+/**
+ * ComprasPage — pantalla COMPARTIDA por dos rutas (decisión LOCKED del dueño, §9):
+ *   - mode='compras'    (/compras)    → SOLO ejecutar OCs (Por aprobar · Activas · Recibidas).
+ *   - mode='pronostico' (/pronostico) → SOLO la inteligencia
+ *                                        (Forecast IA [default] · MRP · Tendencia · IA avanzada · Pedidos).
+ * Misma lógica, mismos handlers, mismos modales — solo cambia QUÉ tabs se muestran.
+ * "Generar OC" desde la inteligencia (MRP/Predicción) sigue cayendo en Compras ▸ Por aprobar:
+ *   handleCrearOCFromMRP guarda el prefill y, si está en modo pronóstico, navega a /compras
+ *   con el prefill en el state de la ruta para que OCsTabResponsive abra "Levantar OC".
+ */
+export default function ComprasPage({ mode = 'compras' }) {
   const isDesktop = useIsDesktop();
-  const [activeTab, setActiveTab] = useState('ocs');
-  const [newOCPrefill, setNewOCPrefill] = useState(null); // { mp, kg, proveedor }
+  const navigate = useNavigate();
+  const location = useLocation();
+  const esPronostico = mode === 'pronostico';
+  /* Tab inicial por modo: compras→ocs (Por aprobar), pronostico→forecast (Forecast IA). */
+  const [activeTab, setActiveTab] = useState(esPronostico ? 'forecast' : 'ocs');
+  /* Prefill de "Levantar OC": puede venir local (modo compras) o por router state
+     (cuando el usuario generó una OC desde /pronostico y se le redirige a /compras). */
+  const [newOCPrefill, setNewOCPrefill] = useState(location.state?.newOCPrefill || null); // { mp, kg, proveedor }
 
   const { data: mrpData, loading: mrpLoading } = useApiData(() => api.getMRP(), [], 15000);
   const { data: forecastData, loading: fcLoading } = useApiData(() => api.getForecast(), null, 30000);
@@ -1484,13 +1502,23 @@ export default function ComprasPage() {
     onInventario:() => reloadOCs(),
   });
 
-  /* Callback desde MRPTab/Predicción: abre Levantar OC con la MP pre-llenada */
+  /* Callback desde MRPTab/Predicción: abre Levantar OC con la MP pre-llenada.
+     - En modo 'compras' (la tab OCs existe aquí): cambia a la tab ocs con el prefill.
+     - En modo 'pronostico' (la tab OCs NO existe aquí): navega a /compras pasando
+       el prefill por router-state → ComprasPage(mode='compras') lo lee y abre
+       "Levantar OC". Así la OC generada SIEMPRE cae en Compras ▸ Por aprobar. */
   const handleCrearOCFromMRP = (data) => {
+    if (esPronostico) {
+      navigate('/compras', { state: { newOCPrefill: data } });
+      return;
+    }
     setNewOCPrefill(data);
     setActiveTab('ocs');
   };
   const handleNewOCCreated = () => {
     setNewOCPrefill(null);
+    /* Limpia el router-state para que un refresh no reabra el modal. */
+    if (location.state?.newOCPrefill) navigate(location.pathname, { replace: true, state: {} });
     reloadOCs();
   };
 
@@ -1507,29 +1535,39 @@ export default function ComprasPage() {
     return map;
   }, [invData]);
 
-  /* TABS.
-     - "Compras" (OCs) = EJECUTAR órdenes — la pantalla que urge, ya responsive.
-     - El resto (Pronóstico/MRP/Forecast IA/IA/Predicción) es "la inteligencia":
-       el plan del dueño es moverla a una pantalla NUEVA /pronostico (otro agente).
-       POR AHORA se reskina y se deja accesible aquí — NO se borra.  Ver FLAGS. */
-  const tabs = [
-    { id: 'ocs',        label: 'Compras' },
-    { id: 'forecast',   label: 'Forecast IA' },
-    { id: 'pedidos',    label: 'Predicción' },
-    { id: 'mrp',        label: 'MRP' },
-    { id: 'pronostico', label: 'Pronóstico' },
-    { id: 'ia',         label: 'IA avanzada' },
-    { id: 'aliases',    label: 'POS Aliases' },
-    { id: 'sat',        label: 'SAT' },
+  /* TABS — se eligen según `mode` (decisión LOCKED del dueño, §9). NO se borra
+     lógica de ninguna tab; solo se decide CUÁLES se montan en cada pantalla.
+     - mode='compras'    → SOLO ejecutar OCs (Por aprobar/Activas/Recibidas viven
+       dentro de la tab 'ocs' vía SegmentedControl en OCsTabResponsive).
+     - mode='pronostico' → SOLO la inteligencia: Sugerencias (Forecast IA, default),
+       MRP, Tendencia (PronosticoTab/WMA), IA avanzada, Pedidos.
+     SAT y POS Aliases salieron a pantallas propias (/sat, /pos-aliases) — ya NO
+     se montan aquí en ningún modo. */
+  const tabsCompras = [
+    { id: 'ocs', label: 'Compras' },
   ];
+  const tabsPronostico = [
+    { id: 'forecast',   label: 'Sugerencias' },
+    { id: 'mrp',        label: 'MRP' },
+    { id: 'pronostico', label: 'Tendencia' },
+    { id: 'ia',         label: 'IA avanzada' },
+    { id: 'pedidos',    label: 'Pedidos' },
+  ];
+  const tabs = esPronostico ? tabsPronostico : tabsCompras;
 
   return (
     <>
-      <TopBar title="Compras" />
+      <TopBar title={esPronostico ? 'Pronóstico' : 'Compras'} />
       <div style={S.wrap}>
-        <HelpHint id="compras-overview" title="Compras: ejecutar OCs + inteligencia de compra">
-          <strong>Compras</strong>: levanta, aprueba (con pago + comprobante), recibe y cierra órdenes de compra. <strong>MRP</strong>: detecta MPs que faltan según producción esperada. <strong>Pronóstico</strong>: WMA × estacional × YoY blended con demanda POS. <strong>Forecast IA / IA avanzada</strong>: motor de sugerencias y Holt forecasting. <strong>SAT/CFDI</strong>: parsea XMLs de facturas y los cruza con OCs.
-        </HelpHint>
+        {esPronostico ? (
+          <HelpHint id="pronostico-overview" title="Pronóstico: la inteligencia de compra">
+            <strong>Sugerencias</strong>: motor Forecast IA con demanda proyectada + safety stock; generar OC cae en Compras ▸ Por aprobar. <strong>MRP</strong>: detecta MPs que faltan según producción esperada. <strong>Tendencia</strong>: WMA × estacional × YoY blended con demanda POS. <strong>IA avanzada</strong>: Holt forecasting. <strong>Pedidos</strong>: predicción de pedidos.
+          </HelpHint>
+        ) : (
+          <HelpHint id="compras-overview" title="Compras: ejecutar órdenes de compra">
+            <strong>Compras</strong>: levanta, aprueba (con pago + comprobante), recibe y cierra órdenes de compra. La inteligencia (Forecast IA, MRP, Tendencia) vive en <strong>Pronóstico</strong>.
+          </HelpHint>
+        )}
         <PageTabs
           tabs={tabs.map(t => ({ ...t, style: (active) => S.tab(active) }))}
           activeTab={activeTab}
@@ -1566,13 +1604,11 @@ export default function ComprasPage() {
             : <PronosticoTab forecastData={forecastData} inventario={inventario} />
         )}
 
+        {/* Forecast IA genera OCs server-side (generarOCsBulkForecast) que caen
+            directo en Compras ▸ Por aprobar — no necesita callback de prefill. */}
         {activeTab === 'forecast' && <ForecastIATab />}
 
         {activeTab === 'ia' && <PrediccionIATab />}
-
-        {activeTab === 'aliases' && <PosAliasesTab />}
-
-        {activeTab === 'sat' && <SATPanel />}
       </div>
     </>
   );

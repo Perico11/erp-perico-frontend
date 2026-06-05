@@ -30,6 +30,10 @@ const PedidosPage         = lazy(() => import('./pages/pedidos/PedidosPage'));
 const LaboratorioPage     = lazy(() => import('./pages/laboratorio/LaboratorioPage'));
 const ReportesPage        = lazy(() => import('./pages/reportes/ReportesPage'));
 const SeguridadPage       = lazy(() => import('./pages/seguridad/SeguridadPage'));
+/* Capa Pronóstico (§9): inteligencia de compras separada de la ejecución de OC */
+const PronosticoPage      = lazy(() => import('./pages/pronostico/PronosticoPage'));
+const SATPage             = lazy(() => import('./pages/sat/SATPage'));
+const PosAliasesPage      = lazy(() => import('./pages/pos-aliases/PosAliasesPage'));
 
 /* Fallback mientras carga la página solicitada */
 function PageLoader() {
@@ -136,6 +140,9 @@ export default function App() {
               <Route path="stock-fabrica"  element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><StockFabricaPage /></ErrorBoundary></RoleRoute>} />
               <Route path="recoleccion"    element={<RoleRoute roles={['admin','recolector','recoleccion','almacen']}><ErrorBoundary><RecoleccionPage /></ErrorBoundary></RoleRoute>} />
               <Route path="compras"        element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><ComprasPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="pronostico"     element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><PronosticoPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="sat"            element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><SATPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="pos-aliases"    element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><PosAliasesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="trazabilidad"   element={<RoleRoute roles={['admin','tecnico','almacen','compras','recolector','inventario']}><ErrorBoundary><TrazabilidadPage /></ErrorBoundary></RoleRoute>} />
               <Route path="conteo"         element={<RoleRoute roles={['admin','inventario']}><ErrorBoundary><CycleCountPage /></ErrorBoundary></RoleRoute>} />
               <Route path="almacen"        element={<RoleRoute roles={['admin','almacen']}><ErrorBoundary><AlmacenRecepcionPage /></ErrorBoundary></RoleRoute>} />

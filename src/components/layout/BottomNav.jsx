@@ -64,6 +64,9 @@ const ICONS = {
   lab:          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M9 2v6l-4 7a5 5 0 0 0 4 8h6a5 5 0 0 0 4-8l-4-7V2"/><path d="M9 2h6"/></svg>,
   admin:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
   reportes:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 16l4-4 4 4 5-6"/></svg>,
+  pronostico:   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
+  sat:          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>,
+  posAliases:   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
   notif:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
   cerrar:       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
 };
@@ -104,8 +107,11 @@ const SECCIONES = [
   {
     titulo: 'Compras y trazabilidad',
     items: [
-      { path: '/compras',      label: 'OCs y MRP',    icon: ICONS.compr, perm: 'compras' },
+      { path: '/compras',      label: 'Compras',      icon: ICONS.compr, perm: 'compras' },
+      { path: '/pronostico',   label: 'Pronóstico',   icon: ICONS.pronostico, perm: 'compras', roles: ['admin','compras'] },
       { path: '/devoluciones-mp', label: 'Devol. proveedor', icon: ICONS.devol, perm: 'devoluciones', roles: ['admin','compras'] },
+      { path: '/sat',          label: 'SAT / CFDI',   icon: ICONS.sat,        perm: 'compras', roles: ['admin','compras'] },
+      { path: '/pos-aliases',  label: 'POS Aliases',  icon: ICONS.posAliases, perm: 'compras', roles: ['admin','compras'] },
       { path: '/recoleccion',  label: 'Recolección',  icon: ICONS.recol, perm: 'recoleccion' },
       { path: '/trazabilidad', label: 'Trazabilidad', icon: ICONS.traz,  perm: 'trazabilidad' },
     ],
