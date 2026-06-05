@@ -551,29 +551,77 @@ export default function DashboardPage() {
   const hoverIn = (e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--lp-shadow-md)'; };
   const hoverOut = (e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; };
 
-  /* ── KPI reutilizable ── */
+  /* ── KPI reutilizable ──
+     Escritorio: primitivos EXACTOS lpd-card lpd-kpi (.kl/.kv/.ks) portados 1:1
+     del documento. Móvil: estilos inline existentes (NO se tocan). El dot va en
+     <i> con background del accent; la tendencia es span inline dentro de .kv. */
   const Kpi = ({ accent, onClick, label, value, valueColor, trend, trendPos, sub }) => (
-    <button style={S.kpi(accent, !!onClick, isDesktop)} onClick={onClick} onMouseEnter={onClick ? hoverIn : undefined} onMouseLeave={onClick ? hoverOut : undefined}>
-      <div style={S.kpiLabel}><span style={S.kpiDot(accent)} />{label}</div>
-      <div style={{ ...S.kpiValue, ...(valueColor ? { color: valueColor } : {}) }}>
-        {value}
-        {trend != null && <span style={S.trend(trendPos)}>{trend}</span>}
-      </div>
-      {sub != null && <div style={S.kpiSub}>{sub}</div>}
-    </button>
+    isDesktop ? (
+      <button
+        className="lpd-card lpd-kpi"
+        style={{ cursor: onClick ? 'pointer' : 'default', textAlign: 'left', width: '100%', fontFamily: 'var(--lp-font-sans)', transition: 'transform .12s, box-shadow .12s, border-color .12s' }}
+        onClick={onClick}
+        onMouseEnter={onClick ? hoverIn : undefined}
+        onMouseLeave={onClick ? hoverOut : undefined}
+      >
+        <div className="kl"><i style={{ background: accent }} />{label}</div>
+        <div className="kv" style={valueColor ? { color: valueColor } : undefined}>
+          {value}
+          {trend != null && <span style={{ fontSize: 12, color: accent, fontWeight: 700 }}>{trend}</span>}
+        </div>
+        {sub != null && <div className="ks">{sub}</div>}
+      </button>
+    ) : (
+      <button style={S.kpi(accent, !!onClick, isDesktop)} onClick={onClick} onMouseEnter={onClick ? hoverIn : undefined} onMouseLeave={onClick ? hoverOut : undefined}>
+        <div style={S.kpiLabel}><span style={S.kpiDot(accent)} />{label}</div>
+        <div style={{ ...S.kpiValue, ...(valueColor ? { color: valueColor } : {}) }}>
+          {value}
+          {trend != null && <span style={S.trend(trendPos)}>{trend}</span>}
+        </div>
+        {sub != null && <div style={S.kpiSub}>{sub}</div>}
+      </button>
+    )
+  );
+
+  /* ── Etiqueta de sección ──
+     Escritorio: primitivo EXACTO lpd-seclbl. Móvil: estilo inline existente. */
+  const SecLbl = ({ children }) => (
+    isDesktop
+      ? <div className="lpd-seclbl" style={{ margin: '0 2px 11px' }}>{children}</div>
+      : <div style={S.sectionTitle}>{children}</div>
+  );
+
+  /* ── Grid de KPIs ──
+     Escritorio: primitivo EXACTO lpd-grid lpd-g4 (4 columnas como el documento).
+     Móvil: grid inline existente (1fr 1fr). */
+  const KpiGrid = ({ children }) => (
+    isDesktop
+      ? <div className="lpd-grid lpd-g4">{children}</div>
+      : <div style={S.grid(isDesktop)}>{children}</div>
   );
 
   return (
     <div>
       <TopBar title="Inicio" />
       <div style={S.wrap(isDesktop)}>
-        {/* Saludo (estilo head() del mockup) */}
-        <div style={S.greeting}>
-          <div style={S.greetH(isDesktop)}>{saludo}, {user?.nombre || ''}</div>
-          <div style={S.greetSub}>
-            {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+        {/* Saludo (estilo head() del mockup).
+            Escritorio: primitivos EXACTOS lpd-h1 / lpd-psub (saludo+fecha dinámicos
+            reales conservados). Móvil: estilos inline existentes (NO se tocan). */}
+        {isDesktop ? (
+          <div style={S.greeting}>
+            <div className="lpd-h1">{saludo}, {user?.nombre || ''}</div>
+            <div className="lpd-psub" style={{ marginBottom: 0 }}>
+              {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div style={S.greeting}>
+            <div style={S.greetH(isDesktop)}>{saludo}, {user?.nombre || ''}</div>
+            <div style={S.greetSub}>
+              {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+            </div>
+          </div>
+        )}
 
         {loading && !data ? (
           <div style={S.loading}>Cargando KPIs...</div>
@@ -602,13 +650,21 @@ export default function DashboardPage() {
                 Móvil: card hero del más prioritario + lista de pendientes. */}
             {cardsConCount.length > 0 && (
               <div style={S.section}>
-                <div style={S.sectionTitle}>Requiere tu atención</div>
+                <SecLbl>Requiere tu atención</SecLbl>
 
                 {isDesktop ? (
-                  /* ── Escritorio: g3 cards (mockup SCREENS.inicio "atn") ── */
-                  <div style={S.atnGrid}>
+                  /* ── Escritorio: grid g3 de cards lpd-atn (borde-left de color),
+                       primitivo EXACTO del documento SCREENS.inicio "atn". ── */
+                  <div className="lpd-grid lpd-g3">
                     {cardsConCount.map(c => (
-                      <button key={c.key} style={S.atnCard(c.accent)} onClick={() => navigate(c.ruta)} onMouseEnter={hoverIn} onMouseLeave={hoverOut}>
+                      <button
+                        key={c.key}
+                        className="lpd-atn"
+                        style={{ borderLeftColor: c.accent, cursor: 'pointer', width: '100%', textAlign: 'left', fontFamily: 'var(--lp-font-sans)', transition: 'transform .12s, box-shadow .12s' }}
+                        onClick={() => navigate(c.ruta)}
+                        onMouseEnter={hoverIn}
+                        onMouseLeave={hoverOut}
+                      >
                         <div style={S.atnHead}>
                           <div style={S.atnTitle}>{c.count} {c.titulo.toLowerCase()}</div>
                           <span style={S.atnBadge(c.accent)}>{c.count}</span>
@@ -699,8 +755,8 @@ export default function DashboardPage() {
                   {/* HOY EN LA PLANTA — Producción + Inventario + Devoluciones */}
                   {verSeccionHoy && (
                     <div style={S.section}>
-                      <div style={S.sectionTitle}>Hoy en la planta</div>
-                      <div style={S.grid(isDesktop)}>
+                      <SecLbl>Hoy en la planta</SecLbl>
+                      <KpiGrid>
                         {verProduccion && (
                           <Kpi
                             accent={ACC.brand}
@@ -759,15 +815,15 @@ export default function DashboardPage() {
                             sub={`${fmt$2(d.devoluciones.monto30d || 0)} devueltos`}
                           />
                         )}
-                      </div>
+                      </KpiGrid>
                     </div>
                   )}
 
                   {/* COMPRAS Y RENTABILIDAD — solo admin/compras */}
                   {verSeccionCompr && (
                     <div style={S.section}>
-                      <div style={S.sectionTitle}>Compras y rentabilidad</div>
-                      <div style={S.grid(isDesktop)}>
+                      <SecLbl>Compras y rentabilidad</SecLbl>
+                      <KpiGrid>
                         {verCompras && (
                           <>
                             <Kpi
@@ -815,15 +871,15 @@ export default function DashboardPage() {
                             />
                           </>
                         )}
-                      </div>
+                      </KpiGrid>
                     </div>
                   )}
 
                   {/* TRAZABILIDAD — flujo de lotes */}
                   {verSeccionTraz && (
                     <div style={S.section}>
-                      <div style={S.sectionTitle}>Trazabilidad — flujo de lotes</div>
-                      <div style={S.grid(isDesktop)}>
+                      <SecLbl>Trazabilidad — flujo de lotes</SecLbl>
+                      <KpiGrid>
                         {verQC && (
                           <>
                             <Kpi
@@ -853,7 +909,7 @@ export default function DashboardPage() {
                             sub="Por confirmar recepción"
                           />
                         )}
-                      </div>
+                      </KpiGrid>
                     </div>
                   )}
                 </>
@@ -864,10 +920,8 @@ export default function DashboardPage() {
                 Solo visible para admin/compras (mismo permiso que /api/dashboard/exec). */}
             {(can('admin') || can('compras')) && (
               <div style={S.section}>
-                <div style={S.sectionTitle}>
-                  Top {Math.min(5, (d.topProductos || []).length)} productos del mes
-                </div>
-                <div style={S.panel}>
+                <SecLbl>Top {Math.min(5, (d.topProductos || []).length)} productos del mes</SecLbl>
+                <div className={isDesktop ? 'lpd-card' : undefined} style={isDesktop ? undefined : S.panel}>
                   {!Array.isArray(d.topProductos) ? (
                     <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
@@ -924,8 +978,8 @@ export default function DashboardPage() {
                 Solo visible para admin/compras (mismo permiso). */}
             {(can('admin') || can('compras')) && (
               <div style={S.section}>
-                <div style={S.sectionTitle}>Producción últimos 12 meses</div>
-                <div style={S.panel}>
+                <SecLbl>Producción últimos 12 meses</SecLbl>
+                <div className={isDesktop ? 'lpd-card' : undefined} style={isDesktop ? undefined : S.panel}>
                   {!Array.isArray(d.serie12m) ? (
                     <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
                       <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
