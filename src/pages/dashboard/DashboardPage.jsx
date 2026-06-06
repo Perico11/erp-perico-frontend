@@ -147,7 +147,7 @@ export default function DashboardPage() {
     esRol('admin', 'almacen') ? { key: 'almacen', titulo: 'En camino a Almacén', desc: 'Luis ya escaneó, esperando confirmación de recepción', count: tareas.lotesEnCamino.length, items: muestraNombres(tareas.lotesEnCamino), accent: ACC.info, ruta: '/almacen' } : null,
     can('compras') ? { key: 'oc-vencidas', titulo: 'OCs vencidas', desc: 'Órdenes de compra que pasaron fecha de entrega', count: tareas.ocsVencidas.length, items: muestraNombres(tareas.ocsVencidas, 'codigo'), accent: ACC.critHi, ruta: '/compras' } : null,
     can('compras') ? { key: 'ocs-por-aprobar', titulo: 'OCs por aprobar', desc: 'Solicitudes pendientes de asignar proveedor/precio', count: tareas.ocsPorAprobar.length, items: muestraNombres(tareas.ocsPorAprobar, 'codigo'), accent: ACC.amber, ruta: '/compras' } : null,
-    (can('produccion') || esRol('admin')) ? { key: 'dev-recibir', titulo: 'Devoluciones por recibir', desc: 'Producto del cliente por inspeccionar en fábrica', count: tareas.devsPendRecibir.length, items: muestraNombres(tareas.devsPendRecibir, 'id'), accent: ACC.info, ruta: '/devoluciones' } : null,
+    (can('produccion') || esRol('admin')) ? { key: 'dev-recibir', titulo: 'Devoluciones por recibir', desc: 'Producto del cliente por inspeccionar en fábrica', count: tareas.devsPendRecibir.length, items: muestraNombres(tareas.devsPendRecibir, 'id'), accent: ACC.mut, ruta: '/devoluciones' } : null,
     can('compras') ? { key: 'dev-reembolsar', titulo: 'Reembolsos por emitir', desc: 'Devoluciones regresadas a stock que necesitan nota de crédito', count: tareas.devsPorReembolsar.length, items: muestraNombres(tareas.devsPorReembolsar, 'cliente'), accent: ACC.amberHi, ruta: '/devoluciones' } : null,
     can('conteoFisico') ? { key: 'conteos-vencidos', titulo: 'Conteos vencidos', desc: 'MPs/PT que el calendario indica contar ya', count: tareas.conteosVencidos.length, items: muestraNombres(tareas.conteosVencidos, 'item') || muestraNombres(tareas.conteosVencidos, 'nombre'), accent: ACC.crit, ruta: '/conteo' } : null,
   ].filter(Boolean);
@@ -196,7 +196,8 @@ export default function DashboardPage() {
   const accToSev = (accent) =>
     (accent === ACC.crit || accent === ACC.critHi) ? 'danger'
       : (accent === ACC.amber || accent === ACC.amberHi) ? 'warning'
-        : (accent === ACC.info) ? 'info' : 'ok';
+        : (accent === ACC.info) ? 'info'
+          : (accent === ACC.mut) ? 'mut' : 'ok';
   const KEY_ICON = {
     pedidos: 'ordenes', ordenes: 'ordenes', qc: 'qc', 'qc-hold': 'alert',
     envasado: 'stock', recoleccion: 'stock', almacen: 'inventario',
