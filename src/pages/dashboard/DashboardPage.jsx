@@ -140,8 +140,8 @@ export default function DashboardPage() {
   const cards = [
     can('crearPedidos') ? { key: 'pedidos', titulo: 'Pedidos por preparar', desc: 'Pedidos de almacén esperando crear orden', count: tareas.pedidosPendientes.length, items: muestraNombres(tareas.pedidosPendientes, 'codigo'), accent: ACC.info, ruta: '/pedidos' } : null,
     can('ordenes') ? { key: 'ordenes', titulo: 'Órdenes en proceso', desc: 'Producción asignada que aún no se cierra', count: tareas.ordenesPendientes.length, items: muestraNombres(tareas.ordenesPendientes, 'codigo'), accent: ACC.amber, ruta: '/ordenes' } : null,
-    can('registrarQC') ? { key: 'qc', titulo: 'QC por hacer', desc: 'Lotes producidos esperando revisión de calidad', count: tareas.lotesProducidos.length, items: muestraNombres(tareas.lotesProducidos), accent: ACC.amberHi, ruta: '/produccion' } : null,
-    can('registrarQC') ? { key: 'qc-hold', titulo: 'QC retenidos', desc: 'Lotes con problemas de calidad que requieren retrabajo', count: tareas.lotesQC.length, items: muestraNombres(tareas.lotesQC), accent: ACC.crit, ruta: '/produccion' } : null,
+    can('registrarQC') ? { key: 'qc', titulo: 'QC por hacer', desc: 'Lotes producidos esperando revisión de calidad', count: tareas.lotesProducidos.length, items: muestraNombres(tareas.lotesProducidos), accent: ACC.amberHi, ruta: '/produccion?tab=calidad' } : null,
+    can('registrarQC') ? { key: 'qc-hold', titulo: 'QC retenidos', desc: 'Lotes con problemas de calidad que requieren retrabajo', count: tareas.lotesQC.length, items: muestraNombres(tareas.lotesQC), accent: ACC.crit, ruta: '/produccion?tab=calidad' } : null,
     can('envasado') ? { key: 'envasado', titulo: 'Por envasar', desc: 'Lotes aprobados de QC, listos para envasar', count: tareas.lotesEnvasado.length, items: muestraNombres(tareas.lotesEnvasado), accent: ACC.brand, ruta: '/stock-fabrica' } : null,
     can('recoleccion') ? { key: 'recoleccion', titulo: 'Por recolectar', desc: 'Lotes envasados esperando a Luis', count: tareas.lotesRecoleccion.length, items: muestraNombres(tareas.lotesRecoleccion), accent: ACC.ok, ruta: '/recoleccion' } : null,
     esRol('admin', 'almacen') ? { key: 'almacen', titulo: 'En camino a Almacén', desc: 'Luis ya escaneó, esperando confirmación de recepción', count: tareas.lotesEnCamino.length, items: muestraNombres(tareas.lotesEnCamino), accent: ACC.info, ruta: '/almacen' } : null,
@@ -171,7 +171,9 @@ export default function DashboardPage() {
     const verTrazab = can('trazabilidad') || can('registrarQC');
     const verInventario = can('inventario');
     const verCompras = can('compras');
-    const verRentab = can('compras');
+    /* "Margen mensual" navega a /admin (solo admin). Si lo viera compras, al
+       clicar rebotaría al dashboard (RoleRoute). Por eso es admin-only. */
+    const verRentab = can('admin');
     if (verProduccion) {
       const g = d.produccion.growthPct;
       out.push({ label: 'Cubetas / mes', value: (d.produccion.promMensual || 0).toLocaleString('es-MX'), trend: (g != null && g !== 0) ? `${g > 0 ? '+' : ''}${g}%` : null, trendPos: g > 0, sub: 'Prom. 6 meses', ruta: '/produccion' });
