@@ -194,6 +194,12 @@ export default function DashboardPage() {
     'oc-vencidas': 'compras', 'ocs-por-aprobar': 'compras',
     'dev-recibir': 'devoluciones', 'dev-reembolsar': 'devoluciones', 'conteos-vencidos': 'qc',
   };
+  const HERO_VERB = {
+    pedidos: 'Preparar', ordenes: 'Ver', qc: 'Revisar', 'qc-hold': 'Atender',
+    envasado: 'Envasar', recoleccion: 'Recolectar', almacen: 'Recibir',
+    'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar',
+    'dev-recibir': 'Recibir', 'dev-reembolsar': 'Emitir', 'conteos-vencidos': 'Contar',
+  };
   const heroCard = cardsConCount[0] || null;
   const inicioData = {
     saludo: `Hola, ${user?.nombre || ''}`,
@@ -204,6 +210,7 @@ export default function DashboardPage() {
       sev: accToSev(heroCard.accent),
       icon: KEY_ICON[heroCard.key] || 'inventario',
       ruta: heroCard.ruta,
+      accion: HERO_VERB[heroCard.key] || 'Atender',
     } : null,
     pendientes: cardsConCount.slice(1).map(c => ({
       id: c.key, icon: KEY_ICON[c.key] || 'inventario', sev: accToSev(c.accent),
