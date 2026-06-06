@@ -204,7 +204,7 @@ export default function DashboardPage() {
     'dev-recibir': 'devoluciones', 'dev-reembolsar': 'devoluciones', 'conteos-vencidos': 'qc',
   };
   const HERO_VERB = {
-    pedidos: 'Preparar', ordenes: 'Ver', qc: 'Revisar', 'qc-hold': 'Atender',
+    pedidos: 'Preparar', ordenes: 'Revisar', qc: 'Revisar', 'qc-hold': 'Atender',
     envasado: 'Envasar', recoleccion: 'Recolectar', almacen: 'Recibir',
     'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar',
     'dev-recibir': 'Recibir', 'dev-reembolsar': 'Emitir', 'conteos-vencidos': 'Contar',
