@@ -34,9 +34,9 @@ const icons = {
    granular y se mostraban items que la ruta App.jsx luego rechazaba (parpadeo
    a Dashboard sin explicación). El filtro final es: can(perm) AND (roles.length===0 OR roles.includes(rol)). */
 const NAV_ITEMS = [
-  { key: 'dashboard',    label: 'Dashboard',    path: '/',              icon: icons.dashboard,    perm: 'dashboard' },
+  { key: 'dashboard',    label: 'Inicio',       path: '/',              icon: icons.dashboard,    perm: 'dashboard' },
   { key: 'formulas',     label: 'Fórmulas',     path: '/formulas',      icon: icons.formulas,     perm: 'formulas' },
-  { key: 'inventario',   label: 'Inventarios',  path: '/inventario',    icon: icons.inventario,   perm: 'inventario' },
+  { key: 'inventario',   label: 'Inventario',   path: '/inventario',    icon: icons.inventario,   perm: 'inventario' },
   { key: 'pedidos',      label: 'Pedidos',      path: '/pedidos',       icon: icons.pedidos,      perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
   { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico','almacen'] },
   { key: 'produccion',   label: 'Producción',   path: '/produccion',    icon: icons.produccion,   perm: 'produccion' },
@@ -65,7 +65,8 @@ const NAV_ITEMS = [
 
 const S = {
   aside: { display: 'flex', flexDirection: 'column', width: 240, height: '100vh', background: 'var(--lp-bg-raised)', borderRight: '1.5px solid var(--lp-border-subtle)', position: 'fixed', left: 0, top: 0, zIndex: 40, fontFamily: 'var(--lp-font-sans)' },
-  brand: { padding: '16px 16px 14px', borderBottom: '1px solid var(--lp-border-subtle)' },
+  brand: { padding: '16px 16px 14px', borderBottom: '1px solid var(--lp-border-subtle)', display: 'flex', alignItems: 'center', gap: 10 },
+  brandLogo: { width: 30, height: 30, objectFit: 'contain', flexShrink: 0 },
   brandName: { fontSize: 15, fontWeight: 700, color: 'var(--lp-brand-700)', letterSpacing: '-0.02em' },
   brandSub: { fontSize: 11, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.08em', marginTop: 2 },
   nav: { flex: 1, overflowY: 'auto', padding: '10px 8px' },
@@ -151,8 +152,11 @@ export default function Sidebar() {
     <aside style={S.aside} className="sidebar-desktop">
       {ConfirmEl}
       <div style={S.brand}>
-        <div style={S.brandName}>Pinturas El Perico</div>
-        <div style={S.brandSub}>ERP Producción</div>
+        <img src="/logos/logo-perico-green.svg" alt="" style={S.brandLogo} />
+        <div style={{ minWidth: 0 }}>
+          <div style={S.brandName}>Pinturas El Perico</div>
+          <div style={S.brandSub}>ERP Producción</div>
+        </div>
       </div>
       <nav style={S.nav}>
         {items.map(item => {
