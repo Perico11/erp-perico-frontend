@@ -29,7 +29,8 @@ const LOGOS_DISPONIBLES = [
 ];
 
 const COLORES_RAPIDOS = [
-  { v: '#2563EB', n: 'Azul Perico' },
+  { v: '#1D9E75', n: 'Verde Perico' },
+  { v: '#2563EB', n: 'Azul' },
   { v: '#DC2626', n: 'Rojo' },
   { v: '#059669', n: 'Verde' },
   { v: '#D97706', n: 'Ámbar' },
@@ -395,7 +396,7 @@ export default function BrandingPanel() {
                   <input
                     type="color"
                     style={S.picker}
-                    value={config.brandColor || '#2563EB'}
+                    value={config.brandColor || '#1D9E75'}
                     onChange={e => updateField('brandColor', e.target.value.toUpperCase())}
                   />
                   <input
@@ -403,7 +404,7 @@ export default function BrandingPanel() {
                     style={S.hexInput}
                     value={config.brandColor || ''}
                     onChange={e => updateField('brandColor', e.target.value)}
-                    placeholder="#2563EB"
+                    placeholder="#1D9E75"
                   />
                   <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
                     Dark auto: <code style={{ color: 'var(--lp-text-secondary)' }}>{config.brandColorDark}</code>
