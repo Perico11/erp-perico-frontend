@@ -135,7 +135,7 @@ export default function DashboardPage() {
     can('crearPedidos') || can('admin') ? { key: 'pedidos', titulo: 'Pedidos por preparar', desc: 'Pedidos de almacén esperando crear orden', count: tareas.pedidosPendientes.length, items: muestraNombres(tareas.pedidosPendientes, 'codigo'), accent: ACC.info, ruta: '/pedidos' } : null,
     can('admin') || can('tecnico') ? { key: 'ordenes', titulo: 'Órdenes en proceso', desc: 'Producción asignada que aún no se cierra', count: tareas.ordenesPendientes.length, items: muestraNombres(tareas.ordenesPendientes, 'codigo'), accent: ACC.amber, ruta: '/ordenes' } : null,
     can('registrarQC') || can('admin') ? { key: 'qc', titulo: 'QC por hacer', desc: 'Lotes producidos esperando revisión de calidad', count: tareas.lotesProducidos.length, items: muestraNombres(tareas.lotesProducidos), accent: ACC.amberHi, ruta: '/produccion' } : null,
-    (can('admin') || can('tecnico')) && tareas.lotesQC.length > 0 ? { key: 'qc-hold', titulo: 'QC retenidos', desc: 'Lotes con problemas de calidad que requieren retrabajo', count: tareas.lotesQC.length, items: muestraNombres(tareas.lotesQC), accent: ACC.crit, ruta: '/produccion' } : null,
+    can('admin') || can('tecnico') ? { key: 'qc-hold', titulo: 'QC retenidos', desc: 'Lotes con problemas de calidad que requieren retrabajo', count: tareas.lotesQC.length, items: muestraNombres(tareas.lotesQC), accent: ACC.crit, ruta: '/produccion' } : null,
     can('admin') || can('tecnico') || can('almacen') ? { key: 'envasado', titulo: 'Por envasar', desc: 'Lotes aprobados de QC, listos para envasar', count: tareas.lotesEnvasado.length, items: muestraNombres(tareas.lotesEnvasado), accent: ACC.brand, ruta: '/stock-fabrica' } : null,
     can('admin') || can('almacen') || can('recolector') ? { key: 'recoleccion', titulo: 'Por recolectar', desc: 'Lotes envasados esperando a Luis', count: tareas.lotesRecoleccion.length, items: muestraNombres(tareas.lotesRecoleccion), accent: ACC.ok, ruta: '/recoleccion' } : null,
     can('admin') || can('almacen') ? { key: 'almacen', titulo: 'En camino a Almacén', desc: 'Luis ya escaneó, esperando confirmación de recepción', count: tareas.lotesEnCamino.length, items: muestraNombres(tareas.lotesEnCamino), accent: ACC.info, ruta: '/almacen' } : null,
@@ -150,10 +150,12 @@ export default function DashboardPage() {
 
   /* Severidad → el hero es el pendiente más urgente, no el primero del array. */
   const SEV = { [ACC.crit]: 6, [ACC.critHi]: 6, [ACC.amberHi]: 5, [ACC.amber]: 4, [ACC.brand]: 3, [ACC.info]: 2, [ACC.ok]: 1, [ACC.mut]: 0 };
-  const cardsConCount = cards
-    .filter(c => c.count > 0)
-    .map((c, i) => ({ ...c, _idx: i, _sev: SEV[c.accent] ?? 0 }))
-    .sort((a, b) => (b._sev - a._sev) || (a._idx - b._idx));
+  /* HERO = pendiente más urgente con count>0 (o null → "Todo al día").
+     LISTA Pendientes = TODAS las categorías del rol (incluso en CERO), excepto
+     la que ya ocupa el hero. Así el rol siempre ve sus categorías como el documento. */
+  const allCards = cards.map((c, i) => ({ ...c, _idx: i, _sev: SEV[c.accent] ?? 0 }));
+  const heroCard = allCards.filter(c => c.count > 0).sort((a, b) => (b._sev - a._sev) || (a._idx - b._idx))[0] || null;
+  const pendientesCards = allCards.filter(c => !heroCard || c.key !== heroCard.key);
 
   /* "Tu día" — KPIs reales del rol. */
   const tuDia = (() => {
@@ -200,7 +202,6 @@ export default function DashboardPage() {
     'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar',
     'dev-recibir': 'Recibir', 'dev-reembolsar': 'Emitir', 'conteos-vencidos': 'Contar',
   };
-  const heroCard = cardsConCount[0] || null;
   const inicioData = {
     saludo: `Hola, ${user?.nombre || ''}`,
     fecha: fechaHoy,
@@ -212,7 +213,7 @@ export default function DashboardPage() {
       ruta: heroCard.ruta,
       accion: HERO_VERB[heroCard.key] || 'Atender',
     } : null,
-    pendientes: cardsConCount.slice(1).map(c => ({
+    pendientes: pendientesCards.map(c => ({
       id: c.key, icon: KEY_ICON[c.key] || 'inventario', sev: accToSev(c.accent),
       titulo: c.titulo, desc: c.desc, folios: c.items || undefined, count: c.count, ruta: c.ruta,
     })),
