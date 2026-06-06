@@ -130,20 +130,26 @@ export default function DashboardPage() {
       + (arr.length > n ? ` · +${arr.length - n}` : '');
   };
 
-  /* Tarjetas de pendientes por rol (gateadas por can()). */
+  /* Tarjetas de pendientes por rol.
+     FIX raíz (jun 2026): se gatean por el PERMISO REAL de cada pantalla — NO por
+     can('tecnico')/can('almacen')/can('recolector'), que NO son permisos (no existen
+     en permisos_roles) y por tanto can() siempre devolvía false → "Órdenes en proceso",
+     "QC retenidos" y "Por envasar" jamás se creaban para Enrique. Donde la tarjeta es
+     genuinamente específica de un rol (recepción en Terán) se usa user.rol. */
+  const esRol = (...rs) => rs.includes(user?.rol);
   const cards = [
-    can('crearPedidos') || can('admin') ? { key: 'pedidos', titulo: 'Pedidos por preparar', desc: 'Pedidos de almacén esperando crear orden', count: tareas.pedidosPendientes.length, items: muestraNombres(tareas.pedidosPendientes, 'codigo'), accent: ACC.info, ruta: '/pedidos' } : null,
-    can('admin') || can('tecnico') ? { key: 'ordenes', titulo: 'Órdenes en proceso', desc: 'Producción asignada que aún no se cierra', count: tareas.ordenesPendientes.length, items: muestraNombres(tareas.ordenesPendientes, 'codigo'), accent: ACC.amber, ruta: '/ordenes' } : null,
-    can('registrarQC') || can('admin') ? { key: 'qc', titulo: 'QC por hacer', desc: 'Lotes producidos esperando revisión de calidad', count: tareas.lotesProducidos.length, items: muestraNombres(tareas.lotesProducidos), accent: ACC.amberHi, ruta: '/produccion' } : null,
-    can('admin') || can('tecnico') ? { key: 'qc-hold', titulo: 'QC retenidos', desc: 'Lotes con problemas de calidad que requieren retrabajo', count: tareas.lotesQC.length, items: muestraNombres(tareas.lotesQC), accent: ACC.crit, ruta: '/produccion' } : null,
-    can('admin') || can('tecnico') || can('almacen') ? { key: 'envasado', titulo: 'Por envasar', desc: 'Lotes aprobados de QC, listos para envasar', count: tareas.lotesEnvasado.length, items: muestraNombres(tareas.lotesEnvasado), accent: ACC.brand, ruta: '/stock-fabrica' } : null,
-    can('admin') || can('almacen') || can('recolector') ? { key: 'recoleccion', titulo: 'Por recolectar', desc: 'Lotes envasados esperando a Luis', count: tareas.lotesRecoleccion.length, items: muestraNombres(tareas.lotesRecoleccion), accent: ACC.ok, ruta: '/recoleccion' } : null,
-    can('admin') || can('almacen') ? { key: 'almacen', titulo: 'En camino a Almacén', desc: 'Luis ya escaneó, esperando confirmación de recepción', count: tareas.lotesEnCamino.length, items: muestraNombres(tareas.lotesEnCamino), accent: ACC.info, ruta: '/almacen' } : null,
-    can('admin') || can('compras') ? { key: 'oc-vencidas', titulo: 'OCs vencidas', desc: 'Órdenes de compra que pasaron fecha de entrega', count: tareas.ocsVencidas.length, items: muestraNombres(tareas.ocsVencidas, 'codigo'), accent: ACC.critHi, ruta: '/compras' } : null,
-    can('compras') || can('admin') ? { key: 'ocs-por-aprobar', titulo: 'OCs por aprobar', desc: 'Solicitudes pendientes de asignar proveedor/precio', count: tareas.ocsPorAprobar.length, items: muestraNombres(tareas.ocsPorAprobar, 'codigo'), accent: ACC.amber, ruta: '/compras' } : null,
-    can('produccion') || can('admin') ? { key: 'dev-recibir', titulo: 'Devoluciones por recibir', desc: 'Producto del cliente por inspeccionar en fábrica', count: tareas.devsPendRecibir.length, items: muestraNombres(tareas.devsPendRecibir, 'id'), accent: ACC.info, ruta: '/devoluciones' } : null,
-    can('compras') || can('admin') ? { key: 'dev-reembolsar', titulo: 'Reembolsos por emitir', desc: 'Devoluciones regresadas a stock que necesitan nota de crédito', count: tareas.devsPorReembolsar.length, items: muestraNombres(tareas.devsPorReembolsar, 'cliente'), accent: ACC.amberHi, ruta: '/devoluciones' } : null,
-    can('conteoFisico') || can('admin') ? { key: 'conteos-vencidos', titulo: 'Conteos vencidos', desc: 'MPs/PT que el calendario indica contar ya', count: tareas.conteosVencidos.length, items: muestraNombres(tareas.conteosVencidos, 'item') || muestraNombres(tareas.conteosVencidos, 'nombre'), accent: ACC.crit, ruta: '/conteo' } : null,
+    can('crearPedidos') ? { key: 'pedidos', titulo: 'Pedidos por preparar', desc: 'Pedidos de almacén esperando crear orden', count: tareas.pedidosPendientes.length, items: muestraNombres(tareas.pedidosPendientes, 'codigo'), accent: ACC.info, ruta: '/pedidos' } : null,
+    can('ordenes') ? { key: 'ordenes', titulo: 'Órdenes en proceso', desc: 'Producción asignada que aún no se cierra', count: tareas.ordenesPendientes.length, items: muestraNombres(tareas.ordenesPendientes, 'codigo'), accent: ACC.amber, ruta: '/ordenes' } : null,
+    can('registrarQC') ? { key: 'qc', titulo: 'QC por hacer', desc: 'Lotes producidos esperando revisión de calidad', count: tareas.lotesProducidos.length, items: muestraNombres(tareas.lotesProducidos), accent: ACC.amberHi, ruta: '/produccion' } : null,
+    can('registrarQC') ? { key: 'qc-hold', titulo: 'QC retenidos', desc: 'Lotes con problemas de calidad que requieren retrabajo', count: tareas.lotesQC.length, items: muestraNombres(tareas.lotesQC), accent: ACC.crit, ruta: '/produccion' } : null,
+    can('envasado') ? { key: 'envasado', titulo: 'Por envasar', desc: 'Lotes aprobados de QC, listos para envasar', count: tareas.lotesEnvasado.length, items: muestraNombres(tareas.lotesEnvasado), accent: ACC.brand, ruta: '/stock-fabrica' } : null,
+    can('recoleccion') ? { key: 'recoleccion', titulo: 'Por recolectar', desc: 'Lotes envasados esperando a Luis', count: tareas.lotesRecoleccion.length, items: muestraNombres(tareas.lotesRecoleccion), accent: ACC.ok, ruta: '/recoleccion' } : null,
+    esRol('admin', 'almacen') ? { key: 'almacen', titulo: 'En camino a Almacén', desc: 'Luis ya escaneó, esperando confirmación de recepción', count: tareas.lotesEnCamino.length, items: muestraNombres(tareas.lotesEnCamino), accent: ACC.info, ruta: '/almacen' } : null,
+    can('compras') ? { key: 'oc-vencidas', titulo: 'OCs vencidas', desc: 'Órdenes de compra que pasaron fecha de entrega', count: tareas.ocsVencidas.length, items: muestraNombres(tareas.ocsVencidas, 'codigo'), accent: ACC.critHi, ruta: '/compras' } : null,
+    can('compras') ? { key: 'ocs-por-aprobar', titulo: 'OCs por aprobar', desc: 'Solicitudes pendientes de asignar proveedor/precio', count: tareas.ocsPorAprobar.length, items: muestraNombres(tareas.ocsPorAprobar, 'codigo'), accent: ACC.amber, ruta: '/compras' } : null,
+    (can('produccion') || esRol('admin')) ? { key: 'dev-recibir', titulo: 'Devoluciones por recibir', desc: 'Producto del cliente por inspeccionar en fábrica', count: tareas.devsPendRecibir.length, items: muestraNombres(tareas.devsPendRecibir, 'id'), accent: ACC.info, ruta: '/devoluciones' } : null,
+    can('compras') ? { key: 'dev-reembolsar', titulo: 'Reembolsos por emitir', desc: 'Devoluciones regresadas a stock que necesitan nota de crédito', count: tareas.devsPorReembolsar.length, items: muestraNombres(tareas.devsPorReembolsar, 'cliente'), accent: ACC.amberHi, ruta: '/devoluciones' } : null,
+    can('conteoFisico') ? { key: 'conteos-vencidos', titulo: 'Conteos vencidos', desc: 'MPs/PT que el calendario indica contar ya', count: tareas.conteosVencidos.length, items: muestraNombres(tareas.conteosVencidos, 'item') || muestraNombres(tareas.conteosVencidos, 'nombre'), accent: ACC.crit, ruta: '/conteo' } : null,
   ].filter(Boolean);
 
   const d = data || { produccion: {}, inventario: {}, compras: {}, margenes: {}, trazabilidad: {}, devoluciones: {} };
@@ -160,11 +166,12 @@ export default function DashboardPage() {
   /* "Tu día" — KPIs reales del rol. */
   const tuDia = (() => {
     const out = [];
-    const verProduccion = can('admin') || can('tecnico') || can('produccion');
-    const verTrazab = can('admin') || can('tecnico') || can('registrarQC') || can('almacen') || can('compras');
-    const verInventario = can('admin') || can('inventario') || can('compras') || can('almacen') || can('tecnico');
-    const verCompras = can('admin') || can('compras');
-    const verRentab = can('admin') || can('compras');
+    /* Gating por PERMISO REAL (no por can('tecnico')/can('almacen') que no existen). */
+    const verProduccion = can('produccion');
+    const verTrazab = can('trazabilidad') || can('registrarQC');
+    const verInventario = can('inventario');
+    const verCompras = can('compras');
+    const verRentab = can('compras');
     if (verProduccion) {
       const g = d.produccion.growthPct;
       out.push({ label: 'Cubetas / mes', value: (d.produccion.promMensual || 0).toLocaleString('es-MX'), trend: (g != null && g !== 0) ? `${g > 0 ? '+' : ''}${g}%` : null, trendPos: g > 0, sub: 'Prom. 6 meses', ruta: '/produccion' });
@@ -212,7 +219,13 @@ export default function DashboardPage() {
       icon: KEY_ICON[heroCard.key] || 'inventario',
       ruta: heroCard.ruta,
       accion: HERO_VERB[heroCard.key] || 'Atender',
-    } : null,
+    } : {
+      /* Sin urgencias → el hero SIEMPRE se muestra como estado "Todo al día"
+         (sin botón). Así "Requiere tu atención" nunca desaparece. */
+      titulo: 'Todo al día',
+      desc: 'No tienes pendientes urgentes ahora mismo',
+      sev: 'ok', icon: 'check', ruta: null, accion: null,
+    },
     pendientes: pendientesCards.map(c => ({
       id: c.key, icon: KEY_ICON[c.key] || 'inventario', sev: accToSev(c.accent),
       titulo: c.titulo, desc: c.desc, folios: c.items || undefined, count: c.count, ruta: c.ruta,

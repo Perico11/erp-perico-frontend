@@ -33,6 +33,7 @@ const PATHS = {
   stock: 'M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z|M9 22V12h6v10',
   alert: 'M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0z|M12 9v4|M12 17h.01',
   devoluciones: 'M3 12a9 9 0 1 0 3-6.7L3 8|M3 3v5h5',
+  check: 'M9 11l3 3L22 4|M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
   inventario: 'M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z|M3.3 7 12 12l8.7-5',
   compras: 'M8 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2z|M19 21a1 1 0 1 0 0-2 1 1 0 0 0 0 2z|M2 3h2l2.6 12.4a2 2 0 0 0 2 1.6h9.8a2 2 0 0 0 1.9-1.6L22 7H5',
   chevron: 'M9 6l6 6-6 6',
@@ -77,10 +78,12 @@ export default function InicioScreen({
               <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-.01em' }}>{d.hero.titulo}</div>
               <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{d.hero.desc}</div>
             </div>
-            <button data-id="inicio.btn.atender-hero" data-rol={role} onClick={() => onAtenderHero?.(d.hero.ruta)}
-              style={{ flexShrink: 0, alignSelf: 'stretch', padding: '0 18px', minHeight: 46, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--lp-brand-600)', color: '#fff', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600 }}>
-              {d.hero.accion || 'Atender'}
-            </button>
+            {d.hero.ruta && (
+              <button data-id="inicio.btn.atender-hero" data-rol={role} onClick={() => onAtenderHero?.(d.hero.ruta)}
+                style={{ flexShrink: 0, alignSelf: 'stretch', padding: '0 18px', minHeight: 46, borderRadius: 12, border: 'none', cursor: 'pointer', background: 'var(--lp-brand-600)', color: '#fff', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600 }}>
+                {d.hero.accion || 'Atender'}
+              </button>
+            )}
           </div>
         </>
       )}
