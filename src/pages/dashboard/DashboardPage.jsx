@@ -9,14 +9,26 @@ import HelpHint from '../../components/HelpHint';
 import MisLotesPipeline from './MisLotesPipeline';
 
 /* ════════════════════════════════════════════════════════════════════
-   Reskin "Claude Design" (verde) — Inicio / Dashboard
-   Refs: ERP Escritorio.html (SCREENS.inicio) · ERP Móvil.html (S.inicio)
-   · Inicio Resumen.html. Escritorio = saludo + KPIs g4 + "Requiere tu
-   atención" g3 (cards borde-left de color). Móvil = secciones apiladas:
-   "Requiere tu atención" (card hero) + "Pendientes" (lista lrow) +
-   "Tu día" (g2 KPIs). Tokens SOLO var(--lp-*). Sin emojis (SVG line).
-   KPIs/montos en var(--lp-font-mono). Touch ≥44px. Reskin VISUAL: toda
-   la lógica por rol, endpoints, realtime y drill-down se conserva 1:1.
+   "Claude Design" (verde) — Inicio / Dashboard
+   Ref ÚNICA: Inicio Resumen.html (grid:false → MISMA estructura en móvil
+   y escritorio; el shell/max-width los da el layout). Estructura 1:1:
+     1) Encabezado in-content: "Hola, {nombre}" + fecha capitalizada.
+     2) "Requiere tu atención" → HERO del pendiente MÁS urgente del rol
+        (.lp-hero, borde-left de color). Sin pendientes → .lp-hero.ok.
+     3) "Pendientes" → .lp-plist con una .lp-prow por categoría restante.
+     4) "Tu día" → .lp-stats (2-col que envuelve) con KPIs reales del rol.
+   Clases .lp-* viven en src/styles/lp-desktop.css (globales, importadas vía
+   index.css, valores exactos del documento). Tokens SOLO var(--lp-*).
+   Sin emojis (SVG line). Toda la lógica por rol, endpoints, realtime,
+   drill-down por card y exclusión esPrueba se conserva 1:1.
+
+   Reubicación de DATA del render anterior:
+     · "Hoy en la planta" (g4) + "Trazabilidad — flujo de lotes" → "Tu día".
+     · banner "Tu enfoque" → eliminado (su intención la cubre el hero).
+   OMITIDO por el mockup (flaggeado, NO borrado de datos): paneles admin/compras
+   "Top productos del mes" y "Producción últimos 12 meses" — no existen en
+   Inicio Resumen.html; su DATA (d.topProductos / d.serie12m) sigue disponible
+   en getDashboardExec para reubicar en Reportes si se decide.
    ════════════════════════════════════════════════════════════════════ */
 
 /* Paleta de acentos — solo tokens LP del tema verde. El mockup usa
@@ -346,8 +358,13 @@ export default function DashboardPage() {
     onOrdenes: () => cargar(),
   });
 
-  const hora = new Date().getHours();
-  const saludo = hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches';
+  /* Encabezado: "Hola, {nombre}" + fecha capitalizada (documento Inicio Resumen.html).
+     toLocaleDateString es-MX devuelve "jueves, 4 de junio" en minúsculas → capitalizar
+     la primera letra para igualar el .date del documento (text-transform:capitalize). */
+  const fechaHoy = (() => {
+    const f = new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' });
+    return f.charAt(0).toUpperCase() + f.slice(1);
+  })();
 
   /* ── Cómputo de tareas pendientes por rol ──
      IMPORTANTE: excluir esPrueba en TODOS los pendientes — los lotes de prueba
@@ -516,20 +533,6 @@ export default function DashboardPage() {
     } : null,
   ].filter(Boolean);
 
-  /* Foco del rol: hint corto sobre qué priorizar hoy. Independiente
-     de los pendientes — es un atajo mental para roles operativos. */
-  const focoDelRol = (() => {
-    const rol = user?.rol;
-    if (!rol) return null;
-    if (rol === 'tecnico')    return { txt: 'Aceptar pedidos, producir, envasar.', ruta: '/pedidos' };
-    if (rol === 'almacen')    return { txt: 'Crear pedidos, recibir lotes en Terán, gestionar PT.', ruta: '/pedidos' };
-    if (rol === 'recolector') return { txt: 'Recoger sublotes listos y llevarlos a Terán.', ruta: '/recoleccion' };
-    if (rol === 'compras')    return { txt: 'Procesar OCs, aprobar precios, gestionar reembolsos.', ruta: '/compras' };
-    if (rol === 'inventario') return { txt: 'Conteos físicos, ajustes con candado, reportar varianzas.', ruta: '/conteo' };
-    if (rol === 'admin')      return { txt: 'Supervisión global, ajustes con TOTP, decisiones de margen.', ruta: '/admin' };
-    return null;
-  })();
-
   if (err && !data) {
     return (
       <div>
@@ -545,518 +548,229 @@ export default function DashboardPage() {
     produccion: {}, inventario: {}, compras: {}, margenes: {}, trazabilidad: {}, devoluciones: {},
   };
 
-  const cardsConCount = cards.filter(c => c.count > 0);
+  /* Severidad por color de acento → determina cuál pendiente es el HERO.
+     crítico (rojo) > ámbar fuerte > ámbar > brand > info > ok/mut. El hero
+     es el pendiente MÁS urgente del rol, no simplemente el primero del array. */
+  const SEV = {
+    [ACC.crit]: 6, [ACC.critHi]: 6,
+    [ACC.amberHi]: 5, [ACC.amber]: 4,
+    [ACC.brand]: 3, [ACC.info]: 2, [ACC.ok]: 1, [ACC.mut]: 0,
+  };
+  /* Verbo de acción del botón hero según la categoría del pendiente. */
+  const HERO_VERB = {
+    pedidos: 'Preparar', ordenes: 'Ver', qc: 'Revisar', 'qc-hold': 'Atender',
+    envasado: 'Envasar', recoleccion: 'Recolectar', almacen: 'Recibir',
+    'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar',
+    'dev-recibir': 'Recibir', 'dev-reembolsar': 'Emitir', 'conteos-vencidos': 'Contar',
+  };
+  /* Pendientes con count>0, ordenados por severidad desc (hero = el primero).
+     stable: empate de severidad conserva el orden del flujo definido en `cards`. */
+  const cardsConCount = cards
+    .filter(c => c.count > 0)
+    .map((c, i) => ({ ...c, _idx: i, _sev: SEV[c.accent] ?? 0 }))
+    .sort((a, b) => (b._sev - a._sev) || (a._idx - b._idx));
+
+  /* ── "Tu día" — stats reales del rol (2 para operativos, hasta 4 admin) ──
+     Reubica aquí la DATA que antes vivía en "Hoy en la planta" (g4) y
+     "Trazabilidad — flujo de lotes". NO se inventan datos: todo sale de `d`
+     (getDashboardExec). Cada stat: {label, value, trend?, trendPos?, sub?, ruta}. */
+  const tuDia = (() => {
+    const out = [];
+    const verProduccion = can('admin') || can('tecnico') || can('produccion');
+    const verTrazab     = can('admin') || can('tecnico') || can('registrarQC') || can('almacen') || can('compras');
+    const verInventario = can('admin') || can('inventario') || can('compras') || can('almacen') || can('tecnico');
+    const verCompras    = can('admin') || can('compras');
+    const verRentab     = can('admin') || can('compras');
+
+    if (verProduccion) {
+      const g = d.produccion.growthPct;
+      out.push({
+        label: 'Cubetas / mes',
+        value: (d.produccion.promMensual || 0).toLocaleString('es-MX'),
+        trend: (g != null && g !== 0) ? `${g > 0 ? '+' : ''}${g}%` : null,
+        trendPos: g > 0,
+        sub: 'Prom. 6 meses',
+        ruta: '/produccion',
+      });
+    }
+    if (verTrazab) {
+      out.push({
+        label: 'Lotes en flujo',
+        value: (d.trazabilidad.lotesEnEnvasado || 0) + (d.trazabilidad.lotesEnCamino || 0),
+        sub: `${d.trazabilidad.lotesEnEnvasado || 0} envasando · ${d.trazabilidad.lotesEnCamino || 0} en camino`,
+        ruta: '/trazabilidad',
+      });
+    }
+    /* Admin/compras: completan la fila con KPIs de inventario y rentabilidad
+       (data antes en g4 "Hoy en la planta" y "Compras y rentabilidad"). */
+    if (verInventario) {
+      out.push({
+        label: 'Valor inventario MP',
+        value: fmt$(d.inventario.valorMP || 0),
+        sub: `${d.inventario.mpsTotales || 0} MPs · ${d.inventario.ptsTotales || 0} PTs`,
+        ruta: '/inventario?tab=mp',
+      });
+      out.push({
+        label: 'Stock crítico',
+        value: d.inventario.mpsCriticas || 0,
+        valueColor: d.inventario.mpsCriticas > 0 ? 'var(--lp-danger-600)' : undefined,
+        sub: 'MPs sin existencia',
+        ruta: '/inventario?tab=mp&filter=sin',
+      });
+    }
+    if (verCompras) {
+      out.push({
+        label: 'OCs activas',
+        value: d.compras.ocsActivas || 0,
+        sub: `${fmt$(d.compras.montoPendiente || 0)} pendiente`,
+        ruta: '/compras',
+      });
+    }
+    if (verRentab && d.margenes && d.margenes.margenMensual != null) {
+      out.push({
+        label: 'Margen mensual',
+        value: fmt$(d.margenes.margenMensual),
+        trend: d.margenes.margenPct > 0 ? `${d.margenes.margenPct}%` : null,
+        trendPos: true,
+        sub: `Ingresos ${fmt$(d.margenes.ingresosMensual)}`,
+        ruta: '/admin?section=margenes',
+      });
+    }
+    /* Operativos sin acceso a inventario/compras (recolector) quedan con sus
+       2 stats de producción/flujo según permisos; si el rol no ve ninguno
+       (caso extremo), la sección "Tu día" simplemente no se renderiza. */
+    return out;
+  })();
 
   /* Hover helpers (reskin: elevación sutil con sombra LP) */
   const hoverIn = (e) => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = 'var(--lp-shadow-md)'; };
   const hoverOut = (e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; };
 
-  /* ── KPI reutilizable ──
-     Escritorio: primitivos EXACTOS lpd-card lpd-kpi (.kl/.kv/.ks) portados 1:1
-     del documento. Móvil: estilos inline existentes (NO se tocan). El dot va en
-     <i> con background del accent; la tendencia es span inline dentro de .kv. */
-  const Kpi = ({ accent, onClick, label, value, valueColor, trend, trendPos, sub }) => (
-    isDesktop ? (
-      <button
-        className="lpd-card lpd-kpi"
-        style={{ cursor: onClick ? 'pointer' : 'default', textAlign: 'left', width: '100%', fontFamily: 'var(--lp-font-sans)', transition: 'transform .12s, box-shadow .12s, border-color .12s' }}
-        onClick={onClick}
-        onMouseEnter={onClick ? hoverIn : undefined}
-        onMouseLeave={onClick ? hoverOut : undefined}
-      >
-        <div className="kl"><i style={{ background: accent }} />{label}</div>
-        <div className="kv" style={valueColor ? { color: valueColor } : undefined}>
-          {value}
-          {trend != null && <span style={{ fontSize: 12, color: accent, fontWeight: 700 }}>{trend}</span>}
-        </div>
-        {sub != null && <div className="ks">{sub}</div>}
-      </button>
-    ) : (
-      <button style={S.kpi(accent, !!onClick, isDesktop)} onClick={onClick} onMouseEnter={onClick ? hoverIn : undefined} onMouseLeave={onClick ? hoverOut : undefined}>
-        <div style={S.kpiLabel}><span style={S.kpiDot(accent)} />{label}</div>
-        <div style={{ ...S.kpiValue, ...(valueColor ? { color: valueColor } : {}) }}>
-          {value}
-          {trend != null && <span style={S.trend(trendPos)}>{trend}</span>}
-        </div>
-        {sub != null && <div style={S.kpiSub}>{sub}</div>}
-      </button>
-    )
+  /* ── Iconos auxiliares (SVG line) — hero (24px), chevron, check ── */
+  const HeroIcon = ({ id, color }) => (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      {ICONS[id] || ICONS.pedidos}
+    </svg>
   );
-
-  /* ── Etiqueta de sección ──
-     Escritorio: primitivo EXACTO lpd-seclbl. Móvil: estilo inline existente. */
-  const SecLbl = ({ children }) => (
-    isDesktop
-      ? <div className="lpd-seclbl" style={{ margin: '0 2px 11px' }}>{children}</div>
-      : <div style={S.sectionTitle}>{children}</div>
-  );
-
-  /* ── Grid de KPIs ──
-     Escritorio: primitivo EXACTO lpd-grid lpd-g4 (4 columnas como el documento).
-     Móvil: grid inline existente (1fr 1fr). */
-  const KpiGrid = ({ children }) => (
-    isDesktop
-      ? <div className="lpd-grid lpd-g4">{children}</div>
-      : <div style={S.grid(isDesktop)}>{children}</div>
+  const Chevron = () => (
+    <svg className="lp-prow-chev" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
   );
 
   return (
     <div>
       <TopBar title="Inicio" />
+      {/* Estructura 1:1 con el documento Inicio Resumen.html (grid:false → MISMA
+          en móvil y escritorio). El shell y el max-width los da el layout. */}
       <div style={S.wrap(isDesktop)}>
-        {/* Saludo (estilo head() del mockup).
-            Escritorio: primitivos EXACTOS lpd-h1 / lpd-psub (saludo+fecha dinámicos
-            reales conservados). Móvil: estilos inline existentes (NO se tocan). */}
-        {isDesktop ? (
-          <div style={S.greeting}>
-            <div className="lpd-h1">{saludo}, {user?.nombre || ''}</div>
-            <div className="lpd-psub" style={{ marginBottom: 0 }}>
-              {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </div>
+        {/* 1 ── Encabezado in-content: "Hola, {nombre}" + fecha capitalizada. */}
+        <div style={S.greeting}>
+          <div style={{ fontSize: 20, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)', lineHeight: 1.15 }}>
+            Hola, {user?.nombre || ''}
           </div>
-        ) : (
-          <div style={S.greeting}>
-            <div style={S.greetH(isDesktop)}>{saludo}, {user?.nombre || ''}</div>
-            <div style={S.greetSub}>
-              {new Date().toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-            </div>
+          <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
+            {fechaHoy}
           </div>
-        )}
+        </div>
 
         {loading && !data ? (
           <div style={S.loading}>Cargando KPIs...</div>
         ) : (
           <>
             <HelpHint id="dashboard-bienvenida" title={`¡Hola ${user?.nombre || ''}!`}>
-              Este es tu tablero. Arriba ves <strong>tareas pendientes para tu rol</strong>: solo te muestra lo que tú puedes accionar. Abajo, los <strong>KPIs cruzados</strong> de toda la operación. Haz click en cualquier tarjeta para ir al detalle.
+              Este es tu tablero. Arriba ves <strong>lo que requiere tu atención</strong>: solo lo que tú puedes accionar. Abajo, <strong>tu día</strong> con los KPIs reales de tu rol. Toca cualquier elemento para ir al detalle.
             </HelpHint>
 
-            {/* Tira de foco — hint corto del rol */}
-            {focoDelRol && (
-              <button type="button" onClick={() => navigate(focoDelRol.ruta)} style={S.focoStrip}>
-                <span style={S.focoIcon}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-                  </svg>
-                </span>
-                <span style={S.focoTxt}>
-                  <span style={S.focoStrong}>Tu enfoque: </span>{focoDelRol.txt}
-                </span>
-              </button>
-            )}
-
-            {/* ════════ Sección 1 — Requiere tu atención ════════
-                Escritorio: grid g3 de cards con borde-left de color.
-                Móvil: card hero del más prioritario + lista de pendientes. */}
-            {cardsConCount.length > 0 && (
-              <div style={S.section}>
-                <SecLbl>Requiere tu atención</SecLbl>
-
-                {isDesktop ? (
-                  /* ── Escritorio: grid g3 de cards lpd-atn (borde-left de color),
-                       primitivo EXACTO del documento SCREENS.inicio "atn". ── */
-                  <div className="lpd-grid lpd-g3">
-                    {cardsConCount.map(c => (
-                      <button
-                        key={c.key}
-                        className="lpd-atn"
-                        style={{ borderLeftColor: c.accent, cursor: 'pointer', width: '100%', textAlign: 'left', fontFamily: 'var(--lp-font-sans)', transition: 'transform .12s, box-shadow .12s' }}
-                        onClick={() => navigate(c.ruta)}
-                        onMouseEnter={hoverIn}
-                        onMouseLeave={hoverOut}
-                      >
-                        <div style={S.atnHead}>
-                          <div style={S.atnTitle}>{c.count} {c.titulo.toLowerCase()}</div>
-                          <span style={S.atnBadge(c.accent)}>{c.count}</span>
-                        </div>
-                        <div style={S.atnDesc}>{c.desc}</div>
-                        {c.items && <div style={S.atnItems}>{c.items}</div>}
-                      </button>
-                    ))}
+            {/* 2 ── Requiere tu atención — HERO del pendiente MÁS urgente del rol.
+                Si no hay pendientes: estado "ok" (borde verde, check, sin botón). */}
+            <div className="lp-label">Requiere tu atención</div>
+            {cardsConCount.length > 0 ? (() => {
+              const hero = cardsConCount[0];
+              const verbo = HERO_VERB[hero.key] || 'Atender';
+              return (
+                <div className="lp-hero" style={{ borderLeftColor: hero.accent }}>
+                  <span className="lp-hero-ic" style={{ background: tint(hero.accent), color: hero.accent }}>
+                    <HeroIcon id={hero.key} color={hero.accent} />
+                  </span>
+                  <div className="lp-hero-tx">
+                    <div className="lp-hero-t">{hero.count} {hero.titulo.toLowerCase()}</div>
+                    <div className="lp-hero-s">{hero.desc}{hero.items ? ' · ' + hero.items : ''}</div>
                   </div>
-                ) : (
-                  /* ── Móvil: hero del primero + lista lrow del resto ── */
-                  <>
-                    {(() => {
-                      const hero = cardsConCount[0];
-                      return (
-                        <button style={S.atnHero(hero.accent)} onClick={() => navigate(hero.ruta)}>
-                          <div style={S.atnHeroTitle}>{hero.count} {hero.titulo.toLowerCase()}</div>
-                          <div style={S.atnHeroDesc}>{hero.desc}{hero.items ? ' · ' + hero.items : ''}</div>
-                          <span style={S.atnHeroBtn}>
-                            Atender
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-                            </svg>
-                          </span>
-                        </button>
-                      );
-                    })()}
-
-                    {cardsConCount.length > 1 && (
-                      <>
-                        <div style={{ ...S.sectionTitle, marginTop: 18 }}>Pendientes</div>
-                        <div style={S.listCard}>
-                          {cardsConCount.slice(1).map((c, i, arr) => (
-                            <button key={c.key} style={S.lrow(i === arr.length - 1)} onClick={() => navigate(c.ruta)}>
-                              <span style={S.lrowIc(c.accent)}><CardIcon id={c.key} color={c.accent} /></span>
-                              <span style={S.lrowNm}>
-                                <span style={S.lrowT}>{c.titulo}</span>
-                                {c.items && <span style={{ ...S.lrowS, display: 'block' }}>{c.items}</span>}
-                              </span>
-                              <span style={S.lrowCt(c.accent)}>{c.count}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-            {cardsConCount.length === 0 && cards.length > 0 && (
-              <div style={S.empty}>
-                <span style={S.okBadge}>
-                  <svg style={S.okIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <button className="lp-hero-btn" onClick={() => navigate(hero.ruta)}>{verbo}</button>
+                </div>
+              );
+            })() : (
+              <div className="lp-hero ok">
+                <span className="lp-hero-ic" style={{ background: tint('var(--lp-success-600)'), color: 'var(--lp-success-600)' }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
-                  Todo al día — sin pendientes para tu rol
                 </span>
-              </div>
-            )}
-
-            {/* ════════ Sección 2 — KPIs ejecutivos agrupados ════════
-                Cada KPI / sección visible sólo si el rol tiene permiso del módulo
-                correspondiente. Roles sin acceso (ej. recolector) no ven nada de
-                inventario, compras ni rentabilidad. */}
-            {(() => {
-              const verProduccion = can('admin') || can('tecnico') || can('produccion');
-              const verInventario = can('admin') || can('inventario') || can('compras') || can('almacen') || can('tecnico');
-              const verCompras    = can('admin') || can('compras');
-              const verDevol      = can('admin') || can('compras');
-              const verRentab     = can('admin') || can('compras');
-              const verQC         = can('admin') || can('tecnico') || can('registrarQC');
-              const verEnCamino   = can('admin') || can('almacen');
-
-              const verSeccionHoy   = verProduccion || verInventario || verDevol;
-              const verSeccionCompr = verCompras || verRentab;
-              /* Trazabilidad sólo si hay KPIs visibles dentro (QC para técnico, En camino para almacén) */
-              const verSeccionTraz  = verQC || verEnCamino;
-              /* Para Lotes en flujo en sección "Hoy" usamos el mismo gate de QC/almacén/compras */
-              const verTrazab       = verQC || verEnCamino || can('compras');
-
-              return (
-                <>
-                  {/* Pipeline de lotes activos para almacen+recolector. */}
-                  {(user?.rol === 'almacen' || user?.rol === 'recolector') && (
-                    <MisLotesPipeline rol={user.rol} />
-                  )}
-
-                  {/* HOY EN LA PLANTA — Producción + Inventario + Devoluciones */}
-                  {verSeccionHoy && (
-                    <div style={S.section}>
-                      <SecLbl>Hoy en la planta</SecLbl>
-                      <KpiGrid>
-                        {verProduccion && (
-                          <Kpi
-                            accent={ACC.brand}
-                            onClick={() => navigate('/produccion')}
-                            label="Cubetas / mes"
-                            value={(d.produccion.promMensual || 0).toLocaleString()}
-                            trend={d.produccion.growthPct != null && d.produccion.growthPct !== 0
-                              ? `${d.produccion.growthPct > 0 ? '+' : ''}${d.produccion.growthPct}%` : null}
-                            trendPos={d.produccion.growthPct > 0}
-                            sub="Promedio últimos 6 meses"
-                          />
-                        )}
-                        {verTrazab && (
-                          <Kpi
-                            accent={ACC.info}
-                            onClick={() => navigate('/trazabilidad')}
-                            label="Lotes en flujo"
-                            value={(d.trazabilidad.lotesEnEnvasado || 0) + (d.trazabilidad.lotesEnCamino || 0)}
-                            sub={`${d.trazabilidad.lotesEnEnvasado || 0} envasando · ${d.trazabilidad.lotesEnCamino || 0} en camino`}
-                          />
-                        )}
-                        {verInventario && (
-                          <>
-                            <Kpi
-                              accent={ACC.brand}
-                              onClick={() => navigate('/inventario?tab=mp')}
-                              label="Valor inventario MP"
-                              value={fmt$(d.inventario.valorMP || 0)}
-                              sub={`${d.inventario.mpsTotales || 0} MPs · ${d.inventario.ptsTotales || 0} PTs`}
-                            />
-                            <Kpi
-                              accent={d.inventario.mpsCriticas > 0 ? ACC.crit : ACC.mut}
-                              onClick={() => navigate('/inventario?tab=mp&filter=sin')}
-                              label="Stock crítico"
-                              value={d.inventario.mpsCriticas || 0}
-                              valueColor={d.inventario.mpsCriticas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
-                              sub="MPs sin existencia →"
-                            />
-                            <Kpi
-                              accent={d.inventario.mpsBajas > 0 ? ACC.amber : ACC.mut}
-                              onClick={() => navigate('/inventario?tab=mp&filter=bajo')}
-                              label="Stock bajo"
-                              value={d.inventario.mpsBajas || 0}
-                              valueColor={d.inventario.mpsBajas > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)'}
-                              sub="Por debajo del mínimo →"
-                            />
-                          </>
-                        )}
-                        {verDevol && (
-                          <Kpi
-                            accent={d.devoluciones.ult30d > 0 ? ACC.amber : ACC.mut}
-                            onClick={() => navigate('/devoluciones')}
-                            label="Devoluciones 30d"
-                            value={d.devoluciones.ult30d || 0}
-                            valueColor={d.devoluciones.ult30d > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)'}
-                            sub={`${fmt$2(d.devoluciones.monto30d || 0)} devueltos`}
-                          />
-                        )}
-                      </KpiGrid>
-                    </div>
-                  )}
-
-                  {/* COMPRAS Y RENTABILIDAD — solo admin/compras */}
-                  {verSeccionCompr && (
-                    <div style={S.section}>
-                      <SecLbl>Compras y rentabilidad</SecLbl>
-                      <KpiGrid>
-                        {verCompras && (
-                          <>
-                            <Kpi
-                              accent={ACC.amber}
-                              onClick={() => navigate('/compras')}
-                              label="OCs activas"
-                              value={d.compras.ocsActivas || 0}
-                              sub={`${fmt$(d.compras.montoPendiente || 0)} pendiente`}
-                            />
-                            <Kpi
-                              accent={d.compras.ocsVencidas > 0 ? ACC.crit : ACC.mut}
-                              onClick={() => navigate('/compras')}
-                              label="OCs vencidas"
-                              value={d.compras.ocsVencidas || 0}
-                              valueColor={d.compras.ocsVencidas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
-                              sub="Pasada fecha de entrega"
-                            />
-                          </>
-                        )}
-                        {verRentab && (
-                          <>
-                            <Kpi
-                              accent={ACC.ok}
-                              onClick={() => navigate('/admin?section=margenes')}
-                              label="Margen mensual"
-                              value={fmt$(d.margenes.margenMensual)}
-                              trend={d.margenes.margenPct > 0 ? `${d.margenes.margenPct}%` : null}
-                              trendPos
-                              sub={`Ingresos ${fmt$(d.margenes.ingresosMensual)}`}
-                            />
-                            <Kpi
-                              accent={ACC.brand}
-                              onClick={() => navigate('/admin?section=margenes')}
-                              label="Con precio"
-                              value={<>{d.margenes.conPrecio} <span style={{ fontSize: 13, opacity: .5 }}>/ {d.margenes.totalProductos}</span></>}
-                              sub={`${d.margenes.totalProductos - d.margenes.conPrecio} sin precio`}
-                            />
-                            <Kpi
-                              accent={d.margenes.noRentables > 0 ? ACC.crit : ACC.mut}
-                              onClick={() => navigate('/admin?section=margenes')}
-                              label="No rentables"
-                              value={d.margenes.noRentables || 0}
-                              valueColor={d.margenes.noRentables > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
-                              sub="Costo > precio"
-                            />
-                          </>
-                        )}
-                      </KpiGrid>
-                    </div>
-                  )}
-
-                  {/* TRAZABILIDAD — flujo de lotes */}
-                  {verSeccionTraz && (
-                    <div style={S.section}>
-                      <SecLbl>Trazabilidad — flujo de lotes</SecLbl>
-                      <KpiGrid>
-                        {verQC && (
-                          <>
-                            <Kpi
-                              accent={ACC.amber}
-                              onClick={() => navigate('/produccion')}
-                              label="QC pendientes"
-                              value={d.trazabilidad.lotesQCPendientes || 0}
-                              valueColor={(d.trazabilidad.lotesQCPendientes || 0) > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)'}
-                              sub="Lotes producidos esperando revisión"
-                            />
-                            <Kpi
-                              accent={ACC.crit}
-                              onClick={() => navigate('/trazabilidad')}
-                              label="QC retenidos"
-                              value={d.trazabilidad.lotesQCHold || 0}
-                              valueColor={(d.trazabilidad.lotesQCHold || 0) > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)'}
-                              sub="Requieren retrabajo"
-                            />
-                          </>
-                        )}
-                        {verEnCamino && (
-                          <Kpi
-                            accent={ACC.ok}
-                            onClick={() => navigate('/almacen')}
-                            label="En camino a almacén"
-                            value={d.trazabilidad.lotesEnCamino || 0}
-                            sub="Por confirmar recepción"
-                          />
-                        )}
-                      </KpiGrid>
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-
-            {/* ════════ Sección 3 — Top productos del mes ════════
-                Solo visible para admin/compras (mismo permiso que /api/dashboard/exec). */}
-            {(can('admin') || can('compras')) && (
-              <div style={S.section}>
-                <SecLbl>Top {Math.min(5, (d.topProductos || []).length)} productos del mes</SecLbl>
-                <div className={isDesktop ? 'lpd-card' : undefined} style={isDesktop ? undefined : S.panel}>
-                  {!Array.isArray(d.topProductos) ? (
-                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
-                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                      </svg>
-                      <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
-                        Backend desactualizado
-                      </div>
-                      <div style={{ lineHeight: 1.5 }}>
-                        El endpoint del dashboard aún no devuelve los datos de Top productos.<br />
-                        Reinicia el server con <code style={{ background: 'var(--lp-bg-sunken)', padding: '2px 6px', borderRadius: 4 }}>reiniciar.bat</code> y haz hard refresh.
-                      </div>
-                    </div>
-                  ) : d.topProductos.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                      Sin producción registrada en el mes más reciente.
-                    </div>
-                  ) : (() => {
-                    const max = Math.max(...d.topProductos.map(p => p.cubetas), 1);
-                    /* Paleta diversa por rank — solo tokens LP del tema verde */
-                    const COLORES_RANK = [ACC.brand, ACC.ok, ACC.amber, ACC.info, ACC.amberHi];
-                    return d.topProductos.map((p, i) => {
-                      const pct = (p.cubetas / max) * 100;
-                      const accent = COLORES_RANK[i] || ACC.brand;
-                      return (
-                        <div key={p.nombre} style={S.topRow}>
-                          <div style={S.topRank}>{i + 1}</div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={S.topName}>{p.nombre}</div>
-                            {p.tienePrecio && p.margenPct != null && (
-                              <div style={S.topSub}>
-                                Margen {p.margenPct}% · ${Math.round(p.margenMes).toLocaleString()} utilidad/mes
-                              </div>
-                            )}
-                            {!p.tienePrecio && (
-                              <div style={{ ...S.topSub, color: 'var(--lp-warning-700)' }}>
-                                Sin precio cargado
-                              </div>
-                            )}
-                          </div>
-                          <div style={S.topBarWrap}>
-                            <div style={S.topBar(pct, accent)} />
-                          </div>
-                          <div style={S.topVal}>{p.cubetas.toLocaleString()}</div>
-                        </div>
-                      );
-                    });
-                  })()}
+                <div className="lp-hero-tx">
+                  <div className="lp-hero-t">Todo al día</div>
+                  <div className="lp-hero-s">Sin pendientes para tu rol</div>
                 </div>
               </div>
             )}
 
-            {/* ════════ Sección 4 — Producción últimos 12 meses ════════
-                Solo visible para admin/compras (mismo permiso). */}
-            {(can('admin') || can('compras')) && (
-              <div style={S.section}>
-                <SecLbl>Producción últimos 12 meses</SecLbl>
-                <div className={isDesktop ? 'lpd-card' : undefined} style={isDesktop ? undefined : S.panel}>
-                  {!Array.isArray(d.serie12m) ? (
-                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                      <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 8 }}>
-                        <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                      </svg>
-                      <div style={{ fontWeight: 600, color: 'var(--lp-warning-700)', marginBottom: 4 }}>
-                        Backend desactualizado
-                      </div>
-                      <div style={{ lineHeight: 1.5 }}>
-                        Los datos de la serie de 12 meses aún no llegan.<br />
-                        Reinicia el server (<code style={{ background: 'var(--lp-bg-sunken)', padding: '2px 6px', borderRadius: 4 }}>reiniciar.bat</code>) y haz <code>Ctrl+Shift+R</code>.
-                      </div>
-                    </div>
-                  ) : d.serie12m.length < 3 ? (
-                    <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-                      Se necesitan al menos 3 meses de datos para mostrar la tendencia.
-                    </div>
-                  ) : (() => {
-                    const max = Math.max(...d.serie12m.map(x => x.cubetas), 1);
-                    const lastIdx = d.serie12m.length - 1;
-                    const NOMBRES_MES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-                    return (
-                      <>
-                        <div style={S.sparkRow}>
-                          {d.serie12m.map((x, i) => {
-                            const pct = (x.cubetas / max) * 100;
-                            return (
-                              <div
-                                key={x.mes}
-                                style={S.sparkBar(pct, i === lastIdx)}
-                                title={`${x.mes}: ${x.cubetas.toLocaleString()} cubetas`}
-                              />
-                            );
-                          })}
-                        </div>
-                        <div style={S.sparkMonths}>
-                          {d.serie12m.map((x, i) => {
-                            const m = parseInt(x.mes.slice(5, 7)) - 1;
-                            return (
-                              <span key={x.mes} style={S.sparkMonth(i === lastIdx)}>
-                                {NOMBRES_MES[m]}
-                              </span>
-                            );
-                          })}
-                        </div>
-                        <div style={S.trendStats}>
-                          <div>
-                            <span style={S.trendStat}>Promedio: </span>
-                            <span style={S.trendStatVal}>
-                              {(d.statsTrend?.promedio || 0).toLocaleString()} cub
-                            </span>
-                          </div>
-                          {d.statsTrend?.mejorMes && (
-                            <div>
-                              <span style={S.trendStat}>Mejor mes: </span>
-                              <span style={S.trendStatVal}>
-                                {d.statsTrend.mejorMes.cubetas.toLocaleString()} cub
-                                ({NOMBRES_MES[parseInt(d.statsTrend.mejorMes.mes.slice(5, 7)) - 1]})
-                              </span>
-                            </div>
-                          )}
-                          {d.statsTrend?.crecimiento != null && (
-                            <div>
-                              <span style={S.trendStat}>Crecimiento: </span>
-                              <span style={{
-                                ...S.trendStatVal,
-                                color: d.statsTrend.crecimiento >= 0 ? 'var(--lp-success-700)' : 'var(--lp-danger-700)',
-                              }}>
-                                {d.statsTrend.crecimiento >= 0 ? '+' : ''}{d.statsTrend.crecimiento}%
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    );
-                  })()}
+            {/* 3 ── Pendientes — una fila por categoría pendiente del rol.
+                El hero NO se repite aquí: la lista es el resto. Si no hay
+                pendientes (o solo el del hero), la sección se omite. */}
+            {cardsConCount.length > 1 && (
+              <>
+                <div className="lp-label">Pendientes</div>
+                <div className="lp-plist">
+                  {cardsConCount.slice(1).map(c => (
+                    <button key={c.key} className="lp-prow" onClick={() => navigate(c.ruta)}>
+                      <span className="lp-prow-ic" style={{ background: tint(c.accent), color: c.accent }}>
+                        <CardIcon id={c.key} color={c.accent} />
+                      </span>
+                      <span className="lp-prow-tx">
+                        <span className="lp-prow-t">{c.titulo}</span>
+                        <span className="lp-prow-s">{c.items || c.desc}</span>
+                      </span>
+                      <span className="lp-prow-count">{c.count}</span>
+                      <Chevron />
+                    </button>
+                  ))}
                 </div>
+              </>
+            )}
+
+            {/* 4 ── Tu día — KPIs reales del rol (2 operativos, hasta 4 admin).
+                Reubica la DATA de "Hoy en la planta" (g4) y "Trazabilidad — flujo
+                de lotes". Grid 2-col que envuelve (lp-stats). Cada stat navega. */}
+            {tuDia.length > 0 && (
+              <>
+                <div className="lp-label">Tu día</div>
+                <div className="lp-stats">
+                  {tuDia.map((st, i) => (
+                    <button
+                      key={i}
+                      className="lp-stat"
+                      style={{ cursor: st.ruta ? 'pointer' : 'default', textAlign: 'left', fontFamily: 'inherit', width: '100%' }}
+                      onClick={st.ruta ? () => navigate(st.ruta) : undefined}
+                    >
+                      <div className="lp-stat-l">{st.label}</div>
+                      <div className="lp-stat-v" style={st.valueColor ? { color: st.valueColor } : undefined}>
+                        {st.value}
+                        {st.trend != null && (
+                          <span className="lp-stat-trend" style={!st.trendPos ? { color: 'var(--lp-danger-600)' } : undefined}>{st.trend}</span>
+                        )}
+                      </div>
+                      {st.sub != null && <div className="lp-stat-s">{st.sub}</div>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {/* Pipeline de lotes activos para almacen + recolector (conservado
+                del render anterior — se monta al final de Inicio). */}
+            {(user?.rol === 'almacen' || user?.rol === 'recolector') && (
+              <div style={{ marginTop: 22 }}>
+                <MisLotesPipeline rol={user.rol} />
               </div>
             )}
           </>
