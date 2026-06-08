@@ -681,7 +681,7 @@ function EstadoBadge({ qty, pct }) {
 
 /* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
    Conserva el candado: el onSave del padre pasa por ajustarConCandado. */
-function AjusteSheet({ item, isDesktop, canEditMin = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
+function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
@@ -725,11 +725,16 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, onClose, onSave, onE
         <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste</label>
         <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, merma, corrección"
           value={motivo} onChange={e => setMotivo(e.target.value)} />
+        {modoPropuesta && (
+          <div style={{ marginTop: 12, padding: '9px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 12, color: 'var(--lp-warning-700)' }}>
+            Tu cambio quedará <strong>pendiente</strong> hasta que el admin lo apruebe. No se aplica todavía.
+          </div>
+        )}
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose}>Cancelar</button>
           <button style={{ ...S.act2(true), opacity: puedeGuardar && !saving ? 1 : 0.5 }}
             disabled={!puedeGuardar || saving} onClick={handleSave}>
-            {saving ? 'Guardando…' : 'Guardar'}
+            {saving ? (modoPropuesta ? 'Enviando…' : 'Guardando…') : (modoPropuesta ? 'Enviar a aprobación' : 'Guardar')}
           </button>
         </div>
 
@@ -863,7 +868,7 @@ function FilterChips({ activeFilter, onPick }) {
 /* ================================================================ */
 /* MAIN COMPONENT                                                    */
 /* ── Modal de revisión de importación Excel (paso 2: confirmar) ──────────── */
-function ImportPreviewModal({ data, onClose, onConfirmed }) {
+function ImportPreviewModal({ data, onClose, onConfirmed, modoPropuesta = false }) {
   const [saving, setSaving] = useState(false);
   const esPT = data.tipo === 'pt';
   const unidad = esPT ? 'cub' : 'kg';
@@ -876,7 +881,7 @@ function ImportPreviewModal({ data, onClose, onConfirmed }) {
     setSaving(true);
     try {
       const res = await api.confirmarImport(data.importId);
-      onConfirmed(res?.cambios ?? validos.length);
+      onConfirmed(res?.cambios ?? res?.n ?? validos.length, res?.pendiente === true);
     } catch (e) {
       alert('No se pudo aplicar la importación: ' + (e?.data?.error || e?.message || 'error'));
       setSaving(false);
@@ -941,8 +946,86 @@ function ImportPreviewModal({ data, onClose, onConfirmed }) {
         <div style={{ padding: '12px 18px', borderTop: '1px solid var(--lp-border-subtle)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <button onClick={onClose} disabled={saving} style={{ height: 44, padding: '0 16px', borderRadius: 'var(--lp-radius-md)', border: '1px solid var(--lp-border-default)', background: 'transparent', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13.5 }}>Cancelar</button>
           <button onClick={confirmar} disabled={saving || validos.length === 0} style={{ height: 44, padding: '0 20px', borderRadius: 'var(--lp-radius-md)', border: 'none', background: 'var(--lp-brand-600)', color: '#fff', cursor: (saving || validos.length === 0) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, opacity: (saving || validos.length === 0) ? .6 : 1 }}>
-            {saving ? 'Aplicando…' : `Confirmar e importar (${validos.length})`}
+            {saving ? (modoPropuesta ? 'Enviando…' : 'Aplicando…') : (modoPropuesta ? `Enviar a aprobación (${validos.length})` : `Confirmar e importar (${validos.length})`)}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal del admin: aprobar / rechazar ajustes propuestos ─────────────── */
+function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
+  const [busyId, setBusyId] = useState(null);
+  const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
+  const aprobar = async (id) => {
+    setBusyId(id);
+    try { await api.aprobarAjuste(id); onResolved(); }
+    catch (e) { alert('No se pudo aprobar: ' + (e?.data?.error || e?.message || 'error')); setBusyId(null); }
+  };
+  const rechazar = async (id) => {
+    const m = window.prompt('Motivo del rechazo (opcional):', '');
+    if (m === null) return;
+    setBusyId(id);
+    try { await api.rechazarAjuste(id, m); onResolved(); }
+    catch (e) { alert('No se pudo rechazar: ' + (e?.data?.error || e?.message || 'error')); setBusyId(null); }
+  };
+  const ov = { position: 'fixed', inset: 0, background: 'rgba(26,24,21,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 };
+  const box = { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)', border: '1px solid var(--lp-border-subtle)', width: '100%', maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' };
+  const lbl = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', fontWeight: 600 };
+  return (
+    <div style={ov} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={box} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '16px 18px 8px' }}>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>Ajustes por aprobar</div>
+          <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 3 }}>Cambios propuestos por inventario. Al aprobar se aplican y quedan auditados.</div>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '4px 18px', flex: 1 }}>
+          {pendientes.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: 30, color: 'var(--lp-text-tertiary)', fontSize: 13 }}>No hay propuestas pendientes.</div>
+          ) : pendientes.map(p => {
+            const esImport = p.tipo === 'import_mp' || p.tipo === 'import_pt';
+            const u = (p.tipo === 'mp' || p.tipo === 'import_mp') ? 'kg' : 'cub';
+            const qChg = Number(p.qtyActual) !== Number(p.qtyPropuesto);
+            const mChg = Number(p.minActual) !== Number(p.minPropuesto);
+            const items = p.items || [];
+            return (
+              <div key={p.id} style={{ border: '1px solid var(--lp-border-subtle)', borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: esImport ? 'color-mix(in srgb,var(--lp-info-600) 14%,transparent)' : 'var(--lp-bg-sunken)', color: esImport ? 'var(--lp-info-600)' : 'var(--lp-text-secondary)' }}>{esImport ? ('IMPORT ' + (p.tipo === 'import_mp' ? 'MP' : 'PT')) : p.tipo.toUpperCase()}</span>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>{p.nombre}</span>
+                </div>
+                {esImport ? (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 6 }}>{items.length} ítems{p.archivo ? ` · ${p.archivo}` : ''}</div>
+                    <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)', background: 'var(--lp-bg-sunken)', borderRadius: 8, padding: '6px 8px', maxHeight: 96, overflowY: 'auto' }}>
+                      {items.slice(0, 6).map((it, i) => (
+                        <div key={i}>{it.nombre}: <span style={{ opacity: .7 }}>{it.qtyAnterior != null ? Number(it.qtyAnterior).toLocaleString('es-MX') : '—'}</span> → {Number(it.qtyNuevo).toLocaleString('es-MX')} {u}</div>
+                      ))}
+                      {items.length > 6 && <div>+{items.length - 6} más…</div>}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {qChg && <div><div style={lbl}>Existencia</div><div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 14 }}><span style={{ color: 'var(--lp-text-tertiary)' }}>{Number(p.qtyActual).toLocaleString('es-MX')}</span> → <strong>{Number(p.qtyPropuesto).toLocaleString('es-MX')} {u}</strong></div></div>}
+                      {mChg && <div><div style={lbl}>Mínimo</div><div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 14 }}><span style={{ color: 'var(--lp-text-tertiary)' }}>{Number(p.minActual).toLocaleString('es-MX')}</span> → <strong>{Number(p.minPropuesto).toLocaleString('es-MX')} {u}</strong></div></div>}
+                      {!qChg && !mChg && <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>Sin cambios numéricos.</div>}
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 10 }}>“{p.motivo}” · <span style={{ color: 'var(--lp-text-tertiary)' }}>{p.propuestoPor} · {fmtFecha(p.fechaPropuesta)}</span></div>
+                  </>
+                )}
+                {esImport && <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginBottom: 10 }}>{p.propuestoPor} · {fmtFecha(p.fechaPropuesta)}</div>}
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => rechazar(p.id)} disabled={busyId === p.id} style={{ height: 40, padding: '0 14px', borderRadius: 'var(--lp-radius-md)', border: '1px solid color-mix(in srgb,var(--lp-danger-600) 30%,transparent)', background: 'transparent', color: 'var(--lp-danger-600)', cursor: 'pointer', fontWeight: 600, fontSize: 13 }}>Rechazar</button>
+                  <button onClick={() => aprobar(p.id)} disabled={busyId === p.id} style={{ height: 40, padding: '0 18px', borderRadius: 'var(--lp-radius-md)', border: 'none', background: 'var(--lp-brand-600)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>{busyId === p.id ? '…' : 'Aprobar'}</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <div style={{ padding: '12px 18px', borderTop: '1px solid var(--lp-border-subtle)', display: 'flex', justifyContent: 'flex-end' }}>
+          <button onClick={onClose} style={{ height: 42, padding: '0 18px', borderRadius: 'var(--lp-radius-md)', border: '1px solid var(--lp-border-default)', background: 'transparent', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13.5 }}>Cerrar</button>
         </div>
       </div>
     </div>
@@ -982,6 +1065,8 @@ export default function InventarioPage() {
   /* Importación Excel en 2 pasos: el backend devuelve {importId, preview}; aquí se revisa
      y se confirma. { importId, preview, tipo:'mp'|'pt' } */
   const [importPreview, setImportPreview] = useState(null);
+  /* Cola de aprobación: el rol inventario propone, el admin aprueba. */
+  const [showAprobar, setShowAprobar] = useState(false);
 
   /* Fetch data */
   const { data: invData, loading: invLoading, reload: reloadInv } = useApiData(() => api.getInventario(), [], 8000);
@@ -989,12 +1074,15 @@ export default function InventarioPage() {
   const { data: envData, reload: reloadEnv } = useApiData(() => api.getEnvases(), [], 15000);
   /* W3: stock PT desglosado por ubicación física (desde trazabilidad) */
   const { data: ptUbiData, reload: reloadPtUbi } = useApiData(() => api.getPTPorUbicacion(), [], 15000);
+  /* Cola de aprobación de ajustes (propuestas pendientes). */
+  const { data: pendData, reload: reloadPendientes } = useApiData(() => api.getAjustesPendientes(), null, 25000);
+  const pendientes = pendData?.pendientes || [];
 
   /* FIX jun 2026 (K1): InventarioPage solo polleaba cada 8s. Cualquier
      movimiento (recepción MP, ajuste por conteo, descuento por producción)
      tardaba hasta 8s en aparecer. Realtime cierra el gap. */
   useRealtimeSync({
-    onInventario:   () => { reloadInv(); reloadPtUbi(); },
+    onInventario:   () => { reloadInv(); reloadPtUbi(); reloadPendientes(); },
     onEnvases:      () => reloadEnv(),
     onPrecios:      () => reloadInv(),
     onTrazabilidad: () => reloadPtUbi(), /* W3: sublotes mueven ubicación → refrescar tabla */
@@ -1015,6 +1103,10 @@ export default function InventarioPage() {
   const canContar = can('conteoFisico');
   /* Editar mínimos (política de reorden) — permiso propio, separado de editarInventario. */
   const canEditMinimos = can('editarMinimos');
+  /* El rol inventario (Burgos) y demás NO-admin PROPONEN cambios → quedan pendientes
+     de aprobación del admin. El admin (Emmanuel) aplica directo con su candado. */
+  const esProponente = !!user && user.rol !== 'admin' && (canEditMP || canEditMinimos);
+  const esAdmin = user?.rol === 'admin';
 
   /* Lista de MPs disponibles para el datalist de sustituir */
   const mpsDisponibles = useMemo(
@@ -1253,9 +1345,17 @@ export default function InventarioPage() {
   const handleAjusteSave = useCallback(async (newQty, motivo, newMin) => {
     if (!ajusteItem) return;
     const minFinal = newMin != null ? newMin : ajusteItem.min;
+    /* Proponente (Burgos/no-admin): NO aplica — crea una propuesta pendiente de aprobación. */
+    if (esProponente) {
+      await api.proponerAjuste(ajusteItem.tipo, ajusteItem.nombre, newQty, minFinal, motivo);
+      setToastMsg('Cambio enviado · pendiente de aprobación del admin');
+      setTimeout(() => setToastMsg(''), 4500);
+      reloadPendientes();
+      return;
+    }
     if (ajusteItem.tipo === 'mp') await handleSaveMP(ajusteItem.nombre, newQty, minFinal, motivo);
     else await handleSavePT(ajusteItem.nombre, newQty, minFinal, motivo);
-  }, [ajusteItem, handleSaveMP, handleSavePT]);
+  }, [ajusteItem, esProponente, handleSaveMP, handleSavePT, reloadPendientes]);
 
   /* ── KPI click handler ── */
   const handleKpiClick = (filter) => {
@@ -1292,6 +1392,22 @@ export default function InventarioPage() {
       <div style={S.wrap}>
         <div style={S.h1}>Inventario</div>
         <div style={S.psub}>{isDesktop ? 'Materia prima y producto terminado' : 'MP y PT'}</div>
+
+        {/* Banner cola de aprobación */}
+        {pendientes.length > 0 && esAdmin && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', margin: '8px 0 4px', padding: '11px 14px', borderRadius: 12, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)' }}>
+            <span style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--lp-warning-700)' }}>
+              {pendientes.length} {pendientes.length === 1 ? 'ajuste propuesto' : 'ajustes propuestos'} por aprobar
+            </span>
+            <div style={{ flex: 1 }} />
+            <button onClick={() => setShowAprobar(true)} style={{ height: 38, padding: '0 16px', borderRadius: 'var(--lp-radius-md)', border: 'none', background: 'var(--lp-warning-600)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>Revisar</button>
+          </div>
+        )}
+        {pendientes.length > 0 && esProponente && (
+          <div style={{ margin: '8px 0 4px', padding: '10px 14px', borderRadius: 12, background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)', fontSize: 13, color: 'var(--lp-text-secondary)' }}>
+            Tienes <strong>{pendientes.length}</strong> {pendientes.length === 1 ? 'cambio' : 'cambios'} esperando aprobación del admin.
+          </div>
+        )}
 
         {/* Toolbar: búsqueda + pills MP / PT / Envases (móvil = apiladas) */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
@@ -1498,6 +1614,7 @@ export default function InventarioPage() {
           item={ajusteItem}
           isDesktop={isDesktop}
           canEditMin={canEditMinimos}
+          modoPropuesta={esProponente}
           onClose={() => setAjusteItem(null)}
           onSave={handleAjusteSave}
           onPedir={ajusteItem.tipo === 'pt' && canPedirPT && (ajusteItem.qty <= 0 || (ajusteItem.min > 0 && ajusteItem.qty <= ajusteItem.min))
@@ -1509,17 +1626,28 @@ export default function InventarioPage() {
         />
       )}
 
+      {/* Cola de aprobación (admin) */}
+      {showAprobar && (
+        <AprobarAjustesModal
+          pendientes={pendientes}
+          onClose={() => setShowAprobar(false)}
+          onResolved={() => { reloadPendientes(); reloadInv(); }}
+        />
+      )}
+
       {/* Revisión de importación Excel (paso 2) — MP o PT */}
       {importPreview && (
         <ImportPreviewModal
           data={importPreview}
+          modoPropuesta={esProponente}
           onClose={() => setImportPreview(null)}
-          onConfirmed={(n) => {
+          onConfirmed={(n, pendiente) => {
             const t = importPreview.tipo === 'pt' ? 'PT' : 'MP';
             setImportPreview(null);
             reloadInv();
-            setToastMsg(`Importación aplicada · ${n} ${t} actualizados`);
-            setTimeout(() => setToastMsg(''), 4000);
+            reloadPendientes();
+            setToastMsg(pendiente ? `Importación enviada a aprobación · ${n} ${t}` : `Importación aplicada · ${n} ${t} actualizados`);
+            setTimeout(() => setToastMsg(''), 4500);
           }}
         />
       )}

@@ -108,6 +108,11 @@ const api = {
       sesionConteoFolio: opts.sesionConteoFolio,
       codigoAutorizacion: opts.codigoAutorizacion,
     }),
+  /* Flujo de aprobación: el rol inventario PROPONE; el admin aprueba/rechaza. */
+  proponerAjuste: (tipo, nombre, qty, min, motivo) => request('POST', '/api/inventario/ajuste-propuesta', { tipo, nombre, qty, min, motivo }),
+  getAjustesPendientes: () => request('GET', '/api/inventario/ajustes-pendientes'),
+  aprobarAjuste: (id) => request('POST', '/api/inventario/ajuste-aprobar', { id }),
+  rechazarAjuste: (id, motivo) => request('POST', '/api/inventario/ajuste-rechazar', { id, motivo }),
   /* Fuente única de verdad para KPIs de stock. Devuelve listas pre-filtradas. */
   getInventarioStats: () => request('GET', '/api/inventario/stats'),
   /* URLs para descargar/imprimir — se usan en window.open o <a href> */
