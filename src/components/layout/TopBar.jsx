@@ -3,18 +3,16 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
-import Logo from '../Logo';
 import ThemeToggle from '../ui/ThemeToggle';
+import useIsDesktop from '../../hooks/useIsDesktop';
 
 const S = {
   bar: {
     position: 'sticky', top: 0, zIndex: 30,
-    /* Fondo opaco para que en iOS el área del notch / Dynamic Island
-       siempre tenga color sólido y nada se vea POR DEBAJO.
-       HANDOFF jun 2026: usa token raised para flipear en modo oscuro
-       (antes #FAFAF8 hardcodeado no respondía al toggle). */
-    background: 'var(--lp-bg-raised)',
-    borderBottom: '1px solid var(--lp-border-subtle)',
+    /* AG24: topbar limpio. Fondo = mismo que el contenido (bg-base) para que en
+       escritorio se funda con la página (como el mockup). El borde inferior solo
+       se aplica en móvil (en render) para separar de la barra sticky. */
+    background: 'var(--lp-bg-base)',
     /* Respeta el notch / Dynamic Island en iOS: el padding-top SOLO empuja
        hacia abajo el contenido. El contenido vive en el .inner con altura
        fija de 56px que NUNCA se monta sobre el notch. */
@@ -38,8 +36,10 @@ const S = {
      anterior (~34px). El padding 12 + minWidth/Height 44 cumple guía
      Apple/Material sin agrandar el ícono. */
   btn: { background: 'none', border: 'none', padding: 12, minWidth: 44, minHeight: 44, borderRadius: 'var(--lp-radius-sm)', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  /* AG24: botón circular del mockup (luna / campana). 44px = touch target. */
+  iconCircle: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', padding: 0, width: 44, height: 44, borderRadius: '50%', cursor: 'pointer', color: 'var(--lp-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' },
   badge: {
-    position: 'absolute', top: 4, right: 4,
+    position: 'absolute', top: 6, right: 6,
     minWidth: 16, height: 16, padding: '0 4px',
     background: 'var(--lp-danger-600)', color: '#fff',
     borderRadius: 8, fontSize: 11, fontWeight: 700,
@@ -50,8 +50,9 @@ const S = {
 };
 
 export default function TopBar({ title }) {
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const navigate = useNavigate();
+  const isDesktop = useIsDesktop();
   const [count, setCount] = useState(0);
   /* Branding configurable desde Admin → Apariencia. Se actualiza vía evento custom. */
   const [branding, setBranding] = useState(null);
@@ -93,24 +94,30 @@ export default function TopBar({ title }) {
   /* Logos desde branding configurable. HANDOFF jun 2026: default = logo
      monocromático verde en TODAS las pantallas. El branding override sigue
      funcionando si el admin sube uno propio. */
-  const logoMain = branding?.logoMain || '/logos/logo-perico-green.svg';
   const logoIcon = branding?.logoIcon || '/logos/logo-perico-green.svg';
 
   return (
-    <header style={S.bar}>
+    <header style={{ ...S.bar, ...(isDesktop ? {} : { borderBottom: '1px solid var(--lp-border-subtle)' }) }}>
       <div style={S.inner}>
+        {/* IZQUIERDA: ícono del perico (silueta verde) — NO se elimina nunca.
+            En móvil además el título de la pantalla (no hay sidebar que lo indique). */}
         <div style={S.brand}>
-          {/* Desktop: logo horizontal · Móvil: icono. Branding override aplica vía src directo. */}
-          <img src={logoMain} alt="" height={36} className="topbar-logo-desktop" style={{ height: 36, width: 'auto', objectFit: 'contain' }} />
-          <img src={logoIcon} alt="" width={32} height={32} className="topbar-logo-mobile" style={{ width: 32, height: 32, objectFit: 'contain' }} />
-          <span style={S.brandSep} aria-hidden="true" />
-          <h1 style={S.title}>{title}</h1>
+          <img src={logoIcon} alt="Pinturas El Perico" height={34} style={{ height: 34, width: 'auto', objectFit: 'contain' }} />
+          {!isDesktop && (
+            <>
+              <span style={S.brandSep} aria-hidden="true" />
+              <h1 style={S.title}>{title}</h1>
+            </>
+          )}
         </div>
-        <div style={S.right} className="topbar-right-mobile">
-          <ThemeToggle style={S.btn} />
+        {/* DERECHA: solo tema + notificaciones (circulares), como el mockup.
+            El nombre y el logout salen en escritorio (logout vive en el menú del
+            avatar del sidebar). En móvil se conserva el botón salir (no hay sidebar). */}
+        <div style={S.right}>
+          <ThemeToggle style={S.iconCircle} />
           <button
             onClick={() => navigate('/notificaciones')}
-            style={S.btn}
+            style={S.iconCircle}
             title="Notificaciones"
             aria-label={count > 0 ? `Notificaciones, ${count} sin leer` : 'Notificaciones'}
           >
@@ -121,12 +128,13 @@ export default function TopBar({ title }) {
               <span style={S.badge}>{count > 99 ? '99+' : count}</span>
             )}
           </button>
-          <span style={S.name}>{user?.nombre}</span>
-          <button onClick={logout} style={S.btn} title="Salir" aria-label="Cerrar sesión">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
-            </svg>
-          </button>
+          {!isDesktop && (
+            <button onClick={logout} style={S.iconCircle} title="Salir" aria-label="Cerrar sesión">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+              </svg>
+            </button>
+          )}
         </div>
       </div>
     </header>

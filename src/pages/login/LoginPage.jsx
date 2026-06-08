@@ -356,9 +356,8 @@ export default function LoginPage() {
         <div style={S.brand}>
           {logoOk ? (
             <Logo
-              variant={isDark ? 'el-perico-blanco' : 'el-perico-icono'}
-              height={isDark ? 64 : 60}
-              width={isDark ? 128 : 60}
+              variant="perico-green"
+              height={62}
               style={{ background: 'transparent', border: 'none' }}
               onError={() => setLogoOk(false)}
             />

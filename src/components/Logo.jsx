@@ -15,6 +15,8 @@ const VARIANTS = {
   'el-perico-blanco':     'Logo blanco.png',
   'el-perico-negro':      'Logo negro.png',
   'astra-cover':          'astra-cover.png',
+  /* Silueta verde del perico (SVG mono #0f7a5a) — marca del Design System verde. */
+  'perico-green':         'logo-perico-green.svg',
 };
 
 function getBase() {
