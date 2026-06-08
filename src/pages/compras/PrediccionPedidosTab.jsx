@@ -8,6 +8,7 @@ import { useState, useMemo } from 'react';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import KPICard from '../../components/ui/KPICard';
 
 const PRIORIDAD_INFO = {
   critico: { label: 'Crítico',  bg: 'var(--lp-danger-100)',   fg: 'var(--lp-danger-700)',  border: 'var(--lp-danger-500)' },
@@ -219,30 +220,12 @@ export default function PrediccionPedidosTab({ onCreateOC }) {
 
       {/* KPIs OPERATIVOS */}
       <div style={S.kpiGrid}>
-        <div style={S.kpi('var(--lp-danger-600)')}>
-          <div style={S.kpiLabel}>Críticos</div>
-          <div style={{...S.kpiValue, color: kpis.criticos > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'}}>{kpis.criticos}</div>
-        </div>
-        <div style={S.kpi('var(--lp-warning-600)')}>
-          <div style={S.kpiLabel}>Urgentes</div>
-          <div style={S.kpiValue}>{kpis.urgentes}</div>
-        </div>
-        <div style={S.kpi('var(--lp-brand-600)')}>
-          <div style={S.kpiLabel}>Pronto</div>
-          <div style={S.kpiValue}>{kpis.pronto}</div>
-        </div>
-        <div style={S.kpi('var(--lp-success-600)')}>
-          <div style={S.kpiLabel}>Total MPs</div>
-          <div style={S.kpiValue}>{kpis.total}</div>
-        </div>
-        <div style={S.kpi('var(--lp-text-tertiary)')}>
-          <div style={S.kpiLabel}>Déficit kg</div>
-          <div style={S.kpiValue}>{Math.round(kpis.kgDeficit).toLocaleString()}</div>
-        </div>
-        <div style={S.kpi('var(--lp-brand-700)')}>
-          <div style={S.kpiLabel}>Proy. {meses}m kg</div>
-          <div style={S.kpiValue}>{Math.round(kpis.kgTotalProyectado).toLocaleString()}</div>
-        </div>
+        <KPICard accent="var(--lp-danger-600)" label="Críticos" value={kpis.criticos} valueColor={kpis.criticos > 0 ? 'var(--lp-danger-600)' : undefined} />
+        <KPICard accent="var(--lp-warning-600)" label="Urgentes" value={kpis.urgentes} />
+        <KPICard accent="var(--lp-brand-600)" label="Pronto" value={kpis.pronto} />
+        <KPICard accent="var(--lp-success-600)" label="Total MPs" value={kpis.total} />
+        <KPICard accent="var(--lp-text-tertiary)" label="Déficit kg" value={Math.round(kpis.kgDeficit).toLocaleString()} />
+        <KPICard accent="var(--lp-brand-700)" label={`Proy. ${meses}m kg`} value={Math.round(kpis.kgTotalProyectado).toLocaleString()} />
       </div>
 
       {/* TOOLBAR: Filtro + Búsqueda */}

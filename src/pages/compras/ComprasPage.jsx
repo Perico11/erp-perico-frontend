@@ -23,6 +23,7 @@ import EditOCModal from './components/EditOCModal';
 import RecibirOCModal from './components/RecibirOCModal';
 import EliminarOCModal from './components/EliminarOCModal';
 import ComprasScreen from '../../screens/ComprasScreen';
+import KPICard from '../../components/ui/KPICard';
 
 const S = {
   wrap: { padding: '0 20px 100px' },
@@ -1125,40 +1126,26 @@ function PronosticoTab({ forecastData, inventario }) {
 
   return (
     <>
-      {/* KPIs */}
+      {/* KPIs — estilo dot unificado (KPICard) */}
       <div style={S.kpiGrid}>
-        <div style={S.kpi('var(--lp-brand-600)')}>
-          <div style={S.kpiLabel}>Promedio/mes</div>
-          <div style={S.kpiValue}>{promedioMensual.toLocaleString()}</div>
-          <div style={S.kpiSub}>cubetas</div>
-        </div>
-        <div style={S.kpi('var(--lp-success-600)')}>
-          <div style={S.kpiLabel}>Prox. mes</div>
-          <div style={S.kpiValue}>{proxMes.toLocaleString()}</div>
-          <div style={S.kpiSub}>proyeccion</div>
-        </div>
-        <div
-          style={{ ...S.kpi(periyoy != null && periyoy >= 0 ? 'var(--lp-success-600)' : 'var(--lp-warning-600)'), cursor: 'help' }}
+        <KPICard accent="var(--lp-brand-600)" label="Promedio/mes" value={promedioMensual.toLocaleString()} sub="cubetas" />
+        <KPICard accent="var(--lp-success-600)" label="Prox. mes" value={proxMes.toLocaleString()} sub="proyeccion" />
+        <KPICard
+          accent={periyoy != null && periyoy >= 0 ? 'var(--lp-success-600)' : 'var(--lp-warning-600)'}
+          style={{ cursor: 'help' }}
           title={`Crecimiento YoY = promedio de 3 YoY (mismo mes año anterior).\nProducción: ${yoyPctProd != null ? yoyPctProd + '%' : 'sin datos'} (${yoyProd.pares || 0} pares)\nCompras:    ${yoyPctComp != null ? yoyPctComp + '%' : 'sin datos'} (${yoyComp.pares || 0} pares)\nVentas POS: ${yoyPctVtas != null ? yoyPctVtas + '%' : 'sin desglose mensual'}`}
-        >
-          <div style={S.kpiLabel}>Crecimiento YoY</div>
-          <div style={S.kpiValue}>
-            {periyoy != null
-              ? <>{periyoy >= 0 ? '+' : ''}{periyoy}<span style={{ fontSize: 16, opacity: .7 }}>%</span></>
-              : '—'}
-          </div>
-          <div style={S.kpiSub}>
+          label="Crecimiento YoY"
+          value={periyoy != null
+            ? <>{periyoy >= 0 ? '+' : ''}{periyoy}<span style={{ fontSize: 16, opacity: .7 }}>%</span></>
+            : '—'}
+          sub={<>
             Prod {yoyPctProd != null ? (yoyPctProd >= 0 ? '+' : '') + yoyPctProd + '%' : '—'}
             {' · '}Comp {yoyPctComp != null ? (yoyPctComp >= 0 ? '+' : '') + yoyPctComp + '%' : '—'}
             {' · '}POS {yoyPctVtas != null ? (yoyPctVtas >= 0 ? '+' : '') + yoyPctVtas + '%' : '—'}
             {!periyoyConfiable && <span style={{ color: 'var(--lp-warning-700)' }}> ~</span>}
-          </div>
-        </div>
-        <div style={S.kpi(alertCount > 0 ? 'var(--lp-warning-600)' : 'var(--lp-text-tertiary)')}>
-          <div style={S.kpiLabel}>Alertas</div>
-          <div style={S.kpiValue}>{alertCount}</div>
-          <div style={S.kpiSub}>{mesesHist} meses datos</div>
-        </div>
+          </>}
+        />
+        <KPICard accent={alertCount > 0 ? 'var(--lp-warning-600)' : 'var(--lp-text-tertiary)'} label="Alertas" value={alertCount} sub={`${mesesHist} meses datos`} />
       </div>
 
       {/* Chart */}

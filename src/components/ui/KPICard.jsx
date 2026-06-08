@@ -26,19 +26,24 @@ const subStyle = {
   marginTop: 'auto', paddingTop: 3, lineHeight: 1.3,
 };
 
-export default function KPICard({ label, value, sub, accent = '#7C3AED', onClick, valueColor, style }) {
+/* KPI unificado — estilo "dot" del Design System verde (dot de color + label +
+   valor mono + sub). Reemplaza el viejo borderTop. `accent` = color del dot. */
+export default function KPICard({ label, value, sub, accent = 'var(--lp-brand-600)', onClick, valueColor, style, ...rest }) {
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag
       style={{
         ...base,
-        borderTop: `2px solid ${accent}`,
         cursor: onClick ? 'pointer' : 'default',
         ...style,
       }}
       onClick={onClick}
+      {...rest}
     >
-      <div style={labelStyle}>{label}</div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ width: 7, height: 7, borderRadius: 999, background: accent, flexShrink: 0 }} />
+        <div style={labelStyle}>{label}</div>
+      </div>
       <div style={{ ...valueStyle, ...(valueColor ? { color: valueColor } : {}) }}>{value}</div>
       {sub && <div style={subStyle}>{sub}</div>}
     </Tag>

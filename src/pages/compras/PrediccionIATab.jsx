@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import HelpHint from '../../components/HelpHint';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import KPICard from '../../components/ui/KPICard';
 
 const S = {
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
@@ -154,22 +155,10 @@ export default function PrediccionIATab() {
         </p>
       </HelpHint>
       <div style={S.metric}>
-        <div style={S.metricCard('var(--lp-brand-600)')}>
-          <div style={S.metricVal}>{k.totalMPs}</div>
-          <div style={S.metricLabel}>MPs analizadas</div>
-        </div>
-        <div style={S.metricCard('var(--lp-warning-600)')}>
-          <div style={{ ...S.metricVal, color: 'var(--lp-warning-700)' }}>{k.alertas}</div>
-          <div style={S.metricLabel}>Alertas</div>
-        </div>
-        <div style={S.metricCard('var(--lp-danger-600)')}>
-          <div style={{ ...S.metricVal, color: 'var(--lp-danger-600)' }}>{k.criticas}</div>
-          <div style={S.metricLabel}>Críticas</div>
-        </div>
-        <div style={S.metricCard('var(--lp-brand-600)')}>
-          <div style={S.metricVal}>{horizonte}</div>
-          <div style={S.metricLabel}>Meses adelante</div>
-        </div>
+        <KPICard accent="var(--lp-brand-600)" label="MPs analizadas" value={k.totalMPs} />
+        <KPICard accent="var(--lp-warning-600)" label="Alertas" value={k.alertas} valueColor="var(--lp-warning-700)" />
+        <KPICard accent="var(--lp-danger-600)" label="Críticas" value={k.criticas} valueColor="var(--lp-danger-600)" />
+        <KPICard accent="var(--lp-brand-600)" label="Meses adelante" value={horizonte} />
       </div>
 
       <div style={S.hint}>
