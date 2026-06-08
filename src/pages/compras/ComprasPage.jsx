@@ -1139,9 +1139,9 @@ function PronosticoTab({ forecastData, inventario }) {
         </div>
         <div
           style={{ ...S.kpi(periyoy != null && periyoy >= 0 ? 'var(--lp-success-600)' : 'var(--lp-warning-600)'), cursor: 'help' }}
-          title={`PERIYOY = promedio de 3 YoY (mismo mes año anterior).\nProducción: ${yoyPctProd != null ? yoyPctProd + '%' : 'sin datos'} (${yoyProd.pares || 0} pares)\nCompras:    ${yoyPctComp != null ? yoyPctComp + '%' : 'sin datos'} (${yoyComp.pares || 0} pares)\nVentas POS: ${yoyPctVtas != null ? yoyPctVtas + '%' : 'sin desglose mensual'}`}
+          title={`Crecimiento YoY = promedio de 3 YoY (mismo mes año anterior).\nProducción: ${yoyPctProd != null ? yoyPctProd + '%' : 'sin datos'} (${yoyProd.pares || 0} pares)\nCompras:    ${yoyPctComp != null ? yoyPctComp + '%' : 'sin datos'} (${yoyComp.pares || 0} pares)\nVentas POS: ${yoyPctVtas != null ? yoyPctVtas + '%' : 'sin desglose mensual'}`}
         >
-          <div style={S.kpiLabel}>PERIYOY</div>
+          <div style={S.kpiLabel}>Crecimiento YoY</div>
           <div style={S.kpiValue}>
             {periyoy != null
               ? <>{periyoy >= 0 ? '+' : ''}{periyoy}<span style={{ fontSize: 16, opacity: .7 }}>%</span></>
