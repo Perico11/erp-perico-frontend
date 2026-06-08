@@ -454,14 +454,15 @@ function resaltar(texto, query) {
   );
 }
 
-function MPRow({ item, canEdit, onAdjust, query }) {
+function MPRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
   const { mp, inv, pct, maestro } = item;
   const qty = inv.qty || 0;
   const sev = sevOf(qty, pct);
   const prov = maestro?.proveedor?.principal;
+  const clickable = canEdit || canContar;
   return (
-    <div style={S.mCard(canEdit)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
-      role={canEdit ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); }}>
+    <div style={S.mCard(clickable)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
+      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
       <div style={S.mTop}>
         <span style={S.mName}>
           {resaltar(mp, query)}
@@ -472,19 +473,21 @@ function MPRow({ item, canEdit, onAdjust, query }) {
       <div style={S.mNums}>
         <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} kg</span>
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} kg</span>
+        {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
     </div>
   );
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
-function PTRow({ item, canEdit, onAdjust, query }) {
+function PTRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
   const { nombre, inv, pct } = item;
   const qty = inv.qty || 0;
   const sev = sevOf(qty, pct);
+  const clickable = canEdit || canContar;
   return (
-    <div style={S.mCard(canEdit)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
-      role={canEdit ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); }}>
+    <div style={S.mCard(clickable)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
+      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
       <div style={S.mTop}>
         <span style={S.mName}>{resaltar(nombre, query)}</span>
         <EstadoBadge qty={qty} pct={pct} />
@@ -492,6 +495,7 @@ function PTRow({ item, canEdit, onAdjust, query }) {
       <div style={S.mNums}>
         <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} cub</span>
+        {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
     </div>
   );
@@ -748,7 +752,12 @@ function AjusteSheet({ item, isDesktop, onClose, onSave, onEliminar, onSustituir
 }
 
 /* ── Tabla de inventario (escritorio) ── */
-function InvTable({ items, tipo, unidad, canEdit, canDelete, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, query }) {
+function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query }) {
+  /* La columna "Acción" solo se muestra si el rol tiene ALGUNA acción posible en
+     esta tabla. Antes el header "Acción" se pintaba siempre y dejaba celdas vacías
+     para roles sin acciones (p.ej. inventario/Burgos: sin editarInventario) → columna
+     fantasma. Ahora: si no hay acción, no se pinta la columna. */
+  const showActionCol = canEdit || canContar || (tipo === 'mp' ? canDelete : canPedir);
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -758,7 +767,7 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, mpsDisponibles, onA
             <th style={{ ...S.th, textAlign: 'right' }}>Existencia</th>
             <th style={{ ...S.th, textAlign: 'right' }}>Mínimo</th>
             <th style={S.th}>Estado</th>
-            <th style={{ ...S.th, textAlign: 'right' }}>Acción</th>
+            {showActionCol && <th style={{ ...S.th, textAlign: 'right' }}>Acción</th>}
           </tr>
         </thead>
         <tbody>
@@ -782,6 +791,7 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, mpsDisponibles, onA
                   {min.toLocaleString('es-MX')} {unidad}
                 </td>
                 <td style={S.td}><EstadoBadge qty={qty} pct={it.pct} /></td>
+                {showActionCol && (
                 <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {lowPT && canPedir && (
                     <button type="button" data-id="inventario.btn.pedir-pt" data-rol="admin,almacen,tecnico"
@@ -793,12 +803,22 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, mpsDisponibles, onA
                   {canEdit && (
                     <button type="button" style={S.btnGhost} onClick={() => onAdjust(it)}>Ajustar</button>
                   )}
+                  {/* Burgos (rol inventario): su acción es CONTAR (conteo físico), no editar.
+                      Lleva a /conteo. Solo cuando no puede editar directo (evita duplicar para admin). */}
+                  {canContar && !canEdit && (
+                    <button type="button" data-id="inventario.btn.contar" data-rol="inventario,admin"
+                      onClick={() => onContar && onContar()}
+                      style={{ ...S.btnGhost, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' }}>
+                      Contar
+                    </button>
+                  )}
                   {tipo === 'mp' && canDelete && (
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
                       <MPActionsMenu mp={nombre} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
                     </span>
                   )}
                 </td>
+                )}
               </tr>
             );
           })}
@@ -844,6 +864,8 @@ export default function InventarioPage() {
     /* Navegar a PedidosPage con el producto prellenado en query string */
     navigate(`/pedidos?nuevo=${encodeURIComponent(nombre)}`);
   };
+  /* Acción del rol inventario (Burgos): ir a Conteo físico (su flujo de ajuste). */
+  const handleContar = () => navigate('/conteo');
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'mp');
   const [mpSubtab, setMpSubtab] = useState(searchParams.get('mp') || 'stock'); /* stock | costos | maestro */
   /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
@@ -889,6 +911,8 @@ export default function InventarioPage() {
   const canDeleteMP = can('eliminarMP');
   /* §8: +Recepción MP gateado por permiso `recibirMP` (almacen/compras/admin). */
   const canRecibirMP = can('recibirMP');
+  /* Conteo físico (rol inventario/Burgos): su acción real en la columna Acción. */
+  const canContar = can('conteoFisico');
 
   /* Lista de MPs disponibles para el datalist de sustituir */
   const mpsDisponibles = useMemo(
@@ -1221,11 +1245,12 @@ export default function InventarioPage() {
               </div>
             ) : isDesktop ? (
               <InvTable items={filteredMP} tipo="mp" unidad="kg" canEdit={canEditMP} canDelete={canDeleteMP}
+                canContar={canContar} onContar={handleContar}
                 mpsDisponibles={mpsDisponibles} onAdjust={handleAdjustMP} onAction={handleMPAction} query={debouncedQuery} />
             ) : (
               <div>
                 {filteredMP.map(item => (
-                  <MPRow key={item.mp} item={item} canEdit={canEditMP} onAdjust={handleAdjustMP} query={debouncedQuery} />
+                  <MPRow key={item.mp} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustMP} onContar={handleContar} query={debouncedQuery} />
                 ))}
               </div>
             )}
@@ -1268,11 +1293,12 @@ export default function InventarioPage() {
                 </div>
               ) : isDesktop ? (
                 <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
+                  canContar={canContar} onContar={handleContar}
                   onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
               ) : (
                 <div>
                   {filteredPT.map(item => (
-                    <PTRow key={item.nombre} item={item} canEdit={canEditMP} onAdjust={handleAdjustPT} query={debouncedQuery} />
+                    <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery} />
                   ))}
                 </div>
               )
