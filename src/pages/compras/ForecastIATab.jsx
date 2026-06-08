@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import useIsDesktop from '../../hooks/useIsDesktop';
 
 const S = {
   section: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 14 },
@@ -305,6 +306,7 @@ function BarsMini({ data, accent }) {
 export default function ForecastIATab() {
   const { user } = useAuth();
   const toast = useToast();
+  const isDesktop = useIsDesktop();
   const puedeCrearOCs = ['admin', 'compras'].includes(user?.rol);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
@@ -360,29 +362,14 @@ export default function ForecastIATab() {
     } finally { setCreandoBulk(false); }
   };
 
-  /* Generar UNA OC desde la card (mockup) — cae en Compras · Por aprobar. */
-  const handleGenerarUna = async (f) => {
-    if (!puedeCrearOCs || !f.sugerir) return;
-    try {
-      await api.generarOCsBulkForecast([{ mp: f.mp, cantidad: f.cantidadSugerida, proveedor: f.proveedor }], 'Generada desde Forecast IA');
-      toast.success(`OC de ${f.mp} creada → Compras · Por aprobar`, { duration: 5000 });
-      cargar();
-    } catch (e) {
-      toast.error('Error al generar OC: ' + (e?.data?.error || e.message));
-    }
-  };
-
-  /* "Generar todas las sugeridas" — selecciona todas y abre el modal bulk. */
-  const handleGenerarTodas = () => {
-    const all = {};
-    filtradas.filter(f => f.sugerir).forEach(f => { all[f.mp] = true; });
-    setSeleccion(all);
-    setMostrarBulk(true);
-  };
-
   if (err) return <div style={{ background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12 }}>{err}</div>;
 
   const k = datos.kpis || {};
+  /* Carrito = MPs marcadas (seleccionadas). Una OC por proveedor (BulkOCModal agrupa). */
+  const sugeridasCount = filtradas.filter(f => f.sugerir).length;
+  const totalKgSel = seleccionadas.reduce((s, x) => s + (Number(x.cantidadSugerida) || 0), 0);
+  const totalMontoSel = seleccionadas.reduce((s, x) => s + (Number(x.montoEstimado) || 0), 0);
+  const provCountSel = new Set(seleccionadas.map(x => x.proveedor || 'POR ASIGNAR')).size;
 
   return (
     <>
@@ -406,13 +393,15 @@ export default function ForecastIATab() {
         ))}
       </div>
 
-      {/* ── Toolbar mínima: buscar · recalcular · generar todas ── */}
+      {/* ── Toolbar: buscar · recalcular · seleccionar todas (al carrito) ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
         <input style={{ ...S.search, maxWidth: 280 }} type="text" placeholder="Buscar materia prima…" value={search} onChange={e => setSearch(e.target.value)} />
         <button style={S.btnGhost} onClick={cargar}>↻ Recalcular</button>
         <div style={{ flex: 1 }} />
-        {puedeCrearOCs && filtradas.filter(f => f.sugerir).length > 0 && (
-          <button style={S.btnPrimary} onClick={handleGenerarTodas}>Generar todas ({filtradas.filter(f => f.sugerir).length})</button>
+        {puedeCrearOCs && sugeridasCount > 0 && (
+          <button style={S.btnGhost} onClick={toggleSelAll}>
+            {seleccionadas.length === sugeridasCount ? 'Quitar todas' : `Seleccionar todas (${sugeridasCount})`}
+          </button>
         )}
       </div>
 
@@ -467,12 +456,22 @@ export default function ForecastIATab() {
                   </div>
                 )}
 
-                {puedeCrearOCs && f.sugerir && (
-                  <button data-id="forecast.btn.generar-oc" data-rol="compras,admin" onClick={() => handleGenerarUna(f)}
-                    style={{ width: '100%', minHeight: 46, borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600, background: 'var(--lp-brand-600)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    + Generar OC
-                  </button>
-                )}
+                {puedeCrearOCs && f.sugerir && (() => {
+                  const enOrden = !!seleccion[f.mp];
+                  return (
+                    <button data-id="forecast.btn.agregar-oc" data-rol="compras,admin" onClick={() => toggleSel(f.mp)}
+                      style={{ width: '100%', minHeight: 46, borderRadius: 12, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                        border: enOrden ? '1.5px solid var(--lp-brand-600)' : 'none',
+                        background: enOrden ? 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)' : 'var(--lp-brand-600)',
+                        color: enOrden ? 'var(--lp-brand-700)' : '#fff' }}>
+                      {enOrden ? (
+                        <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg> En la orden</>
+                      ) : (
+                        <><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg> Agregar a la orden</>
+                      )}
+                    </button>
+                  );
+                })()}
                 <button data-id="forecast.btn.ver-detalle" onClick={() => setDetalleMP(f.mp)}
                   style={{ width: '100%', marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-tertiary)', padding: 4 }}>
                   Ver detalle del cálculo
@@ -480,6 +479,23 @@ export default function ForecastIATab() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ── Carrito flotante: varias MP → OC(s) (una por proveedor) ── */}
+      {puedeCrearOCs && seleccionadas.length > 0 && (
+        <div style={{ position: 'fixed', left: '50%', transform: 'translateX(-50%)', zIndex: 45, bottom: isDesktop ? 22 : 'calc(74px + env(safe-area-inset-bottom, 0px))', width: 'auto', maxWidth: 'calc(100vw - 24px)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', boxShadow: '0 12px 34px rgba(0,0,0,.20)', borderRadius: 999, padding: '8px 8px 8px 16px' }}>
+            <span style={{ width: 30, height: 30, flex: '0 0 auto', borderRadius: 999, background: 'var(--lp-brand-600)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 13 }}>{seleccionadas.length}</span>
+            <div style={{ lineHeight: 1.25, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, whiteSpace: 'nowrap' }}>{seleccionadas.length === 1 ? 'materia en la orden' : 'materias en la orden'}</div>
+              <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {fmtN(totalKgSel, 0)} kg · {fmt$(totalMontoSel)} · {provCountSel === 1 ? '1 OC' : `${provCountSel} OC`}
+              </div>
+            </div>
+            <button onClick={() => setSeleccion({})} title="Vaciar" style={{ ...S.btnGhost, flex: '0 0 auto', height: 40, padding: '0 12px' }}>Vaciar</button>
+            <button onClick={() => setMostrarBulk(true)} style={{ ...S.btnPrimary, flex: '0 0 auto', height: 40, padding: '0 18px', whiteSpace: 'nowrap' }}>Crear OC</button>
+          </div>
         </div>
       )}
 
