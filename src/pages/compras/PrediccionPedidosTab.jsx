@@ -157,7 +157,7 @@ export default function PrediccionPedidosTab({ onCreateOC }) {
           borderRadius:'var(--lp-radius)',
           padding:20, maxWidth:560, margin:'40px auto', textAlign:'center',
         }}>
-          <div style={{ fontSize:36, marginBottom:8 }}>⚠</div>
+          <div style={{ marginBottom:8, color:'var(--lp-warning-600)', display:'flex', justifyContent:'center' }}><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
           <div style={{ fontSize:16, fontWeight:700, marginBottom:8, color:'var(--lp-warning-700)' }}>
             Server desactualizado
           </div>
@@ -190,7 +190,7 @@ export default function PrediccionPedidosTab({ onCreateOC }) {
   if (errorBackend) {
     return (
       <div style={S.empty}>
-        <div style={{ fontSize:48, marginBottom:12 }}>⚠</div>
+        <div style={{ marginBottom:12, color:'var(--lp-danger-600)', display:'flex', justifyContent:'center' }}><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
         <div style={{ fontSize:14, fontWeight:600, color:'var(--lp-danger-600)' }}>Error: {errorBackend}</div>
       </div>
     );
@@ -251,7 +251,7 @@ export default function PrediccionPedidosTab({ onCreateOC }) {
       {/* TARJETAS POR MP — grid responsivo */}
       {predicciones.length === 0 ? (
         <div style={S.empty}>
-          <div style={{fontSize:48, marginBottom:12}}>✓</div>
+          <div style={{ marginBottom:12, color:'var(--lp-brand-600)', display:'flex', justifyContent:'center' }}><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
           <div style={{fontSize:14, fontWeight:600, color:'var(--lp-text-secondary)'}}>
             {search || filtro !== 'todos' ? 'Sin resultados con esos filtros' : 'No hay MPs que requieran pedido pronto'}
           </div>
@@ -298,7 +298,7 @@ function MPCard({ p, onCreateOC }) {
       </div>
       {p.deficit > 0 && (
         <div style={{...S.row, color:'var(--lp-danger-600)', fontWeight:700}}>
-          <span>⚠ Déficit</span>
+          <span style={{ display:'inline-flex', alignItems:'center', gap:5 }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Déficit</span>
           <span style={S.rowVal}>{Math.round(p.deficit).toLocaleString()} kg</span>
         </div>
       )}

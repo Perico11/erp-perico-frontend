@@ -10,6 +10,7 @@
 */
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import PruebaBadge from '../../components/ui/PruebaBadge';
 
 const PASOS = [
   { key: 'aceptado',       label: 'Aceptado',    short: 'Acep' },
@@ -248,7 +249,7 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
                   {it.codigo}
                   {it.codigoOrden && ` · ${it.codigoOrden}`}
                   {it.codigoLote && ` · ${it.codigoLote}`}
-                  {it.esPrueba && ' · 🧪 PRUEBA'}
+                  {it.esPrueba && <> · <PruebaBadge inline size="sm" /></>}
                   {it.origen === 'interna' && ' · INTERNA'}
                 </div>
                 <div style={S.producto}>{it.producto}</div>

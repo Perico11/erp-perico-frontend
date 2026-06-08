@@ -196,7 +196,7 @@ export default function PrediccionIATab() {
           <div style={{ ...S.loading, padding: '40px 20px', lineHeight: 1.7 }}>
             {filter === 'alertas' || filter === 'criticas' ? (
               <>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>✓</div>
+                <div style={{ marginBottom: 8, color: 'var(--lp-brand-600)', display: 'flex', justifyContent: 'center' }}><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary)', marginBottom: 6 }}>
                   Sin alertas activas
                 </div>

@@ -50,7 +50,7 @@ const S = {
 };
 
 export default function TopBar({ title }) {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const [count, setCount] = useState(0);
@@ -96,6 +96,10 @@ export default function TopBar({ title }) {
      funcionando si el admin sube uno propio. */
   const logoIcon = branding?.logoIcon || '/logos/logo-perico-green.svg';
 
+  /* Saludo del Design System: "Hola {nombre} · N pendientes" (1:1 mockup). */
+  const firstName = (user?.nombre || '').split(' ')[0] || (user?.nombre || '');
+  const pendText = count > 0 ? `${count} ${count === 1 ? 'pendiente' : 'pendientes'}` : 'Todo al día';
+
   return (
     <header style={{ ...S.bar, ...(isDesktop ? {} : { borderBottom: '1px solid var(--lp-border-subtle)' }) }}>
       <div style={S.inner}>
@@ -103,13 +107,19 @@ export default function TopBar({ title }) {
             En escritorio el perico ya vive en el sidebar; repetirlo aquí encima del
             saludo era redundante, así que el topbar de escritorio queda vacío a la izq. */}
         <div style={S.brand}>
-          {!isDesktop && (
+          {!isDesktop ? (
             <>
               <img src={logoIcon} alt="Pinturas El Perico" height={34} style={{ height: 34, width: 'auto', objectFit: 'contain' }} />
               <span style={S.brandSep} aria-hidden="true" />
               <h1 style={S.title}>{title}</h1>
             </>
-          )}
+          ) : firstName ? (
+            /* Escritorio: saludo personalizado + pendientes (antes el topbar izq quedaba vacío). */
+            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.18, minWidth: 0 }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' }}>Hola {firstName}</span>
+              <span style={{ fontSize: 12, fontWeight: 500, color: count > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)' }}>{pendText}</span>
+            </div>
+          ) : null}
         </div>
         {/* DERECHA: solo tema + notificaciones (circulares), como el mockup.
             El nombre y el logout salen en escritorio (logout vive en el menú del
