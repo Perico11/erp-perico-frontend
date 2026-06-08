@@ -1376,75 +1376,86 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
     onEnviarRecolectar, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
   });
 
+  const envSt = envEstado(lote);
+  /* Badge 1:1 con el mockup: QC aprobado (info) · Parcial (ámbar) · Envasado (verde). */
+  const tintBadge = (c) => ({ background: `color-mix(in srgb, ${c} 14%, transparent)`, color: c, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap' });
+  let badge;
+  if (lote.estado === 'qc_hold') badge = { label: 'QC retenido', c: 'var(--lp-danger-600)' };
+  else if (envSt === 'envasado') badge = { label: 'Envasado', c: 'var(--lp-success-600)' };
+  else if (envSt === 'parcial') badge = { label: 'Parcial', c: 'var(--lp-warning-600)' };
+  else badge = { label: lote.estado === 'qc_aprobado' ? 'QC aprobado' : lote.estado === 'producido' ? 'Producido' : (ESTADO_MAP[lote.estado]?.label || 'Listo'), c: 'var(--lp-info-600)' };
+
+  const primary = acciones.find(a => a.kind === 'primary');     /* Envasar */
+  const secundarias = acciones.filter(a => a.kind !== 'primary');
+  const btnFull = { width: '100%', minHeight: 46, borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 };
+  const btnSec = (danger) => ({ flex: '1 1 auto', minHeight: 40, padding: '0 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', background: 'var(--lp-bg-raised)', border: `1px solid ${danger ? 'color-mix(in srgb, var(--lp-danger-600) 35%, transparent)' : 'var(--lp-border-subtle)'}`, color: danger ? 'var(--lp-danger-600)' : 'var(--lp-text-secondary)' });
+
   return (
-    <div style={S.card}>
-      <div style={S.cardHeader}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>
-            {lote.codigo || lote.codigoLote || lote.id}
-          </span>
-          <span style={B(est.bg, est.fg)}>{est.label}</span>
-          {hasTotes && <span style={B('#EDE9FE', '#7C3AED')}>2 fases</span>}
-          {lote.esPrueba && <PruebaBadge size="sm" />}
-        </div>
-        <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{(lote.fecha || '').slice(0, 10)}</span>
+    <div style={{ ...S.card, display: 'flex', flexDirection: 'column' }}>
+      {/* header: código + badge (+ 2 fases / prueba) + QR utilitario */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+        <span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>
+          {lote.codigo || lote.codigoLote || lote.id}
+        </span>
+        <span style={tintBadge(badge.c)}>{badge.label}</span>
+        {hasTotes && <span style={tintBadge('var(--lp-info-600)')}>2 fases</span>}
+        {lote.esPrueba && <PruebaBadge size="sm" />}
+        <button data-id="stock.btn.qr" data-rol="tecnico,almacen,admin" onClick={() => onQR && onQR(lote)} title="Generar QR del lote"
+          style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', padding: 4, display: 'inline-flex' }}>
+          {Icon.qr({ s: 17 })}
+        </button>
       </div>
 
-      <div style={S.cardTitle}>{lote.producto || lote.nombre}</div>
-      <div style={S.cardMeta}>
-        {lote.cantidad} cubetas · <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{total.toFixed(0)} L</span> totales
-        {lote.ordenCodigo && ` · ${lote.ordenCodigo}`}
+      {/* nombre + producidos */}
+      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-primary)', letterSpacing: '-.01em' }}>{lote.producto || lote.nombre}</div>
+      <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
+        <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{total.toFixed(0)} L</span> producidos{lote.ordenCodigo ? ` · ${lote.ordenCodigo}` : ''}
       </div>
 
-      {/* Barra de progreso de envasado */}
+      {/* progreso de envasado */}
       {total > 0 && (
-        <>
-          <div style={S.progressWrap}>
-            <div style={S.progressBar(pct)} />
+        <div style={{ margin: '12px 0 2px' }}>
+          {used > 0 && <div style={S.progressWrap}><div style={S.progressBar(pct)} /></div>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-mono)', marginTop: used > 0 ? 6 : 0 }}>
+            <span>{used.toFixed(0)} L envasados</span>
+            <span>{rest.toFixed(0)} L restantes</span>
           </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>
-            <span>{used.toFixed(1)} L envasados ({Math.round(pct)}%)</span>
-            <span>{rest.toFixed(1)} L restantes</span>
-          </div>
-        </>
+        </div>
       )}
 
-      {/* Sublotes expandibles */}
+      {/* sublotes expandibles (detalle, colapsado) */}
       {sublotes.length > 0 && (
-        <div style={{ marginTop: 8 }}>
-          <button
-            onClick={() => setShowSublotes(!showSublotes)}
-            style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--lp-brand-600)', cursor: 'pointer', fontWeight: 600, padding: '4px 0', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          >
+        <div style={{ marginTop: 6 }}>
+          <button onClick={() => setShowSublotes(!showSublotes)}
+            style={{ background: 'none', border: 'none', fontSize: 12, color: 'var(--lp-brand-600)', cursor: 'pointer', fontWeight: 600, padding: '4px 0', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             {Icon.chevron({ open: showSublotes })} {sublotes.length} sublote(s)
           </button>
-          {showSublotes && (
-            <SublotesList lote={lote} sublotes={sublotes} canAnular={canAnular} onAnularSublote={onAnularSublote} />
-          )}
+          {showSublotes && <SublotesList lote={lote} sublotes={sublotes} canAnular={canAnular} onAnularSublote={onAnularSublote} />}
         </div>
       )}
 
-      {/* Acciones */}
-      <div style={S.cardActions}>
-        <button
-          data-id="stock.btn.qr" data-rol="tecnico,almacen,admin"
-          style={{ ...S.btnPrimary, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', border: '1.5px solid var(--lp-border-subtle)', display: 'inline-flex', alignItems: 'center', gap: 6 }}
-          onClick={() => onQR && onQR(lote)}
-          title="Generar QR del lote"
-        >
-          {Icon.qr({ s: 15 })} QR
-        </button>
-        {acciones.map(a => (
-          <button
-            key={a.key}
-            data-id={a.dataId} data-rol={a.dataRol}
-            style={{ ...accionStyle(a.kind, false), display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            onClick={a.onClick}
-            title={a.title}
-          >
-            {a.icon ? a.icon({ s: 15 }) : null} {a.label}
+      {/* acciones: Envasar full-width (o "Lote envasado") + secundarias */}
+      <div style={{ marginTop: 'auto', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {primary ? (
+          <button data-id={primary.dataId} data-rol={primary.dataRol} onClick={primary.onClick} title={primary.title}
+            style={{ ...btnFull, background: 'var(--lp-brand-600)', color: '#fff' }}>
+            {primary.icon ? primary.icon({ s: 17 }) : null} {primary.label}
           </button>
-        ))}
+        ) : envSt === 'envasado' ? (
+          <div style={{ ...btnFull, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', cursor: 'default', border: '1px solid var(--lp-border-subtle)' }}>
+            {Icon.check({ s: 16 })} Lote envasado
+          </div>
+        ) : null}
+        {secundarias.length > 0 && (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {secundarias.map(a => (
+              <button key={a.key} data-id={a.dataId} data-rol={a.dataRol} onClick={a.onClick} title={a.title}
+                style={btnSec(a.kind === 'danger' || a.kind === 'warn')}>
+                {a.icon ? a.icon({ s: 15 }) : null} {a.label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1803,28 +1814,6 @@ export default function StockFabricaPage() {
           style={S.tabs}
         />
 
-        {/* KPIs */}
-        {activeTab === 'enFabrica' && (
-          <div style={S.kpiGrid}>
-            <div style={S.kpi('var(--lp-brand-600)')}>
-              <div style={S.kpiLabel}>Sin Envasar</div>
-              <div style={S.kpiValue}>{kpis.sinEnvasar}</div>
-            </div>
-            <div style={S.kpi('var(--lp-warning-600)')}>
-              <div style={S.kpiLabel}>Parcial</div>
-              <div style={S.kpiValue}>{kpis.parcial}</div>
-            </div>
-            <div style={S.kpi('var(--lp-success-600)')}>
-              <div style={S.kpiLabel}>Envasados</div>
-              <div style={S.kpiValue}>{kpis.envasados}</div>
-            </div>
-            <div style={S.kpi('var(--lp-text-tertiary)')}>
-              <div style={S.kpiLabel}>Total</div>
-              <div style={S.kpiValue}>{kpis.total}</div>
-            </div>
-          </div>
-        )}
-
         {/* Search */}
         <div style={S.toolbar}>
           <input type="text" style={S.search} placeholder="Buscar lote..."
@@ -1848,47 +1837,30 @@ export default function StockFabricaPage() {
                 : 'Sin lotes rechazados'}
             </div>
           </div>
-        ) : isDesktop ? (
-          /* ESCRITORIO — tabla Lote/Producto/Litros/Envasado/Estado/Acción */
-          <LoteTable
-            lotes={filtered}
-            canEnvasar={canEnvasar}
-            canTransfer={canTransfer}
-            canAnular={canAnular}
-            isAdmin={rol === 'admin'}
-            highlightLote={highlightLote}
-            onEnvasar={setEnvasadoModal}
-            onCerrar={handleCerrar}
-            onTransferir={handleTransferir}
-            onEnviarRecolectar={handleEnviarRecolectar}
-            onReenvasar={setReenvasadoModal}
-            onQR={setQrLote}
-            onEliminarPrueba={handleEliminarPrueba}
-            onAnularSublote={handleAnularSublote}
-            onIrQC={() => window.location.assign('/produccion?tab=calidad')}
-          />
         ) : (
-          /* MÓVIL — cards limpias con barra de progreso + sublotes expandibles */
-          filtered.map(lote => (
-            <LoteCard
-              key={lote.id}
-              lote={lote}
-              canEnvasar={canEnvasar}
-              canTransfer={canTransfer}
-              canAnular={canAnular}
-              isAdmin={rol === 'admin'}
-              autoExpand={!!highlightLote && (lote.codigo === highlightLote || lote.codigoLote === highlightLote || lote.id === highlightLote)}
-              onEnvasar={setEnvasadoModal}
-              onCerrar={handleCerrar}
-              onTransferir={handleTransferir}
-              onEnviarRecolectar={handleEnviarRecolectar}
-              onReenvasar={setReenvasadoModal}
-              onQR={setQrLote}
-              onEliminarPrueba={handleEliminarPrueba}
-              onAnularSublote={handleAnularSublote}
-              onIrQC={() => window.location.assign('/produccion?tab=calidad')}
-            />
-          ))
+          /* MÓVIL 1-col · ESCRITORIO grid 2-col — cards limpias 1:1 con el mockup */
+          <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: 14, alignItems: 'start' }}>
+            {filtered.map(lote => (
+              <LoteCard
+                key={lote.id}
+                lote={lote}
+                canEnvasar={canEnvasar}
+                canTransfer={canTransfer}
+                canAnular={canAnular}
+                isAdmin={rol === 'admin'}
+                autoExpand={!!highlightLote && (lote.codigo === highlightLote || lote.codigoLote === highlightLote || lote.id === highlightLote)}
+                onEnvasar={setEnvasadoModal}
+                onCerrar={handleCerrar}
+                onTransferir={handleTransferir}
+                onEnviarRecolectar={handleEnviarRecolectar}
+                onReenvasar={setReenvasadoModal}
+                onQR={setQrLote}
+                onEliminarPrueba={handleEliminarPrueba}
+                onAnularSublote={handleAnularSublote}
+                onIrQC={() => window.location.assign('/produccion?tab=calidad')}
+              />
+            ))}
+          </div>
         )}
       </div>
 
