@@ -27,8 +27,10 @@ const I_DOC = 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v
 const I_SEARCH = 'M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z|M21 21l-4.3-4.3';
 
 function btn(kind) {
-  const base = { height: 44, borderRadius: 'var(--lp-radius-md)', border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7 };
-  if (kind === 'primary') return { ...base, flex: 1, background: 'var(--lp-brand-600)', color: '#fff' };
+  const base = { height: 44, borderRadius: 'var(--lp-radius-md)', border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, whiteSpace: 'nowrap' };
+  /* primary nunca se encoge bajo su texto (evita que "Recibir MP" se recorte
+     cuando hay muchos botones en una card angosta); crece si hay espacio. */
+  if (kind === 'primary') return { ...base, flex: '1 1 auto', minWidth: 'max-content', padding: '0 16px', background: 'var(--lp-brand-600)', color: '#fff' };
   if (kind === 'ghost') return { ...base, flex: '0 0 auto', padding: '0 14px', background: 'transparent', border: '1px solid var(--lp-border-default)', color: 'var(--lp-text-secondary)' };
   if (kind === 'danger') return { ...base, flex: '0 0 auto', padding: '0 14px', background: 'transparent', border: '1px solid color-mix(in srgb,var(--lp-danger-600) 30%,transparent)', color: 'var(--lp-danger-600)' };
   if (kind === 'done') return { ...base, flex: 1, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)', cursor: 'default' };
