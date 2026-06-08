@@ -51,7 +51,8 @@ export default function ComprasScreen({
   });
   const pad = isDesktop ? '20px 28px 30px' : '8px 18px 24px';
 
-  const estadoOf = (o) => o.estado === 'porAprobar' ? { l: 'Por aprobar', c: C.amber }
+  const estadoOf = (o) => o.eliminada ? { l: 'Eliminada', c: C.danger }
+    : o.estado === 'porAprobar' ? { l: 'Por aprobar', c: C.amber }
     : o.vencida ? { l: 'Vencida', c: C.danger } : o.porVencer ? { l: 'Por vencer', c: C.amber }
     : o.estado === 'activa' ? { l: 'En tránsito', c: C.info } : { l: 'Recibida', c: C.ok };
 
@@ -135,9 +136,11 @@ export default function ComprasScreen({
                     {can('eliminarOC') && <button data-id="compras.btn.eliminar-oc" data-rol="admin" title="Cancelar OC (solo admin)" onClick={() => onEliminarOC?.(o.cod)} style={btn('danger')}>Eliminar</button>}
                   </>}
                   {o.estado === 'recibida' && <>
-                    <span style={btn('done')}><Ico d={I_CHECK} s={16} /> En inventario</span>
+                    {o.eliminada
+                      ? <span style={{ ...btn('done'), color: C.danger }}>Eliminada</span>
+                      : <span style={btn('done')}><Ico d={I_CHECK} s={16} /> En inventario</span>}
                     {o.comp && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver comprobante adjunto" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
-                    {can('compras') && <button data-id="compras.btn.imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
+                    {!o.eliminada && can('compras') && <button data-id="compras.btn.imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
                   </>}
                 </div>
               </div>

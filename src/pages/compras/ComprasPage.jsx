@@ -472,6 +472,8 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       comp: oc.comprobanteNombre || undefined,
       /* #3: OC nacida de una solicitud del técnico (Enrique) → badge SOLICITUD */
       solicitud: oc.origen === 'solicitud_tecnico' || oc.estado === 'solicitud',
+      /* eliminada cae en el bucket 'recibida' (auditoría) pero se etiqueta distinto */
+      eliminada: oc.eliminada || oc.estado === 'eliminada',
     };
   }), [ocs]);
 
