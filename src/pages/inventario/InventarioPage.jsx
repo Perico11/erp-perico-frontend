@@ -13,6 +13,7 @@ import MaestroMPInline from './MaestroMPInline';
 import HelpHint from '../../components/HelpHint';
 import PageTabs from '../../components/ui/PageTabs';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
+import CanonicoCard from './CanonicoCard';
 import useConfirm from '../../hooks/useConfirm';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
@@ -1408,6 +1409,9 @@ export default function InventarioPage() {
             Tienes <strong>{pendientes.length}</strong> {pendientes.length === 1 ? 'cambio' : 'cambios'} esperando aprobación del admin.
           </div>
         )}
+
+        {/* P2: inventario inicial canónico (congelar base + delta) — solo admin */}
+        {esAdmin && <CanonicoCard />}
 
         {/* Toolbar: búsqueda + pills MP / PT / Envases (móvil = apiladas) */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
