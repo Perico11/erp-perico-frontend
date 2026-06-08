@@ -10,6 +10,7 @@ import { useAuth } from '../../context/AuthContext';
 import PrediccionIATab from './PrediccionIATab';
 import ForecastIATab from './ForecastIATab';
 import PrediccionPedidosTab from './PrediccionPedidosTab';
+import CatalogoCompraTab from './CatalogoCompraTab';
 /* NOTA (§9): POS Aliases y SAT/CFDI salieron a pantallas propias (/pos-aliases, /sat).
    Sus componentes (PosAliasesTab / SATPanel) ya NO se montan aquí — viven en
    PosAliasesPage.jsx y SATPage.jsx respectivamente. */
@@ -1552,7 +1553,8 @@ export default function ComprasPage({ mode = 'compras' }) {
      SAT y POS Aliases salieron a pantallas propias (/sat, /pos-aliases) — ya NO
      se montan aquí en ningún modo. */
   const tabsCompras = [
-    { id: 'ocs', label: 'Compras' },
+    { id: 'ocs', label: 'Órdenes' },
+    { id: 'catalogo', label: 'Catálogo' },
   ];
   const tabsPronostico = [
     { id: 'forecast',   label: 'Sugerencias' },
@@ -1594,6 +1596,13 @@ export default function ComprasPage({ mode = 'compras' }) {
                 onCreated={handleNewOCCreated}
                 isDesktop={isDesktop}
               />
+        )}
+
+        {activeTab === 'catalogo' && (
+          <CatalogoCompraTab
+            isDesktop={isDesktop}
+            onCreated={() => { reloadOCs(); setActiveTab('ocs'); }}
+          />
         )}
 
         {activeTab === 'pedidos' && (
