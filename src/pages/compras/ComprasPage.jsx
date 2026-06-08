@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
+import { useToast } from '../../components/ui/Toast';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
@@ -1287,6 +1288,36 @@ function MRPTab({ mrpData, onCrearOC }) {
     return arr;
   }, [mrpData, debouncedQuery]);
 
+  const toast = useToast();
+  const [gen, setGen] = useState(false);
+
+  const deficitItems = useMemo(() => items.filter(it => {
+    const stock = it.stockActual ?? it.stock ?? it.tengo ?? 0;
+    const deficit = it.deficit ?? 0;
+    return deficit > 0 && !it.gasto_local && stock >= 0;
+  }), [items]);
+
+  /* "Para" — fecha límite para tener la MP (hoy si ya está en cero). */
+  const fmtPara = (stock, consumo, deficit) => {
+    if (deficit > 0 && stock <= 0) return 'hoy';
+    if (!consumo || consumo <= 0) return '—';
+    const dias = Math.max(0, Math.round((stock / consumo) * 30));
+    const d = new Date(); d.setDate(d.getDate() + dias);
+    return d.getDate() + ' ' + (MESES_CORTO[d.getMonth()] || '').toLowerCase();
+  };
+
+  const handleGenerarTodas = async () => {
+    if (!deficitItems.length || gen) return;
+    setGen(true);
+    try {
+      const payload = deficitItems.map(it => ({ mp: it.mp || it.nombre, cantidad: Math.ceil(it.deficit ?? 0), proveedor: it.proveedor_principal || it.proveedor || null }));
+      const r = await api.generarOCsBulkForecast(payload, 'Generadas desde MRP');
+      toast.success(`${r?.total ?? payload.length} OC(s) creadas → Compras · Por aprobar`, { duration: 5000 });
+    } catch (e) {
+      toast.error('Error al generar OCs: ' + (e?.data?.error || e.message));
+    } finally { setGen(false); }
+  };
+
   return (
     <>
       <div style={S.toolbar}>
@@ -1302,18 +1333,23 @@ function MRPTab({ mrpData, onCrearOC }) {
         />
       )}
 
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 0 10px' }}>
+        Plan de requerimientos (MRP) · Neto a comprar
+      </div>
+
       {items.length === 0 ? (
         <div style={S.empty}>Sin datos de MRP disponibles.</div>
       ) : (
+        <>
         <div style={{ overflowX: 'auto' }}>
           <table style={S.table}>
             <thead>
               <tr>
-                <th style={S.th}>MP</th>
-                <th style={{ ...S.th, textAlign: 'right' }}>Tengo</th>
-                <th style={{ ...S.th, textAlign: 'right' }}>Necesito/mes</th>
-                <th style={{ ...S.th, textAlign: 'right' }}>Deficit</th>
-                <th style={S.th}>Accion</th>
+                <th style={S.th}>Materia prima</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Demanda</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Disponible</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Neto a comprar</th>
+                <th style={{ ...S.th, textAlign: 'right' }}>Para</th>
               </tr>
             </thead>
             <tbody>
@@ -1325,9 +1361,7 @@ function MRPTab({ mrpData, onCrearOC }) {
                 const priColor = deficit > 0
                   ? (stock <= 0 ? 'var(--lp-danger-600)' : 'var(--lp-warning-600)')
                   : 'var(--lp-success-600)';
-                const badgeBg = deficit > 0 ? 'var(--lp-danger-100)' : 'var(--lp-success-100)';
-                const badgeFg = deficit > 0 ? 'var(--lp-danger-600)' : 'var(--lp-success-600)';
-                const badgeText = deficit > 0 ? 'Comprar' : 'OK';
+                const clickable = deficit > 0 && !it.gasto_local;
 
                 // Construir flags (banderitas)
                 const flagsArr = [];
@@ -1363,7 +1397,10 @@ function MRPTab({ mrpData, onCrearOC }) {
                 const topFlag = flagsArr.find(f => f.tipo === 'datos') || flagsArr.find(f => f.tipo === 'local') || flagsArr[0];
 
                 return (
-                  <tr key={mp}>
+                  <tr key={mp}
+                    onClick={clickable ? () => onCrearOC && onCrearOC({ mp, kg: Math.ceil(deficit), proveedor: it.proveedor_principal || it.proveedor || null }) : undefined}
+                    style={clickable ? { cursor: 'pointer' } : undefined}
+                    title={clickable ? `Click para crear OC de ${mp} (${Math.ceil(deficit)} kg)` : undefined}>
                     <td style={{ ...S.td, fontWeight: 600 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={S.dot(priColor)} />
@@ -1398,42 +1435,22 @@ function MRPTab({ mrpData, onCrearOC }) {
                       </div>
                     </td>
                     <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>
-                      {typeof stock === 'number' ? stock.toFixed(1) : stock}
+                      {typeof consumo === 'number' ? consumo.toFixed(0) : consumo} kg
                     </td>
                     <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>
-                      {typeof consumo === 'number' ? consumo.toFixed(1) : consumo}
+                      {typeof stock === 'number' ? stock.toFixed(0) : stock} kg
+                    </td>
+                    <td style={{
+                      ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700,
+                      color: deficit > 0 ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
+                    }}>
+                      {deficit > 0 ? `${Math.ceil(deficit)} kg` : '—'}
                     </td>
                     <td style={{
                       ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)',
-                      fontWeight: 700,
-                      color: deficit > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)',
+                      color: deficit > 0 && stock <= 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-secondary)',
                     }}>
-                      {deficit > 0 ? `-${deficit.toFixed(1)}` : '—'}
-                    </td>
-                    <td style={S.td}>
-                      {deficit > 0 && !it.gasto_local ? (
-                        <button
-                          onClick={() => onCrearOC && onCrearOC({
-                            mp,
-                            kg: Math.ceil(deficit),
-                            proveedor: it.proveedor_principal || it.proveedor || null,
-                          })}
-                          style={{
-                            ...S.badge(badgeBg, badgeFg),
-                            border: '1.5px solid ' + badgeFg,
-                            cursor: 'pointer',
-                            fontWeight: 700,
-                            transition: 'transform .12s, box-shadow .12s',
-                          }}
-                          onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,.10)'; }}
-                          onMouseLeave={(e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; }}
-                          title={`Crear OC para ${mp} (${Math.ceil(deficit)} kg)`}
-                        >
-                          + Crear OC
-                        </button>
-                      ) : (
-                        <span style={S.badge(badgeBg, badgeFg)}>{badgeText}</span>
-                      )}
+                      {deficit > 0 ? fmtPara(stock, consumo, deficit) : '—'}
                     </td>
                   </tr>
                 );
@@ -1441,6 +1458,15 @@ function MRPTab({ mrpData, onCrearOC }) {
             </tbody>
           </table>
         </div>
+        {deficitItems.length > 0 && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+            <button data-id="mrp.btn.generar-todas" data-rol="compras,admin" onClick={handleGenerarTodas} disabled={gen}
+              style={{ minHeight: 46, padding: '0 22px', borderRadius: 12, border: 'none', cursor: gen ? 'default' : 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600, background: 'var(--lp-brand-600)', color: '#fff', opacity: gen ? .7 : 1 }}>
+              {gen ? 'Generando…' : `Generar todas las OC (${deficitItems.length})`}
+            </button>
+          </div>
+        )}
+        </>
       )}
     </>
   );
