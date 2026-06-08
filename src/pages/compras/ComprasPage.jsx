@@ -470,6 +470,8 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       /* credito-pagado → ComprasScreen oculta "Registrar pago" */
       pago: (oc.pago === 'credito' && oc.pagada) ? 'credito-pagado' : oc.pago,
       comp: oc.comprobanteNombre || undefined,
+      /* #3: OC nacida de una solicitud del técnico (Enrique) → badge SOLICITUD */
+      solicitud: oc.origen === 'solicitud_tecnico' || oc.estado === 'solicitud',
     };
   }), [ocs]);
 
@@ -507,6 +509,7 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onRecibirMP={(cod) => openModal(cod, 'recibir')}
         onRegistrarPago={(cod) => openModal(cod, 'pago')}
         onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) window.open(`/api/compras/oc/${oc.id}/print`, '_blank'); }}
+        onVerComprobante={(cod) => { const oc = findOC(cod); if (oc) window.open(`/api/compras/oc/comprobante/${oc.id}`, '_blank'); }}
       />
 
       {active?.type === 'aprobar'  && <AprobarOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
