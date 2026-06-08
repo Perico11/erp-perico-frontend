@@ -59,12 +59,12 @@ const ROLE_PERMISSIONS_FALLBACK = {
   },
   inventario: {
     dashboard: true, inventario: true, cycleCount: true,
-    /* FIX jun 2026 (K3-a): Burgos NO debe editar inventario directo —
-       el modelo de auditoría exige que cualquier ajuste pase por sesión
-       de conteo con causa raíz. editarInventario:true le abría puerta
-       lateral para mover stock sin firma, rompiendo la promesa del Sprint E.
-       Solo conteoFisico (que termina en aprobación admin) ajusta. */
-    editarInventario: false,
+    /* Decisión del dueño (jun 2026): el rol inventario (Burgos) gestiona el
+       inventario — importar, editar mínimos y ajustar existencias. El guardado de
+       existencias/mínimos sigue protegido por el candado (TOTP/código admin/conteo).
+       (Este es solo el fallback offline; la verdad la da /api/permisos/me.) */
+    editarInventario: true,
+    editarMinimos: true,
     conteoFisico: true,
   },
 };
