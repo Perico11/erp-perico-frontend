@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import { PRESENTACIONES } from './presentaciones';
 
 const fmt$ = n => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
 const fmtN = (n, d = 0) => (n != null && !isNaN(n)) ? Number(n).toFixed(d) : '—';
@@ -52,7 +53,7 @@ function Stepper({ value, onChange, accent }) {
 }
 
 /* ── Hoja de revisión del carrito → crear OC(s) ─────────────────────────── */
-function CartSheet({ cart, getQty, setQty, removeMp, onClose, onConfirm, creating }) {
+function CartSheet({ cart, getQty, setQty, getPres, setPres, removeMp, onClose, onConfirm, creating }) {
   const [notas, setNotas] = useState('');
   const porProv = useMemo(() => {
     const g = {};
@@ -78,12 +79,16 @@ function CartSheet({ cart, getQty, setQty, removeMp, onClose, onConfirm, creatin
             <div key={prov} style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', margin: '6px 0 6px' }}>{prov} · {items.length}</div>
               {items.map(f => (
-                <div key={f.mp} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px dashed var(--lp-border-subtle)' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
+                <div key={f.mp} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '9px 0', borderBottom: '1px dashed var(--lp-border-subtle)', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 120px', minWidth: 0 }}>
                     <div style={{ fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{f.mp}</div>
                     <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{Number(f.costoKg) > 0 ? `${fmt$(getQty(f.mp) * f.costoKg)} · $${fmtN(f.costoKg, 2)}/kg` : 'sin costo'}</div>
                   </div>
                   <Stepper value={getQty(f.mp)} onChange={v => setQty(f.mp, v)} />
+                  <select value={getPres(f.mp)} onChange={e => setPres(f.mp, e.target.value)} title="Presentación del envase"
+                    style={{ flex: '0 0 auto', height: 38, maxWidth: 150, padding: '0 8px', borderRadius: 8, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}>
+                    {PRESENTACIONES.map(p => <option key={p.v} value={p.v}>{p.lbl}</option>)}
+                  </select>
                   <button onClick={() => removeMp(f.mp)} title="Quitar" style={{ flex: '0 0 auto', width: 32, height: 32, borderRadius: 8, border: '1px solid color-mix(in srgb,var(--lp-danger-600) 30%,transparent)', background: 'transparent', color: 'var(--lp-danger-600)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                 </div>
               ))}
@@ -123,6 +128,7 @@ export default function CatalogoCompraTab({ isDesktop = false, onCreated }) {
   const [filtro, setFiltro] = useState('todas');
   const [sel, setSel] = useState({});   /* { mp: true } */
   const [qtys, setQtys] = useState({}); /* { mp: number } */
+  const [pres, setPres] = useState({}); /* { mp: presentacion } */
   const [showCart, setShowCart] = useState(false);
   const [creating, setCreating] = useState(false);
 
@@ -157,6 +163,8 @@ export default function CatalogoCompraTab({ isDesktop = false, onCreated }) {
 
   const getQty = (mp) => Number(qtys[mp]) || 0;
   const setQty = (mp, v) => setQtys(s => ({ ...s, [mp]: Math.max(0, Math.round(Number(v) || 0)) }));
+  const getPres = (mp) => pres[mp] || '';
+  const setPresMp = (mp, v) => setPres(s => ({ ...s, [mp]: v }));
   const toggle = (mp) => setSel(s => ({ ...s, [mp]: !s[mp] }));
   const removeMp = (mp) => setSel(s => { const n = { ...s }; delete n[mp]; return n; });
 
@@ -170,7 +178,7 @@ export default function CatalogoCompraTab({ isDesktop = false, onCreated }) {
   const handleCrear = async (notas) => {
     setCreating(true);
     try {
-      const items = cart.map(f => ({ mp: f.mp, cantidad: getQty(f.mp), proveedor: f.proveedor })).filter(i => i.cantidad > 0);
+      const items = cart.map(f => ({ mp: f.mp, cantidad: getQty(f.mp), proveedor: f.proveedor, presentacion: getPres(f.mp) })).filter(i => i.cantidad > 0);
       if (!items.length) { toast.error('Agrega cantidades válidas'); setCreating(false); return; }
       const r = await api.generarOCsBulkForecast(items, notas || 'Generada desde Catálogo de compra');
       toast.success(`✓ ${r.total} OC(s) creada(s) → Compras · Por aprobar`, { duration: 5000 });
@@ -295,7 +303,7 @@ export default function CatalogoCompraTab({ isDesktop = false, onCreated }) {
       )}
 
       {showCart && (
-        <CartSheet cart={cart} getQty={getQty} setQty={setQty} removeMp={removeMp}
+        <CartSheet cart={cart} getQty={getQty} setQty={setQty} getPres={getPres} setPres={setPresMp} removeMp={removeMp}
           onClose={() => setShowCart(false)} onConfirm={handleCrear} creating={creating} />
       )}
     </div>

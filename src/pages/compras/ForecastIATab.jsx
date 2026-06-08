@@ -13,6 +13,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import { PRESENTACIONES } from './presentaciones';
 
 const S = {
   section: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 14 },
@@ -186,39 +187,65 @@ function DetalleModal({ mp, onClose }) {
   );
 }
 
-/* ── Modal de confirmación de OCs bulk ──────────────────────────────────── */
-function BulkOCModal({ items, onConfirm, onClose, loading }) {
-  /* Agrupar por proveedor para preview */
-  const porProveedor = useMemo(() => {
-    const grupos = {};
-    items.forEach(it => {
-      const p = it.proveedor || 'POR ASIGNAR';
-      if (!grupos[p]) grupos[p] = [];
-      grupos[p].push(it);
-    });
-    return grupos;
-  }, [items]);
+/* ── Modal de confirmación de OCs bulk — KILOS y PRESENTACIÓN editables por MP ── */
+const _mBtn = { width: 30, height: 34, flex: '0 0 auto', border: 'none', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontSize: 16, fontWeight: 700, lineHeight: 1 };
+const _mInput = { width: 56, border: 'none', textAlign: 'center', fontFamily: 'var(--lp-font-mono)', fontSize: 12.5, fontWeight: 600, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', outline: 'none' };
+const _mSelect = { flex: '0 0 auto', height: 34, maxWidth: 150, padding: '0 8px', borderRadius: 8, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', fontSize: 12, fontFamily: 'var(--lp-font-sans)' };
 
-  const totalKg = items.reduce((s, x) => s + x.cantidadSugerida, 0);
-  const totalMonto = items.reduce((s, x) => s + x.montoEstimado, 0);
+function BulkOCModal({ items, onConfirm, onClose, loading }) {
+  /* Estado editable por MP: cantidad + presentación, partiendo de la sugerencia. */
+  const [rows, setRows] = useState(() => items.map(it => ({
+    mp: it.mp,
+    proveedor: it.proveedor || 'POR ASIGNAR',
+    costoKg: Number(it.costoKg) || 0,
+    cantidad: Math.round(Number(it.cantidadSugerida) || 0),
+    presentacion: '',
+  })));
   const [notas, setNotas] = useState('');
+
+  const setCant = (mp, v) => setRows(rs => rs.map(r => r.mp === mp ? { ...r, cantidad: Math.max(0, Math.round(Number(v) || 0)) } : r));
+  const bump = (mp, d) => setRows(rs => rs.map(r => r.mp === mp ? { ...r, cantidad: Math.max(0, r.cantidad + d) } : r));
+  const setPres = (mp, v) => setRows(rs => rs.map(r => r.mp === mp ? { ...r, presentacion: v } : r));
+
+  const porProveedor = useMemo(() => {
+    const g = {};
+    rows.forEach(r => { (g[r.proveedor] = g[r.proveedor] || []).push(r); });
+    return g;
+  }, [rows]);
+
+  const totalKg = rows.reduce((s, r) => s + r.cantidad, 0);
+  const totalMonto = rows.reduce((s, r) => s + r.cantidad * r.costoKg, 0);
+  const nProv = Object.keys(porProveedor).length;
 
   return (
     <div style={S.modal} onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={S.modalBox}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Confirmar generación de OCs</div>
         <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 14 }}>
-          Se crearán <strong>{Object.keys(porProveedor).length}</strong> OC(s) — una por proveedor — con <strong>{items.length}</strong> MP(s) en total. {fmtN(totalKg, 0)} kg · {fmt$(totalMonto)}
+          Se crearán <strong>{nProv}</strong> OC(s) — una por proveedor — con <strong>{rows.length}</strong> MP(s). {fmtN(totalKg, 0)} kg · {fmt$(totalMonto)}. Ajusta los kilos y elige la presentación si lo necesitas.
         </div>
 
-        <div style={{ maxHeight: 260, overflowY: 'auto', marginBottom: 12 }}>
+        <div style={{ maxHeight: 340, overflowY: 'auto', marginBottom: 12 }}>
           {Object.entries(porProveedor).map(([prov, ms]) => (
-            <div key={prov} style={{ marginBottom: 10, border: '1px solid var(--lp-border-subtle)', borderRadius: 6, padding: 10 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{prov} ({ms.length} MPs)</div>
-              {ms.map(m => (
-                <div key={m.mp} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '3px 0' }}>
-                  <span>{m.mp}</span>
-                  <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{m.cantidadSugerida} kg · {fmt$(m.montoEstimado)}</span>
+            <div key={prov} style={{ marginBottom: 10, border: '1px solid var(--lp-border-subtle)', borderRadius: 8, padding: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>{prov} ({ms.length} MP{ms.length > 1 ? 's' : ''})</div>
+              {ms.map(r => (
+                <div key={r.mp} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderTop: '1px dashed var(--lp-border-subtle)', flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 120px', minWidth: 0 }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.mp}</div>
+                    <div style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{r.costoKg > 0 ? fmt$(r.cantidad * r.costoKg) : 'sin costo'}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'stretch', border: '1px solid var(--lp-border-default)', borderRadius: 8, overflow: 'hidden' }}>
+                      <button type="button" onClick={() => bump(r.mp, -10)} style={{ ..._mBtn, borderRight: '1px solid var(--lp-border-subtle)' }} aria-label="menos">−</button>
+                      <input type="number" value={r.cantidad} min="0" step="10" onChange={e => setCant(r.mp, e.target.value)} style={_mInput} />
+                      <button type="button" onClick={() => bump(r.mp, 10)} style={{ ..._mBtn, borderLeft: '1px solid var(--lp-border-subtle)', color: 'var(--lp-brand-600)' }} aria-label="más">+</button>
+                    </div>
+                    <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginLeft: 4 }}>kg</span>
+                  </div>
+                  <select value={r.presentacion} onChange={e => setPres(r.mp, e.target.value)} style={_mSelect}>
+                    {PRESENTACIONES.map(p => <option key={p.v} value={p.v}>{p.lbl}</option>)}
+                  </select>
                 </div>
               ))}
             </div>
@@ -234,8 +261,8 @@ function BulkOCModal({ items, onConfirm, onClose, loading }) {
 
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button style={S.btnGhost} onClick={onClose} disabled={loading}>Cancelar</button>
-          <button style={S.btnPrimary} onClick={() => onConfirm(notas)} disabled={loading}>
-            {loading ? 'Creando…' : `Crear ${Object.keys(porProveedor).length} OC(s)`}
+          <button style={S.btnPrimary} onClick={() => onConfirm(notas, rows.filter(r => r.cantidad > 0))} disabled={loading || totalKg <= 0}>
+            {loading ? 'Creando…' : `Crear ${nProv} OC(s)`}
           </button>
         </div>
       </div>
@@ -348,10 +375,17 @@ export default function ForecastIATab() {
     }
   };
 
-  const handleCrearBulk = async (notas) => {
+  const handleCrearBulk = async (notas, rows) => {
     setCreandoBulk(true);
     try {
-      const items = seleccionadas.map(s => ({ mp: s.mp, cantidad: s.cantidadSugerida, proveedor: s.proveedor }));
+      /* rows viene del modal con cantidad + presentación editadas; fallback a la sugerencia. */
+      const fuente = (Array.isArray(rows) && rows.length) ? rows : seleccionadas;
+      const items = fuente.map(s => ({
+        mp: s.mp,
+        cantidad: s.cantidad != null ? s.cantidad : s.cantidadSugerida,
+        proveedor: s.proveedor,
+        presentacion: s.presentacion || '',
+      }));
       const r = await api.generarOCsBulkForecast(items, notas);
       toast.success(`✓ ${r.total} OC(s) creadas correctamente`, { duration: 5000 });
       setMostrarBulk(false);
