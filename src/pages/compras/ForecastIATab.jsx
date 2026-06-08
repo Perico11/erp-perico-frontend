@@ -36,7 +36,7 @@ const S = {
 const PRIORIDAD_COLORS = {
   critical: { bg: 'var(--lp-danger-100)',  fg: 'var(--lp-danger-700)',  accent: 'var(--lp-danger-600)',  label: 'Crítica' },
   high:     { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-700)', accent: 'var(--lp-warning-600)', label: 'Alta' },
-  medium:   { bg: 'var(--lp-brand-100)',   fg: 'var(--lp-brand-700)',   accent: 'var(--lp-brand-600)',   label: 'Media' },
+  medium:   { bg: 'color-mix(in srgb, var(--lp-info-600) 12%, transparent)', fg: 'var(--lp-info-600)', accent: 'var(--lp-info-600)', label: 'Media' },
   low:      { bg: 'var(--lp-bg-sunken)',   fg: 'var(--lp-text-tertiary)', accent: 'var(--lp-border-subtle)', label: 'Baja' },
 };
 
@@ -218,6 +218,23 @@ function BulkOCModal({ items, onConfirm, onClose, loading }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
+/* Mini gráfico de barras (12 meses, último mes destacado) — para la card de sugerencia. */
+function BarsMini({ data, accent }) {
+  const vals = (data || []).map(d => Number(d.consumo) || 0);
+  if (vals.length === 0) return null;
+  const max = Math.max(...vals, 1);
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 42, margin: '12px 0 14px' }}>
+      {vals.map((v, i) => {
+        const last = i === vals.length - 1;
+        return <div key={i} title={`${(data[i]?.periodo || '').slice(-2)}: ${Math.round(v)}`}
+          style={{ flex: 1, minHeight: 4, height: `${Math.max(10, (v / max) * 100)}%`, borderRadius: 3,
+            background: last ? (accent || 'var(--lp-brand-600)') : 'color-mix(in srgb, var(--lp-brand-600) 20%, transparent)' }} />;
+      })}
+    </div>
+  );
+}
+
 export default function ForecastIATab() {
   const { user } = useAuth();
   const toast = useToast();
@@ -276,124 +293,118 @@ export default function ForecastIATab() {
     } finally { setCreandoBulk(false); }
   };
 
+  /* Generar UNA OC desde la card (mockup) — cae en Compras · Por aprobar. */
+  const handleGenerarUna = async (f) => {
+    if (!puedeCrearOCs || !f.sugerir) return;
+    try {
+      await api.generarOCsBulkForecast([{ mp: f.mp, cantidad: f.cantidadSugerida, proveedor: f.proveedor }], 'Generada desde Forecast IA');
+      toast.success(`OC de ${f.mp} creada → Compras · Por aprobar`, { duration: 5000 });
+      cargar();
+    } catch (e) {
+      toast.error('Error al generar OC: ' + (e?.data?.error || e.message));
+    }
+  };
+
+  /* "Generar todas las sugeridas" — selecciona todas y abre el modal bulk. */
+  const handleGenerarTodas = () => {
+    const all = {};
+    filtradas.filter(f => f.sugerir).forEach(f => { all[f.mp] = true; });
+    setSeleccion(all);
+    setMostrarBulk(true);
+  };
+
   if (err) return <div style={{ background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12 }}>{err}</div>;
 
   const k = datos.kpis || {};
 
   return (
     <>
-      {/* ── KPIs ── */}
-      <div style={S.kpiGrid}>
-        <div style={S.kpi(k.criticas > 0 ? 'var(--lp-danger-600)' : 'var(--lp-border-subtle)')}>
-          <div style={S.kpiLabel}>MPs críticas</div>
-          <div style={{ ...S.kpiVal, color: k.criticas > 0 ? 'var(--lp-danger-700)' : 'var(--lp-text-tertiary)' }}>{k.criticas || 0}</div>
-          <div style={S.kpiSub}>Riesgo paro inmediato</div>
-        </div>
-        <div style={S.kpi(k.altas > 0 ? 'var(--lp-warning-600)' : 'var(--lp-border-subtle)')}>
-          <div style={S.kpiLabel}>MPs alta prioridad</div>
-          <div style={{ ...S.kpiVal, color: k.altas > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)' }}>{k.altas || 0}</div>
-          <div style={S.kpiSub}>Stockout próximo</div>
-        </div>
-        <div style={S.kpi('var(--lp-brand-600)')}>
-          <div style={S.kpiLabel}>Total sugeridas</div>
-          <div style={S.kpiVal}>{k.sugeridas || 0}</div>
-          <div style={S.kpiSub}>de {k.totalMPsAnalizadas || 0} analizadas</div>
-        </div>
-        <div style={S.kpi('#0F6E56')}>
-          <div style={S.kpiLabel}>Inversión sugerida</div>
-          <div style={S.kpiVal}>{fmt$(k.montoEstimadoTotal)}</div>
-          <div style={S.kpiSub}>{fmtN(k.kgTotalSugerido, 0)} kg total</div>
-        </div>
+      {/* ── FORECAST IA · RESUMEN — KPIs 1:1 mockup ── */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 0 10px' }}>Forecast IA · Resumen</div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 10, marginBottom: 18 }}>
+        {[
+          { dot: 'var(--lp-danger-600)', label: 'Críticas', value: k.criticas || 0, sub: 'requieren OC hoy', danger: (k.criticas || 0) > 0 },
+          { dot: 'var(--lp-warning-600)', label: 'Alta prioridad', value: k.altas || 0, sub: 'esta semana' },
+          { dot: 'var(--lp-info-600)', label: 'MP en lista', value: k.totalMPsAnalizadas || 0, sub: 'analizadas' },
+          { dot: 'var(--lp-brand-600)', label: 'Inversión sugerida', value: fmt$(k.montoEstimadoTotal), sub: 'próximos 30 días' },
+        ].map((kpi, i) => (
+          <div key={i} style={{ background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 15px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 7, height: 7, borderRadius: 999, background: kpi.dot }} />
+              <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', color: 'var(--lp-text-tertiary)' }}>{kpi.label}</span>
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 700, marginTop: 6, color: kpi.danger ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)' }}>{kpi.value}</div>
+            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>{kpi.sub}</div>
+          </div>
+        ))}
       </div>
 
-      {/* ── Filtros + acción bulk ── */}
+      {/* ── Toolbar mínima: buscar · recalcular · generar todas ── */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
-        <input style={S.search} type="text" placeholder="Buscar MP..." value={search} onChange={e => setSearch(e.target.value)} />
-        <select value={filtros.prioridad} onChange={e => setFiltros(f => ({ ...f, prioridad: e.target.value }))}
-          style={{ padding: '8px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-sm)', fontSize: 13 }}>
-          <option value="">Todas las prioridades</option>
-          <option value="critical">Críticas</option>
-          <option value="high">Alta</option>
-          <option value="medium">Media</option>
-        </select>
-        <select value={filtros.soloSugeridas} onChange={e => setFiltros(f => ({ ...f, soloSugeridas: e.target.value }))}
-          style={{ padding: '8px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-sm)', fontSize: 13 }}>
-          <option value="1">Solo sugeridas</option>
-          <option value="">Todas (incluye no-sugeridas)</option>
-        </select>
+        <input style={{ ...S.search, maxWidth: 280 }} type="text" placeholder="Buscar materia prima…" value={search} onChange={e => setSearch(e.target.value)} />
         <button style={S.btnGhost} onClick={cargar}>↻ Recalcular</button>
         <div style={{ flex: 1 }} />
-        {puedeCrearOCs && seleccionadas.length > 0 && (
-          <button style={S.btnPrimary} onClick={() => setMostrarBulk(true)}>
-            + Crear OCs ({seleccionadas.length})
-          </button>
+        {puedeCrearOCs && filtradas.filter(f => f.sugerir).length > 0 && (
+          <button style={S.btnPrimary} onClick={handleGenerarTodas}>Generar todas ({filtradas.filter(f => f.sugerir).length})</button>
         )}
       </div>
 
-      {/* ── Tabla ── */}
+      {/* ── MATERIAS PRIMAS POR REABASTECER — cards 1:1 mockup ── */}
+      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 0 10px' }}>Materias primas por reabastecer</div>
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 30, color: 'var(--lp-text-tertiary)', fontSize: 12 }}>Calculando sugerencias…</div>
+        <div style={{ textAlign: 'center', padding: 30, color: 'var(--lp-text-tertiary)', fontSize: 13 }}>Calculando sugerencias…</div>
       ) : filtradas.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 30, color: 'var(--lp-text-tertiary)', fontSize: 12 }}>
-          ✓ Sin sugerencias de compra. Tu inventario está bien cubierto.
-        </div>
+        <div style={{ textAlign: 'center', padding: 40, color: 'var(--lp-text-tertiary)', fontSize: 13 }}>Sin sugerencias de compra. Tu inventario está bien cubierto.</div>
       ) : (
-        <table style={S.table}>
-          <thead><tr>
-            {puedeCrearOCs && (
-              <th style={{ ...S.th, width: 30 }}>
-                <input type="checkbox" onChange={toggleSelAll}
-                  checked={seleccionadas.length > 0 && seleccionadas.length === filtradas.filter(f => f.sugerir).length} />
-              </th>
-            )}
-            <th style={S.th}>Prioridad</th>
-            <th style={S.th}>MP</th>
-            <th style={S.th}>Proveedor</th>
-            <th style={S.th}>Stock</th>
-            <th style={S.th}>Tránsito</th>
-            <th style={S.th}>Días</th>
-            <th style={S.th}>Consumo/mes</th>
-            <th style={S.th}>Histórico 12m</th>
-            <th style={S.th}>Sugerir</th>
-            <th style={S.th}>$ Estimado</th>
-            <th style={S.th}></th>
-          </tr></thead>
-          <tbody>
-            {filtradas.map(f => {
-              const col = PRIORIDAD_COLORS[f.prioridad] || PRIORIDAD_COLORS.low;
-              return (
-                <tr key={f.mp} style={f.sugerir ? {} : { opacity: 0.5 }}>
-                  {puedeCrearOCs && (
-                    <td style={S.td}>
-                      {f.sugerir && (
-                        <input type="checkbox" checked={!!seleccion[f.mp]} onChange={() => toggleSel(f.mp)} />
-                      )}
-                    </td>
-                  )}
-                  <td style={S.td}><span style={S.badge(col.bg, col.fg)}>{col.label}</span></td>
-                  <td style={S.td}><strong>{f.mp}</strong></td>
-                  <td style={S.td}>{f.proveedor || '—'}</td>
-                  <td style={S.tdNum}>{fmtN(f.stockActual, 0)}</td>
-                  <td style={S.tdNum}>{f.enTransito > 0 ? fmtN(f.enTransito, 0) : '—'}</td>
-                  <td style={S.tdNum}>
-                    {f.diasHastaStockout < 999
-                      ? <span style={{ color: f.diasHastaStockout < f.leadTime.dias ? 'var(--lp-danger-700)' : 'inherit', fontWeight: 700 }}>{f.diasHastaStockout}d</span>
-                      : '—'}
-                  </td>
-                  <td style={S.tdNum}>{fmtN(f.demandaMensualProyectada, 0)}</td>
-                  <td style={S.td}><Sparkline data={f.consumoHistorico} color={col.accent} /></td>
-                  <td style={{ ...S.tdNum, fontWeight: 700, color: f.sugerir ? col.fg : 'inherit' }}>
-                    {f.sugerir ? `${f.cantidadSugerida} kg` : '—'}
-                  </td>
-                  <td style={S.tdNum}>{f.sugerir ? fmt$(f.montoEstimado) : '—'}</td>
-                  <td style={S.td}>
-                    <button style={S.btnGhost} onClick={() => setDetalleMP(f.mp)}>Ver</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
+          {filtradas.map(f => {
+            const col = PRIORIDAD_COLORS[f.prioridad] || PRIORIDAD_COLORS.low;
+            const sinCobertura = f.diasHastaStockout < (f.leadTime?.dias || 0);
+            const sinStock = (f.stockActual || 0) <= 0;
+            return (
+              <div key={f.mp} data-id="forecast.card.mp" style={{ position: 'relative', overflow: 'hidden', background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-lg)', padding: '16px 17px', opacity: f.sugerir ? 1 : 0.6 }}>
+                <span style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: col.accent }} />
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 16, fontWeight: 600, letterSpacing: '-.01em' }}>{f.mp}</div>
+                    <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 2, fontFamily: 'var(--lp-font-mono)' }}>
+                      {f.sugerir ? `${fmtN(f.cantidadSugerida, 0)} kg sugeridos` : 'Cubierto'}
+                    </div>
+                  </div>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, whiteSpace: 'nowrap', background: `color-mix(in srgb, ${col.accent} 14%, transparent)`, color: col.accent }}>
+                    <span style={{ width: 6, height: 6, borderRadius: 999, background: col.accent }} />{col.label}
+                  </span>
+                </div>
+
+                <div style={{ display: 'flex', gap: 22, marginTop: 12 }}>
+                  {[
+                    { v: `${fmtN(f.stockActual, 0)} kg`, l: 'Stock', danger: sinStock },
+                    { v: f.diasHastaStockout < 999 ? `${f.diasHastaStockout} d` : '—', l: 'Cobertura', danger: sinCobertura },
+                    { v: fmtN(f.demandaMensualProyectada, 0), l: 'Consumo/mes' },
+                  ].map((st, i) => (
+                    <div key={i}>
+                      <div style={{ fontSize: 15, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: st.danger ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>{st.v}</div>
+                      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', marginTop: 2 }}>{st.l}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <BarsMini data={f.consumoHistorico} accent={col.accent} />
+
+                {puedeCrearOCs && f.sugerir && (
+                  <button data-id="forecast.btn.generar-oc" data-rol="compras,admin" onClick={() => handleGenerarUna(f)}
+                    style={{ width: '100%', minHeight: 46, borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600, background: 'var(--lp-brand-600)', color: '#fff', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    + Generar OC
+                  </button>
+                )}
+                <button data-id="forecast.btn.ver-detalle" onClick={() => setDetalleMP(f.mp)}
+                  style={{ width: '100%', marginTop: 8, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-tertiary)', padding: 4 }}>
+                  Ver detalle del cálculo
+                </button>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {detalleMP && <DetalleModal mp={detalleMP} onClose={() => setDetalleMP(null)} />}
