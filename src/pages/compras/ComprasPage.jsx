@@ -22,6 +22,7 @@ import RegistrarPagoModal from './components/RegistrarPagoModal';
 import EditOCModal from './components/EditOCModal';
 import RecibirOCModal from './components/RecibirOCModal';
 import EliminarOCModal from './components/EliminarOCModal';
+import ComprasScreen from '../../screens/ComprasScreen';
 
 const S = {
   wrap: { padding: '0 20px 100px' },
@@ -113,6 +114,16 @@ function _diasVence(fechaVencimientoISO) {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     return Math.round((v - hoy) / (24 * 3600 * 1000));
   } catch { return null; }
+}
+
+/* "10 jun" desde un ISO de fecha de entrega (para la card de ComprasScreen). */
+function _fmtEntrega(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(String(iso).slice(0, 10) + 'T00:00:00');
+    if (isNaN(d.getTime())) return '';
+    return d.getDate() + ' ' + (MESES_CORTO[d.getMonth()] || '').toLowerCase();
+  } catch { return ''; }
 }
 
 /* Clasifica una OC en: porAprobar | activa | recibida */
@@ -422,10 +433,12 @@ function OCMobileCard({ oc, onRefresh, can }) {
 /* responsive: tabla (escritorio) / cards (móvil)                     */
 /* ══════════════════════════════════════════════════════════════════ */
 function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed, onCreated, isDesktop }) {
-  const { can } = useAuth();
-  const { query, debouncedQuery, setQuery } = useSearch(200);
-  const [bucket, setBucket] = useState('porAprobar');
+  const { can, user } = useAuth();
   const [showNew, setShowNew] = useState(false);
+  /* Modal activo (uno a la vez), levantado a este nivel: ComprasScreen es
+     presentacional y dispara onAccion(cod) → aquí se resuelve la OC real y se
+     abre el modal robusto correspondiente (con su comprobante/validaciones). */
+  const [active, setActive] = useState(null); /* { oc, type } */
 
   /* Si llega prefill desde MRP/Predicción, abrir Levantar OC */
   useEffect(() => { if (prefillNewOC) setShowNew(true); }, [prefillNewOC]);
@@ -435,24 +448,39 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
     return raw;
   }, [ocsData]);
 
-  const counts = useMemo(() => {
-    const c = { porAprobar: 0, activa: 0, recibida: 0 };
-    ocs.forEach(o => { c[_ocBucket(o)]++; });
-    return c;
-  }, [ocs]);
+  /* Mapea cada OC real → shape presentacional de ComprasScreen, con los MISMOS
+     helpers que usaba OCCard (bucket, monto, kg, vencimiento de crédito). */
+  const ocsForScreen = useMemo(() => ocs.map(oc => {
+    const bucket = _ocBucket(oc);
+    const esCreditoSinPagar = oc.pago === 'credito' && !oc.pagada;
+    const dias = esCreditoSinPagar ? _diasVence(oc.fechaVencimiento) : null;
+    const vencida = (esCreditoSinPagar && dias != null && dias < 0) ? `${Math.abs(dias)}d` : undefined;
+    const porVencer = (esCreditoSinPagar && dias != null && dias >= 0 && dias <= 5) ? `${dias}d` : undefined;
+    const kg = _ocKgTotal(oc);
+    return {
+      cod: oc.codigo || oc.id,
+      mp: _ocMPLabel(oc),
+      qty: kg > 0 ? `${kg.toLocaleString('es-MX')} kg` : '',
+      sol: oc.solicitadoPor || oc.solicitante || undefined,
+      prov: oc.proveedor || '—',
+      monto: _ocMonto(oc) || '',
+      entrega: _fmtEntrega(oc.fechaEntrega),
+      estado: bucket,
+      vencida, porVencer,
+      /* credito-pagado → ComprasScreen oculta "Registrar pago" */
+      pago: (oc.pago === 'credito' && oc.pagada) ? 'credito-pagado' : oc.pago,
+      comp: oc.comprobanteNombre || undefined,
+    };
+  }), [ocs]);
 
-  const filtered = useMemo(() => {
-    let items = ocs.filter(o => _ocBucket(o) === bucket);
-    if (debouncedQuery) {
-      const q = debouncedQuery.toLowerCase();
-      items = items.filter(o =>
-        (o.codigo || '').toLowerCase().includes(q) ||
-        (o.proveedor || '').toLowerCase().includes(q) ||
-        (o.items || []).some(it => (it.mp || '').toLowerCase().includes(q))
-      );
-    }
-    return items;
-  }, [ocs, bucket, debouncedQuery]);
+  const findOC = (cod) => ocs.find(o => (o.codigo || o.id) === cod);
+  const openModal = (cod, type) => { const oc = findOC(cod); if (oc) setActive({ oc, type }); };
+  const closeModal = () => setActive(null);
+  const afterSave = () => { setActive(null); if (onRefresh) onRefresh(); };
+
+  /* ComprasScreen pregunta can('eliminarOC') (no es un permiso real) → lo mapeamos
+     a can('configuracion') = admin. El resto de permisos pasan directo. */
+  const canForScreen = (p) => p === 'eliminarOC' ? can('configuracion') : can(p);
 
   const handleCreated = async () => {
     setShowNew(false);
@@ -467,63 +495,25 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
 
   return (
     <>
-      {/* Pills de estado + Levantar OC */}
-      <div style={{ ...S.toolbar, alignItems: 'stretch' }}>
-        <input type="text" style={{ ...S.search, maxWidth: 280, minHeight: 44, height: 44 }}
-          placeholder="Buscar por código, proveedor o MP..."
-          value={query} onChange={e => setQuery(e.target.value)} />
-        <SegmentedControl
-          value={bucket}
-          onChange={setBucket}
-          color="brand"
-          options={[
-            { value: 'porAprobar', label: `Por aprobar${counts.porAprobar ? ` · ${counts.porAprobar}` : ''}` },
-            { value: 'activa',     label: `Activas${counts.activa ? ` · ${counts.activa}` : ''}` },
-            { value: 'recibida',   label: `Recibidas${counts.recibida ? ` · ${counts.recibida}` : ''}` },
-          ]}
-        />
-        {can('compras') && (
-          <button
-            data-id="compras.btn.levantar-oc"
-            style={{ ...BTN.base, ...BTN.primary, minHeight: 44, height: 44, marginLeft: isDesktop ? 'auto' : 0 }}
-            onClick={() => setShowNew(true)}>
-            {IPlus} Levantar OC
-          </button>
-        )}
-      </div>
+      <ComprasScreen
+        data={{ ocs: ocsForScreen }}
+        isDesktop={isDesktop}
+        role={user?.rol}
+        can={canForScreen}
+        onNuevaOC={() => setShowNew(true)}
+        onAprobarOC={(cod) => openModal(cod, 'aprobar')}
+        onEditarOC={(cod) => openModal(cod, 'editar')}
+        onEliminarOC={(cod) => openModal(cod, 'eliminar')}
+        onRecibirMP={(cod) => openModal(cod, 'recibir')}
+        onRegistrarPago={(cod) => openModal(cod, 'pago')}
+        onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) window.open(`/api/compras/oc/${oc.id}/print`, '_blank'); }}
+      />
 
-      {filtered.length === 0 ? (
-        <div style={S.empty}>
-          {ocs.length === 0 ? 'Sin órdenes de compra.' : 'Sin OCs en esta vista.'}
-        </div>
-      ) : isDesktop ? (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={S.table}>
-            <thead>
-              <tr>
-                <th style={S.th}>OC</th>
-                <th style={S.th}>Materia prima</th>
-                <th style={S.th}>Proveedor</th>
-                <th style={{ ...S.th, textAlign: 'right' }}>Monto</th>
-                <th style={S.th}>Pago</th>
-                <th style={S.th}>Estado</th>
-                <th style={{ ...S.th, textAlign: 'right' }}>Acción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(oc => (
-                <OCDeskRow key={oc.id} oc={oc} onRefresh={onRefresh} can={can} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : (
-        <div>
-          {filtered.map(oc => (
-            <OCMobileCard key={oc.id} oc={oc} onRefresh={onRefresh} can={can} />
-          ))}
-        </div>
-      )}
+      {active?.type === 'aprobar'  && <AprobarOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
+      {active?.type === 'pago'     && <RegistrarPagoModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
+      {active?.type === 'editar'   && <EditOCModal       oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
+      {active?.type === 'recibir'  && <RecibirOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
+      {active?.type === 'eliminar' && <EliminarOCModal   oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
 
       {showNew && (
         <NewOCModal
