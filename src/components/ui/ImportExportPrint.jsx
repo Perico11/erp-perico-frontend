@@ -114,8 +114,14 @@ export default function ImportExportPrint({
       if (!res.ok || data.ok === false) {
         throw new Error(data.error || `HTTP ${res.status}`);
       }
-      setMsg('✓ Importado: ' + (data.cambios || data.total || 'OK'));
-      if (onImported) onImported(data);
+      if (data.importId && onImported) {
+        /* Flujo 2 pasos: NO aplicar todavía. El padre abre el modal de revisión
+           (válidos / advertencias / errores) y confirma. Sin mensaje de éxito aquí. */
+        onImported(data);
+      } else {
+        setMsg('✓ Importado: ' + (data.cambios || data.total || 'OK'));
+        if (onImported) onImported(data);
+      }
     } catch (err) {
       setMsg('✕ ' + (err.message || 'Error al importar'));
     } finally {

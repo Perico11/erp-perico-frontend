@@ -112,6 +112,10 @@ const api = {
   getInventarioStats: () => request('GET', '/api/inventario/stats'),
   /* URLs para descargar/imprimir — se usan en window.open o <a href> */
   urlImportInv: () => API_BASE + '/api/importar/inventario',
+  /* Importar existencias de PRODUCTO TERMINADO (flujo 2 pasos: preview → confirmar). */
+  urlImportInvPT: () => API_BASE + '/api/importar/inventario-pt',
+  /* Paso 2 de la importación: aplica los cambios del preview (por importId). */
+  confirmarImport: (importId) => request('POST', '/api/importar/confirmar', { importId }),
 
   /* ── Causas raíz de varianza ── */
   getCausasVarianza: () => request('GET', '/api/reportes/causas'),

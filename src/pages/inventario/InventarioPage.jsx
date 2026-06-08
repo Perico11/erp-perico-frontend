@@ -681,20 +681,23 @@ function EstadoBadge({ qty, pct }) {
 
 /* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
    Conserva el candado: el onSave del padre pasa por ajustarConCandado. */
-function AjusteSheet({ item, isDesktop, onClose, onSave, onEliminar, onSustituir, onPedir }) {
+function AjusteSheet({ item, isDesktop, canEditMin = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
   const [qty, setQty] = useState(String(item.qty ?? 0));
+  const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
   useEffect(() => { const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 120); return () => clearTimeout(t); }, []);
 
-  const puedeGuardar = motivo.trim().length >= 3 && qty !== '' && !isNaN(parseFloat(qty)) && parseFloat(qty) >= 0;
+  const minValido = !canEditMin || (min !== '' && !isNaN(parseFloat(min)) && parseFloat(min) >= 0);
+  const puedeGuardar = motivo.trim().length >= 3 && qty !== '' && !isNaN(parseFloat(qty)) && parseFloat(qty) >= 0 && minValido;
 
   const handleSave = async () => {
     if (!puedeGuardar) return;
     setSaving(true);
     try {
-      await onSave(parseFloat(qty), motivo.trim());
+      /* 3er arg = nuevo mínimo (solo si el rol puede editarlo; si no, se conserva el actual). */
+      await onSave(parseFloat(qty), motivo.trim(), canEditMin ? parseFloat(min) : (item.min ?? 0));
       onClose();
     } catch { /* el handler ya avisó; mantener abierto para reintentar */ }
     finally { setSaving(false); }
@@ -704,7 +707,7 @@ function AjusteSheet({ item, isDesktop, onClose, onSave, onEliminar, onSustituir
     <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Ajustar existencia</div>
-        <div style={S.shS}>{item.nombre} · mín {(item.min ?? 0).toLocaleString('es-MX')} {item.unidad}</div>
+        <div style={S.shS}>{item.nombre}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
         <div style={S.bigsis}>
           <div style={S.bigK}>Existencia actual</div>
           <div style={S.bigV}>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</div>
@@ -712,6 +715,13 @@ function AjusteSheet({ item, isDesktop, onClose, onSave, onEliminar, onSustituir
         <label style={S.flbl}>Nueva cantidad</label>
         <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
           value={qty} onChange={e => setQty(e.target.value)} />
+        {canEditMin && (
+          <>
+            <label style={{ ...S.flbl, marginTop: 12 }}>Mínimo ({item.unidad})</label>
+            <input style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
+              value={min} onChange={e => setMin(e.target.value)} />
+          </>
+        )}
         <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste</label>
         <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, merma, corrección"
           value={motivo} onChange={e => setMotivo(e.target.value)} />
@@ -852,6 +862,93 @@ function FilterChips({ activeFilter, onPick }) {
 
 /* ================================================================ */
 /* MAIN COMPONENT                                                    */
+/* ── Modal de revisión de importación Excel (paso 2: confirmar) ──────────── */
+function ImportPreviewModal({ data, onClose, onConfirmed }) {
+  const [saving, setSaving] = useState(false);
+  const esPT = data.tipo === 'pt';
+  const unidad = esPT ? 'cub' : 'kg';
+  const preview = data.preview || {};
+  const r = preview.resumen || {};
+  const validos = preview.validos || [];
+  const errores = preview.errores || [];
+
+  const confirmar = async () => {
+    setSaving(true);
+    try {
+      const res = await api.confirmarImport(data.importId);
+      onConfirmed(res?.cambios ?? validos.length);
+    } catch (e) {
+      alert('No se pudo aplicar la importación: ' + (e?.data?.error || e?.message || 'error'));
+      setSaving(false);
+    }
+  };
+
+  const ov = { position: 'fixed', inset: 0, background: 'rgba(26,24,21,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 };
+  const box = { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)', border: '1px solid var(--lp-border-subtle)', width: '100%', maxWidth: 680, maxHeight: '88vh', display: 'flex', flexDirection: 'column' };
+  const chip = (c, bg) => ({ display: 'inline-flex', alignItems: 'baseline', gap: 5, padding: '5px 10px', borderRadius: 999, fontSize: 12, fontWeight: 600, background: bg, color: c });
+  const th = { textAlign: 'left', padding: '6px 8px', fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', position: 'sticky', top: 0, background: 'var(--lp-bg-sunken)' };
+  const td = { padding: '6px 8px', fontSize: 12, borderTop: '1px solid var(--lp-border-subtle)' };
+
+  return (
+    <div style={ov} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={box} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '16px 18px 10px' }}>
+          <div style={{ fontSize: 17, fontWeight: 700 }}>Revisar importación · {esPT ? 'Producto terminado' : 'Materia prima'}</div>
+          <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 3 }}>
+            {r.hoja ? `Hoja "${r.hoja}" · columnas detectadas: ${r.columnas?.nombre} / ${r.columnas?.qty}` : ''}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+            <span style={chip('var(--lp-brand-700)', 'color-mix(in srgb,var(--lp-brand-600) 14%,transparent)')}>{r.validos || 0} a aplicar</span>
+            {r.nuevos > 0 && <span style={chip('var(--lp-info-600)', 'color-mix(in srgb,var(--lp-info-600) 14%,transparent)')}>{r.nuevos} nuevos</span>}
+            {r.actualizados > 0 && <span style={chip('var(--lp-text-secondary)', 'var(--lp-bg-sunken)')}>{r.actualizados} actualizados</span>}
+            {r.sinCambio > 0 && <span style={chip('var(--lp-text-tertiary)', 'var(--lp-bg-sunken)')}>{r.sinCambio} sin cambio</span>}
+            {r.errores > 0 && <span style={chip('var(--lp-danger-600)', 'color-mix(in srgb,var(--lp-danger-600) 14%,transparent)')}>{r.errores} con error</span>}
+          </div>
+        </div>
+        <div style={{ overflowY: 'auto', padding: '0 18px', flex: 1 }}>
+          {validos.length > 0 && (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>
+                <th style={th}>{esPT ? 'Producto' : 'Materia prima'}</th>
+                <th style={{ ...th, textAlign: 'right' }}>Antes</th>
+                <th style={{ ...th, textAlign: 'right' }}>Nuevo</th>
+                <th style={th}></th>
+              </tr></thead>
+              <tbody>
+                {validos.map((v, i) => (
+                  <tr key={i}>
+                    <td style={td}>{v.mp}{v.original ? <span style={{ color: 'var(--lp-text-tertiary)' }}> · {v.original}</span> : ''}</td>
+                    <td style={{ ...td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{v.qtyAnterior != null ? v.qtyAnterior.toLocaleString('es-MX') : '—'}</td>
+                    <td style={{ ...td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700 }}>{v.qtyNuevo.toLocaleString('es-MX')} {unidad}</td>
+                    <td style={td}>{v.esNuevo ? <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--lp-info-600)' }}>NUEVO</span> : ''}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {errores.length > 0 && (
+            <div style={{ marginTop: 12, marginBottom: 8 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-danger-600)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>Filas con error (se omitirán)</div>
+              {errores.slice(0, 30).map((e, i) => (
+                <div key={i} style={{ fontSize: 11.5, color: 'var(--lp-text-secondary)', padding: '2px 0' }}>Fila {e.fila}: <strong>{e.nombre || '—'}</strong> — {e.error} ({e.valor})</div>
+              ))}
+            </div>
+          )}
+          {validos.length === 0 && errores.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 30, color: 'var(--lp-text-tertiary)', fontSize: 13 }}>No hay cambios para aplicar (todo coincide con el inventario actual).</div>
+          )}
+        </div>
+        <div style={{ padding: '12px 18px', borderTop: '1px solid var(--lp-border-subtle)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button onClick={onClose} disabled={saving} style={{ height: 44, padding: '0 16px', borderRadius: 'var(--lp-radius-md)', border: '1px solid var(--lp-border-default)', background: 'transparent', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13.5 }}>Cancelar</button>
+          <button onClick={confirmar} disabled={saving || validos.length === 0} style={{ height: 44, padding: '0 20px', borderRadius: 'var(--lp-radius-md)', border: 'none', background: 'var(--lp-brand-600)', color: '#fff', cursor: (saving || validos.length === 0) ? 'default' : 'pointer', fontWeight: 700, fontSize: 13.5, opacity: (saving || validos.length === 0) ? .6 : 1 }}>
+            {saving ? 'Aplicando…' : `Confirmar e importar (${validos.length})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ================================================================ */
 export default function InventarioPage() {
   const { user, can } = useAuth();
@@ -882,6 +979,9 @@ export default function InventarioPage() {
   /* AG2 (jun 2026): escritorio = tabla, móvil = cards. Sheet "Ajustar existencia" compartido. */
   const isDesktop = useIsDesktop();
   const [ajusteItem, setAjusteItem] = useState(null);
+  /* Importación Excel en 2 pasos: el backend devuelve {importId, preview}; aquí se revisa
+     y se confirma. { importId, preview, tipo:'mp'|'pt' } */
+  const [importPreview, setImportPreview] = useState(null);
 
   /* Fetch data */
   const { data: invData, loading: invLoading, reload: reloadInv } = useApiData(() => api.getInventario(), [], 8000);
@@ -913,6 +1013,8 @@ export default function InventarioPage() {
   const canRecibirMP = can('recibirMP');
   /* Conteo físico (rol inventario/Burgos): su acción real en la columna Acción. */
   const canContar = can('conteoFisico');
+  /* Editar mínimos (política de reorden) — permiso propio, separado de editarInventario. */
+  const canEditMinimos = can('editarMinimos');
 
   /* Lista de MPs disponibles para el datalist de sustituir */
   const mpsDisponibles = useMemo(
@@ -1127,8 +1229,8 @@ export default function InventarioPage() {
 
   /* Ajuste inline PT — pasa por ajustarConCandado: backend exige sesión de conteo
      activa, código TOTP propio o código universal del admin. */
-  const handleSavePT = useCallback(async (nombre, newQty, motivo) => {
-    const minActual = inventory?.pt?.[nombre]?.min;
+  const handleSavePT = useCallback(async (nombre, newQty, newMin, motivo) => {
+    const minActual = newMin != null ? newMin : inventory?.pt?.[nombre]?.min;
     await ajustarConCandado(
       (codigo) => api.ajustePT(
         nombre, newQty,
@@ -1148,10 +1250,11 @@ export default function InventarioPage() {
     setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub' });
   }, []);
   /* El guardado del sheet pasa por handleSaveMP/PT → ajustarConCandado (candado intacto). */
-  const handleAjusteSave = useCallback(async (newQty, motivo) => {
+  const handleAjusteSave = useCallback(async (newQty, motivo, newMin) => {
     if (!ajusteItem) return;
-    if (ajusteItem.tipo === 'mp') await handleSaveMP(ajusteItem.nombre, newQty, ajusteItem.min, motivo);
-    else await handleSavePT(ajusteItem.nombre, newQty, motivo);
+    const minFinal = newMin != null ? newMin : ajusteItem.min;
+    if (ajusteItem.tipo === 'mp') await handleSaveMP(ajusteItem.nombre, newQty, minFinal, motivo);
+    else await handleSavePT(ajusteItem.nombre, newQty, minFinal, motivo);
   }, [ajusteItem, handleSaveMP, handleSavePT]);
 
   /* ── KPI click handler ── */
@@ -1226,7 +1329,7 @@ export default function InventarioPage() {
                       exportUrl={() => api.urlExportInv('mp', activeFilter)}
                       printUrl={() => api.urlPrintInv('mp', activeFilter)}
                       importEndpoint={canEditMP ? (api.urlImportInv && api.urlImportInv()) : null}
-                      onImported={() => reloadInv()}
+                      onImported={(data) => { if (data && data.importId) setImportPreview({ ...data, tipo: 'mp' }); else reloadInv(); }}
                       permisos={{ import: canEditMP }}
                     />
                   )}
@@ -1280,7 +1383,13 @@ export default function InventarioPage() {
                   {canEditMP && (
                     <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
                   )}
-                  {isDesktop && <ImportExportPrint exportUrl={() => api.urlExportInv('pt', activeFilter)} printUrl={() => api.urlPrintInv('pt', activeFilter)} permisos={{ import: false }} />}
+                  {isDesktop && <ImportExportPrint
+                    exportUrl={() => api.urlExportInv('pt', activeFilter)}
+                    printUrl={() => api.urlPrintInv('pt', activeFilter)}
+                    importEndpoint={canEditMP ? api.urlImportInvPT() : null}
+                    onImported={(data) => { if (data && data.importId) setImportPreview({ ...data, tipo: 'pt' }); else reloadInv(); }}
+                    permisos={{ import: canEditMP }}
+                  />}
                 </div>
               )}
             </div>
@@ -1388,6 +1497,7 @@ export default function InventarioPage() {
         <AjusteSheet
           item={ajusteItem}
           isDesktop={isDesktop}
+          canEditMin={canEditMinimos}
           onClose={() => setAjusteItem(null)}
           onSave={handleAjusteSave}
           onPedir={ajusteItem.tipo === 'pt' && canPedirPT && (ajusteItem.qty <= 0 || (ajusteItem.min > 0 && ajusteItem.qty <= ajusteItem.min))
@@ -1396,6 +1506,21 @@ export default function InventarioPage() {
             ? () => { const n = ajusteItem.nombre; setAjusteItem(null); setSustituirMP(n); } : null}
           onEliminar={ajusteItem.tipo === 'mp' && canDeleteMP
             ? () => { const n = ajusteItem.nombre; setAjusteItem(null); setEliminarMP(n); } : null}
+        />
+      )}
+
+      {/* Revisión de importación Excel (paso 2) — MP o PT */}
+      {importPreview && (
+        <ImportPreviewModal
+          data={importPreview}
+          onClose={() => setImportPreview(null)}
+          onConfirmed={(n) => {
+            const t = importPreview.tipo === 'pt' ? 'PT' : 'MP';
+            setImportPreview(null);
+            reloadInv();
+            setToastMsg(`Importación aplicada · ${n} ${t} actualizados`);
+            setTimeout(() => setToastMsg(''), 4000);
+          }}
         />
       )}
 
