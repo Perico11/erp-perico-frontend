@@ -124,12 +124,37 @@ function DetalleModal({ mp, onClose }) {
         </div>
 
         <div style={S.section}>
-          <div style={S.sectionTitle}>Consumo histórico 12 meses</div>
-          <Sparkline data={data.consumoHistorico} />
-          <table style={{ width: '100%', marginTop: 8, fontSize: 11, fontFamily: 'var(--lp-font-mono)' }}>
-            <thead><tr>{data.consumoHistorico.map(m => <th key={m.periodo} style={{ textAlign: 'right', padding: 2, fontWeight: 400, color: 'var(--lp-text-tertiary)' }}>{m.periodo.slice(-2)}</th>)}</tr></thead>
-            <tbody><tr>{data.consumoHistorico.map(m => <td key={m.periodo} style={{ textAlign: 'right', padding: 2 }}>{fmtN(m.consumo, 0)}</td>)}</tr></tbody>
-          </table>
+          <div style={S.sectionTitle}>Consumo histórico (producción × fórmula) · kg/mes</div>
+          {(data.consumoHistorico || []).some(m => m.consumo > 0) ? (
+            <>
+              <Sparkline data={data.consumoHistorico} color="var(--lp-brand-600)" />
+              <table style={{ width: '100%', marginTop: 8, fontSize: 11, fontFamily: 'var(--lp-font-mono)' }}>
+                <thead><tr>{data.consumoHistorico.map(m => <th key={m.periodo} style={{ textAlign: 'right', padding: 2, fontWeight: 400, color: 'var(--lp-text-tertiary)' }}>{m.periodo.slice(-2)}</th>)}</tr></thead>
+                <tbody><tr>{data.consumoHistorico.map(m => <td key={m.periodo} style={{ textAlign: 'right', padding: 2 }}>{fmtN(m.consumo, 0)}</td>)}</tr></tbody>
+              </table>
+            </>
+          ) : <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>Sin consumo de producción registrado en el periodo.</div>}
+        </div>
+
+        <div style={S.section}>
+          <div style={S.sectionTitle}>Compras históricas (proveedor) · kg/mes</div>
+          {(data.comprasHistorico || []).some(m => m.kg > 0) ? (
+            <>
+              <Sparkline data={(data.comprasHistorico || []).map(m => ({ periodo: m.periodo, consumo: m.kg }))} color="var(--lp-info-600)" />
+              <table style={{ width: '100%', marginTop: 8, fontSize: 11, fontFamily: 'var(--lp-font-mono)' }}>
+                <thead><tr>{data.comprasHistorico.map(m => <th key={m.periodo} style={{ textAlign: 'right', padding: 2, fontWeight: 400, color: 'var(--lp-text-tertiary)' }}>{m.periodo.slice(-2)}</th>)}</tr></thead>
+                <tbody><tr>{data.comprasHistorico.map(m => <td key={m.periodo} style={{ textAlign: 'right', padding: 2 }}>{fmtN(m.kg, 0)}</td>)}</tr></tbody>
+              </table>
+              <div style={{ fontSize: 11, color: 'var(--lp-text-secondary)', marginTop: 8, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 }}>
+                <span>Comprado 12 m: <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{fmtN(data.comprasTotal12m, 0)} kg</strong></span>
+                {data.ultimaCompra && (
+                  <span style={{ color: 'var(--lp-text-tertiary)' }}>
+                    Última: {data.ultimaCompra.periodo} · {fmtN(data.ultimaCompra.kg, 0)} kg{data.ultimaCompra.proveedor ? ` · ${data.ultimaCompra.proveedor}` : ''}{data.ultimaCompra.costo_unitario != null ? ` · ${data.ultimaCompra.costo_unitario} ${data.ultimaCompra.moneda || ''}/kg` : ''}
+                  </span>
+                )}
+              </div>
+            </>
+          ) : <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>Sin compras registradas en el periodo.</div>}
         </div>
 
         <div style={S.section}>
@@ -432,6 +457,15 @@ export default function ForecastIATab() {
                 </div>
 
                 <BarsMini data={f.consumoHistorico} accent={col.accent} />
+
+                {(f.comprasTotal12m > 0 || f.ultimaCompra) && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, margin: '-2px 0 12px', paddingTop: 9, borderTop: '1px solid var(--lp-border-subtle)' }}>
+                    <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', fontSize: 10, color: 'var(--lp-text-tertiary)' }}>Compras 12 m</span>
+                    <span style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)' }}>
+                      {fmtN(f.comprasTotal12m, 0)} kg{f.ultimaCompra ? ` · últ. ${_mesAbr(f.ultimaCompra.periodo)}` : ''}
+                    </span>
+                  </div>
+                )}
 
                 {puedeCrearOCs && f.sugerir && (
                   <button data-id="forecast.btn.generar-oc" data-rol="compras,admin" onClick={() => handleGenerarUna(f)}
