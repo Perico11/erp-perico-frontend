@@ -327,6 +327,14 @@ body {
    El usuario aún puede deslizar lateralmente con el dedo. */
 .page-tabs-scroll::-webkit-scrollbar { display: none; }
 .page-tabs-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+/* Móvil: fade en el borde derecho = pista de que hay más pestañas a la derecha
+   (ej: 'Pedidos' en Pronóstico, que se salía de pantalla sin indicador). */
+@media (max-width: 880px) {
+  .page-tabs-scroll {
+    -webkit-mask-image: linear-gradient(90deg, #000 84%, transparent 100%);
+    mask-image: linear-gradient(90deg, #000 84%, transparent 100%);
+  }
+}
 .segmented-scroll::-webkit-scrollbar { display: none; }
 
 /* ═══ Wrapper de scroll horizontal para tablas anchas en móvil ═══
