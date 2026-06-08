@@ -218,19 +218,61 @@ function BulkOCModal({ items, onConfirm, onClose, loading }) {
 }
 
 /* ════════════════════════════════════════════════════════════════════════════ */
-/* Mini gráfico de barras (12 meses, último mes destacado) — para la card de sugerencia. */
+/* Mini gráfico de barras: CONSUMO MENSUAL de los últimos 12 meses.
+   Rotulado (título + escala + meses) para que la card sea interpretable de un vistazo. */
+const _MESES_ABR = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+const _mesAbr = (periodo) => _MESES_ABR[Number((periodo || '').slice(-2)) - 1] || '';
+
 function BarsMini({ data, accent }) {
-  const vals = (data || []).map(d => Number(d.consumo) || 0);
-  if (vals.length === 0) return null;
+  const rows = data || [];
+  const vals = rows.map(d => Number(d.consumo) || 0);
+  if (rows.length === 0) return null;
+  const total = vals.reduce((s, v) => s + v, 0);
   const max = Math.max(...vals, 1);
+  const brand = accent || 'var(--lp-brand-600)';
+
+  /* Cabecera común: dice EXACTAMENTE qué se está graficando. */
+  const Header = ({ right }) => (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', marginBottom: 6 }}>
+      <span>Consumo mensual · 12 m</span>
+      {right && <span style={{ fontFamily: 'var(--lp-font-mono)', textTransform: 'none', letterSpacing: 0 }}>{right}</span>}
+    </div>
+  );
+
+  /* Sin consumo en todo el periodo → no dibujar barras falsas. */
+  if (total <= 0) {
+    return (
+      <div style={{ margin: '12px 0 14px' }}>
+        <Header />
+        <div style={{ height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--lp-text-tertiary)', background: 'var(--lp-bg-sunken)', borderRadius: 8, border: '1px dashed var(--lp-border-subtle)' }}>
+          Sin consumo registrado en 12 meses
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 42, margin: '12px 0 14px' }}>
-      {vals.map((v, i) => {
-        const last = i === vals.length - 1;
-        return <div key={i} title={`${(data[i]?.periodo || '').slice(-2)}: ${Math.round(v)}`}
-          style={{ flex: 1, minHeight: 4, height: `${Math.max(10, (v / max) * 100)}%`, borderRadius: 3,
-            background: last ? (accent || 'var(--lp-brand-600)') : 'color-mix(in srgb, var(--lp-brand-600) 20%, transparent)' }} />;
-      })}
+    <div style={{ margin: '12px 0 14px' }}>
+      <Header right={`pico ${Math.round(max).toLocaleString('es-MX')} kg`} />
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 40 }}>
+        {vals.map((v, i) => {
+          const last = i === vals.length - 1;
+          const cero = v <= 0;
+          return (
+            <div key={i} title={`${_mesAbr(rows[i]?.periodo)}: ${Math.round(v).toLocaleString('es-MX')} kg`}
+              style={{
+                flex: 1, minHeight: 2, borderRadius: 3,
+                height: cero ? '3%' : `${Math.max(12, (v / max) * 100)}%`,
+                background: cero ? 'var(--lp-border-subtle)' : (last ? brand : `color-mix(in srgb, ${brand} 30%, transparent)`),
+              }} />
+          );
+        })}
+      </div>
+      {/* Eje X: primer y último mes del rango + leyenda del mes destacado. */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: 'var(--lp-text-tertiary)', marginTop: 5, fontFamily: 'var(--lp-font-mono)' }}>
+        <span>{_mesAbr(rows[0]?.periodo)}</span>
+        <span style={{ color: 'var(--lp-text-secondary)', fontWeight: 600 }}>{_mesAbr(rows[rows.length - 1]?.periodo)} · más reciente</span>
+      </div>
     </div>
   );
 }
