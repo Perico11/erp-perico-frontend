@@ -154,7 +154,7 @@ function periodoLabel(p) {
 function KPI({ label, value, sub, accent = CHART.brand, trend, trendUp }) {
   return (
     <div style={S.kpi}>
-      <div style={S.kdot(accent)}>
+      <div style={S.kdot}>
         <span style={S.dot(accent)} />
         <span style={S.kpiLabel}>{label}</span>
       </div>

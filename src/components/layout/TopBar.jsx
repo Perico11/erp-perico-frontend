@@ -99,12 +99,13 @@ export default function TopBar({ title }) {
   return (
     <header style={{ ...S.bar, ...(isDesktop ? {} : { borderBottom: '1px solid var(--lp-border-subtle)' }) }}>
       <div style={S.inner}>
-        {/* IZQUIERDA: ícono del perico (silueta verde) — NO se elimina nunca.
-            En móvil además el título de la pantalla (no hay sidebar que lo indique). */}
+        {/* IZQUIERDA: solo en MÓVIL (no hay sidebar) → perico + título de pantalla.
+            En escritorio el perico ya vive en el sidebar; repetirlo aquí encima del
+            saludo era redundante, así que el topbar de escritorio queda vacío a la izq. */}
         <div style={S.brand}>
-          <img src={logoIcon} alt="Pinturas El Perico" height={34} style={{ height: 34, width: 'auto', objectFit: 'contain' }} />
           {!isDesktop && (
             <>
+              <img src={logoIcon} alt="Pinturas El Perico" height={34} style={{ height: 34, width: 'auto', objectFit: 'contain' }} />
               <span style={S.brandSep} aria-hidden="true" />
               <h1 style={S.title}>{title}</h1>
             </>
