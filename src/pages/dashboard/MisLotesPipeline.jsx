@@ -33,6 +33,9 @@ const PASOS = [
 ];
 
 function _idxPaso(estado) {
+  /* qc_hold no está en PASOS → antes caía a 0 y el timeline/badge lo mostraban
+     como "Aceptado" (engañoso para Josué/Luis). Lo ubicamos en la etapa QC. */
+  if (estado === 'qc_hold') return PASOS.findIndex(p => p.key === 'qc_aprobado');
   const i = PASOS.findIndex(p => p.key === estado);
   return i >= 0 ? i : 0;
 }
@@ -110,6 +113,7 @@ const S = {
 function LoteCard({ lote, onClick }) {
   const idxActual = _idxPaso(lote.estado);
   const estadoActual = PASOS[idxActual];
+  const labelEstado = lote.estado === 'qc_hold' ? 'QC retenido' : estadoActual.label;
   const colorEstado = lote.estado === 'envasado' ? 'var(--lp-success-600)'
                     : lote.estado === 'qc_hold' ? 'var(--lp-danger-600)'
                     : lote.estado === 'en_camino' ? 'var(--lp-warning-600)'
@@ -125,7 +129,7 @@ function LoteCard({ lote, onClick }) {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={S.loteCantidad}>{lote.cantidad || '?'} {lote.litPerUnit === 19 ? 'cub' : 'u'}</span>
-          <span style={S.badge(colorEstado)}>{estadoActual.label}</span>
+          <span style={S.badge(colorEstado)}>{labelEstado}</span>
         </div>
       </div>
       {/* Timeline horizontal compacto */}
@@ -221,7 +225,7 @@ export default function MisLotesPipeline({ rol }) {
       )}
       {lotesFiltrados.length > 8 && (
         <div style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-          +{lotesFiltrados.length - 8} más en <a href={navTarget} style={{ color: 'var(--lp-brand-600)' }}>{navTarget}</a>
+          +{lotesFiltrados.length - 8} más en <span onClick={() => navigate(navTarget)} style={{ color: 'var(--lp-brand-600)', cursor: 'pointer', textDecoration: 'underline' }}>{navTarget}</span>
         </div>
       )}
     </div>

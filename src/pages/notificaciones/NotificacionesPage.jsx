@@ -46,7 +46,7 @@ const AREA_BADGE = {
   inventario: { bg: 'var(--lp-success-50)', fg: 'var(--lp-success-700)' },
   compras:    { bg: 'var(--lp-info-50)',    fg: 'var(--lp-info-600)' },
   costos:     { bg: 'var(--lp-warning-50)', fg: 'var(--lp-warning-700)' },
-  produccion: { bg: 'var(--lp-brand-50, #EFF6FF)', fg: 'var(--lp-brand-700, #1D4ED8)' },
+  produccion: { bg: 'var(--lp-brand-50)', fg: 'var(--lp-brand-700)' },
 };
 
 /* Mapa de área → ruta destino al click. Hace que las cards sean clickeables y
@@ -248,7 +248,11 @@ export default function NotificacionesPage() {
           notifs.map(n => {
             const sb = SEV_BADGE[n.severidad] || SEV_BADGE.baja;
             const ab = AREA_BADGE[n.area] || { bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-secondary)' };
-            const ruta = AREA_ROUTE[n.area];
+            /* Prioriza la ruta propia de la notif (ej: devolucion_mp_pendiente →
+               /devoluciones-mp) sobre el mapa por área — igual que handleCardClick.
+               Antes solo miraba AREA_ROUTE[area] → notifs con ruta propia (o área
+               sin entrada en el mapa) quedaban no-clickeables o mal ruteadas. */
+            const ruta = n.ruta || AREA_ROUTE[n.area];
             const clickeable = !!ruta;
             return (
               <div

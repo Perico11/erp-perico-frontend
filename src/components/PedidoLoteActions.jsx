@@ -66,7 +66,7 @@ const S = {
   btn: (kind) => ({
     padding: '7px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
     fontFamily: 'var(--lp-font-sans)',
-    border: 'none', borderRadius: 6, minHeight: 36,
+    borderRadius: 6, minHeight: 36,
     background: kind === 'success' ? 'var(--lp-success-600)'
               : kind === 'danger'  ? 'var(--lp-danger-600)'
               : kind === 'warn'    ? 'var(--lp-warning-600)'

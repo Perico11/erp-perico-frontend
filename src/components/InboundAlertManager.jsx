@@ -95,7 +95,8 @@ const S = {
               : 'var(--lp-bg-raised)',
     color: variant === 'ghost' ? 'var(--lp-text-secondary)' : '#fff',
     border: variant === 'ghost' ? '1.5px solid var(--lp-border-subtle)' : 'none',
-    minHeight: 40,
+    /* Luis/Josué tocan este banner en el celular en campo → touch target ≥44px. */
+    minHeight: 44,
   }),
   taken: {
     fontSize: 11, color: 'var(--lp-text-tertiary)',

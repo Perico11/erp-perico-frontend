@@ -12,6 +12,11 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 
+/* Icono SVG line (sin glyphs) */
+const IcoPlay = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ verticalAlign: '-2px', marginRight: 5 }} aria-hidden="true"><polygon points="6 4 20 12 6 20 6 4" /></svg>
+);
+
 const PASOS = [
   { key: 'aceptado',       label: 'Aceptado',    short: 'Acep' },
   { key: 'en_produccion',  label: 'Producción',  short: 'Prod' },
@@ -26,6 +31,11 @@ const PASOS = [
 ];
 
 function _idxPaso(estado) {
+  /* qc_hold no está en PASOS (es un desvío del checkpoint QC). Antes caía al
+     fallback 0 → el timeline y el badge lo mostraban como "Aceptado" (engañoso).
+     Lo ubicamos en la etapa QC (índice de qc_aprobado) para que el avance sea
+     correcto; el badge usa label propio "QC retenido" (ver render). */
+  if (estado === 'qc_hold') return PASOS.findIndex(p => p.key === 'qc_aprobado');
   const i = PASOS.findIndex(p => p.key === estado);
   return i >= 0 ? i : 0;
 }
@@ -41,7 +51,7 @@ function accionContextual(estado, navigate, itemId) {
   switch (estado) {
     case 'pendiente':
     case 'aceptado':
-      return { label: '▶ Iniciar producción', primary: true,
+      return { label: <><IcoPlay />Iniciar producción</>, primary: true,
                onClick: () => navigate('/pedidos') };
     case 'en_produccion':
       return { label: 'Continuar wizard', primary: true,
@@ -234,6 +244,8 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
       {items.map(it => {
         const idxActual = _idxPaso(it.estado);
         const estadoActual = PASOS[idxActual];
+        /* qc_hold comparte índice con qc_aprobado pero su label real es distinto */
+        const labelEstado = it.estado === 'qc_hold' ? 'QC retenido' : estadoActual.label;
         const colorEstado = it.estado === 'qc_hold'      ? 'var(--lp-danger-600)'
                           : it.estado === 'envasado'      ? 'var(--lp-success-600)'
                           : it.estado === 'entregado'     ? 'var(--lp-success-700)'
@@ -260,7 +272,7 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
                   </div>
                 )}
               </div>
-              <span style={S.badge(colorEstado)}>{estadoActual.label}</span>
+              <span style={S.badge(colorEstado)}>{labelEstado}</span>
             </div>
 
             {/* Timeline horizontal */}

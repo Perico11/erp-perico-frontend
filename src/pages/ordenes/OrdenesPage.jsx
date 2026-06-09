@@ -612,7 +612,7 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
                     borderBottom: '1px solid var(--lp-border-subtle)',
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-brand-50)'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
                   onClick={() => { setFormula(f.nombre); setSearch(f.nombre); }}
                 >
                   {f.nombre}
@@ -1616,7 +1616,7 @@ function NuevoPedidoModal({ formulas, userName, onClose, onSuccess }) {
                     borderBottom: '1px solid var(--lp-border-subtle)',
                   }}
                   onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-brand-50)'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#fff'}
+                  onMouseLeave={e => e.currentTarget.style.background = ''}
                   onClick={() => { setProducto(f.nombre); setSearch(f.nombre); }}
                 >
                   {f.nombre}
@@ -1751,9 +1751,9 @@ function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, nav
             <div style={S.kpiLabel('var(--lp-brand-700)')}>En Producción</div>
             <div style={S.kpiValue('var(--lp-brand-700)')}>{kpis.aceptados}</div>
           </div>
-          <div style={S.kpi('#EDE9FE')}>
-            <div style={S.kpiLabel('#7C3AED')}>En Camino</div>
-            <div style={S.kpiValue('#7C3AED')}>{kpis.enCamino}</div>
+          <div style={S.kpi('var(--lp-info-50)')}>
+            <div style={S.kpiLabel('var(--lp-info-600)')}>En Camino</div>
+            <div style={S.kpiValue('var(--lp-info-600)')}>{kpis.enCamino}</div>
           </div>
           <div style={S.kpi('var(--lp-success-100)')}>
             <div style={S.kpiLabel('var(--lp-success-600)')}>Total Activos</div>

@@ -31,7 +31,7 @@ const S = {
     width: '100%', height: 64, borderRadius: 18, border: 'none', cursor: 'pointer',
     background: 'var(--lp-brand-600)', color: '#fff',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 11,
-    fontFamily: 'inherit', fontSize: 16, fontWeight: 700, marginBottom: 14,
+    fontFamily: 'var(--lp-font-sans)', fontSize: 16, fontWeight: 700, marginBottom: 14,
     boxShadow: '0 10px 24px -10px color-mix(in srgb, var(--lp-brand-600) 60%, transparent)',
     animation: activo ? 'lpPulse 2.4s ease-in-out infinite' : 'none',
   }),
@@ -40,7 +40,7 @@ const S = {
   scanBtnDesktop: (activo) => ({
     height: 44, minHeight: 44, padding: '0 18px', borderRadius: 12, border: 'none', cursor: 'pointer',
     background: 'var(--lp-brand-600)', color: '#fff',
-    fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600,
+    fontFamily: 'var(--lp-font-sans)', fontSize: 13.5, fontWeight: 600,
     display: 'inline-flex', alignItems: 'center', gap: 8,
     boxShadow: '0 8px 20px -12px color-mix(in srgb, var(--lp-brand-600) 60%, transparent)',
     animation: activo ? 'lpPulse 2.4s ease-in-out infinite' : 'none',
@@ -52,7 +52,7 @@ const S = {
   tabsDesktop: { display: 'flex', gap: 6, marginBottom: 16 },
   tabDesktop: (on) => ({
     padding: '9px 16px', borderRadius: 999, border: 'none', cursor: 'pointer',
-    fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 700 : 500, minHeight: 44,
+    fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 700 : 500, minHeight: 44,
     background: on ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
     color: on ? '#fff' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap',
   }),
@@ -61,7 +61,7 @@ const S = {
   grid: { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' },
   tab: (on) => ({
     flex: 1, padding: '9px 6px', borderRadius: 999, border: 'none', cursor: 'pointer',
-    fontFamily: 'inherit', fontSize: 12.5, fontWeight: on ? 700 : 500,
+    fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 700 : 500,
     background: on ? 'var(--lp-brand-600)' : 'transparent',
     color: on ? '#fff' : 'var(--lp-text-secondary)',
   }),
@@ -79,9 +79,9 @@ const S = {
   from: { display: 'flex', alignItems: 'center', gap: 8, margin: '13px 0', padding: '11px 13px', borderRadius: 12, background: 'var(--lp-bg-sunken)', fontSize: 13, color: 'var(--lp-text-secondary)' },
   pruebaNote: { marginTop: 11, padding: '9px 11px', background: 'var(--lp-warning-100)', border: '1.5px solid var(--lp-warning-500)', borderRadius: 11, fontSize: 12, color: 'var(--lp-warning-800)', lineHeight: 1.4 },
 
-  act: { width: '100%', height: 54, borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 15.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9 },
+  act: { width: '100%', height: 54, borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 15.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9 },
   /* escritorio: CTA pegado al fondo de la card (alturas parejas en grid), un poco más compacto */
-  actDesktop: { width: '100%', height: 44, minHeight: 44, marginTop: 'auto', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actDesktop: { width: '100%', height: 44, minHeight: 44, marginTop: 'auto', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   actPrimary: { background: 'var(--lp-brand-600)', color: '#fff' },
   actDone: { background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)', cursor: 'default' },
 
@@ -383,7 +383,7 @@ export default function AlmacenRecepcionPage() {
                     {canAct && (
                       <button type="button" data-id="recepcion.btn.reenvasar" data-rol="almacen,admin"
                         onClick={() => setReenvaseFor({ tote, lote: tote._lote })}
-                        style={{ width: '100%', marginTop: 10, background: 'var(--lp-brand-600)', color: '#fff', border: 'none', padding: '9px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', minHeight: 40 }}>
+                        style={{ width: '100%', marginTop: 10, background: 'var(--lp-brand-600)', color: '#fff', border: 'none', padding: '9px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', minHeight: 40 }}>
                         Re-envasar (cubeta / galón / litro)
                       </button>
                     )}

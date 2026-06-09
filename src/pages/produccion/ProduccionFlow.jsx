@@ -537,7 +537,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         : estadoFinal === 'qc_hold'
           ? ' · QC en HOLD (lecturas fuera de rango) — revisa en Calidad'
           : '';
-      onSuccess(`✓ Lote ${loteCreado.codigoLote} producido: ${productoNombre} x${lotes}${sufijoMsg}`);
+      onSuccess(`Lote ${loteCreado.codigoLote} producido: ${productoNombre} x${lotes}${sufijoMsg}`);
     } catch (e) {
       setError(e.message || 'Error al finalizar producción');
     } finally {
@@ -694,7 +694,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
                 {dualPhase === 'add' ? (
                   <div style={S.bigTimer('var(--lp-success-700)', danger)}>{fmtTimer(timerSec)}</div>
                 ) : (
-                  <div style={{ fontSize:36, color:'var(--lp-success-600)' }}>✓</div>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-success-600)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
                 )}
                 <div style={{ fontSize:11, color:'var(--lp-text-tertiary)', marginTop:6 }}>{fmtTimer(step.tiempo || 0)}</div>
               </div>
@@ -771,7 +771,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
                   onClick={() => setAjustesMP(prev => prev.filter((_,i) => i !== idx))}
                   style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', cursor: 'pointer', fontSize: 16 }}
                   title="Quitar ajuste"
-                >×</button>
+                ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
               </div>
             ))}
             <button
@@ -843,14 +843,14 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
       {/* BOTONES */}
       <div style={S.btnRow}>
         <div style={{ display:'flex', gap:8 }}>
-          <button style={S.btn('ghost')} onClick={handlePrev} disabled={curStep === 0}>← Anterior</button>
+          <button style={S.btn('ghost')} onClick={handlePrev} disabled={curStep === 0}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign:'-2px', marginRight:4 }}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Anterior</button>
         </div>
 
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           {(isDual || isWait) && (
             running
-              ? <button style={S.btn('warn')} onClick={handlePause}>⏸ Pausar</button>
-              : <button style={S.btn('success')} onClick={handleStart}>▶ {timerSec === 0 ? 'Iniciar timer' : 'Reanudar'}</button>
+              ? <button style={S.btn('warn')} onClick={handlePause}><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ verticalAlign:'-1px', marginRight:5 }}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pausar</button>
+              : <button style={S.btn('success')} onClick={handleStart}><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ verticalAlign:'-1px', marginRight:5 }}><polygon points="6 4 20 12 6 20 6 4"/></svg>{timerSec === 0 ? 'Iniciar timer' : 'Reanudar'}</button>
           )}
 
           {!isLast && (
@@ -859,7 +859,8 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
               onClick={handleNext}
               disabled={isQC && !qcEnRango}
             >
-              Siguiente →
+              Siguiente
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign:'-2px', marginLeft:4 }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </button>
           )}
 
