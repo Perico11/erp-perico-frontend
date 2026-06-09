@@ -101,15 +101,19 @@ const PRIO_BADGE = {
   normal:  { cls: 'ok',   label: 'NORMAL' },
 };
 
-/* ── Estado transitions allowed per current estado ── */
+/* ── Estado transitions allowed per current estado ──
+   X3b (jun 2026): SOLO estados canónicos. Las transiciones manuales aplican a
+   las fases tempranas (pendiente↔en_proceso, cancelar, reactivar). Los estados
+   mid/late del flujo (en_produccion, qc_hold, envasado, en_recoleccion…) los
+   maneja la state machine del LOTE por roll-up — aquí NO se ofrecen botones
+   manuales para esos (evita pisar el flujo). Antes había claves legacy
+   (produccion/qc/terminada/entregada) muertas y 'cancelada' (con 'a') que NO
+   es canónico → corrompía el estado (badge caía a "Pendiente", escapaba al
+   filtro de Canceladas). Canónico = 'cancelado'. */
 const TRANSITIONS = {
-  pendiente:  ['en_proceso', 'cancelada'],
-  en_proceso: ['pendiente', 'cancelada'],
-  produccion: ['en_proceso', 'cancelada'],
-  qc:         ['en_proceso'],
-  terminada:  ['entregada'],
-  entregada:  [],
-  cancelada:  ['pendiente'],
+  pendiente:  ['en_proceso', 'cancelado'],
+  en_proceso: ['pendiente', 'cancelado'],
+  cancelado:  ['pendiente'],
 };
 
 /* ── Inline styles (LP design system) ── */
@@ -301,11 +305,22 @@ const S = {
 };
 
 /* ── Timeline ── */
-const STEPS = ['pendiente', 'en_proceso', 'qc', 'terminada', 'entregada'];
-const STEP_LABELS = { pendiente: 'Pendiente', en_proceso: 'Producción', qc: 'QC', terminada: 'Terminada', entregada: 'Entregada' };
+const STEPS = ['pendiente', 'produccion', 'qc', 'envasado', 'entregado'];
+const STEP_LABELS = { pendiente: 'Pendiente', produccion: 'Producción', qc: 'QC', envasado: 'Envasado', entregado: 'Entregado' };
+/* Mapa estado canónico de orden → índice de fase del timeline. Los estados
+   mid-flow del lote (en_produccion, qc_hold, en_envasado, en_camino…) caen en
+   su fase para que el timeline NO se vea atascado al inicio mientras el lote
+   avanza. X3b jun 2026 (antes STEPS.indexOf devolvía -1 para estos). */
+const ESTADO_STEP_IDX = {
+  pendiente: 0, aceptado: 0,
+  en_proceso: 1, en_produccion: 1,
+  producido: 2, qc_hold: 2, qc_aprobado: 2,
+  en_envasado: 3, envasado: 3, en_recoleccion: 3, en_camino: 3,
+  en_almacen: 4, entregado: 4,
+};
 
 function Timeline({ estado }) {
-  const idx = STEPS.indexOf(estado);
+  const idx = ESTADO_STEP_IDX[estado] ?? -1;
   return (
     <div style={S.timeline}>
       {STEPS.map((step, i) => (
@@ -718,7 +733,7 @@ function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onPr
         {o.notas ? ` · ${o.notas}` : ''}
         {o.fechaRequerida ? ` · Requerida: ${o.fechaRequerida}` : ''}
       </div>
-      {!o.eliminado && o.estado !== 'cancelada' && <Timeline estado={o.estado} />}
+      {!o.eliminado && o.estado !== 'cancelado' && o.estado !== 'rechazado' && <Timeline estado={o.estado} />}
       {/* QC summary — solo se renderiza si hay al menos UN valor */}
       {o.qcResultados && (
         o.qcResultados.brillo != null ||
@@ -774,7 +789,7 @@ function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onPr
           )}
           {transitions.map(nextState => {
             const info = ESTADO_BADGE[nextState] || {};
-            const isCancel = nextState === 'cancelada';
+            const isCancel = nextState === 'cancelado';
             return (
               <button
                 key={nextState}
@@ -927,7 +942,7 @@ export default function OrdenesPage() {
 
   /* Active orders REALES (sin pruebas, sin canceladas/entregadas) */
   const activas = useMemo(() =>
-    ordenes.filter(o => !o.eliminado && o.estado !== 'entregada' && o.estado !== 'cancelada' && !o.esPrueba)
+    ordenes.filter(o => !o.eliminado && o.estado !== 'entregado' && o.estado !== 'cancelado' && o.estado !== 'rechazado' && !o.esPrueba)
       .sort((a, b) => {
         const p = { urgente: 0, alta: 1, normal: 2 };
         return (p[a.prioridad] || 2) - (p[b.prioridad] || 2);
@@ -937,14 +952,14 @@ export default function OrdenesPage() {
 
   /* Órdenes de PRUEBA — separadas de la vista activa */
   const pruebasActivas = useMemo(() =>
-    ordenes.filter(o => !o.eliminado && o.estado !== 'entregada' && o.estado !== 'cancelada' && o.esPrueba)
+    ordenes.filter(o => !o.eliminado && o.estado !== 'entregado' && o.estado !== 'cancelado' && o.estado !== 'rechazado' && o.esPrueba)
       .sort((a, b) => (b.fechaCreacion || '').localeCompare(a.fechaCreacion || '')),
     [ordenes]
   );
 
   /* Órdenes CANCELADAS o eliminadas */
   const canceladas = useMemo(() =>
-    ordenes.filter(o => o.eliminado || o.estado === 'cancelada')
+    ordenes.filter(o => o.eliminado || o.estado === 'cancelado' || o.estado === 'rechazado')
       .sort((a, b) => (b.fechaCreacion || '').localeCompare(a.fechaCreacion || '')),
     [ordenes]
   );
@@ -962,7 +977,12 @@ export default function OrdenesPage() {
 
   /* Historial grouped by status */
   const historialGroups = useMemo(() => {
-    const statusOrder = ['en_proceso', 'qc', 'pendiente', 'terminada', 'entregada', 'cancelada', 'eliminado'];
+    /* X3b: estados canónicos. Antes 'terminada/entregada/cancelada' (legacy) NO
+       casaban con el estado real → órdenes entregadas/canceladas no aparecían en
+       NINGÚN grupo del historial. Catch-all completo del flujo. */
+    const statusOrder = ['pendiente', 'en_proceso', 'en_produccion', 'qc_hold', 'qc_aprobado',
+      'en_envasado', 'envasado', 'en_recoleccion', 'en_camino', 'en_almacen', 'entregado',
+      'rechazado', 'cancelado', 'eliminado'];
     const groups = {};
     ordenes.forEach(o => {
       const st = o.eliminado ? 'eliminado' : (o.estado || 'pendiente');
@@ -982,8 +1002,10 @@ export default function OrdenesPage() {
   /* KPIs */
   const kpis = useMemo(() => {
     const pend = activas.filter(o => o.estado === 'pendiente').length;
-    const proc = activas.filter(o => o.estado === 'en_proceso' || o.estado === 'produccion').length;
-    const qc = activas.filter(o => o.estado === 'qc').length;
+    const proc = activas.filter(o => o.estado === 'en_proceso' || o.estado === 'en_produccion').length;
+    /* X3b: el KPI de QC contaba el estado legacy 'qc' (que NUNCA existe) → siempre
+       mostraba 0. Canónico = qc_hold + qc_aprobado. */
+    const qc = activas.filter(o => o.estado === 'qc_hold' || o.estado === 'qc_aprobado').length;
     const urg = activas.filter(o => o.prioridad === 'urgente').length;
     return { pend, proc, qc, urg };
   }, [activas]);
@@ -1051,7 +1073,7 @@ export default function OrdenesPage() {
       title: 'Cambiar estado',
       message: `¿Cambiar "${orden.codigo}" de ${ESTADO_BADGE[orden.estado]?.label || orden.estado} a ${label}?`,
       confirmLabel: `Cambiar a ${label}`,
-      danger: nextState === 'cancelada',
+      danger: nextState === 'cancelado',
       action: async () => {
         const updated = {
           ...orden,
