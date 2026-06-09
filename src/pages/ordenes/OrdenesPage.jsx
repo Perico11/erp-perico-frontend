@@ -1495,6 +1495,10 @@ export default function OrdenesPage() {
                 cantidad: prodFlowItem.cantidad,
                 esPrueba: prodFlowItem.esPrueba,
                 fechaInicioProduccion: prodFlowItem.fechaInicioProduccion,
+                /* FIX jun 2026 (censo Pre#4): sin esto el lote nacía sin pedidoId
+                   y el pedido fuente quedaba atascado en 'aceptado' para siempre. */
+                pedidoId: prodFlowItem.pedidoId || '',
+                litPerUnit: prodFlowItem.litPerUnit,
               }}
               userName={userName}
               onClose={() => setProdFlowItem(null)}

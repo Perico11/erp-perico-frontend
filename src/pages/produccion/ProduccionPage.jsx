@@ -255,14 +255,17 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
         });
       } else if (orden?.id) {
         /* FALLBACK: si no hay lote (orden sin trazabilidad aún) mantener el
-           upsert sobre la orden directo. Igual registramos QC. */
+           upsert sobre la orden directo. Igual registramos QC.
+           FIX jun 2026 (auditoría M4): estado CANÓNICO 'qc_aprobado' — antes
+           escribía 'terminada', que no existe en FLUJO_ESTADOS y dejaba la
+           orden huérfana (ningún badge/timeline la mapeaba). */
         await api.upsertOrden({
           ...orden,
-          estado: 'terminada',
+          estado: 'qc_aprobado',
           qcResultados: { ...buildQcPayload('aprobado'), aprobado: true },
           historial: [
             ...(orden.historial || []),
-            { estado: 'terminada', fecha: new Date().toISOString(), usuario: userName, nota: 'QC aprobado' },
+            { estado: 'qc_aprobado', fecha: new Date().toISOString(), usuario: userName, nota: 'QC aprobado' },
           ],
         });
       }
@@ -288,13 +291,15 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
           usuario: userName,
         });
       } else if (orden?.id) {
+        /* FIX jun 2026 (auditoría M4): 'qc_hold' canónico (la SM manda QC
+           rechazado a hold; reabrir producción es el paso explícito después). */
         await api.upsertOrden({
           ...orden,
-          estado: 'en_proceso',
+          estado: 'qc_hold',
           qcResultados: { ...buildQcPayload('rechazado'), aprobado: false },
           historial: [
             ...(orden.historial || []),
-            { estado: 'en_proceso', fecha: new Date().toISOString(), usuario: userName, nota: `QC rechazado: ${notas}` },
+            { estado: 'qc_hold', fecha: new Date().toISOString(), usuario: userName, nota: `QC rechazado: ${notas}` },
           ],
         });
       }
@@ -522,8 +527,15 @@ export default function ProduccionPage() {
       notas: p.solicitante ? `Solicitante: ${p.solicitante}` : '',
       pedidoId: p.id,
     }));
-    /* Pedidos primero (cronómetro corriendo arriba), luego órdenes */
-    return [...fromPedido, ...fromOrden];
+    /* Pedidos primero (cronómetro corriendo arriba), luego órdenes.
+       FIX jun 2026 (censo Pre#2): DEDUPE — un pedido lanzado con
+       aceptar-y-producir genera pedido 'en_produccion' Y orden 'en_proceso';
+       ambos cumplían los filtros y el MISMO batch salía dos veces ("Pedido X"
+       y "Orden OP-X") invitando a producirlo doble. La orden se omite si su
+       pedido fuente ya está en la lista (el server además rechaza 409). */
+    const pedidoIds = new Set(fromPedido.map(p => p.id));
+    const fromOrdenDedup = fromOrden.filter(o => !o.pedidoId || !pedidoIds.has(o.pedidoId));
+    return [...fromPedido, ...fromOrdenDedup];
   }, [enProceso, pedidosListos]);
 
   /* FIX jun 2026 (M1): si la URL trae `?continuar=<id>`, abrir el wizard del

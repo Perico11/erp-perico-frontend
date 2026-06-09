@@ -162,7 +162,9 @@ export function calcularEstadoLote(lote) {
                'qc_hold','qc_aprobado','en_envasado','cancelado'];
   if (pre.includes(lote.estado)) return lote.estado;
 
-  const subs = Array.isArray(lote.sublotes) ? lote.sublotes : [];
+  /* FIX jun 2026 (censo H5, sync con backend): excluir mermas del roll-up —
+     la merma no viaja; incluirla dejaba el lote 'en_proceso' eterno. */
+  const subs = (Array.isArray(lote.sublotes) ? lote.sublotes : []).filter(s => s && !s.esMerma);
   if (subs.length === 0) return lote.estado || 'envasado';
 
   const terminales = ['en_stock_teran','tote_vaciado','cancelado'];

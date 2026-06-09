@@ -265,7 +265,12 @@ export default function FlujoPage() {
   }, [lotes, pedidos, ordenes]);
 
   const itemHasActions = useCallback((it) => {
-    const estObj = it.lote || it.source || {};
+    /* FIX jun 2026 (auditoría M3): evaluar acciones sobre el estado ROLL-UP del
+       lote (el mismo que muestra el badge/pipeline), no el estado persistido
+       crudo — si divergen, el filtro "Para mí" mentía respecto a la card. */
+    const estObj = it.lote
+      ? { ...it.lote, estado: calcularEstadoLote(it.lote) || it.lote.estado }
+      : (it.source || {});
     const loteAcc = getAccionesLote(estObj, rol).filter(a => a !== 'cancelarLote');
     if (loteAcc.length > 0) return true;
     return (it.lote?.sublotes || []).some(s => !s.esMerma && getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote').length > 0);
