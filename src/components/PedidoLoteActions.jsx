@@ -192,8 +192,18 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
 
   if (!lote) return null;
 
-  const acciones = getAccionesLote(lote, userRol);
   const sublotes = Array.isArray(lote.sublotes) ? lote.sublotes : [];
+  /* FIX jun 2026 (auditoría A1/A4): el envasado se hace SOLO por el botón
+     "Envasar" (EnvasadoModal), no por transiciones directas de la SM:
+     - registrarEnvasado como botón avanzaría el lote a 'en_envasado' SIN crear
+       sublotes (descuadra pct/roll-up). Se quita siempre.
+     - marcarEnvasado sin sublotes siempre da 422 (botón fantasma). Se quita si
+       no hay sublotes; con sublotes sí es válido (marcar 100% manual). */
+  const acciones = getAccionesLote(lote, userRol).filter(a => {
+    if (a === 'registrarEnvasado') return false;
+    if (a === 'marcarEnvasado' && sublotes.length === 0) return false;
+    return true;
+  });
   const sublotesActivos = sublotes.filter(s => !s.esMerma && s.estado !== 'cancelado');
   const litTotal = Number(lote.litrosTotal) || 0;
   /* Evitar doble conteo TOTE + hijos finales */

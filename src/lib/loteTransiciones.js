@@ -191,7 +191,7 @@ export function calcularEstadoLote(lote) {
      suelto NO degrada un lote cuyos otros sublotes ya avanzaron (en camino, en
      Terán, vaciados, TOTE activo en Terán) — evitaba reaparecer en "Voy por él". */
   const haySublotesAvanzados = subs.some(s =>
-    ['en_camino','en_stock_teran','tote_vaciado'].includes(s.estado) ||
+    ['en_recoleccion','en_camino','en_stock_teran','tote_vaciado'].includes(s.estado) ||
     (s.estado === 'tote_activo' && (s.ub || 'fabrica') === 'teran')
   );
   const algunEnvasado = subs.some(s => s.estado === 'envasado');
