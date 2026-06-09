@@ -1787,7 +1787,7 @@ export default function StockFabricaPage() {
     );
     if (!motivo) return;
     try {
-      await api.transicionSublote(sublote.cod, 'cancelarSublote', { motivo });
+      await api.transicionSublote(sublote.cod, 'cancelarSublote', { nota: motivo, motivo });
       reloadTraz();
       showToast(`Sublote ${sublote.cod} anulado`);
     } catch (err) {

@@ -242,19 +242,22 @@ export default function FlujoPage() {
         fecha: l.fecha || src?.fecha || src?.fechaCreacion || '',
       });
     });
-    /* Pedidos/órdenes activos que aún NO tienen lote (pedido→aceptado) */
+    /* Pedidos/órdenes activos que aún NO tienen lote (pedido→aceptado).
+       FIX jun 2026 (auditoría M5): dedupe — los pedidos van primero (fuente
+       canónica); una orden se omite si su pedido fuente (orden.pedidoId) ya
+       está mostrado, para no pintar dos cards del mismo trabajo. */
     const PRE = ['pendiente', 'aceptado', 'en_produccion'];
-    [...pedidos, ...ordenes].forEach(src => {
-      if (usedSrc.has(src.id)) return;
-      if (!PRE.includes(src.estado)) return;
-      if (items.some(it => it.source && it.source.id === src.id)) return;
-      items.push({
-        key: 'src-' + src.id,
-        lote: null,
-        source: src,
-        folio: src.codigo || src.id,
-        fecha: src.fecha || src.fechaCreacion || '',
-      });
+    const preIds = new Set();
+    pedidos.forEach(src => {
+      if (usedSrc.has(src.id) || !PRE.includes(src.estado) || preIds.has(src.id)) return;
+      preIds.add(src.id);
+      items.push({ key: 'src-' + src.id, lote: null, source: src, folio: src.codigo || src.id, fecha: src.fecha || src.fechaCreacion || '' });
+    });
+    ordenes.forEach(src => {
+      if (usedSrc.has(src.id) || !PRE.includes(src.estado) || preIds.has(src.id)) return;
+      if (src.pedidoId && preIds.has(src.pedidoId)) return; /* su pedido ya está */
+      preIds.add(src.id);
+      items.push({ key: 'src-' + src.id, lote: null, source: src, folio: src.codigo || src.id, fecha: src.fecha || src.fechaCreacion || src.fechaRequerida || '' });
     });
     /* Orden ESTABLE: por fecha desc (la card no salta al avanzar de estado). */
     items.sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
