@@ -50,6 +50,12 @@
   --lp-danger-700: #A23E29;
   --lp-info-50: #ECF2F8;
   --lp-info-600: #3E7BB6;
+  /* Categorías de sublote (StockFábrica) — colores semánticos por concepto:
+     granel/TOTE (morado), reenvasado/TOTE físico (terracota), retail/hijo (azul).
+     -50 = tint de fondo, -600 = texto/borde, -700 = texto fuerte. */
+  --lp-granel-50: #EDE9FE;   --lp-granel-600: #7C3AED;   --lp-granel-700: #3C3489;
+  --lp-reenvase-50: #FAECE7; --lp-reenvase-600: #993C1D;
+  --lp-retail-50: #DBEAFE;   --lp-retail-600: #1E40AF;
   --lp-font-sans: 'DM Sans', system-ui, -apple-system, sans-serif;
   --lp-font-mono: 'JetBrains Mono', ui-monospace, monospace;
   --lp-radius: 14px;
@@ -162,6 +168,11 @@
   --lp-danger-700: #F0A48F;
   --lp-info-50: rgba(121,176,224,.12);
   --lp-info-600: #79B0E0;
+  /* Categorías de sublote — dark-friendly: tint translúcido + fg más brillante
+     para contraste sobre fondo oscuro. */
+  --lp-granel-50: rgba(155,125,245,.16);   --lp-granel-600: #B79DF5;   --lp-granel-700: #CDBBF8;
+  --lp-reenvase-50: rgba(224,162,132,.16); --lp-reenvase-600: #E0A284;
+  --lp-retail-50: rgba(143,180,240,.16);   --lp-retail-600: #8FB4F0;
   /* Sombras más profundas en oscuro */
   --lp-shadow-xs: 0 1px 2px rgba(0,0,0,0.30);
   --lp-shadow-sm: 0 1px 3px rgba(0,0,0,0.36), 0 1px 2px rgba(0,0,0,0.28);

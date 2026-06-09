@@ -97,10 +97,10 @@ const ESTADO_BG_FG = {
   en_envasado:    { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
   en_proceso:     { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
   envasado:       { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
-  en_recoleccion: { bg: '#EDE9FE',              fg: '#7C3AED' },
+  en_recoleccion: { bg: 'var(--lp-granel-50)',              fg: 'var(--lp-granel-600)' },
   en_camino:      { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
   en_almacen:     { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
-  reenvasado:     { bg: '#FAECE7',              fg: '#993C1D' },
+  reenvasado:     { bg: 'var(--lp-reenvase-50)',              fg: 'var(--lp-reenvase-600)' },
 };
 const ESTADO_MAP = Object.keys(ESTADO_BG_FG).reduce((acc, k) => {
   acc[k] = { label: ESTADO_LOTE_LABEL[k] || k, ...ESTADO_BG_FG[k] };
@@ -907,7 +907,7 @@ function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   return (
     <div style={S.overlay} onClick={onClose}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ ...S.modalHeader, borderBottom: '3px solid #993C1D' }}>
+        <div style={{ ...S.modalHeader, borderBottom: '3px solid var(--lp-reenvase-600)' }}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>Re-envasar desde tote</span>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4 }} aria-label="Cerrar">{Icon.x({ s: 18 })}</button>
         </div>
@@ -918,9 +918,9 @@ function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
             </div>
           )}
 
-          <div style={{ padding: 12, background: '#EDE9FE', borderRadius: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#7C3AED', fontFamily: 'var(--lp-font-mono)' }}>{lote.codigo || lote.codigoLote || lote.id}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4, color: '#3C3489' }}>{lote.producto || lote.nombre}</div>
+          <div style={{ padding: 12, background: 'var(--lp-granel-50)', borderRadius: 8, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-granel-600)', fontFamily: 'var(--lp-font-mono)' }}>{lote.codigo || lote.codigoLote || lote.id}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4, color: 'var(--lp-granel-700)' }}>{lote.producto || lote.nombre}</div>
           </div>
 
           {totes.length > 1 && (
@@ -971,7 +971,7 @@ function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
         </div>
         <div style={S.modalFooter}>
           <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={{ ...S.btnPrimary, background: '#993C1D' }} disabled={saving} onClick={handleSubmit}>
+          <button style={{ ...S.btnPrimary, background: 'var(--lp-reenvase-600)' }} disabled={saving} onClick={handleSubmit}>
             {saving ? 'Re-envasando...' : `Re-envasar ${qty || 0} ${tipo}(s)`}
           </button>
         </div>
@@ -1266,7 +1266,7 @@ function accionStyle(kind, compact) {
     case 'success': return { ...base, background: 'var(--lp-success-600)' };
     case 'warn':    return { ...base, background: 'var(--lp-warning-600)' };
     case 'danger':  return { ...base, background: 'var(--lp-danger-600)' };
-    case 'tote':    return { ...base, background: '#993C1D' };
+    case 'tote':    return { ...base, background: 'var(--lp-reenvase-600)' };
     case 'ghost':   return ghost;
     default:        return base;
   }
@@ -1290,17 +1290,17 @@ function SublotesList({ lote, sublotes, canAnular, onAnularSublote }) {
         return (
           <div key={i} style={{
             ...S.sublote,
-            background: s.esMerma ? 'var(--lp-danger-50)' : isTote ? '#EDE9FE' : s.ub === 'teran' ? 'var(--lp-success-50)' : 'var(--lp-bg-raised)',
+            background: s.esMerma ? 'var(--lp-danger-50)' : isTote ? 'var(--lp-granel-50)' : s.ub === 'teran' ? 'var(--lp-success-50)' : 'var(--lp-bg-raised)',
             marginLeft: desdeTote ? 16 : 0,
-            borderLeft: desdeTote ? '3px solid #1E40AF' : undefined,
+            borderLeft: desdeTote ? '3px solid var(--lp-retail-600)' : undefined,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              {desdeTote && <span style={{ fontSize: 11, color: '#1E40AF' }}>↳</span>}
+              {desdeTote && <span style={{ fontSize: 11, color: 'var(--lp-retail-600)' }}>↳</span>}
               <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, fontSize: 11 }}>{s.cod}</span>
               {s.esMerma && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>MERMA</span>}
-              {isTote && <span style={B('#EDE9FE', '#7C3AED')}>Granel</span>}
-              {s.fase === 2 && desdeTote && <span style={B('#DBEAFE', '#1E40AF')}>Retail</span>}
-              {s.consumido && <span style={B('#D1FAE5', '#065F46')}>Consumido</span>}
+              {isTote && <span style={B('var(--lp-granel-50)', 'var(--lp-granel-600)')}>Granel</span>}
+              {s.fase === 2 && desdeTote && <span style={B('var(--lp-retail-50)', 'var(--lp-retail-600)')}>Retail</span>}
+              {s.consumido && <span style={B('var(--lp-success-50)', 'var(--lp-success-700)')}>Consumido</span>}
             </div>
             <div style={{ fontSize: 11 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
@@ -1318,7 +1318,7 @@ function SublotesList({ lote, sublotes, canAnular, onAnularSublote }) {
                 </div>
               )}
               {desdeTote && (
-                <div style={{ color: '#1E40AF', fontSize: 10, marginTop: 2, textAlign: 'right' }}>
+                <div style={{ color: 'var(--lp-retail-600)', fontSize: 10, marginTop: 2, textAlign: 'right' }}>
                   ↳ reenvasado desde tote {desdeTote}
                 </div>
               )}
@@ -1498,7 +1498,7 @@ function LoteTableRow({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnv
         <td style={S.td}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={{ fontWeight: 600 }}>{lote.producto || lote.nombre}</span>
-            {hasTotes && <span style={B('#EDE9FE', '#7C3AED')}>2 fases</span>}
+            {hasTotes && <span style={B('var(--lp-granel-50)', 'var(--lp-granel-600)')}>2 fases</span>}
             {lote.esPrueba && <PruebaBadge size="sm" />}
           </div>
           {lote.ordenCodigo && <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>{lote.ordenCodigo}</div>}
