@@ -161,6 +161,10 @@ export default function RecoleccionPage() {
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(null); // sublote.cod while saving
   const [scannerOpen, setScannerOpen] = useState(false);
+  /* FIX jun 2026: acción que disparará el escáner. null = default por rol
+     (escanearRecoger desde el hero "Escanear QR"). Un botón de tarjeta la
+     fija a su acción concreta antes de abrir la cámara. */
+  const [scanIntent, setScanIntent] = useState(null);
 
   const showToast = useCallback((msg, isErr = false) => {
     setToast({ msg, isErr });
@@ -221,6 +225,16 @@ export default function RecoleccionPage() {
 
   /* Ejecutar transición de sublote vía state machine */
   const doTransicion = useCallback(async (sublote, accion) => {
+    /* FIX jun 2026: escanearRecoger / escanearRecibirTeran exigen el QR FÍSICO
+       (guard scanCod===cod en el backend). NO se pueden disparar con un botón
+       "a ciegas" — eso devolvía "El código escaneado no coincide con este
+       sublote". El botón ahora ABRE LA CÁMARA con la acción correcta; al leer
+       el QR de la cubeta (o teclear el código) se marca en automático. */
+    if (accion === 'escanearRecoger' || accion === 'escanearRecibirTeran') {
+      setScanIntent(accion);
+      setScannerOpen(true);
+      return;
+    }
     const label = LABELS_ACCION_SUBLOTE[accion] || accion;
     const ok = await confirm(`¿${label}: ${sublote.cod}?`, { confirmText: label });
     if (!ok) return;
@@ -300,9 +314,11 @@ export default function RecoleccionPage() {
     const code = result?.cod || result?.raw || '';
     if (!code) { feedbackScanError(); return showToast('QR no reconocido', true); }
 
-    const accion = (rol === 'recolector' || rol === 'admin')
-      ? 'escanearRecoger'
-      : null;
+    /* Acción: la del botón que abrió el escáner (scanIntent), o la default por
+       rol (recolector/admin → escanearRecoger) cuando se usa el hero "Escanear QR". */
+    const accion = scanIntent
+      || ((rol === 'recolector' || rol === 'admin') ? 'escanearRecoger' : null);
+    setScanIntent(null);
     if (!accion) { feedbackScanError(); return showToast('No tienes permisos para recoger (solo recolector/admin)', true); }
 
     setBusy(code);
@@ -340,7 +356,7 @@ export default function RecoleccionPage() {
     } finally {
       setBusy(null);
     }
-  }, [rol, reload, showToast, confirm, feedbackScanOK, feedbackScanError]);
+  }, [rol, reload, showToast, confirm, feedbackScanOK, feedbackScanError, scanIntent]);
 
   /* canScan: quién puede usar el hero "Escanear QR" (handleScan gatea por rol).
      Las acciones por card las decide la state machine (getAccionesSublote). */
@@ -379,7 +395,7 @@ export default function RecoleccionPage() {
             <div style={S.scanRowDesktop}>
               <button
                 style={S.scanBtnDesktop}
-                onClick={() => setScannerOpen(true)}
+                onClick={() => { setScanIntent(null); setScannerOpen(true); }}
                 aria-label="Escanear QR de sublote"
               >
                 <IconQR size={20} />
@@ -448,7 +464,7 @@ export default function RecoleccionPage() {
       {scannerOpen && (
         <QRScanner
           onResult={handleScan}
-          onClose={() => setScannerOpen(false)}
+          onClose={() => { setScannerOpen(false); setScanIntent(null); }}
         />
       )}
 
