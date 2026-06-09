@@ -43,11 +43,11 @@ const S = {
 };
 
 const ESTADO_COLORS = {
-  borrador: { bg: '#F3F4F6', color: '#374151' },
-  en_proceso: { bg: '#DBEAFE', color: '#1D4ED8' },
-  qc_pendiente: { bg: '#FEF3C7', color: '#92400E' },
-  aprobado: { bg: '#D1FAE5', color: '#065F46' },
-  rechazado: { bg: '#FEE2E2', color: '#991B1B' },
+  borrador: { bg: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' },
+  en_proceso: { bg: 'var(--lp-info-50)', color: 'var(--lp-info-600)' },
+  qc_pendiente: { bg: 'var(--lp-warning-50)', color: 'var(--lp-warning-700)' },
+  aprobado: { bg: 'var(--lp-success-50)', color: 'var(--lp-success-700)' },
+  rechazado: { bg: 'var(--lp-danger-50)', color: 'var(--lp-danger-700)' },
 };
 
 function PruebaCard({ prueba, onEdit, onDelete, onQC }) {
@@ -72,13 +72,13 @@ function PruebaCard({ prueba, onEdit, onDelete, onQC }) {
           </div>
         </div>
         <div style={S.actions} onClick={e => e.stopPropagation()}>
-          <button onClick={() => onQC(prueba)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: '#FEF3C7', color: '#92400E', border: 'none' }} title="Registrar QC">
+          <button onClick={() => onQC(prueba)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'var(--lp-warning-50)', color: 'var(--lp-warning-700)', border: 'none' }} title="Registrar QC">
             QC
           </button>
           <button onClick={() => onEdit(prueba)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'var(--lp-bg-base)', border: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)' }}>
             Editar
           </button>
-          <button onClick={() => onDelete(prueba)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: '#FEE2E2', color: '#DC2626', border: 'none' }}>
+          <button onClick={() => onDelete(prueba)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'var(--lp-danger-50)', color: 'var(--lp-danger-600)', border: 'none' }}>
             Eliminar
           </button>
         </div>
@@ -136,7 +136,7 @@ function PruebaCard({ prueba, onEdit, onDelete, onQC }) {
                 {qc.densidad != null && <span>Densidad: <b>{qc.densidad}</b></span>}
                 {qc.brillo != null && <span>Brillo: <b>{qc.brillo}</b></span>}
                 {qc.cubrimiento && <span>Cubrimiento: <b>{qc.cubrimiento}</b></span>}
-                {qc.estado && <span>Veredicto: <b style={{ color: qc.estado === 'aprobado' ? '#065F46' : '#991B1B' }}>{qc.estado.toUpperCase()}</b></span>}
+                {qc.estado && <span>Veredicto: <b style={{ color: qc.estado === 'aprobado' ? 'var(--lp-success-700)' : 'var(--lp-danger-700)' }}>{qc.estado.toUpperCase()}</b></span>}
               </div>
               {qc.observaciones && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>{qc.observaciones}</div>}
               {qc.imagenBase64 && (

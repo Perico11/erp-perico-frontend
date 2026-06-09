@@ -21,8 +21,8 @@ const S = {
   cardName: { fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 4 },
   badge: (color) => ({
     display: 'inline-block', fontSize: 10, fontWeight: 600, padding: '2px 8px',
-    borderRadius: 10, background: color === 'blue' ? '#DBEAFE' : color === 'green' ? '#D1FAE5' : '#F3F4F6',
-    color: color === 'blue' ? '#1D4ED8' : color === 'green' ? '#065F46' : '#374151',
+    borderRadius: 10, background: color === 'blue' ? 'var(--lp-info-50)' : color === 'green' ? 'var(--lp-success-50)' : 'var(--lp-bg-sunken)',
+    color: color === 'blue' ? 'var(--lp-info-600)' : color === 'green' ? 'var(--lp-success-700)' : 'var(--lp-text-secondary)',
     marginRight: 6,
   }),
   meta: { fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 6 },
@@ -69,7 +69,7 @@ function MPCard({ mp, isLab, onEdit, onDelete }) {
             <button onClick={() => onEdit(mp)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'var(--lp-bg-base)', border: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)' }}>
               Editar
             </button>
-            <button onClick={() => onDelete(mp)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: '#FEE2E2', color: '#DC2626', border: 'none' }}>
+            <button onClick={() => onDelete(mp)} style={{ ...S.btn, padding: '5px 10px', fontSize: 11, background: 'var(--lp-danger-50)', color: 'var(--lp-danger-600)', border: 'none' }}>
               Eliminar
             </button>
           </div>

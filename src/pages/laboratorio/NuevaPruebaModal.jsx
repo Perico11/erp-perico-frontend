@@ -1,15 +1,17 @@
 import { useState, useMemo } from 'react';
 
-/* ── Colores por categoría ── */
+/* ── Colores por categoría ── (tokens var(--lp-*), sin hardcodes ni morado
+   del skin viejo; auto-adaptan a claro/oscuro. La etiqueta de texto distingue
+   las categorías que comparten familia de color.) */
 const CAT_COLORS = {
-  'Resinas y Ligantes':     { bg: '#EDE9FE', color: '#6D28D9', border: '#C4B5FD' },
-  'Pigmentos y Colorantes': { bg: '#FEF3C7', color: '#92400E', border: '#FCD34D' },
-  'Cargas y Extensores':    { bg: '#E0E7FF', color: '#3730A3', border: '#A5B4FC' },
-  'Aditivos':               { bg: '#D1FAE5', color: '#065F46', border: '#6EE7B7' },
-  'Solventes y Agua':       { bg: '#DBEAFE', color: '#1E40AF', border: '#93C5FD' },
-  'Biocidas':               { bg: '#FCE7F3', color: '#9D174D', border: '#F9A8D4' },
-  'Lab':                    { bg: '#FFF7ED', color: '#9A3412', border: '#FDBA74' },
-  'Sin categoría':          { bg: '#F3F4F6', color: '#374151', border: '#D1D5DB' },
+  'Resinas y Ligantes':     { bg: 'var(--lp-brand-50)',   color: 'var(--lp-brand-700)',   border: 'var(--lp-brand-200)' },
+  'Pigmentos y Colorantes': { bg: 'var(--lp-warning-50)', color: 'var(--lp-warning-700)', border: 'var(--lp-warning-100)' },
+  'Cargas y Extensores':    { bg: 'var(--lp-info-50)',    color: 'var(--lp-info-600)',    border: 'var(--lp-border-subtle)' },
+  'Aditivos':               { bg: 'var(--lp-success-50)', color: 'var(--lp-success-700)', border: 'var(--lp-success-100)' },
+  'Solventes y Agua':       { bg: 'var(--lp-info-50)',    color: 'var(--lp-info-600)',    border: 'var(--lp-border-subtle)' },
+  'Biocidas':               { bg: 'var(--lp-danger-50)',  color: 'var(--lp-danger-700)',  border: 'var(--lp-danger-100)' },
+  'Lab':                    { bg: 'var(--lp-warning-50)', color: 'var(--lp-warning-700)', border: 'var(--lp-warning-100)' },
+  'Sin categoría':          { bg: 'var(--lp-bg-sunken)',  color: 'var(--lp-text-secondary)', border: 'var(--lp-border-subtle)' },
 };
 
 /* Orden canónico de categorías */
@@ -390,7 +392,7 @@ export default function NuevaPruebaModal({ prueba, maestro, labMPs, onClose, onS
                       {ing.costoKg != null ? '$' + ((Number(ing.cantidad) || 0) * Number(ing.costoKg)).toFixed(2) : '—'}
                     </td>
                     <td style={S.ingTd}>
-                      <button onClick={() => removeIngrediente(ing.nombre)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 14, padding: 2 }}>
+                      <button onClick={() => removeIngrediente(ing.nombre)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-danger-600)', fontSize: 14, padding: 2 }}>
                         ×
                       </button>
                     </td>
@@ -435,7 +437,7 @@ export default function NuevaPruebaModal({ prueba, maestro, labMPs, onClose, onS
                 onChange={e => updatePaso(idx, 'descripcion', e.target.value)} />
               <input style={{ ...S.ingInput, width: 80 }} placeholder="Tiempo" value={p.tiempo}
                 onChange={e => updatePaso(idx, 'tiempo', e.target.value)} />
-              <button onClick={() => removePaso(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#DC2626', fontSize: 14, padding: 2 }}>
+              <button onClick={() => removePaso(idx)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-danger-600)', fontSize: 14, padding: 2 }}>
                 {'×'}
               </button>
             </div>

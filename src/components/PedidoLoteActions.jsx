@@ -9,6 +9,14 @@ import {
 } from '../lib/loteTransiciones';
 import PruebaBadge from './ui/PruebaBadge';
 
+/* Iconos SVG line (sin emojis) para los botones QC */
+const IcoCheck = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px', marginRight: 4 }} aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+);
+const IcoX = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-2px', marginRight: 4 }} aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+);
+
 /* ──────────────────────────────────────────────────────────────────── */
 /* PedidoLoteActions                                                    */
 /* ──────────────────────────────────────────────────────────────────── */
@@ -153,7 +161,7 @@ function QCInline({ lote, accion, userName, onSuccess, onCancel }) {
         value={nota} onChange={e => setNota(e.target.value)} />
       <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
         <button style={S.btn(aprobar ? 'success' : 'danger')} disabled={busy} onClick={handleSubmit}>
-          {busy ? 'Guardando…' : (aprobar ? '✓ Aprobar QC' : '✕ Rechazar QC')}
+          {busy ? 'Guardando…' : (aprobar ? <><IcoCheck /> Aprobar QC</> : <><IcoX /> Rechazar QC</>)}
         </button>
         <button style={S.btn('ghost')} onClick={onCancel} disabled={busy}>Cancelar</button>
       </div>
@@ -229,7 +237,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
     if (accion === 'aprobarQC' || accion === 'rechazarQC') {
       return (
         <button key={accion} style={S.btn(kindMap[accion])} onClick={() => setQcMode(accion)}>
-          {accion === 'aprobarQC' ? '✓ Aprobar QC' : '✕ Rechazar QC'}
+          {accion === 'aprobarQC' ? <><IcoCheck /> Aprobar QC</> : <><IcoX /> Rechazar QC</>}
         </button>
       );
     }

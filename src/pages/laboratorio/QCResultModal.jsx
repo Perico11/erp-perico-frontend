@@ -96,8 +96,8 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
 
   /* Estilo del input según evaluación */
   const inputEval = (estadoEval) => {
-    if (estadoEval === 'ok')    return { ...S.input, borderColor: '#059669', background: '#ECFDF5' };
-    if (estadoEval === 'fuera') return { ...S.input, borderColor: '#DC2626', background: '#FEF2F2' };
+    if (estadoEval === 'ok')    return { ...S.input, borderColor: 'var(--lp-success-600)', background: 'var(--lp-success-50)' };
+    if (estadoEval === 'fuera') return { ...S.input, borderColor: 'var(--lp-danger-600)', background: 'var(--lp-danger-50)' };
     return S.input;
   };
 
@@ -169,8 +169,8 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
         {/* Banner de specs cargados — guía visual al técnico */}
         {specs && (
           <div style={{
-            background: '#EFF6FF', border: '1px solid #BFDBFE',
-            color: '#1E40AF', padding: '6px 10px', borderRadius: 6,
+            background: 'var(--lp-info-50)', border: '1px solid var(--lp-border-subtle)',
+            color: 'var(--lp-info-600)', padding: '6px 10px', borderRadius: 6,
             fontSize: 11, marginBottom: 14,
           }}>
             Rangos esperados cargados desde la fórmula. Si una lectura sale del rango,
@@ -232,7 +232,7 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
             <div>
               <img src={imagenBase64} alt="QC" style={S.imgPreview} />
               <div style={{ marginTop: 6 }}>
-                <button style={{ ...S.btn, padding: '4px 12px', fontSize: 11, background: '#FEE2E2', color: '#DC2626' }} onClick={() => setImagenBase64(null)}>
+                <button style={{ ...S.btn, padding: '4px 12px', fontSize: 11, background: 'var(--lp-danger-50)', color: 'var(--lp-danger-600)' }} onClick={() => setImagenBase64(null)}>
                   Quitar imagen
                 </button>
                 <button style={{ ...S.btn, padding: '4px 12px', fontSize: 11, marginLeft: 6, background: 'var(--lp-bg-base)', border: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)' }} onClick={() => fileRef.current?.click()}>
@@ -254,17 +254,17 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
             {sugerencia && (
               <span style={{
                 fontSize: 10, fontWeight: 700, marginLeft: 8,
-                color: sugerencia === 'aprobado' ? '#059669' : '#DC2626',
+                color: sugerencia === 'aprobado' ? 'var(--lp-success-600)' : 'var(--lp-danger-600)',
               }}>
                 Sugerido por validación: {sugerencia === 'aprobado' ? 'APROBADO' : 'RECHAZADO'}
               </span>
             )}
           </label>
           <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
-            <button style={S.estadoBtn(estado === 'aprobado', '#059669')} onClick={() => setEstado('aprobado')}>
+            <button style={S.estadoBtn(estado === 'aprobado', 'var(--lp-success-600)')} onClick={() => setEstado('aprobado')}>
               Aprobado
             </button>
-            <button style={S.estadoBtn(estado === 'rechazado', '#DC2626')} onClick={() => setEstado('rechazado')}>
+            <button style={S.estadoBtn(estado === 'rechazado', 'var(--lp-danger-600)')} onClick={() => setEstado('rechazado')}>
               Rechazado
             </button>
           </div>

@@ -48,11 +48,14 @@ const S = {
     pointerEvents: 'none',
   },
   card: {
-    background: 'linear-gradient(135deg, #fff 0%, #FFF7ED 100%)',
+    /* Fondo y sombra en tokens (antes: gradiente blanco + sombra marrón del
+       skin viejo, que rompía el tema verde y el modo oscuro). El borde verde
+       de marca ya es suficiente acento de atención. */
+    background: 'var(--lp-bg-raised)',
     border: '2px solid var(--lp-brand-600)',
     borderRadius: 14,
     padding: 14,
-    boxShadow: '0 8px 32px rgba(143,107,77,.28)',
+    boxShadow: 'var(--lp-shadow-lg)',
     pointerEvents: 'auto',
     animation: 'inbound-slide-in 0.3s ease-out',
     fontFamily: 'var(--lp-font-sans)',

@@ -135,7 +135,9 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
       <div style={S.modal} onClick={(e) => e.stopPropagation()}>
         <div style={S.header}>
           <div style={S.title}>Nuevo pedido</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">✕</button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4 }} aria-label="Cerrar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+          </button>
         </div>
         <div style={S.body}>
           {err && <div style={S.err}>{err}</div>}
