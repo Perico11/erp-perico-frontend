@@ -458,7 +458,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
                 background: '#7C3AED', /* púrpura — color canónico del TOTE en toda la app */
                 color: '#fff',
               }}
-              onClick={() => navigate('/almacen-recepcion')}
+              onClick={() => navigate('/almacen-recepcion?reenvasar=' + encodeURIComponent(totesActivos[0]?.cod || ''))}
               title={`${totesActivos.length} TOTE(s) activos — re-envasar en cubeta/galón/litro`}
             >
               Re-envasar TOTE en Terán ({totesActivos.length})

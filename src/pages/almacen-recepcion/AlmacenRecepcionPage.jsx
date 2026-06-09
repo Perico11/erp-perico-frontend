@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -228,6 +229,7 @@ export default function AlmacenRecepcionPage() {
   const [reenvaseFor, setReenvaseFor] = useState(null);
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const showToast = useCallback((msg, isErr = false) => {
     setToast({ msg, isErr });
@@ -271,6 +273,22 @@ export default function AlmacenRecepcionPage() {
   }), [sublotesEnCamino, totesActivos, sublotesEnAlmacen]);
 
   const lista = filter === 'en_camino' ? sublotesEnCamino : sublotesEnAlmacen;
+
+  /* FIX jun 2026 (bug Josué): el atajo "Re-envasar TOTE" de la card del pedido
+     llega aquí con ?reenvasar=<cod>. Auto-abrimos el modal de re-envasado para
+     ese TOTE — antes solo aterrizaba en la página y Josué tenía que buscar el
+     buffer y pulsar de nuevo. Si el TOTE aún no cargó (totesActivos vacío) NO
+     limpiamos el param: reintenta cuando llegue la data. */
+  useEffect(() => {
+    const cod = searchParams.get('reenvasar');
+    if (!cod || reenvaseFor) return;
+    const tote = totesActivos.find(t => t.cod === cod) || totesActivos[0];
+    if (tote) {
+      setReenvaseFor({ tote, lote: tote._lote });
+      searchParams.delete('reenvasar');
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, totesActivos, reenvaseFor, setSearchParams]);
 
   /* Recibir un sublote en Terán vía state machine */
   /* jun 2026: se eliminó `recibirSublote` (confirmación manual). La recepción
