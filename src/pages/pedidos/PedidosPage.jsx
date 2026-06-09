@@ -558,48 +558,23 @@ export default function PedidosPage() {
 
   return (
     <div>
-      <TopBar title="Pedidos" />
+      <TopBar
+        title="Pedidos"
+        action={canCrear ? (
+          <button
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 999, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', minHeight: 40, whiteSpace: 'nowrap' }}
+            data-id="pedidos.btn.nuevo"
+            data-rol="almacen,admin,tecnico"
+            onClick={() => setShowNuevo(true)}
+          >
+            {Icon.plus}{isDesktop ? 'Nuevo' : ''}
+          </button>
+        ) : null}
+      />
       <div style={S.wrap}>
-        <HelpHint id="pedidos-flujo" title="Cómo funciona el flujo de pedidos">
-          <ol style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
-            <li><strong>Almacén</strong> crea un pedido (producto + cantidad + solicitante).</li>
-            <li><strong>Técnico (Enrique)</strong> lo ve aquí, lo acepta y lanza la orden de producción.</li>
-            <li>El pedido cambia de estado automáticamente: <em>pendiente → aceptado → en_produccion → producido → QC → envasado → en_camino → entregado</em>.</li>
-            <li>Cualquier rol con permiso puede ver el progreso aquí.</li>
-          </ol>
-        </HelpHint>
-
         {err && <div style={S.err}>{err}</div>}
 
-        {/* KPIs */}
-        <div style={S.metric}>
-          <div style={S.metricCard('var(--lp-text-tertiary)')}>
-            <div style={{ ...S.metricVal, color: k.pendientes > 0 ? 'var(--lp-warning-700)' : 'var(--lp-text-primary)' }}>{k.pendientes}</div>
-            <div style={S.metricLabel}>Pendientes</div>
-          </div>
-          <div style={S.metricCard('var(--lp-warning-600)')}>
-            <div style={S.metricVal}>{k.enProduccion}</div>
-            <div style={S.metricLabel}>En producción</div>
-          </div>
-          <div style={S.metricCard('var(--lp-info-600)')}>
-            <div style={S.metricVal}>{k.enQC}</div>
-            <div style={S.metricLabel}>En QC</div>
-          </div>
-          <div style={S.metricCard('var(--lp-warning-500)')}>
-            <div style={S.metricVal}>{k.enEnvasado}</div>
-            <div style={S.metricLabel}>Envasando</div>
-          </div>
-          <div style={S.metricCard('var(--lp-warning-600)')}>
-            <div style={S.metricVal}>{k.enCamino}</div>
-            <div style={S.metricLabel}>En camino</div>
-          </div>
-          <div style={S.metricCard('var(--lp-success-600)')}>
-            <div style={S.metricVal}>{k.entregados}</div>
-            <div style={S.metricLabel}>Entregados</div>
-          </div>
-        </div>
-
-        {/* Toolbar: pills de filtro + "+ Nuevo pedido" */}
+        {/* Filtros (el botón "Nuevo" vive en el TopBar, estilo limpio) */}
         <div style={S.toolbar}>
           <div style={S.pillRow} role="tablist" aria-label="Filtro de pedidos">
             {FILTROS.map(f => {
@@ -619,17 +594,6 @@ export default function PedidosPage() {
               );
             })}
           </div>
-          {canCrear && (
-            <button
-              style={{ ...S.newBtn, marginLeft: isDesktop ? 'auto' : 0 }}
-              data-id="pedidos.btn.nuevo"
-              data-rol="almacen,admin,tecnico"
-              onClick={() => setShowNuevo(true)}
-            >
-              {Icon.plus}
-              Nuevo pedido
-            </button>
-          )}
         </div>
 
         {/* Lista — escritorio: grid g3 (cards anchas). móvil: cards apiladas. */}

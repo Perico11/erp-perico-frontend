@@ -49,7 +49,7 @@ const S = {
   },
 };
 
-export default function TopBar({ title }) {
+export default function TopBar({ title, action }) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -118,19 +118,17 @@ export default function TopBar({ title }) {
               <span style={S.brandSep} aria-hidden="true" />
               <h1 style={S.title}>{title}</h1>
             </>
-          ) : firstName && !enInicio ? (
-            /* Escritorio: saludo personalizado + pendientes (antes el topbar izq quedaba vacío).
-               En Inicio se omite para no duplicar el saludo del cuerpo del Dashboard. */
-            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.18, minWidth: 0 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' }}>Hola {firstName}</span>
-              <span style={{ fontSize: 12, fontWeight: 500, color: count > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)' }}>{pendText}</span>
-            </div>
+          ) : !enInicio ? (
+            /* Escritorio: TÍTULO de la pantalla (estilo limpio, sin saludo).
+               En Inicio se omite porque el cuerpo del Dashboard ya saluda. */
+            <h1 style={{ fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{title}</h1>
           ) : null}
         </div>
         {/* DERECHA: solo tema + notificaciones (circulares), como el mockup.
             El nombre y el logout salen en escritorio (logout vive en el menú del
             avatar del sidebar). En móvil se conserva el botón salir (no hay sidebar). */}
         <div style={S.right}>
+          {action}
           <ThemeToggle style={S.iconCircle} />
           <button
             onClick={() => navigate('/notificaciones')}
