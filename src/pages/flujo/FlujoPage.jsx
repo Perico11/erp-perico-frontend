@@ -10,7 +10,7 @@
      · getAccionesSublote / bucketOfSublote → gateo por estado+rol
    Las pantallas por rol siguen existiendo (respaldo); ésta es la vista principal.
    ════════════════════════════════════════════════════════════════════════ */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import TopBar from '../../components/layout/TopBar';
 import PageTabs from '../../components/ui/PageTabs';
 import { useAuth } from '../../context/AuthContext';
@@ -66,14 +66,30 @@ const SUB_BTN = {
 };
 
 /* ── Pipeline horizontal ──────────────────────────────────────────────── */
+/* FIX jun 2026 (feedback owner): scroll lateral con AUTO-CENTRADO del paso
+   actual — los 11 pasos no caben nunca completos; antes el usuario tenía que
+   scrollear a mano para encontrar dónde va el lote. */
 function PipelineRow({ estado }) {
   const idx = idxPaso(estado);
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return;
+    if (wrap.scrollWidth <= wrap.clientWidth + 4) return;
+    const el = wrap.querySelector('[data-current="1"]');
+    if (!el) return;
+    const elRect = el.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const target = wrap.scrollLeft + (elRect.left - wrapRect.left) - (wrap.clientWidth / 2) + (elRect.width / 2);
+    try { wrap.scrollTo({ left: Math.max(0, target), behavior: 'smooth' }); }
+    catch { wrap.scrollLeft = Math.max(0, target); }
+  }, [idx, estado]);
   return (
-    <div style={S.timeline}>
+    <div ref={wrapRef} style={S.timeline}>
       {PASOS.map((p, i) => {
         const done = i < idx, current = i === idx;
         return (
-          <div key={p.key} style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}>
+          <div key={p.key} data-current={current ? '1' : undefined} style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}>
             <div style={S.step}>
               <div style={S.dot(done, current)} />
               <div style={S.stepLabel(done, current)}>{p.label}</div>
@@ -429,7 +445,8 @@ const S = {
     background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
     color: active ? '#fff' : 'var(--lp-text-tertiary)', whiteSpace: 'nowrap', minHeight: 44,
   }),
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: 14, alignItems: 'start' },
+  /* 440px: más aire para el pipeline de 11 pasos (feedback owner jun 2026) */
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(440px, 1fr))', gap: 14, alignItems: 'start' },
   card: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 16, padding: 14, marginBottom: 12 },
   cardDesktop: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 16, padding: 16 },
   cardHead: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 },

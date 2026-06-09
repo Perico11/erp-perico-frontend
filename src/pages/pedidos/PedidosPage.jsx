@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
@@ -227,9 +227,25 @@ function _idxFasePedido(estado) {
   return -1;
 }
 
-/* Componente PipelinePedido — mini timeline horizontal por card */
+/* Componente PipelinePedido — mini timeline horizontal por card.
+   FIX jun 2026 (feedback owner): cuando el pipeline no cabe (móvil / card
+   estrecha), el contenedor scrollea lateral y se AUTO-CENTRA en el checkpoint
+   actual al avanzar — antes el último paso quedaba cortado sin pista visual. */
 function PipelinePedido({ estado, esPrueba }) {
   const idx = _idxFasePedido(estado);
+  const wrapRef = useRef(null);
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap || idx < 0) return;
+    if (wrap.scrollWidth <= wrap.clientWidth + 4) return; /* cabe completo */
+    const el = wrap.querySelector('[data-current="1"]');
+    if (!el) return;
+    const elRect = el.getBoundingClientRect();
+    const wrapRect = wrap.getBoundingClientRect();
+    const target = wrap.scrollLeft + (elRect.left - wrapRect.left) - (wrap.clientWidth / 2) + (elRect.width / 2);
+    try { wrap.scrollTo({ left: Math.max(0, target), behavior: 'smooth' }); }
+    catch { wrap.scrollLeft = Math.max(0, target); }
+  }, [idx, estado]);
   if (idx < 0) return null; /* cancelado/rechazado/eliminado: ocultar */
   const accent = esPrueba ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
   /* Construimos un array plano de nodos (step + línea + step + ...) para
@@ -238,7 +254,7 @@ function PipelinePedido({ estado, esPrueba }) {
   PIPELINE_FASES.forEach((fase, i) => {
     const st = i < idx ? 'done' : i === idx ? 'current' : 'pending';
     nodos.push(
-      <div key={'s_' + fase.key} style={S.pipelineStep(st)}>
+      <div key={'s_' + fase.key} data-current={st === 'current' ? '1' : undefined} style={S.pipelineStep(st)}>
         <div style={S.pipelineDot(st, accent)}>
           {st === 'done' && (
             <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
@@ -255,7 +271,7 @@ function PipelinePedido({ estado, esPrueba }) {
       );
     }
   });
-  return <div style={S.pipelineWrap}>{nodos}</div>;
+  return <div ref={wrapRef} style={S.pipelineWrap}>{nodos}</div>;
 }
 
 /* X3 (jun 2026): ESTADO_COLOR y ESTADO_LABEL vienen de lib/estados.js. */
@@ -665,7 +681,9 @@ export default function PedidosPage() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(340px, 1fr))' : '1fr',
+            /* FIX jun 2026 (feedback owner): 340px cortaba el último paso del
+               pipeline ("Entregado") en desktop. 420px = caben las 6 fases. */
+            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(420px, 1fr))' : '1fr',
             gap: 12,
           }}>
           {listaOrdenada.map(p => {
