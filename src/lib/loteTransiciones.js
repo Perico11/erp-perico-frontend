@@ -187,6 +187,15 @@ export function calcularEstadoLote(lote) {
   if (enRuta) return 'en_proceso';
 
   if (subs.every(s => s.estado === 'en_recoleccion')) return 'en_recoleccion';
-  if (subs.some(s => s.estado === 'envasado')) return 'envasado';
+  /* FIX jun 2026 (sync con backend loteStateMachine.js): un sublote 'envasado'
+     suelto NO degrada un lote cuyos otros sublotes ya avanzaron (en camino, en
+     Terán, vaciados, TOTE activo en Terán) — evitaba reaparecer en "Voy por él". */
+  const haySublotesAvanzados = subs.some(s =>
+    ['en_camino','en_stock_teran','tote_vaciado'].includes(s.estado) ||
+    (s.estado === 'tote_activo' && (s.ub || 'fabrica') === 'teran')
+  );
+  const algunEnvasado = subs.some(s => s.estado === 'envasado');
+  if (algunEnvasado && !haySublotesAvanzados) return 'envasado';
+  if (algunEnvasado && haySublotesAvanzados) return 'en_proceso';
   return 'en_proceso';
 }

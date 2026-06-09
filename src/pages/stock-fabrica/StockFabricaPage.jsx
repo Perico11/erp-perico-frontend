@@ -856,11 +856,13 @@ function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
       const letraBase = sublotes.length;
       const cod = (lote.codigo || lote.codigoLote || lote.id) + '-' + String.fromCharCode(65 + letraBase);
       const litExact = +litTotal.toFixed(2);
-      /* Hijo de TOTE: nace ya en estado 'envasado' listo para recolección */
+      /* Hijo de TOTE. NOTA (jun 2026): ya NO mandamos `estado` — el backend lo
+         deriva de la ubicación física del TOTE (fábrica→'envasado', Terán→
+         'en_stock_teran'). Mandar estado desde el cliente causaba la regresión
+         Josué→Luis (hijos 'envasado' reaparecían en "Voy por él"). */
       const subloteHijo = {
         cod,
         claseSublote: 'envasado_final',
-        estado: 'envasado',
         tipo,
         env: tipo === 'cubeta' ? '19L Estandar' : tipo === 'galon' ? '3.785L' : '1L',
         marca: marca || null,
@@ -887,6 +889,9 @@ function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
       await api.transicionSublote(selectedTote, 'reenvasarTote', {
         nuevosSublotes: [subloteHijo],
         litrosConsumidos: litExact,
+        /* lugar derivado de la ubicación física del TOTE (el server lo re-deriva
+           igual, pero dejamos el contrato explícito). */
+        lugar: (tote?.ub === 'teran') ? 'teran' : 'fabrica',
       });
       onSuccess({
         sublotes: [subloteHijo],
