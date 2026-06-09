@@ -551,7 +551,8 @@ export default function PedidosPage() {
   /* Pills de filtro — Activos / Pruebas (si hay) / Rechazados (si hay) / Historial */
   const FILTROS = [
     { value: 'activos',    label: 'Activos',    count: activos.length,    flask: false },
-    ...(pruebas.length > 0    ? [{ value: 'pruebas',    label: 'Pruebas',    count: pruebas.length,    flask: true }] : []),
+    /* Pruebas SIEMPRE visible (sub-tab estándar), aunque no haya pedidos de prueba. */
+    { value: 'pruebas',    label: 'Pruebas',    count: pruebas.length,    flask: true },
     ...(rechazados.length > 0 ? [{ value: 'rechazados', label: 'Rechazados', count: rechazados.length, flask: false }] : []),
     { value: 'historial',  label: 'Historial',  count: historial.length,  flask: false },
   ];
