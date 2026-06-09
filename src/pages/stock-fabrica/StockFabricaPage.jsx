@@ -1236,12 +1236,13 @@ function buildLoteAcciones(lote, ctx) {
       dataId: 'stock.btn.cerrar-merma', dataRol: 'tecnico,almacen,admin',
       onClick: () => onCerrar(lote) });
   }
-  /* Transferir a Terán — §8 almacen,admin */
-  if (canTransfer && enFabrica.length > 0) {
-    acciones.push({ key: 'transferir', label: 'Transferir a Terán', icon: Icon.transfer, kind: 'success',
-      dataId: 'stock.btn.transferir-teran', dataRol: 'almacen,admin',
-      onClick: () => onTransferir(lote) });
-  }
+  /* jun 2026 (decisión owner): se ELIMINA "Transferir a Terán". Era un camino
+     paralelo que movía el sublote a Terán brincándose el flujo Luis→Josué:
+     hacía "desaparecer" el lote de Stock Fábrica sin avisar a dónde iba y
+     confundía. El producto llega a Terán SOLO cuando Josué lo RECIBE por
+     escaneo (escanearRecibirTeran). El camino canónico es:
+       envasado → "Enviar a recolectar" → Luis recoge → Josué escanea/recibe.
+     (El endpoint /api/envasado/transferir se conserva por compat, sin botón.) */
   /* Re-envasar TOTE — NO es "envasar inicial": roles SM reenvasarTote =
      almacen/tecnico/admin. Josué (almacen) lo conserva vía canTransfer aunque
      ya no pueda envasar. */
@@ -1717,19 +1718,8 @@ export default function StockFabricaPage() {
     }
   }, [reloadTraz, showToast, confirm]);
 
-  const handleTransferir = useCallback(async (lote) => {
-    const enFab = (lote.sublotes || []).filter(s => s.ub === 'fabrica' && !s.esMerma);
-    if (enFab.length === 0) return showToast('No hay sublotes en fábrica para transferir');
-    const ok = await confirm(`¿Transferir ${enFab.length} sublote(s) de ${lote.codigo} a Almacén Terán?`, { confirmText: 'Transferir' });
-    if (!ok) return;
-    try {
-      await api.transferirSublotes(lote.id, enFab.map(s => s.cod));
-      reloadTraz();
-      showToast(`${enFab.length} sublote(s) transferidos a Terán`);
-    } catch (err) {
-      showToast('Error: ' + (err.message || 'No se pudo transferir'));
-    }
-  }, [reloadTraz, showToast, confirm]);
+  /* jun 2026: handleTransferir eliminado junto con su botón (ver computeAcciones).
+     El producto llega a Terán solo vía recepción por escaneo de Josué. */
 
   /* FIX jun 2026 (Sprint O - O3): "Enviar a recolectar" como acción primaria
      cuando el lote está envasado. Marca TODOS los sublotes envasados como
@@ -1879,7 +1869,6 @@ export default function StockFabricaPage() {
                 autoExpand={!!highlightLote && (lote.codigo === highlightLote || lote.codigoLote === highlightLote || lote.id === highlightLote)}
                 onEnvasar={setEnvasadoModal}
                 onCerrar={handleCerrar}
-                onTransferir={handleTransferir}
                 onEnviarRecolectar={handleEnviarRecolectar}
                 onReenvasar={setReenvasadoModal}
                 onQR={setQrLote}
