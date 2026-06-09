@@ -248,6 +248,9 @@ const api = {
     request('POST', '/api/pedidos/aceptar-y-producir', {
       pedidoId,
       lanzarProduccion: !!opts.lanzarProduccion,
+      /* jun 2026: el server exige NDA aceptado para LANZAR producción
+         (no-admin). El caller lo manda tras pasar el NDAModal. */
+      ndaAceptado: !!opts.ndaAceptado,
     }),
   getProduccionHistorial: () => request('GET', '/api/produccion-historial'),
   getQC: () => request('GET', '/api/qc'),

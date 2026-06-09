@@ -561,7 +561,9 @@ export default function PedidosPage() {
     if (!p) return;
     setBusyId(p.id);
     try {
-      const r = await api.aceptarYProducir(p.id, { lanzarProduccion: true });
+      /* ndaAceptado: arrancarProduccion solo se invoca tras pasar el NDAModal
+         (handleNDAAccept) o con bypass admin — el server lo exige (Pre#3). */
+      const r = await api.aceptarYProducir(p.id, { lanzarProduccion: true, ndaAceptado: true });
       if (!r?.ok) throw new Error(r?.error || 'No se pudo iniciar producción');
       reload();
       navigate('/produccion');

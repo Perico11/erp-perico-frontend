@@ -7,7 +7,7 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import ProduccionFlow from '../produccion/ProduccionFlow';
-import NDAModal from '../../components/NDAModal';
+import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
@@ -342,6 +342,7 @@ function Timeline({ estado }) {
    /api/pedidos/aceptar-y-producir que crea pedido↔orden atómicamente.
    Sin pedidoOrigen: flujo legacy "orden interna" (solo admin debería usarlo). */
 function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedidoOrigen }) {
+  const { user } = useAuth();
   const tienePedido = !!pedidoOrigen;
   const [formula, setFormula] = useState(pedidoOrigen?.producto || '');
   const [cantidad, setCantidad] = useState(pedidoOrigen ? String(pedidoOrigen.cantidad || '') : '');
@@ -398,7 +399,12 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
     if (tienePedido) {
       setError(''); setSaving(true);
       try {
-        const r = await api.aceptarYProducir(pedidoOrigen.id, { lanzarProduccion: lanzarAhora });
+        /* ndaAceptado: el server lo exige al LANZAR producción (Pre#3). Aquí no
+           hay NDAModal inline — usamos la vigencia guardada (7 días) del NDA de
+           producción; admin bypass. Si no está vigente, el server responde
+           NDA_REQUERIDO y el técnico inicia desde la card (que sí muestra el NDA). */
+        const ndaOk = (user && user.id === 'admin') || ndaYaAceptado(user, 'produccion');
+        const r = await api.aceptarYProducir(pedidoOrigen.id, { lanzarProduccion: lanzarAhora, ndaAceptado: ndaOk });
         if (!r?.ok) throw new Error(r?.error || 'No se pudo crear orden');
         const codigoMsg = r.orden?.codigo || '?';
         onSuccess(r.reusado
