@@ -1,0 +1,38 @@
+name: CI
+
+# Red de seguridad: corre tests + build en cada push y PR a main.
+# (P1 de la auditoría jun 2026 — antes no había CI; los tests rotos pasaban
+#  desapercibidos. El suite ya está 37/37 verde.)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'   # Vite 8 requiere Node >=20.19 / 22.12
+          cache: 'npm'
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Tests (Vitest) — BLOQUEA si falla
+        run: npm run test:run
+
+      - name: Build — BLOQUEA si falla
+        run: npm run build
+
+      - name: Lint (informativo — no bloquea todavía)
+        # Hay ~208 errores preexistentes (mayoría no-unused-vars). Cuando se
+        # limpien, quitar continue-on-error para que el lint sea gate duro.
+        run: npm run lint
+        continue-on-error: true
