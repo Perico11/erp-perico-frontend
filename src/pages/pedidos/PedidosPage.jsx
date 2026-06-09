@@ -274,22 +274,42 @@ export default function PedidosPage() {
   const [confirm, ConfirmEl] = useConfirm();
   /* NDA gate — pendingProd guarda el pedido a iniciar mientras el usuario lee el NDA */
   const [pendingProd, setPendingProd] = useState(null);
+  /* FIX jun 2026 (auditoría M2): "Ir al pedido" desde Órdenes navega con ?focus=
+     — antes PedidosPage lo ignoraba (aterrizaba sin contexto). Ahora resalta y
+     hace scroll a esa card. */
+  const [focusId, setFocusId] = useState(null);
 
-  /* Si la URL trae ?nuevo=NombreProducto, abrir modal con prefill */
+  /* Si la URL trae ?nuevo=NombreProducto, abrir modal; ?focus=ID → resaltar card */
   useEffect(() => {
     const nuevo = searchParams.get('nuevo');
+    const focus = searchParams.get('focus');
     if (nuevo) {
       setPrefillProducto(nuevo);
       setShowNuevo(true);
-      /* Limpiar el query param para que un refresh no vuelva a abrir el modal */
+    }
+    if (focus) setFocusId(focus);
+    if (nuevo || focus) {
+      /* Limpiar el query param para que un refresh no vuelva a disparar. */
       const params = new URLSearchParams(searchParams);
-      params.delete('nuevo');
+      params.delete('nuevo'); params.delete('focus');
       setSearchParams(params, { replace: true });
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
 
   const { data, loading, reload } = useApiData(() => api.getPedidos(), [], 8000);
+
+  /* Scroll + realce a la card enfocada (?focus=) cuando llegue la data */
+  useEffect(() => {
+    if (!focusId || loading) return;
+    const el = document.getElementById('ped-' + focusId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const t = setTimeout(() => setFocusId(null), 2600);
+      return () => clearTimeout(t);
+    }
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [focusId, loading, data]);
   /* Trazabilidad: para resolver el lote asociado a cada pedido y mostrar las
      acciones de state machine directamente en la card. Polling lento — el WS
      trae los cambios en tiempo real. */
@@ -667,7 +687,7 @@ export default function PedidosPage() {
             const mostrarEliminar = esAdmin && !p._esOrdenInterna;
             const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
             return (
-              <div key={p.id} style={S.pedidoCard(p.estado, p.esPrueba)}>
+              <div key={p.id} id={'ped-' + p.id} style={{ ...S.pedidoCard(p.estado, p.esPrueba), ...(p.id === focusId ? { outline: '2px solid var(--lp-brand-600)', outlineOffset: 2, boxShadow: '0 0 0 4px color-mix(in srgb, var(--lp-brand-600) 18%, transparent)' } : {}) }}>
                 {/* Header: folio + badge estado + prueba + cronómetro */}
                 <div style={S.pedidoHeader}>
                   <span style={S.pedidoId}>{p._folio || p.id}</span>
