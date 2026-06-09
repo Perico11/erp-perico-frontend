@@ -8,6 +8,7 @@ import {
   ESTADO_LOTE_COLOR,
 } from '../lib/loteTransiciones';
 import PruebaBadge from './ui/PruebaBadge';
+import useConfirm from '../hooks/useConfirm';
 
 /* Iconos SVG line (sin emojis) para los botones QC */
 const IcoCheck = ({ size = 14 }) => (
@@ -173,6 +174,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
   const navigate = useNavigate();
   const [busy, setBusy] = useState('');
   const [qcMode, setQcMode] = useState(null); /* 'aprobarQC' | 'rechazarQC' | null */
+  const [confirm, ConfirmEl] = useConfirm();
 
   /* Resolver el lote asociado al pedido */
   const lote = useMemo(() => {
@@ -290,14 +292,34 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
     && (userRol === 'almacen' || userRol === 'admin' || userRol === 'tecnico');
 
   const handleEnviarRecolectar = async () => {
+    /* FEFO: un lote CADUCADO no sale a recolección. El backend lo bloquea (guard
+       en la state machine); aquí la UX: admin puede forzar con nota (auditado),
+       el resto recibe aviso. */
+    const caducado = lote.fechaCaducidad && new Date(lote.fechaCaducidad).getTime() < Date.now();
+    let overridePayload = {};
+    if (caducado) {
+      const fecha = String(lote.fechaCaducidad).slice(0, 10);
+      if (userRol !== 'admin') {
+        if (onError) onError(`Lote CADUCADO (venció ${fecha}). No puede salir a recolección — avisa a un administrador.`);
+        return;
+      }
+      const nota = await confirm(
+        `Este lote está CADUCADO (venció ${fecha}). Despacharlo de todas formas requiere tu autorización y queda en auditoría. Indica el motivo.`,
+        { title: 'Forzar despacho de lote caducado', confirmText: 'Forzar con esta nota', danger: true,
+          prompt: { label: 'Motivo del override', placeholder: 'Ej: cliente lo acepta, uso no crítico…', required: true, minLength: 5, maxLength: 300, rows: 2 } }
+      );
+      if (!nota) return;
+      overridePayload = { overrideCaducidad: true, notaOverride: nota };
+    }
     setBusy('enviarRecolectar');
     try {
       const elegibles = sublotes.filter(s => s.estado === 'envasado' && !s.esMerma).length;
       const r = await api.post('/api/sublotes/scan-bulk', {
         loteId: lote.id,
         accion: 'marcarRecoleccion',
+        ...overridePayload,
       });
-      if (onSuccess) onSuccess(`${elegibles} sublote(s) listos — notificado a Luis`);
+      if (onSuccess) onSuccess(caducado ? `Lote caducado despachado con override — notificado a Luis` : `${elegibles} sublote(s) listos — notificado a Luis`);
     } catch (e) {
       if (onError) onError(e.message || 'No se pudo enviar a recolectar');
     } finally {
@@ -307,6 +329,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
 
   return (
     <div style={S.wrap}>
+      {ConfirmEl}
       {/* Header: lote asociado + estado */}
       <div style={S.loteHeader}>
         <span style={{ fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Lote:</span>

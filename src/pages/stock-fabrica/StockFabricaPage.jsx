@@ -1731,19 +1731,39 @@ export default function StockFabricaPage() {
   const handleEnviarRecolectar = useCallback(async (lote) => {
     const envasados = (lote.sublotes || []).filter(s => s.estado === 'envasado' && !s.esMerma);
     if (envasados.length === 0) return showToast('No hay sublotes envasados para enviar a recolección');
-    const ok = await confirm(
-      `Marcar ${envasados.length} sublote(s) de ${lote.codigoLote || lote.codigo} como "listos para recolectar". Luis recibirá notificación inmediata.`,
-      { confirmText: 'Enviar a recolectar', title: 'Enviar a recolectar' }
-    );
-    if (!ok) return;
+
+    /* FEFO: un lote CADUCADO no puede salir a recolección. El backend lo bloquea
+       (guard en la state machine); aquí damos la UX correcta: si es admin, se le
+       pide autorización con nota (override auditado); si no, se le avisa. */
+    const caducado = lote.fechaCaducidad && new Date(lote.fechaCaducidad).getTime() < Date.now();
+    let overridePayload = {};
+    if (caducado) {
+      const fecha = String(lote.fechaCaducidad).slice(0, 10);
+      if (rol !== 'admin') {
+        return showToast(`Lote CADUCADO (venció ${fecha}). No puede salir a recolección — avisa a un administrador.`);
+      }
+      const nota = await confirm(
+        `Este lote está CADUCADO (venció ${fecha}). Despacharlo de todas formas requiere tu autorización y queda en auditoría. Indica el motivo.`,
+        { title: 'Forzar despacho de lote caducado', confirmText: 'Forzar con esta nota', danger: true,
+          prompt: { label: 'Motivo del override', placeholder: 'Ej: cliente lo acepta, uso no crítico…', required: true, minLength: 5, maxLength: 300, rows: 2 } }
+      );
+      if (!nota) return;
+      overridePayload = { overrideCaducidad: true, notaOverride: nota };
+    } else {
+      const ok = await confirm(
+        `Marcar ${envasados.length} sublote(s) de ${lote.codigoLote || lote.codigo} como "listos para recolectar". Luis recibirá notificación inmediata.`,
+        { confirmText: 'Enviar a recolectar', title: 'Enviar a recolectar' }
+      );
+      if (!ok) return;
+    }
     try {
-      await api.post('/api/sublotes/scan-bulk', { loteId: lote.id, accion: 'marcarRecoleccion' });
+      await api.post('/api/sublotes/scan-bulk', { loteId: lote.id, accion: 'marcarRecoleccion', ...overridePayload });
       reloadTraz();
-      showToast(`${envasados.length} sublote(s) listos — notificado a Luis`);
+      showToast(caducado ? `Lote caducado despachado con override — notificado a Luis` : `${envasados.length} sublote(s) listos — notificado a Luis`);
     } catch (err) {
       showToast('Error: ' + (err.message || 'No se pudo enviar a recolectar'));
     }
-  }, [reloadTraz, showToast, confirm]);
+  }, [reloadTraz, showToast, confirm, rol]);
 
   /* Sprint G-1: anular sublote mal capturado. El backend repone envase/tapa
      al stock y marca el sublote como cancelado:true para auditoría (no se
