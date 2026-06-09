@@ -292,7 +292,7 @@ function SecureViewInner({ context, productoNombre, children, user }) {
           }}
         >
           <div style={{ maxWidth: 480 }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+            <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center' }}><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
             <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 8 }}>
               Información protegida — vista pausada
             </div>

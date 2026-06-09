@@ -182,7 +182,7 @@ export default function PosAliasesTab() {
           borderRadius: 'var(--lp-radius)',
           padding: 20, maxWidth: 560, margin: '40px auto', textAlign: 'center',
         }}>
-          <div style={{ fontSize: 36, marginBottom: 8 }}>⚠</div>
+          <div style={{ marginBottom: 8, color: 'var(--lp-warning-600)', display: 'flex', justifyContent: 'center' }}><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8, color: 'var(--lp-warning-700)' }}>
             Server desactualizado
           </div>

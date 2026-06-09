@@ -41,10 +41,10 @@ const COLORES_RAPIDOS = [
 ];
 
 const SECTIONS = [
-  { id: 'colores',    label: 'Colores',    icon: '🎨' },
+  { id: 'colores',    label: 'Colores',    icon: '●' },
   { id: 'tipografia', label: 'Tipografía', icon: 'Aa' },
   { id: 'forma',      label: 'Forma',      icon: '◆' },
-  { id: 'logos',      label: 'Logos',      icon: '🖼' },
+  { id: 'logos',      label: 'Logos',      icon: '▣' },
   { id: 'identidad',  label: 'Identidad',  icon: '✦' },
 ];
 

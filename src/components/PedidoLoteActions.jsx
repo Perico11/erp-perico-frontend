@@ -336,7 +336,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
               onClick={handleEnviarRecolectar}
               title="Marcar todos los sublotes envasados como listos — Luis recibe notificación"
             >
-              {busy === 'enviarRecolectar' ? '…' : '🚚 Enviar a recolectar'}
+              {busy === 'enviarRecolectar' ? '…' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Enviar a recolectar</span>}
             </button>
           )}
 
@@ -381,8 +381,8 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
           <div style={S.actions}>
             {acciones.map(a => renderBoton(a))}
             {puedeEnvasar && (
-              <button style={S.btn('info')} onClick={() => navigate('/stock-fabrica')}>
-                📦 Envasar
+              <button style={{ ...S.btn('info'), display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }} onClick={() => navigate('/stock-fabrica')}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>Envasar
               </button>
             )}
             {tieneSublotes && (
