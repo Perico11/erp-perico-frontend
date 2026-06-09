@@ -20,8 +20,9 @@ export const TRANSICIONES_LOTE = {
   /* FIX jun 2026 (K5): sync con backend. Antes faltaba 'producido' en
      `desde` — el backend acepta envasar directo desde producido (QC opcional
      desde fix de jun) pero el frontend no mostraba el botón. */
-  registrarEnvasado:   { desde: ['producido','qc_aprobado','en_envasado'], a: 'en_envasado', roles: ['tecnico','almacen','admin'] },
-  marcarEnvasado:      { desde: ['producido','qc_aprobado','en_envasado'], a: 'envasado', roles: ['tecnico','almacen','admin'] },
+  /* jun 2026: envasado = Enrique (técnico)/admin. Josué (almacén) NO envasa. */
+  registrarEnvasado:   { desde: ['producido','qc_aprobado','en_envasado'], a: 'en_envasado', roles: ['tecnico','admin'] },
+  marcarEnvasado:      { desde: ['producido','qc_aprobado','en_envasado'], a: 'envasado', roles: ['tecnico','admin'] },
   cancelarLote:        { desde: ['pendiente','aceptado','en_produccion','producido','qc_hold','en_envasado'], a: 'cancelado', roles: ['admin'] },
 };
 

@@ -9,6 +9,7 @@ import {
 } from '../lib/loteTransiciones';
 import PruebaBadge from './ui/PruebaBadge';
 import useConfirm from '../hooks/useConfirm';
+import { QRScanner } from './QRModal';
 
 /* Iconos SVG line (sin emojis) para los botones QC */
 const IcoCheck = ({ size = 14 }) => (
@@ -174,6 +175,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
   const navigate = useNavigate();
   const [busy, setBusy] = useState('');
   const [qcMode, setQcMode] = useState(null); /* 'aprobarQC' | 'rechazarQC' | null */
+  const [scanRecepcion, setScanRecepcion] = useState(false); /* escáner QR de recepción Terán */
   const [confirm, ConfirmEl] = useConfirm();
 
   /* Resolver el lote asociado al pedido */
@@ -256,8 +258,10 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
   };
 
   /* Shortcut: ir a Stock Fábrica para envasar / Stock Fábrica para gestionar sublotes */
+  /* jun 2026: envasado = Enrique (técnico)/admin. Josué (almacén) ya NO envasa
+     — su flujo arranca en "Enviar a recolectar". */
   const puedeEnvasar = (lote.estado === 'qc_aprobado' || lote.estado === 'producido' || lote.estado === 'en_envasado' || lote.estado === 'envasado')
-                     && (userRol === 'tecnico' || userRol === 'almacen' || userRol === 'admin');
+                     && (userRol === 'tecnico' || userRol === 'admin');
   const tieneSublotes = sublotes.length > 0;
 
   /* FIX jun 2026 (Sprint Q1): "Enviar a recolectar" como botón principal
@@ -327,9 +331,52 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
     }
   };
 
+  /* jun 2026 (decisión owner): "al recibir en Terán debe abrir el QR para
+     escanear el lote y se registre en automático". El botón ya NO navega a
+     otra pantalla — abre el escáner aquí mismo. Al leer el QR de la cubeta
+     impresa por Enrique, el código resuelve el sublote y dispara
+     escanearRecibirTeran (en_camino → en_stock_teran = alta como PT, o
+     tote_activo si viene en TOTE). El escaneo físico ES la verificación:
+     el endpoint /sublotes/scan resuelve el sublote por el código leído, así
+     que el guard scanCod===cod se cumple intrínsecamente (no hay bypass
+     manual). Si se lee el QR del LOTE completo, ofrece recibir todo en bulk. */
+  const handleScanRecepcion = async (result) => {
+    setScanRecepcion(false);
+    const code = (result?.cod || result?.raw || '').trim();
+    if (!code) { if (onError) onError('QR no reconocido'); return; }
+    setBusy('recibirTeran');
+    try {
+      const r = await api.escanearSublote(code, 'escanearRecibirTeran');
+      const s = r?.sublote;
+      const esTote = s?.claseSublote === 'tote' || s?.tipo === 'tote';
+      if (onSuccess) onSuccess(`${s?.cod || code} recibido en Terán${esTote ? ' (TOTE activo en buffer)' : ' (alta como PT)'}`);
+    } catch (err) {
+      const data = err?.data;
+      if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
+        const ok = await confirm(
+          `Escaneaste el QR del LOTE ${data.codigoLote || ''}. ¿Recibir TODOS los sublotes en camino del lote?`,
+          { confirmText: 'Recibir todo el lote' }
+        );
+        if (ok) {
+          try {
+            const r2 = await api.escanearLoteBulk({ loteId: data.loteId, accion: 'escanearRecibirTeran' });
+            const n = r2?.procesados?.length || 0;
+            const omit = r2?.omitidos?.length || 0;
+            if (onSuccess) onSuccess(`Lote recibido: ${n} sublote(s)${omit ? ` · ${omit} omitido(s)` : ''}`);
+          } catch (e2) { if (onError) onError(e2.message || 'Bulk scan falló'); }
+        }
+      } else {
+        if (onError) onError(err.message || 'El QR no coincide con un sublote en camino');
+      }
+    } finally {
+      setBusy('');
+    }
+  };
+
   return (
     <div style={S.wrap}>
       {ConfirmEl}
+      {scanRecepcion && <QRScanner onResult={handleScanRecepcion} onClose={() => setScanRecepcion(false)} />}
       {/* Header: lote asociado + estado */}
       <div style={S.loteHeader}>
         <span style={{ fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Lote:</span>
@@ -371,7 +418,10 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
             </button>
           )}
 
-          {/* O4: shortcut a recepción Terán cuando hay sublotes en camino */}
+          {/* O4 + jun 2026: recibir en Terán = ABRIR EL ESCÁNER aquí mismo.
+              Antes navegaba a /almacen-recepcion (2 pasos). Ahora el botón abre
+              la cámara QR inline → al leer la cubeta se da de alta en automático
+              (sin botón de "confirmar" manual que se salte el escaneo físico). */}
           {puedeRecibirEnTeran && (
             <button
               style={{
@@ -382,10 +432,16 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
                 gridColumn: '1 / -1',
                 marginBottom: 4,
               }}
-              onClick={() => navigate('/almacen-recepcion')}
-              title={`${sublotesEnCamino.length} sublote(s) en camino — escanear QR para recibir`}
+              disabled={busy === 'recibirTeran'}
+              onClick={() => setScanRecepcion(true)}
+              title={`${sublotesEnCamino.length} sublote(s) en camino — escanear QR de la cubeta para recibir`}
             >
-              Recibir en Terán · escanear QR ({sublotesEnCamino.length})
+              {busy === 'recibirTeran' ? 'Recibiendo…' : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="14" x2="14" y2="21"/><line x1="21" y1="14" x2="21" y2="21"/><line x1="17.5" y1="17.5" x2="17.5" y2="17.5"/></svg>
+                  Recibir en Terán · escanear QR ({sublotesEnCamino.length})
+                </span>
+              )}
             </button>
           )}
 

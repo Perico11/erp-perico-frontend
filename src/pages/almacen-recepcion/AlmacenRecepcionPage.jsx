@@ -112,9 +112,6 @@ const S = {
 const QR_ICON = (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2" /><path d="M3 12h18" /></svg>
 );
-const CHECK_ICON = (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" /></svg>
-);
 const TRUCK_ICON = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 4h13v12H1z" /><path d="M14 8h4l3 3v5h-7" /><circle cx="5.5" cy="18.5" r="2" /><circle cx="17.5" cy="18.5" r="2" /></svg>
 );
@@ -276,19 +273,9 @@ export default function AlmacenRecepcionPage() {
   const lista = filter === 'en_camino' ? sublotesEnCamino : sublotesEnAlmacen;
 
   /* Recibir un sublote en Terán vía state machine */
-  const recibirSublote = useCallback(async (sublote) => {
-    setBusy(sublote.cod);
-    try {
-      await api.transicionSublote(sublote.cod, 'escanearRecibirTeran', { usuario: userName });
-      reload();
-      const esTote = sublote.claseSublote === 'tote' || sublote.tipo === 'tote';
-      showToast(`${sublote.cod} recibido${esTote ? ' (TOTE activo en buffer)' : ''}`);
-    } catch (err) {
-      showToast('Error: ' + (err.message || 'No se pudo recibir'), true);
-    } finally {
-      setBusy(null);
-    }
-  }, [userName, reload, showToast]);
+  /* jun 2026: se eliminó `recibirSublote` (confirmación manual). La recepción
+     en Terán ahora es SOLO vía escaneo físico del QR de la cubeta — ver
+     handleScanResult. No hay camino que se salte el escáner. */
 
   /* Scanner: dispatch al endpoint /sublotes/scan */
   const handleScanResult = useCallback(async (result) => {
@@ -439,10 +426,17 @@ export default function AlmacenRecepcionPage() {
                   )}
                   {filter === 'en_camino' ? (
                     puedeRecibir ? (
-                      <button type="button" data-id="recepcion.btn.confirmar" data-rol="almacen,admin"
+                      /* jun 2026 (decisión owner): recepción = SOLO vía escaneo
+                         físico del QR de la cubeta. Antes este botón confirmaba
+                         directo (recibirSublote) saltándose el escaneo. Ahora
+                         abre la cámara; al leer el QR de la cubeta impresa por
+                         Enrique se da de alta en automático (handleScanResult →
+                         escanearRecibirTeran). El escaneo ES la verificación. */
+                      <button type="button" data-id="recepcion.btn.escanear" data-rol="almacen,admin"
                         style={{ ...actBase, ...S.actPrimary, opacity: isBusy ? 0.6 : 1 }} disabled={isBusy}
-                        onClick={() => recibirSublote(s)}>
-                        {CHECK_ICON} {isBusy ? 'Recibiendo…' : (esTote ? 'Recibir TOTE' : 'Confirmar recepción')}
+                        onClick={() => setScanning(true)}
+                        title="Lee el QR de la cubeta para darla de alta en Terán">
+                        {QR_ICON} {isBusy ? 'Recibiendo…' : (esTote ? 'Escanear TOTE para recibir' : 'Escanear QR para recibir')}
                       </button>
                     ) : (
                       <button style={{ ...actBase, ...S.actDone }} disabled>En camino — espera a que llegue</button>
