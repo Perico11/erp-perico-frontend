@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
@@ -52,6 +52,11 @@ const S = {
 export default function TopBar({ title }) {
   const { logout, user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  /* En Inicio el cuerpo del Dashboard ya muestra "Hola, {nombre} · fecha", así que
+     aquí NO repetimos el saludo (evita el doble "Hola Emmanuel"). En el resto de
+     pantallas sí, porque su cuerpo no saluda. */
+  const enInicio = location.pathname === '/';
   const isDesktop = useIsDesktop();
   const [count, setCount] = useState(0);
   /* Branding configurable desde Admin → Apariencia. Se actualiza vía evento custom. */
@@ -113,8 +118,9 @@ export default function TopBar({ title }) {
               <span style={S.brandSep} aria-hidden="true" />
               <h1 style={S.title}>{title}</h1>
             </>
-          ) : firstName ? (
-            /* Escritorio: saludo personalizado + pendientes (antes el topbar izq quedaba vacío). */
+          ) : firstName && !enInicio ? (
+            /* Escritorio: saludo personalizado + pendientes (antes el topbar izq quedaba vacío).
+               En Inicio se omite para no duplicar el saludo del cuerpo del Dashboard. */
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.18, minWidth: 0 }}>
               <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' }}>Hola {firstName}</span>
               <span style={{ fontSize: 12, fontWeight: 500, color: count > 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)' }}>{pendText}</span>
