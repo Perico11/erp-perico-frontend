@@ -22,3 +22,22 @@ const storageMock = () => {
 };
 Object.defineProperty(window, 'sessionStorage', { value: storageMock() });
 Object.defineProperty(window, 'localStorage', { value: storageMock() });
+
+/* Mock de matchMedia — jsdom no lo implementa. Lo usa useIsDesktop (rediseño
+   verde) para decidir layout escritorio/móvil. Por defecto devolvemos true
+   (escritorio) para que los tests rendericen el layout de tablas/grids. */
+if (!window.matchMedia) {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: (query) => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+  });
+}

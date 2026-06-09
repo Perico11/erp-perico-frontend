@@ -20,8 +20,12 @@ vi.mock('../services/api', () => ({
   },
 }));
 
+/* El gate del botón "+ Registrar devolución" cambió de 'configuracion' a
+   'devoluciones' (fix jun 2026: 'configuracion' solo lo tenía admin/compras y
+   bloqueaba a técnico/almacén que reciben quejas físicas). El mock concede
+   'devoluciones' para reflejar el permiso real que ahora gatea el botón. */
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ can: (p) => p === 'configuracion' }),
+  useAuth: () => ({ can: (p) => p === 'devoluciones' }),
 }));
 
 describe('DevolucionesPanel', () => {

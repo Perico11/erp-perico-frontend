@@ -33,15 +33,19 @@ describe('api service', () => {
     expect(result.user.rol).toBe('admin');
   });
 
-  it('métodos v2 mandan paths correctos', async () => {
+  it('métodos GET mandan paths correctos', async () => {
+    /* Los wrappers v2 (getMPv2/getFormulasV2 → /api/mp/v2, /api/formulas/v2)
+       eran del SPA legacy (static/modules/formulas_v2.js). El cliente React
+       consolidó MP/fórmulas en el maestro: getMaestroMP → /api/maestro-mp y
+       getFormulas → /api/formulas/todas. Verificamos esos paths canónicos. */
     global.fetch.mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ ok: true }),
     });
-    await api.getMPv2();
-    expect(global.fetch).toHaveBeenCalledWith('/api/mp/v2', expect.anything());
-    await api.getFormulasV2();
-    expect(global.fetch).toHaveBeenCalledWith('/api/formulas/v2', expect.anything());
+    await api.getMaestroMP();
+    expect(global.fetch).toHaveBeenCalledWith('/api/maestro-mp', expect.anything());
+    await api.getFormulas();
+    expect(global.fetch).toHaveBeenCalledWith('/api/formulas/todas', expect.anything());
   });
 
   it('createOC manda POST con data', async () => {

@@ -76,7 +76,8 @@ describe('CycleCountPage', () => {
   it('botón Finalizar conteo está visible', async () => {
     render(<CycleCountPage />);
     await waitFor(() => {
-      expect(screen.getByText('Finalizar conteo')).toBeInTheDocument();
+      /* Rediseño verde: el botón ahora rotula "Finalizar conteo (firma PIN)". */
+      expect(screen.getByText(/Finalizar conteo/)).toBeInTheDocument();
     });
   });
 });

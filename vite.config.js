@@ -16,6 +16,13 @@ export default defineConfig({
   define: {
     __BUILD_TIME__: JSON.stringify(BUILD_TIME),
   },
+  /* JSX runtime automático también para el transform de esbuild que usa Vitest.
+     Sin esto, los .test.jsx se compilaban con runtime CLÁSICO (React.createElement)
+     y fallaban con "React is not defined" porque no importan React. (Regresión
+     tras el bump a Vite 8 / plugin-react 6.) */
+  esbuild: {
+    jsx: 'automatic',
+  },
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,

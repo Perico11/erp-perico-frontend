@@ -60,7 +60,12 @@ describe('MargenesDashboard', () => {
       expect(screen.getByText('Productos totales')).toBeInTheDocument();
       expect(screen.getByText('Con precio venta')).toBeInTheDocument();
       expect(screen.getByText('Sin precio venta')).toBeInTheDocument();
-      expect(screen.getByText('No rentables')).toBeInTheDocument();
+      /* "No rentables" aparece como label de KPI Y como <option> del filtro
+         (rediseño verde movió los filtros a un <select>). Scopeamos al label
+         del KPI (un <div>, no la <option>) para evitar el match múltiple. */
+      const noRentables = screen.getAllByText('No rentables')
+        .filter((el) => el.tagName !== 'OPTION');
+      expect(noRentables.length).toBeGreaterThan(0);
       expect(screen.getByText('Margen promedio')).toBeInTheDocument();
       expect(screen.getByText('Margen mensual')).toBeInTheDocument();
     });
@@ -84,11 +89,13 @@ describe('MargenesDashboard', () => {
     });
   });
 
-  it('los filtros existen y son clicables', async () => {
+  it('los filtros existen como opciones del select', async () => {
+    /* Rediseño verde: los filtros pasaron de pills clicables a un <select>.
+       Verificamos que las opciones canónicas existan como <option>. */
     render(<MargenesDashboard />);
     await waitFor(() => screen.getByText('BLANCO MATE 4.0'));
-    expect(screen.getByText(/Rentables/)).toBeInTheDocument();
-    expect(screen.getByText(/No rentables/)).toBeInTheDocument();
-    expect(screen.getByText(/Sin precio/)).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: /Rentables \(≥30%\)/ })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'No rentables' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Sin precio' })).toBeInTheDocument();
   });
 });
