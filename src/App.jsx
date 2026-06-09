@@ -23,6 +23,7 @@ const AdminPage           = lazy(() => import('./pages/admin/AdminPage'));
 const StockFabricaPage    = lazy(() => import('./pages/stock-fabrica/StockFabricaPage'));
 const CycleCountPage      = lazy(() => import('./pages/cycle-count/CycleCountPage'));
 const AlmacenRecepcionPage = lazy(() => import('./pages/almacen-recepcion/AlmacenRecepcionPage'));
+const FlujoPage           = lazy(() => import('./pages/flujo/FlujoPage'));
 const NotificacionesPage  = lazy(() => import('./pages/notificaciones/NotificacionesPage'));
 const DevolucionesPage    = lazy(() => import('./pages/devoluciones/DevolucionesPage'));
 const DevolucionesMPPage  = lazy(() => import('./pages/devoluciones-mp/DevolucionesMPPage'));
@@ -136,6 +137,7 @@ export default function App() {
               <Route path="inventario"     element={<RoleRoute roles={['admin','tecnico','compras','almacen','inventario']}><ErrorBoundary><InventarioPage /></ErrorBoundary></RoleRoute>} />
               <Route path="ordenes"        element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><OrdenesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pedidos"        element={<RoleRoute roles={['admin','almacen','tecnico']}><ErrorBoundary><PedidosPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="flujo"          element={<RoleRoute roles={['admin','tecnico','almacen','recolector','recoleccion']}><ErrorBoundary><FlujoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="produccion"     element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><ProduccionPage /></ErrorBoundary></RoleRoute>} />
               <Route path="stock-fabrica"  element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><StockFabricaPage /></ErrorBoundary></RoleRoute>} />
               <Route path="recoleccion"    element={<RoleRoute roles={['admin','recolector','recoleccion','almacen']}><ErrorBoundary><RecoleccionPage /></ErrorBoundary></RoleRoute>} />

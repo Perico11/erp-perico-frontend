@@ -343,7 +343,7 @@ const PRESENTACIONES_META = [
 /* ═══════════════════════════════════════════════════════════════════ */
 /* ENVASADO MODAL                                                     */
 /* ═══════════════════════════════════════════════════════════════════ */
-function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
+export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   /* REGLA DE NEGOCIO: TOTE indivisible.
      Un TOTE es un contenedor de transporte a granel. Si el lote se envasa en
      TOTE, va TODO el lote en uno o más TOTEs del MISMO tipo — nunca mezclado
@@ -807,7 +807,7 @@ function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
 /* El backend crea sublotes hijo con esHijoDe=toteCod y decrementa    */
 /* litrosRestante del TOTE. Si el TOTE se vacía pasa a tote_vaciado.  */
 /* ═══════════════════════════════════════════════════════════════════ */
-function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
+export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   const sublotes = lote.sublotes || [];
   /* TOTEs candidatos = sublotes con estado tote_activo y litrosRestante > 0.
      Compat: viejos sublotes sin estado se infieren por tipo==='tote' */
@@ -991,7 +991,7 @@ function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
 /* Permite imprimir uno o varios tickets con el QR ya generado y      */
 /* asignado al sublote — para pegarlo físicamente al envase.           */
 /* ═══════════════════════════════════════════════════════════════════ */
-function SubloteQRPrintModal({ payload, onClose }) {
+export function SubloteQRPrintModal({ payload, onClose }) {
   const { sublotes = [], lote, isTote, q, tipo, litTotal, desdeTote } = payload || {};
   const sublote = sublotes[0];
   const cantidadDefault = sublote ? (isTote ? 1 : Number(sublote.qty) || 1) : 1;

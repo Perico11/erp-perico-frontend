@@ -127,8 +127,9 @@ const ACCION_BTN = {
   },
 };
 
-/* Estado UI: agrupa sublote.estado en buckets visuales para el rol Luis */
-function bucketOfSublote(s) {
+/* Estado UI: agrupa sublote.estado en buckets visuales para el rol Luis.
+   Exportada para reuso en la pantalla unificada /flujo. */
+export function bucketOfSublote(s) {
   const e = s?.estado;
   if (e === 'envasado' || e === 'en_recoleccion') return 'pendientes';
   if (e === 'en_camino') return 'enCamino';

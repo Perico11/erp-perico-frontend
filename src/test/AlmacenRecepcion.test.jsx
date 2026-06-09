@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import AlmacenRecepcionPage from '../pages/almacen-recepcion/AlmacenRecepcionPage';
+
+/* jun 2026: la página usa useSearchParams (auto-abrir reenvasar) → necesita Router. */
+const renderPage = () => render(<MemoryRouter><AlmacenRecepcionPage /></MemoryRouter>);
 
 /* Rediseño verde (Sprint AG): AlmacenRecepcionPage opera sobre SUBLOTES
    (lote.sublotes[]), no sobre lotes de nivel superior. Un sublote en estado
@@ -58,7 +62,7 @@ describe('AlmacenRecepcionPage', () => {
   it('muestra los tabs "Por recibir" y "Recibidos hoy"', async () => {
     /* Rediseño verde: los contadores viven en los tabs ("Por recibir · N" /
        "Recibidos hoy · N"), no en KPIs sueltos "En camino/En almacén". */
-    render(<AlmacenRecepcionPage />);
+    renderPage();
     await waitFor(() => {
       expect(screen.getByText(/Por recibir/)).toBeInTheDocument();
       expect(screen.getByText(/Recibidos hoy/)).toBeInTheDocument();
@@ -66,7 +70,7 @@ describe('AlmacenRecepcionPage', () => {
   });
 
   it('por defecto filtra a en_camino (sublotes por recibir)', async () => {
-    render(<AlmacenRecepcionPage />);
+    renderPage();
     await waitFor(() => {
       /* El sublote en_camino de BLANCO MATE aparece en "Por recibir". */
       expect(screen.getByText('BLANCO MATE 4.0')).toBeInTheDocument();
@@ -76,19 +80,20 @@ describe('AlmacenRecepcionPage', () => {
   });
 
   it('botón "Escanear QR" existe', async () => {
-    render(<AlmacenRecepcionPage />);
+    renderPage();
     await waitFor(() => {
-      /* Texto actual: "Escanear QR de recepción". */
-      expect(screen.getByText(/Escanear QR/)).toBeInTheDocument();
+      /* Hero "Escanear QR de recepción" + botón por card "Escanear QR para
+         recibir" → ambos contienen "Escanear QR". */
+      expect(screen.getAllByText(/Escanear QR/).length).toBeGreaterThan(0);
     });
   });
 
-  it('muestra botón de recepción para sublotes en camino', async () => {
-    /* Para un sublote en_camino, almacén ve "Confirmar recepción"
-       (escanearRecibirTeran). El texto "Recibir" anterior ya no existe. */
-    render(<AlmacenRecepcionPage />);
+  it('muestra botón de recepción (solo escaneo) para sublotes en camino', async () => {
+    /* jun 2026: la recepción es SOLO por escaneo físico. El botón por card ya no
+       es "Confirmar recepción" sino "Escanear QR para recibir" (abre la cámara). */
+    renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Confirmar recepción')).toBeInTheDocument();
+      expect(screen.getByText(/Escanear QR para recibir/)).toBeInTheDocument();
     });
   });
 });

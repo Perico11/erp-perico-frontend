@@ -38,6 +38,7 @@ const NAV_ITEMS = [
   { key: 'formulas',     label: 'Fórmulas',     path: '/formulas',      icon: icons.formulas,     perm: 'formulas' },
   { key: 'inventario',   label: 'Inventario',   path: '/inventario',    icon: icons.inventario,   perm: 'inventario' },
   { key: 'pedidos',      label: 'Pedidos',      path: '/pedidos',       icon: icons.pedidos,      perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
+  { key: 'flujo',        label: 'Flujo',        path: '/flujo',         icon: icons.trazabilidad, perm: 'trazabilidad', roles: ['admin','tecnico','almacen','recolector','recoleccion'] },
   { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico','almacen'] },
   { key: 'produccion',   label: 'Producción',   path: '/produccion',    icon: icons.produccion,   perm: 'produccion' },
   { key: 'stockFabrica', label: 'Stock Fábrica',path: '/stock-fabrica', icon: icons.stockFabrica, perm: 'stockFabrica' },

@@ -84,6 +84,7 @@ const SECCIONES = [
   {
     titulo: 'Producción',
     items: [
+      { path: '/flujo',                   label: 'Flujo',         icon: ICONS.traz,          perm: 'trazabilidad', roles: ['admin','tecnico','almacen','recolector','recoleccion'] },
       { path: '/pedidos',                 label: 'Pedidos',       icon: ICONS.pedidos,       perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
       { path: '/ordenes',                 label: 'Órdenes',       icon: ICONS.ordenes,       perm: 'ordenes',     roles: ['admin','tecnico','almacen'] },
       { path: '/produccion',              label: 'Lanzar lote',   icon: ICONS.produccionSub, perm: 'produccion' },
@@ -134,8 +135,8 @@ function tabsParaRol(rol, can) {
     admin:      [inicio, { path: '/inventario', label: 'Inventario', icon: ICONS.inventario }, { path: '/compras', label: 'Compras', icon: ICONS.compras }],
     tecnico:    [inicio, { path: '/pedidos',    label: 'Pedidos',    icon: ICONS.pedidos    }, { path: '/stock-fabrica', label: 'Stock fáb.', icon: ICONS.stockFabrica }],
     compras:    [inicio, { path: '/compras',    label: 'Compras',    icon: ICONS.compras    }, { path: '/inventario', label: 'Inventario', icon: ICONS.inventario }],
-    almacen:    [inicio, { path: '/recoleccion',label: 'Recolección',icon: ICONS.recol      }, { path: '/pedidos', label: 'Pedidos', icon: ICONS.pedidos }],
-    recolector: [inicio, { path: '/recoleccion',label: 'Recolección',icon: ICONS.recol      }, { path: '/trazabilidad', label: 'Trazab.', icon: ICONS.traz }],
+    almacen:    [inicio, { path: '/flujo',      label: 'Flujo',      icon: ICONS.traz       }, { path: '/recoleccion', label: 'Recolección', icon: ICONS.recol }],
+    recolector: [inicio, { path: '/flujo',      label: 'Flujo',      icon: ICONS.traz       }, { path: '/recoleccion', label: 'Recolección', icon: ICONS.recol }],
     inventario: [inicio, { path: '/inventario', label: 'Stock MP',   icon: ICONS.inventario }, { path: '/conteo', label: 'Conteo', icon: ICONS.conteo }],
   };
   return tabs[rol] || tabs.admin;
