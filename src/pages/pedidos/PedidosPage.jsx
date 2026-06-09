@@ -299,11 +299,17 @@ export default function PedidosPage() {
     return Array.isArray(arr) ? arr : [];
   }, [trazData]);
 
+  /* Órdenes: para incluir las ÓRDENES INTERNAS terminadas (sin pedido fuente)
+     en el Historial. Una orden interna ("origen: interna") nunca crea pedido,
+     así que sin esto el trabajo completado por orden directa quedaba invisible
+     en Pedidos. Polling lento — el historial no es time-critical. */
+  const { data: ordData, reload: reloadOrd } = useApiData(() => api.getOrdenes(), [], 30000);
+
   /* Realtime: refrescar cuando hay cambios */
   useRealtimeSync({
     onPedidos: () => reload(),
-    onOrdenes: () => reload(),
-    onTrazabilidad: () => { reload(); reloadTraz(); },
+    onOrdenes: () => { reload(); reloadOrd(); },
+    onTrazabilidad: () => { reload(); reloadTraz(); reloadOrd(); },
   });
 
   const pedidos = useMemo(() => {
@@ -324,8 +330,38 @@ export default function PedidosPage() {
   const pruebas    = pedidos.filter(p => !TERMINALES.includes(p.estado) && p.esPrueba);
   /* Rechazados / cancelados separados del histórico normal */
   const rechazados = pedidos.filter(p => p.estado === 'rechazado' || p.estado === 'cancelado');
-  /* Historial = entregados (operación completada exitosa) */
-  const historial  = pedidos.filter(p => p.estado === 'entregado' && !p.esPrueba);
+
+  /* Órdenes INTERNAS terminadas (entregadas, sin pedido) → entradas equivalentes
+     a un pedido completado, mapeadas a la forma de pedido para reusar la card.
+     `_esOrdenInterna` marca la entrada para ocultar acciones que no aplican a
+     una orden (eliminar pedido). El id se conserva = o.id para que
+     PedidoLoteActions resuelva el lote por ordenId; `_folio` muestra el código
+     legible (OP-…). */
+  const ordenesInternasHist = useMemo(() => {
+    const arr = ordData?.data || ordData || [];
+    return (Array.isArray(arr) ? arr : [])
+      .filter(o => o && !o.eliminado
+        && (o.origen === 'interna' || !o.pedidoId)
+        && o.estado === 'entregado'
+        && !o.esPrueba)
+      .map(o => ({
+        ...o,
+        _esOrdenInterna: true,
+        _folio: o.codigo || o.id,
+        producto: o.producto || o.formula,
+        cantidad: o.cantidad,
+        estado: o.estado,
+        esPrueba: !!o.esPrueba,
+        fecha: o.fecha || o.fechaCreacion || o.fechaRequerida,
+        creadoPor: o.usuario,
+      }));
+  }, [ordData]);
+
+  /* Historial = entregados (operación completada exitosa): pedidos + órdenes internas */
+  const historial  = [
+    ...pedidos.filter(p => p.estado === 'entregado' && !p.esPrueba),
+    ...ordenesInternasHist,
+  ];
 
   const k = useMemo(() => ({
     pendientes: pedidos.filter(p => p.estado === 'pendiente').length,
@@ -625,14 +661,20 @@ export default function PedidosPage() {
                Disponible en cualquier filtro mientras el pedido no esté ya
                eliminado (los terminales sí pueden eliminarse del histórico). */
             const esAdmin = user?.rol === 'admin';
-            const mostrarEliminar = esAdmin;
+            /* Las órdenes internas mostradas en el Historial NO son pedidos:
+               el botón "Eliminar pedido" no aplica (rompería contra un id de
+               orden). Se oculta para esas entradas. */
+            const mostrarEliminar = esAdmin && !p._esOrdenInterna;
             const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
             return (
               <div key={p.id} style={S.pedidoCard(p.estado, p.esPrueba)}>
                 {/* Header: folio + badge estado + prueba + cronómetro */}
                 <div style={S.pedidoHeader}>
-                  <span style={S.pedidoId}>{p.id}</span>
+                  <span style={S.pedidoId}>{p._folio || p.id}</span>
                   <span style={S.estadoBadge(p.estado)}>{ESTADO_LABEL[p.estado] || p.estado}</span>
+                  {p._esOrdenInterna && (
+                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Interna</span>
+                  )}
                   {p.esPrueba && <PruebaBadge size="sm" />}
                   {p.estado === 'en_produccion' && p.fechaInicioProduccion && (
                     <span style={{ marginLeft: 'auto' }}>
