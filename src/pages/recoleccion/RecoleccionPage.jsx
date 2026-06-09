@@ -139,7 +139,11 @@ function bucketOfSublote(s) {
      incorrectamente en tote_activo en lugar de envasado. */
   if (e === 'tote_activo') {
     const ub = s?.ub || 'fabrica';
-    return ub === 'fabrica' ? 'pendientes' : null; /* tote_activo en Terán = en buffer, no pendiente */
+    /* FIX jun 2026: tote_activo en TERÁN = Luis YA lo entregó (Josué lo recibió
+       y está en buffer de re-envase) → cuenta como ENTREGADO en su historial.
+       Antes devolvía null y desaparecía: Luis perdía el registro de la entrega.
+       En fábrica (legacy) sigue siendo pendiente de recoger. */
+    return ub === 'fabrica' ? 'pendientes' : 'entregados';
   }
   /* Compat con sublotes legacy sin estado: usar 'ub' como pista */
   if (s?.ub === 'teran') return 'entregados';
@@ -193,7 +197,10 @@ export default function RecoleccionPage() {
     allLotes.forEach(lote => {
       (lote.sublotes || []).forEach(s => {
         if (s.esMerma) return; /* merma no se recolecta */
-        if (s.claseSublote === 'tote' && s.estado === 'tote_activo') return; /* TOTE activo no se recolecta directo */
+        /* FIX jun 2026: ya NO saltamos tote_activo. Un TOTE tote_activo en Terán
+           es una entrega de Luis YA completada → debe quedar en su historial de
+           "Entregados" (bucketOfSublote lo clasifica). En fábrica (legacy) sigue
+           siendo recolectable como pendiente. */
         out.push({ ...s, _lote: lote });
       });
     });
@@ -509,12 +516,19 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
     litros,
   ].filter(Boolean).join(' · ');
 
+  const bucket = bucketOfSublote(s);
   /* Destino según estado: entregados parten de Terán; resto Fábrica → Terán */
-  const origen = bucketOfSublote(s) === 'entregados' ? 'Almacén Terán' : 'Fábrica';
+  const origen = bucket === 'entregados' ? 'Almacén Terán' : 'Fábrica';
 
   /* Acciones permitidas por la state machine real para este rol.
-     Excluimos cancelarSublote (acción de anulación admin, no del flujo Luis). */
-  const acciones = getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote');
+     Excluimos cancelarSublote (acción de anulación admin, no del flujo Luis).
+     FIX jun 2026: en "Entregados" NO mostramos acciones de recolección — el
+     sublote ya llegó a Terán. (getAccionesSublote aún ofrecería escanearRecoger
+     para un tote_activo, pero el backend lo rechaza si ya está en Terán; aquí
+     evitamos el botón fantasma y dejamos solo el chip "Entregado".) */
+  const acciones = bucket === 'entregados'
+    ? []
+    : getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote');
 
   return (
     <div style={S.card}>
@@ -580,7 +594,7 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
         </div>
       ) : (
         /* Estado terminal (entregado en Terán) — chip "hecho", no botón */
-        bucketOfSublote(s) === 'entregados' && (
+        bucket === 'entregados' && (
           <div style={S.doneChip}>
             <IconCheck size={16} /> Entregado en Terán
           </div>

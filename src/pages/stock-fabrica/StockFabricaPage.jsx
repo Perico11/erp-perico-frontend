@@ -1242,8 +1242,10 @@ function buildLoteAcciones(lote, ctx) {
       dataId: 'stock.btn.transferir-teran', dataRol: 'almacen,admin',
       onClick: () => onTransferir(lote) });
   }
-  /* Re-envasar TOTE */
-  if (canEnvasar && totesSinConsumir.length > 0 && (lote.estado === 'en_almacen' || lote.estado === 'envasado')) {
+  /* Re-envasar TOTE — NO es "envasar inicial": roles SM reenvasarTote =
+     almacen/tecnico/admin. Josué (almacen) lo conserva vía canTransfer aunque
+     ya no pueda envasar. */
+  if ((canEnvasar || canTransfer) && totesSinConsumir.length > 0 && (lote.estado === 'en_almacen' || lote.estado === 'envasado')) {
     acciones.push({ key: 'reenvasar', label: 'Re-envasar tote', icon: null, kind: 'tote',
       dataId: 'stock.btn.reenvasar-tote', dataRol: 'tecnico,almacen,admin',
       onClick: () => onReenvasarTote(lote) });
@@ -1692,7 +1694,13 @@ export default function StockFabricaPage() {
     total: enFabrica.length,
   }), [enFabrica]);
 
-  const canEnvasar = can('envasado') || can('produccion');
+  /* jun 2026 (decisión owner): el envasado lo hace ENRIQUE (técnico)/admin.
+     Josué (almacén) ya NO envasa — antes `can('envasado')` se lo permitía si
+     el permiso estaba activo en su rol, y por eso veía lotes "para envasar" en
+     Stock Fábrica apenas entraban a en_envasado. Ahora gateamos también por rol
+     para empatar con el state machine (registrarEnvasado/marcarEnvasado =
+     tecnico/admin). Josué conserva transferir/recolectar/anular. */
+  const canEnvasar = (rol === 'admin' || rol === 'tecnico') && (can('envasado') || can('produccion'));
   /* §8: enviar a recolectar / transferir a Terán / anular sublote = almacen,admin */
   const canTransfer = rol === 'admin' || rol === 'almacen';
   const canAnular = canTransfer;
