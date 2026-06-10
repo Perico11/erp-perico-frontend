@@ -35,6 +35,10 @@ export const TRANSICIONES_SUBLOTE = {
      prematuramente y saltaba el paso de Luis. */
   escanearRecibirTeran:   { desde: ['en_camino','tote_activo'], a: '__auto__', roles: ['almacen','admin'] },
   reenvasarTote:          { desde: ['tote_activo'], a: '__same__', roles: ['almacen','tecnico','admin'] },
+  /* Cierre MANUAL del TOTE — DECISIÓN OWNER 10 jun 2026 (revierte la auto-merma):
+     el remanente se registra como merma SOLO cuando admin/técnico lo decide.
+     Nota obligatoria (el guard vive en el backend; aquí solo gateo rol/estado). */
+  vaciarTote:             { desde: ['tote_activo'], a: 'tote_vaciado', roles: ['admin','tecnico'] },
   cancelarSublote:        { desde: ['envasado','en_recoleccion'], a: 'cancelado', roles: ['admin','almacen'] },
 };
 
@@ -61,6 +65,7 @@ export const LABELS_ACCION_SUBLOTE = {
   escanearRecoger:      'Voy por él',
   escanearRecibirTeran: 'Recibir',
   reenvasarTote:        'Re-envasar TOTE',
+  vaciarTote:           'Vaciar TOTE (merma)',
   cancelarSublote:      'Anular sublote',
 };
 
@@ -140,6 +145,9 @@ export const NOTIF_TARGETS_POR_EVENTO = {
   'sublote.escanearRecoger':      ['recolector', 'almacen', 'admin'],
   'sublote.escanearRecibirTeran': ['almacen', 'tecnico', 'recolector', 'admin'],
   'sublote.reenvasarTote':        ['tecnico', 'admin'],
+  /* vaciarTote: Josué (almacen) también — el buffer de TOTEs vive en su
+     pantalla de Recepción Terán y debe desaparecer al vaciarse. */
+  'sublote.vaciarTote':           ['admin', 'tecnico', 'almacen'],
 };
 
 function _has(arr, x) { return Array.isArray(arr) && arr.includes(x); }

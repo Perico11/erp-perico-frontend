@@ -1012,17 +1012,18 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
 
           {qty && parseInt(qty) > 0 && (() => {
             const restanteTrasReenv = Math.max(0, litDisponible - litTotal);
-            const seraMerma = restanteTrasReenv > 0.01 && restanteTrasReenv < 1;
+            const remanenteMenorUnLitro = restanteTrasReenv > 0.01 && restanteTrasReenv < 1;
             return (
               <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 8 }}>
                 {parseInt(qty)} {tipo}(s) x {litPorUnidad}L = <strong>{litTotal.toFixed(1)} L</strong>
                 {' · '}Quedaran en tote: <strong>{restanteTrasReenv.toFixed(1)} L</strong>
-                {/* Regla owner jun 2026: remanente < 1L no es envasable — el server
-                    lo registra como merma y vacía el TOTE (el lote puede concluir). */}
-                {seraMerma && (
+                {/* DECISIÓN OWNER 10 jun 2026 (revierte la auto-merma): el remanente
+                    <1L ya NO se merma solo — el TOTE queda activo y el cierre es
+                    manual con la acción "Vaciar TOTE (merma)" de admin/técnico. */}
+                {remanenteMenorUnLitro && (
                   <div style={{ marginTop: 6, color: 'var(--lp-warning-700)', fontWeight: 600 }}>
-                    El remanente de {restanteTrasReenv.toFixed(2)} L es menor a 1 L: se registrará como
-                    MERMA automática y el TOTE quedará vaciado (el lote podrá concluir).
+                    Quedarán {restanteTrasReenv.toFixed(2)} L en el TOTE. El lote seguirá
+                    activo — ciérralo cuando decidas con "Vaciar TOTE (merma)".
                   </div>
                 )}
                 {restanteTrasReenv <= 0.01 && (

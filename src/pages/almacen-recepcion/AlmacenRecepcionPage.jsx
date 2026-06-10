@@ -237,6 +237,29 @@ export default function AlmacenRecepcionPage() {
     }
   }, [reload, showToast, confirm]);
 
+  /* Vaciar TOTE manualmente — DECISIÓN OWNER 10 jun 2026 (revierte la
+     auto-merma): el remanente se registra como MERMA solo cuando admin/técnico
+     lo decide. Nota OBLIGATORIA (guard del backend) — va al historial. */
+  const handleVaciarTote = useCallback(async (tote) => {
+    const lr = typeof tote.litrosRestante === 'number' ? tote.litrosRestante : Number(tote.lit) || 0;
+    const nota = await confirm(
+      `Vas a vaciar el TOTE ${tote.cod}: los ${lr.toFixed(2)} L restantes se registrarán como MERMA y el lote podrá concluir. Indica el motivo (queda en auditoría).`,
+      { title: 'Vaciar TOTE (merma)', confirmText: 'Vaciar y registrar merma', danger: true,
+        prompt: { label: 'Motivo del vaciado', placeholder: 'Ej: remanente no envasable, producto asentado…', required: true, minLength: 5, maxLength: 300, rows: 2 } }
+    );
+    if (!nota) return;
+    setBusy(tote.cod);
+    try {
+      await api.transicionSublote(tote.cod, 'vaciarTote', { nota });
+      reload();
+      showToast(`TOTE ${tote.cod} vaciado — ${lr.toFixed(2)} L registrados como merma`);
+    } catch (e) {
+      showToast('Error: ' + (e.message || 'No se pudo vaciar el TOTE'), true);
+    } finally {
+      setBusy(null);
+    }
+  }, [confirm, reload, showToast]);
+
   /* Gating real: solo admin/almacen reciben en Terán (Enrique está en fábrica). */
   const canAct = rol === 'admin' || rol === 'almacen';
 
@@ -299,6 +322,18 @@ export default function AlmacenRecepcionPage() {
                         onClick={() => setReenvaseFor({ tote, lote: tote._lote })}
                         style={{ width: '100%', marginTop: 10, background: 'var(--lp-brand-600)', color: '#fff', border: 'none', padding: '9px 12px', borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', minHeight: 40 }}>
                         Re-envasar (cubeta / galón / litro)
+                      </button>
+                    )}
+                    {/* Vaciar TOTE (merma) — cierre MANUAL del remanente (decisión
+                        owner 10 jun 2026). El SM espejo gatea admin/técnico; Josué
+                        (almacen) no lo ve. Botón secundario discreto, ancho auto. */}
+                    {getAccionesSublote(tote, rol).includes('vaciarTote') && (
+                      <button type="button" data-id="recepcion.btn.vaciarTote" data-rol="admin,tecnico"
+                        disabled={busy === tote.cod}
+                        onClick={() => handleVaciarTote(tote)}
+                        title={`Registrar los ${(typeof tote.litrosRestante === 'number' ? tote.litrosRestante : Number(tote.lit) || 0).toFixed(2)} L restantes como merma y vaciar el TOTE`}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, width: 'auto', marginTop: 8, background: 'transparent', color: 'var(--lp-danger-600)', border: '1px solid var(--lp-border-subtle)', padding: '8px 12px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', minHeight: 40, opacity: busy === tote.cod ? 0.6 : 1 }}>
+                        {busy === tote.cod ? 'Vaciando…' : 'Vaciar TOTE (merma)'}
                       </button>
                     )}
                   </div>

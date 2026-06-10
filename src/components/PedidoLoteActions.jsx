@@ -3,7 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import {
   getAccionesLote,
+  getAccionesSublote,
   LABELS_ACCION_LOTE,
+  LABELS_ACCION_SUBLOTE,
   ESTADO_LOTE_LABEL,
   ESTADO_LOTE_COLOR,
   ESTADO_SUBLOTE_LABEL,
@@ -345,6 +347,14 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
     && (userRol === 'almacen' || userRol === 'admin');
   const puedeReenvasarTote = totesActivos.length > 0
     && (userRol === 'almacen' || userRol === 'admin' || userRol === 'tecnico');
+  /* Vaciar TOTE (merma) — cierre MANUAL del remanente (decisión owner 10 jun
+     2026, revierte la auto-merma): doble gate rol explícito + SM espejo
+     (getAccionesSublote exige estado tote_activo y rol admin/técnico). */
+  const totesVaciables = totesActivos.filter(s =>
+    (userRol === 'admin' || userRol === 'tecnico') &&
+    getAccionesSublote(s, userRol).includes('vaciarTote')
+  );
+  const puedeVaciarTote = totesVaciables.length > 0;
 
   const handleEnviarRecolectar = async () => {
     /* FEFO: un lote CADUCADO no sale a recolección. El backend lo bloquea (guard
@@ -377,6 +387,29 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
       if (onSuccess) onSuccess(caducado ? `Lote caducado despachado con override — notificado a Luis` : `${elegibles} sublote(s) listos — notificado a Luis`);
     } catch (e) {
       if (onError) onError(e.message || 'No se pudo enviar a recolectar');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  /* Vaciar TOTE — confirm con nota OBLIGATORIA (guard del backend); el
+     remanente se registra como sublote merma y el lote puede concluir. */
+  const handleVaciarTote = async () => {
+    const tote = totesVaciables[0];
+    if (!tote) return;
+    const lr = typeof tote.litrosRestante === 'number' ? tote.litrosRestante : Number(tote.lit) || 0;
+    const nota = await confirm(
+      `Vas a vaciar el TOTE ${tote.cod}: los ${lr.toFixed(2)} L restantes se registrarán como MERMA y el lote podrá concluir. Indica el motivo (queda en auditoría).`,
+      { title: 'Vaciar TOTE (merma)', confirmText: 'Vaciar y registrar merma', danger: true,
+        prompt: { label: 'Motivo del vaciado', placeholder: 'Ej: remanente no envasable, producto asentado…', required: true, minLength: 5, maxLength: 300, rows: 2 } }
+    );
+    if (!nota) return;
+    setBusy('vaciarTote');
+    try {
+      await api.transicionSublote(tote.cod, 'vaciarTote', { nota });
+      if (onSuccess) onSuccess(`TOTE ${tote.cod} vaciado — ${lr.toFixed(2)} L registrados como merma`);
+    } catch (e) {
+      if (onError) onError(e.message || 'No se pudo vaciar el TOTE');
     } finally {
       setBusy('');
     }
@@ -517,6 +550,29 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
               title={`${totesActivos.length} TOTE(s) activos — re-envasar en cubeta/galón/litro`}
             >
               Re-envasar TOTE en Terán ({totesActivos.length})
+            </button>
+          )}
+
+          {/* Vaciar TOTE (merma) — cierre MANUAL del remanente (decisión owner
+              10 jun 2026). Secundario discreto, ancho auto (nunca 100% en
+              desktop): el wrap es flex column → alignSelf evita el stretch. */}
+          {puedeVaciarTote && (
+            <button
+              style={{
+                alignSelf: 'flex-start',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 12px', fontSize: 11.5, fontWeight: 600,
+                fontFamily: 'var(--lp-font-sans)', cursor: 'pointer',
+                borderRadius: 8, minHeight: 36, marginBottom: 4,
+                background: 'transparent',
+                border: '1px solid var(--lp-border-subtle)',
+                color: 'var(--lp-danger-600)',
+              }}
+              disabled={!!busy}
+              onClick={handleVaciarTote}
+              title={`Registrar el remanente del TOTE ${totesVaciables[0]?.cod || ''} como merma y concluir el lote`}
+            >
+              {busy === 'vaciarTote' ? 'Vaciando…' : LABELS_ACCION_SUBLOTE.vaciarTote}
             </button>
           )}
 
