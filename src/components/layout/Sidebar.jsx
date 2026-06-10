@@ -16,6 +16,7 @@ const icons = {
   produccion:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
   stockFabrica: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>,
   recoleccion:  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
+  recepcion:    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><polyline points="7 12 12 14 17 12"/></svg>,
   compras:      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>,
   trazabilidad: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>,
   admin:        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
@@ -38,11 +39,18 @@ const NAV_ITEMS = [
   { key: 'formulas',     label: 'Fórmulas',     path: '/formulas',      icon: icons.formulas,     perm: 'formulas' },
   { key: 'inventario',   label: 'Inventario',   path: '/inventario',    icon: icons.inventario,   perm: 'inventario' },
   { key: 'pedidos',      label: 'Pedidos',      path: '/pedidos',       icon: icons.pedidos,      perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
-  { key: 'flujo',        label: 'Flujo',        path: '/flujo',         icon: icons.trazabilidad, perm: 'trazabilidad', roles: ['admin','tecnico','almacen','recolector','recoleccion'] },
-  { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico','almacen'] },
+  /* "Flujo" retirado del menú (jun 2026, censo duplicados — decisión owner):
+     Pedidos absorbe el ciclo completo (misma card, mismas acciones). La ruta
+     /flujo queda viva como respaldo. */
+  /* Órdenes: solo admin/tecnico — la tab "Almacén Terán" (lo único de Josué
+     aquí) se eliminó por duplicar Pedidos. */
+  { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico'] },
   { key: 'produccion',   label: 'Producción',   path: '/produccion',    icon: icons.produccion,   perm: 'produccion' },
   { key: 'stockFabrica', label: 'Stock Fábrica',path: '/stock-fabrica', icon: icons.stockFabrica, perm: 'stockFabrica' },
   { key: 'recoleccion',  label: 'Recolección',  path: '/recoleccion',   icon: icons.recoleccion,  perm: 'recoleccion' },
+  /* FIX jun 2026 (censo menú): la pantalla PRINCIPAL de Josué no existía en el
+     sidebar — solo se llegaba por card del Dashboard o el sheet móvil (roto). */
+  { key: 'recepcion',    label: 'Recepción Terán', path: '/almacen',    icon: icons.recepcion,    perm: 'stockFabrica', roles: ['admin','almacen'] },
   { key: 'compras',      label: 'Compras',      path: '/compras',       icon: icons.compras,      perm: 'compras' },
   /* Capa Pronóstico (§9): inteligencia de compras separada. */
   { key: 'pronostico',   label: 'Pronóstico',   path: '/pronostico',    icon: icons.pronostico,   perm: 'compras',     roles: ['admin','compras'] },

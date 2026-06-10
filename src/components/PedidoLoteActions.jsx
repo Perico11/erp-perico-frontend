@@ -475,7 +475,9 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
               }}
               onClick={() => onReenvasarInline
                 ? onReenvasarInline(totesActivos[0], lote)
-                : navigate('/almacen-recepcion?reenvasar=' + encodeURIComponent(totesActivos[0]?.cod || ''))}
+                /* FIX jun 2026 (censo menú): la ruta real es /almacen — el fallback
+                   apuntaba a /almacen-recepcion (inexistente → Dashboard). */
+                : navigate('/almacen?reenvasar=' + encodeURIComponent(totesActivos[0]?.cod || ''))}
               title={`${totesActivos.length} TOTE(s) activos — re-envasar en cubeta/galón/litro`}
             >
               Re-envasar TOTE en Terán ({totesActivos.length})

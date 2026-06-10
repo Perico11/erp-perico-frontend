@@ -135,12 +135,12 @@ export default function App() {
               <Route index element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
               <Route path="formulas"       element={<RoleRoute roles={['admin','tecnico','compras']}><ErrorBoundary><FormulasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="inventario"     element={<RoleRoute roles={['admin','tecnico','compras','almacen','inventario']}><ErrorBoundary><InventarioPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="ordenes"        element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><OrdenesPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="ordenes"        element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><OrdenesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pedidos"        element={<RoleRoute roles={['admin','almacen','tecnico']}><ErrorBoundary><PedidosPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="flujo"          element={<RoleRoute roles={['admin','tecnico','almacen','recolector','recoleccion']}><ErrorBoundary><FlujoPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="flujo"          element={<RoleRoute roles={['admin','tecnico','almacen','recolector']}><ErrorBoundary><FlujoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="produccion"     element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><ProduccionPage /></ErrorBoundary></RoleRoute>} />
               <Route path="stock-fabrica"  element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><StockFabricaPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="recoleccion"    element={<RoleRoute roles={['admin','recolector','recoleccion','almacen']}><ErrorBoundary><RecoleccionPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="recoleccion"    element={<RoleRoute roles={['admin','recolector','almacen']}><ErrorBoundary><RecoleccionPage /></ErrorBoundary></RoleRoute>} />
               <Route path="compras"        element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><ComprasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pronostico"     element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><PronosticoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="sat"            element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><SATPage /></ErrorBoundary></RoleRoute>} />

@@ -152,13 +152,15 @@ function ReenvasarToteModal({ tote, lote, userName, onClose, onSuccess }) {
       const sublotesActuales = (lote?.sublotes || []).length;
       const cod = (lote?.codigo || lote?.codigoLote || lote?.id || tote.cod) + '-' + String.fromCharCode(65 + sublotesActuales);
       const litExact = +litTotal.toFixed(2);
+      /* jun 2026 (censo — drift): ya NO mandamos estado/ub desde el cliente —
+         el backend los deriva de la ubicación física del TOTE (whitelist).
+         Era la 3ª copia del modal, desincronizada del de StockFabrica. */
       const subloteHijo = {
-        cod, claseSublote: 'envasado_final', estado: 'en_stock_teran', tipo,
+        cod, claseSublote: 'envasado_final', tipo,
         env: tipo === 'cubeta' ? '19L Estandar' : tipo === 'galon' ? '3.785L' : '1L',
         marca: marca || null, qty: q, lit: litExact, litrosOriginal: litExact, litrosRestante: 0,
-        tapa: null, ub: 'teran', esMerma: false, fase: 2, esHijoDe: tote.cod, fromTote: tote.cod,
+        tapa: null, esMerma: false, fase: 2, esHijoDe: tote.cod, fromTote: tote.cod,
         qrPayload: buildQrUrl(cod),
-        historial: [{ accion: 'reenvasarTote', estadoNuevo: 'en_stock_teran', ts: new Date().toISOString(), usuario: userName || null, desdeTote: tote.cod, lugar: 'teran' }],
       };
       await api.transicionSublote(tote.cod, 'reenvasarTote', { nuevosSublotes: [subloteHijo], litrosConsumidos: litExact, lugar: 'teran' });
       onSuccess({ sublote: subloteHijo, tote, q, tipo, litTotal: litExact });

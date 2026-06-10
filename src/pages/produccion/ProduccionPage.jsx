@@ -10,7 +10,6 @@ import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import NDAModal from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
-import MisActivosTab from './MisActivosTab';
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /* ICONOS — line SVG (sin emojis). Diseño verde Claude Design.         */
@@ -381,12 +380,11 @@ export default function ProduccionPage() {
      Permite que push notifs o notificacionesPage envíen al usuario directo
      a la tab Calidad QC. */
   const [searchParams, setSearchParams] = useSearchParams();
-  /* Sprint H: default es "activos" (vista unificada). Los query params siguen
-     soportando ?tab=calidad / ?tab=reportes / ?tab=produccion para deep links. */
-  const initialTab = searchParams.get('tab') === 'calidad'    ? 'calidad'
-                    : searchParams.get('tab') === 'reportes'   ? 'reportes'
-                    : searchParams.get('tab') === 'produccion' ? 'produccion'
-                    : 'activos';
+  /* FIX jun 2026 (censo duplicados, decisión owner): se eliminan "Mis activos"
+     (lista que solo navegaba — duplicaba las cards de Pedidos) y "Reportes"
+     (placeholder con KPI roto). Quedan: Lanzar lote (default) · Calidad QC.
+     Deep links ?tab=calidad siguen funcionando; ?tab=activos/reportes caen al default. */
+  const initialTab = searchParams.get('tab') === 'calidad' ? 'calidad' : 'produccion';
   const [activeTab, setActiveTab] = useState(initialTab);
   /* Limpiar el query param después de leerlo para que un F5 no vuelva al mismo tab forzado.
      FIX jun 2026 (M1): no borrar `continuar` hasta que el efecto de auto-abrir
@@ -600,10 +598,8 @@ export default function ProduccionPage() {
      muestra TODOS sus pedidos/lotes activos en una sola tabla con su pipeline
      visual, sin importar el estado actual. */
   const tabs = [
-    { id: 'activos',    label: 'Mis activos' },
     { id: 'produccion', label: 'Lanzar lote' },
     { id: 'calidad',    label: 'Calidad QC' },
-    { id: 'reportes',   label: 'Reportes' },
   ];
 
   if (loading) {
@@ -648,13 +644,9 @@ export default function ProduccionPage() {
           style={S.tabs}
         />
 
-        {/* ════════ MIS ACTIVOS — vista unificada (Sprint H) ════════
-           Muestra TODOS los pedidos/lotes activos del técnico con timeline
-           visual del status. Antes los pedidos "saltaban" entre tabs según
-           su estado y Enrique perdía el hilo. Aquí ve todo en una sola vista. */}
-        {activeTab === 'activos' && (
-          <MisActivosTab pedidos={pedidos} ordenes={ordenes} lotes={lotes} />
-        )}
+        {/* "Mis activos" eliminada (jun 2026, censo duplicados): era una lista
+           que solo NAVEGABA a otras pantallas — las cards de Pedidos ya muestran
+           el pipeline completo con acciones inline. */}
 
         {/* ════════ PRODUCCIÓN TAB (Lanzar lote) ════════ */}
         {activeTab === 'produccion' && (
@@ -918,54 +910,9 @@ export default function ProduccionPage() {
           </>
         )}
 
-        {/* ════════ REPORTES TAB ════════ */}
-        {activeTab === 'reportes' && (
-          <>
-            <div style={S.kpiGrid}>
-              <div style={S.kpi('var(--lp-brand-600)')}>
-                <div style={S.kpiLabel}>Total Órdenes</div>
-                <div style={S.kpiValue}>{stats.total}</div>
-              </div>
-              <div style={S.kpi('var(--lp-success-600)')}>
-                <div style={S.kpiLabel}>Completadas</div>
-                <div style={S.kpiValue}>{stats.completadas}</div>
-              </div>
-              <div style={S.kpi('var(--lp-warning-600)')}>
-                <div style={S.kpiLabel}>Lotes Este Mes</div>
-                <div style={S.kpiValue}>{stats.lotesMes}</div>
-              </div>
-            </div>
-
-            {/* QC rate */}
-            {(stats.qcAprobados + stats.qcRechazados) > 0 && (
-              <div style={{
-                background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
-                borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 16,
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Tasa de aprobación QC</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-                    fontSize: 28, fontWeight: 700, fontFamily: 'var(--lp-font-mono)',
-                    color: 'var(--lp-success-600)',
-                  }}>
-                    {Math.round((stats.qcAprobados / (stats.qcAprobados + stats.qcRechazados)) * 100)}%
-                  </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>
-                    {stats.qcAprobados} aprobados · {stats.qcRechazados} rechazados
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div style={S.empty}>
-              <div style={{ color: 'var(--lp-text-tertiary)', marginBottom: 12, display: 'flex', justifyContent: 'center' }}><IcoChart /></div>
-              <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>Reportes detallados</div>
-              <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
-                Gráficas de producción mensual y análisis de tendencias próximamente.
-              </div>
-            </div>
-          </>
-        )}
+        {/* "Reportes" eliminada (jun 2026, censo duplicados): placeholder
+           "próximamente" con KPI "Completadas" roto (filtraba estados legacy
+           'terminada'/'entregada' que ya nadie emite → siempre 0). */}
       </div>
 
       {/* ── NDA gate antes de iniciar producción ── */}

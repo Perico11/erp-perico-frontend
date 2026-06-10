@@ -317,8 +317,9 @@ export function dispatchPushFromEvent(evento, payload, navigate) {
           title: 'Lote en camino',
           body: `${payload?.codigoLote || 'Lote'} → ${payload?.destino || 'Almacén'}`,
           tag: 'lote-' + (payload?.codigoLote || 'gen'),
-          /* L7: Josué (almacen) usa /almacen-recepcion, los demás /trazabilidad */
-          onClick: () => navigate && navigate(rol === 'almacen' ? '/almacen-recepcion' : '/trazabilidad'),
+          /* L7: Josué (almacen) usa /almacen (Recepción Terán), los demás /trazabilidad.
+             FIX jun 2026: la ruta es /almacen — /almacen-recepcion no existe. */
+          onClick: () => navigate && navigate(rol === 'almacen' ? '/almacen' : '/trazabilidad'),
         });
       }
       if (payload?.estado === 'qc_hold') {
@@ -336,10 +337,11 @@ export function dispatchPushFromEvent(evento, payload, navigate) {
           title: 'Lote listo en fábrica',
           body: `${payload?.codigoLote || 'Lote'} de ${payload?.producto || 'producto'} terminado · listo para almacén`,
           tag: 'lote-listo-' + (payload?.codigoLote || Date.now()),
-          /* L7: Luis (recolector) va a /recoleccion, Josué/admin a /almacen-recepcion */
+          /* L7: Luis (recolector) va a /recoleccion, Josué a /almacen (Recepción).
+             FIX jun 2026: la ruta es /almacen — /almacen-recepcion no existe. */
           onClick: () => navigate && navigate(
             rol === 'recolector' ? '/recoleccion' :
-            (rol === 'almacen' ? '/almacen-recepcion' : '/stock-fabrica')
+            (rol === 'almacen' ? '/almacen' : '/stock-fabrica')
           ),
         });
       }

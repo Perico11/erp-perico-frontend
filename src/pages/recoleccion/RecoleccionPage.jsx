@@ -527,9 +527,12 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
      sublote ya llegó a Terán. (getAccionesSublote aún ofrecería escanearRecoger
      para un tote_activo, pero el backend lo rechaza si ya está en Terán; aquí
      evitamos el botón fantasma y dejamos solo el chip "Entregado".) */
+  /* FIX jun 2026 (censo duplicados): 'escanearRecibirTeran' ("Entregar en
+     Terán") se quita de esta pantalla — era duplicado 100% de Recepción Terán
+     (misma entidad/estado/acción para almacen). Recolección queda 100% de Luis. */
   const acciones = bucket === 'entregados'
     ? []
-    : getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote');
+    : getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote' && a !== 'escanearRecibirTeran');
 
   return (
     <div style={S.card}>

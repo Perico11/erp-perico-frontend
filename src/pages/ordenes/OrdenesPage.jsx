@@ -932,10 +932,12 @@ export default function OrdenesPage() {
   }, [pedData]);
 
   /* Tabs based on role */
+  /* FIX jun 2026 (censo duplicados, decisión owner): se elimina la tab
+     "Almacén Terán" — era una lista SOLO-LECTURA de pedidos + un modal de
+     crear pedido duplicado que redirigía a /pedidos. Todo eso vive en Pedidos. */
   const mainTabs = useMemo(() => {
     const t = [];
     if (rol === 'admin' || rol === 'tecnico') t.push({ id: 'ordenes', label: 'Fábrica' });
-    if (rol === 'admin' || rol === 'almacen') t.push({ id: 'pedidos', label: 'Almacén Terán' });
     if (rol === 'admin' || rol === 'compras' || rol === 'tecnico') t.push({ id: 'compras', label: 'OC MP' });
     if (t.length === 0) t.push({ id: 'ordenes', label: 'Fábrica' });
     return t;
@@ -1186,52 +1188,9 @@ export default function OrdenesPage() {
         {/* ════════ FÁBRICA TAB ════════ */}
         {mainTab === 'ordenes' && (
           <>
-            {/* Pedidos de almacén pending */}
-            {pedidosPend.length > 0 && (rol === 'admin' || rol === 'tecnico') && (
-              <div style={{
-                background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
-                border: '1.5px solid var(--lp-border-subtle)', padding: 16, marginBottom: 16,
-              }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 10 }}>
-                  Pedidos de Almacén ({pedidosPend.length})
-                </div>
-                {pedidosPend.map(ped => {
-                  const yaTieneOrden = !!ped.ordenId;
-                  return (
-                  <div key={ped.id} style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    gap: 8, padding: '8px 0', borderBottom: '1px solid var(--lp-border-subtle)',
-                    ...(ped.esPrueba ? { background: 'var(--lp-warning-100)', padding: '8px', borderRadius: 4, borderLeft: '3px solid var(--lp-warning-600)' } : {}),
-                  }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, flex: 1, minWidth: 0 }}>
-                      {ped.producto} <span style={{ fontSize: 11, color: 'var(--lp-text-secondary)', fontWeight: 400 }}>x{ped.cantidad}</span>
-                      {ped.esPrueba && <span style={S.badge('warn')}>PRUEBA</span>}
-                      {ped.codigo && <span style={{ fontSize: 10, color: 'var(--lp-text-tertiary)', marginLeft: 6 }}>{ped.codigo}</span>}
-                    </div>
-                    <span style={S.badge(ped.estado === 'aceptado' ? 'ok' : 'warn')}>
-                      {ped.estado === 'aceptado' ? 'En cola' : 'Pendiente'}
-                    </span>
-                    {/* Sprint C: botón "→ Crear Orden" — abre modal con pedido prefilled.
-                       Si ya tiene ordenId, lo indica (idempotencia). */}
-                    {canManage && !yaTieneOrden && (
-                      <button
-                        style={{ ...S.btnNew, padding: '6px 10px', fontSize: 11, minHeight: 44, display: 'inline-flex', alignItems: 'center', gap: 5 }}
-                        data-id="ordenes.btn.crear-desde-pedido"
-                        data-rol="admin,tecnico"
-                        onClick={() => { setPedidoOrigenModal(ped); setShowNewModal(true); }}
-                        title="Crear orden vinculada a este pedido"
-                      >{Icon.plus} Crear Orden</button>
-                    )}
-                    {yaTieneOrden && (
-                      <span style={{ fontSize: 10, color: 'var(--lp-success-700)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        {Icon.check} Orden creada
-                      </span>
-                    )}
-                  </div>
-                  );
-                })}
-              </div>
-            )}
+            {/* Panel "Pedidos de Almacén" eliminado (jun 2026, censo duplicados):
+               duplicaba el Aceptar/Iniciar de Pedidos — los pedidos se gestionan
+               SOLO en /pedidos. Esta pantalla queda para órdenes internas y OC MP. */}
 
             {/* Sub-tabs + toolbar — separa pruebas y canceladas para no contaminar la vista */}
             <div style={S.subTabs}>
@@ -1431,11 +1390,7 @@ export default function OrdenesPage() {
           </>
         )}
 
-        {/* ════════ ALMACÉN TERÁN TAB ════════ */}
-        {mainTab === 'pedidos' && (
-          <PedidosTab pedidos={pedidos} rol={rol} userName={userName}
-            formulas={formulas} onReload={reloadPed} showToast={showToast} navigate={navigate} isDesktop={isDesktop} />
-        )}
+        {/* Tab "Almacén Terán" eliminada (jun 2026, censo duplicados) — vive en /pedidos. */}
 
         {/* ════════ OC MP TAB ════════ */}
         {mainTab === 'compras' && (
@@ -1529,306 +1484,9 @@ export default function OrdenesPage() {
   );
 }
 
-/* ── Pedidos Tab (Almacén Terán) ── */
-const PED_ESTADO = {
-  pendiente:    { cls: 'warn',    label: 'Pendiente' },
-  aceptado:     { cls: 'info',    label: 'Aceptado' },
-  en_produccion:{ cls: 'info',    label: 'En Producción' },
-  producido:    { cls: 'purple',  label: 'Producido' },
-  en_recoleccion:{ cls: 'warn',   label: 'En Recolección' },
-  en_camino:    { cls: 'info',    label: 'En Camino' },
-  en_almacen:   { cls: 'ok',      label: 'En Almacén' },
-  entregado:    { cls: 'ok',      label: 'Entregado' },
-  rechazado:    { cls: 'err',     label: 'Rechazado' },
-  cancelado:    { cls: 'neutral', label: 'Cancelado' },
-};
-
-function NuevoPedidoModal({ formulas, userName, onClose, onSuccess }) {
-  const [producto, setProducto] = useState('');
-  const [cantidad, setCantidad] = useState('');
-  const [nota, setNota] = useState('');
-  const [esPrueba, setEsPrueba] = useState(false);
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [search, setSearch] = useState('');
-  const [confirm, ConfirmEl] = useConfirm();
-
-  const filtered = useMemo(() => {
-    if (!search) return formulas;
-    const q = search.toLowerCase();
-    return formulas.filter(f => f.nombre.toLowerCase().includes(q));
-  }, [formulas, search]);
-
-  const handleSubmit = async () => {
-    if (!producto) return setError('Selecciona un producto');
-    const qty = parseInt(cantidad);
-    if (!qty || qty < 1) return setError('Cantidad debe ser ≥ 1');
-    setError('');
-    setSaving(true);
-    try {
-      const pedido = {
-        id: 'PED-' + Date.now(),
-        producto,
-        cantidad: qty,
-        nota: nota || '',
-        estado: 'pendiente',
-        origen: 'almacen',
-        esPrueba: !!esPrueba,
-        fecha: new Date().toISOString().substring(0, 10),
-        solicitante: userName || 'Almacén',
-        historial: [{
-          estado: 'pendiente',
-          fecha: new Date().toISOString(),
-          usuario: userName || '?',
-          nota: (esPrueba ? '[PRUEBA] ' : '') + 'Pedido creado',
-        }],
-      };
-      await api.upsertPedido(pedido);
-      onSuccess(`Pedido enviado: ${producto} x${qty}`);
-    } catch (err) {
-      setError(err.message || 'Error al crear pedido');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={S.overlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={S.modalHeader}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>Nuevo Pedido a Fábrica</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'inline-flex', minHeight: 44, minWidth: 44, alignItems: 'center', justifyContent: 'center' }} aria-label="Cerrar">{Icon.close}</button>
-        </div>
-        <div style={S.modalBody}>
-          {error && (
-            <div style={{ padding: '8px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
-              {error}
-            </div>
-          )}
-
-          <label style={S.fieldLabel}>Producto *</label>
-          <input
-            style={S.fieldInput}
-            placeholder="Buscar producto..."
-            value={search}
-            onChange={e => { setSearch(e.target.value); setProducto(''); }}
-          />
-          {search && !producto && filtered.length > 0 && (
-            <div style={{
-              maxHeight: 180, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)',
-              borderRadius: 8, marginTop: -8, marginBottom: 12, background: 'var(--lp-bg-raised)',
-            }}>
-              {filtered.slice(0, 20).map(f => (
-                <div
-                  key={f.nombre}
-                  style={{
-                    padding: '8px 12px', fontSize: 13, cursor: 'pointer',
-                    borderBottom: '1px solid var(--lp-border-subtle)',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-brand-50)'}
-                  onMouseLeave={e => e.currentTarget.style.background = ''}
-                  onClick={() => { setProducto(f.nombre); setSearch(f.nombre); }}
-                >
-                  {f.nombre}
-                </div>
-              ))}
-            </div>
-          )}
-          {producto && (
-            <div style={{ fontSize: 11, color: 'var(--lp-success-600)', fontWeight: 600, marginTop: -8, marginBottom: 12, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-              {Icon.check} {producto}
-            </div>
-          )}
-
-          <label style={S.fieldLabel}>Cantidad (cubetas) *</label>
-          <input style={S.fieldInput} type="number" inputMode="decimal" min="1" placeholder="Ej: 30"
-            value={cantidad} onChange={e => setCantidad(e.target.value)} />
-
-          <label style={S.fieldLabel}>Notas (opcional)</label>
-          <input style={S.fieldInput} placeholder="Ej: Urgente, para cliente X"
-            value={nota} onChange={e => setNota(e.target.value)} />
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <input type="checkbox" id="chk-ped-prueba" checked={esPrueba}
-              onChange={async e => {
-                const wantsCheck = e.target.checked;
-                if (wantsCheck) {
-                  const ok = await confirm('Modo prueba: no se descontará inventario. ¿Continuar?', { confirmText: 'Activar prueba' });
-                  if (!ok) { setEsPrueba(false); return; }
-                  setEsPrueba(true);
-                } else {
-                  setEsPrueba(false);
-                }
-              }}
-            />
-            <label htmlFor="chk-ped-prueba" style={{ fontSize: 12, color: 'var(--lp-text-secondary)' }}>
-              Modo prueba (no descuenta inventario)
-            </label>
-          </div>
-        </div>
-        <div style={S.modalFooter}>
-          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={S.btnPrimary} disabled={saving} onClick={handleSubmit}>
-            {saving ? 'Enviando...' : 'Enviar Pedido'}
-          </button>
-        </div>
-      </div>
-      {ConfirmEl}
-    </div>
-  );
-}
-
-function PedidosTab({ pedidos, rol, userName, formulas, onReload, showToast, navigate, isDesktop }) {
-  const [showNew, setShowNew] = useState(false);
-  const [subTab, setSubTab] = useState('activos');
-  const [searchQ, setSearchQ] = useState('');
-  const canCreate = rol === 'admin' || rol === 'almacen';
-
-  const almacenPedidos = useMemo(() =>
-    pedidos.filter(p => p.origen === 'almacen')
-      .sort((a, b) => (b.fecha || '').localeCompare(a.fecha || '')),
-    [pedidos]
-  );
-
-  const activos = useMemo(() =>
-    almacenPedidos.filter(p =>
-      p.estado !== 'entregado' && p.estado !== 'cancelado' && p.estado !== 'rechazado'
-    ),
-    [almacenPedidos]
-  );
-
-  const historial = useMemo(() =>
-    almacenPedidos.filter(p =>
-      p.estado === 'entregado' || p.estado === 'cancelado' || p.estado === 'rechazado'
-    ),
-    [almacenPedidos]
-  );
-
-  const filtered = useMemo(() => {
-    const list = subTab === 'activos' ? activos : historial;
-    if (!searchQ) return list;
-    const q = searchQ.toLowerCase();
-    return list.filter(p =>
-      (p.producto || '').toLowerCase().includes(q) ||
-      (p.nota || '').toLowerCase().includes(q) ||
-      (p.id || '').toLowerCase().includes(q)
-    );
-  }, [subTab, activos, historial, searchQ]);
-
-  /* KPIs */
-  const kpis = useMemo(() => ({
-    pendientes: activos.filter(p => p.estado === 'pendiente').length,
-    aceptados: activos.filter(p => p.estado === 'aceptado' || p.estado === 'en_produccion').length,
-    enCamino: activos.filter(p => p.estado === 'en_recoleccion' || p.estado === 'en_camino').length,
-    total: activos.length,
-  }), [activos]);
-
-  return (
-    <>
-      {/* Sub-tabs */}
-      <div style={S.subTabs}>
-        {[{ id: 'activos', label: 'Activos' }, { id: 'historial', label: 'Historial' }].map(t => (
-          <button key={t.id} style={S.subTab(t.id === subTab)} onClick={() => setSubTab(t.id)}>
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Toolbar */}
-      <div style={S.toolbar}>
-        <input type="text" style={S.search} placeholder="Buscar pedido..."
-          value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-        {canCreate && (
-          <button
-            style={{ ...S.btnNew, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            data-id="ordenes.btn.nuevo-pedido"
-            data-rol="admin,almacen"
-            onClick={() => setShowNew(true)}
-          >
-            {Icon.plus} Nuevo Pedido
-          </button>
-        )}
-      </div>
-
-      {/* KPIs */}
-      {subTab === 'activos' && (
-        <div style={S.kpiGrid}>
-          <div style={S.kpi('var(--lp-warning-100)')}>
-            <div style={S.kpiLabel('var(--lp-warning-600)')}>Pendientes</div>
-            <div style={S.kpiValue('var(--lp-warning-600)')}>{kpis.pendientes}</div>
-          </div>
-          <div style={S.kpi('var(--lp-brand-100)')}>
-            <div style={S.kpiLabel('var(--lp-brand-700)')}>En Producción</div>
-            <div style={S.kpiValue('var(--lp-brand-700)')}>{kpis.aceptados}</div>
-          </div>
-          <div style={S.kpi('var(--lp-info-50)')}>
-            <div style={S.kpiLabel('var(--lp-info-600)')}>En Camino</div>
-            <div style={S.kpiValue('var(--lp-info-600)')}>{kpis.enCamino}</div>
-          </div>
-          <div style={S.kpi('var(--lp-success-100)')}>
-            <div style={S.kpiLabel('var(--lp-success-600)')}>Total Activos</div>
-            <div style={S.kpiValue('var(--lp-success-600)')}>{kpis.total}</div>
-          </div>
-        </div>
-      )}
-
-      {/* List */}
-      {filtered.length === 0 ? (
-        <div style={{ ...S.empty, padding: '60px 20px' }}>
-          <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--lp-text-tertiary)' }}>{Icon.empty}</div>
-          <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 8 }}>
-            {searchQ ? 'Sin resultados' : subTab === 'activos' ? 'Sin pedidos activos' : 'Sin historial'}
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-            {searchQ ? `No se encontró "${searchQ}"` : subTab === 'activos' ? 'Crea un pedido para solicitar producción.' : ''}
-          </div>
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap: 12 }}>
-        {filtered.map(p => {
-          const est = PED_ESTADO[p.estado] || { cls: 'neutral', label: p.estado };
-          const isPrueba = p.esPrueba === true;
-          return (
-            <div key={p.id} style={{ ...S.card(isPrueba), marginBottom: 0 }}>
-              <div style={S.cardHeader}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={S.cardCode}>{p.id}</span>
-                  {isPrueba && <PruebaBadge size="sm" />}
-                  <span style={S.badge(est.cls)}>{est.label}</span>
-                </div>
-                <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{p.fecha}</span>
-              </div>
-              <div style={S.cardTitle}>{p.producto}</div>
-              <div style={S.cardMeta}>
-                {p.cantidad} cubetas
-                {p.nota ? ` · ${p.nota}` : ''}
-                {p.solicitante ? ` · Solicitante: ${p.solicitante}` : ''}
-              </div>
-            </div>
-          );
-        })}
-        </div>
-      )}
-
-      {/* Modal nuevo pedido — al crear se redirige a /pedidos para que el técnico
-          (Enrique) lo vea inmediatamente y pueda Aceptar + Iniciar producción. */}
-      {showNew && (
-        <NuevoPedidoModal
-          formulas={formulas}
-          userName={userName}
-          onClose={() => setShowNew(false)}
-          onSuccess={(msg) => {
-            setShowNew(false);
-            onReload();
-            showToast(msg + ' — abriendo Pedidos…');
-            /* Llevar al usuario donde el pedido es accionable */
-            setTimeout(() => navigate('/pedidos'), 600);
-          }}
-        />
-      )}
-    </>
-  );
-}
+/* PedidosTab + NuevoPedidoModal local eliminados (jun 2026, censo duplicados):
+   la tab Almacén Terán era solo-lectura y su modal duplicaba pages/pedidos/NuevoPedidoModal
+   (hasta redirigía a /pedidos al crear). Todo vive en /pedidos. */
 
 /* ════════════════════════════════════════════════════════════════════════
    OC MP TAB — Órdenes de Compra de Materia Prima

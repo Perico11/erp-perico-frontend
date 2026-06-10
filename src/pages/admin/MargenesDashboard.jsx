@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import HelpHint from '../../components/HelpHint';
@@ -593,8 +593,8 @@ export default function MargenesDashboard() {
                                     'tote';
 
                 return (
-                  <>
-                  <tr key={p.nombre} style={{
+                  <Fragment key={p.nombre}>
+                  <tr style={{
                     background: noRentable ? margenBg(margenPctActivo, margenAbsActivo) : 'transparent',
                     cursor: 'pointer',
                   }} onClick={() => setExpandedRow(expanded ? null : p.nombre)}>
@@ -644,13 +644,13 @@ export default function MargenesDashboard() {
                     </td>
                   </tr>
                   {expanded && (
-                    <tr key={p.nombre + '_expand'}>
+                    <tr>
                       <td colSpan={6} style={{ background: 'var(--lp-bg-sunken)', padding: 14, borderBottom: '1.5px solid var(--lp-border-subtle)' }}>
                         <BreakdownRow producto={p} />
                       </td>
                     </tr>
                   )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>

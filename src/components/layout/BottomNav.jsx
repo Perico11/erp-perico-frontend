@@ -84,16 +84,19 @@ const SECCIONES = [
   {
     titulo: 'Producción',
     items: [
-      { path: '/flujo',                   label: 'Flujo',         icon: ICONS.traz,          perm: 'trazabilidad', roles: ['admin','tecnico','almacen','recolector','recoleccion'] },
+      /* "Flujo" retirado (jun 2026): Pedidos absorbe el ciclo completo. */
       { path: '/pedidos',                 label: 'Pedidos',       icon: ICONS.pedidos,       perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
-      { path: '/ordenes',                 label: 'Órdenes',       icon: ICONS.ordenes,       perm: 'ordenes',     roles: ['admin','tecnico','almacen'] },
+      { path: '/ordenes',                 label: 'Órdenes',       icon: ICONS.ordenes,       perm: 'ordenes',     roles: ['admin','tecnico'] },
       { path: '/produccion',              label: 'Lanzar lote',   icon: ICONS.produccionSub, perm: 'produccion' },
       { path: '/produccion?tab=calidad',  label: 'Calidad QC',    icon: ICONS.lab,           perm: 'produccion' },
       { path: '/stock-fabrica',           label: 'Stock fábrica', icon: ICONS.stockFabrica,  perm: 'stockFabrica' },
       /* FIX jun 2026 (K8): pantalla principal de Josué (escanear QR para
          recibir PT en Terán) faltaba en sheet. Solo se llegaba por KPI
          del Dashboard o URL directa. */
-      { path: '/almacen-recepcion',       label: 'Recepción',     icon: ICONS.recepcion,     perm: 'stockFabrica', roles: ['admin','almacen','tecnico'] },
+      /* FIX jun 2026 (censo menú): la ruta real es /almacen — el tile apuntaba a
+         /almacen-recepcion (inexistente) y caía al Dashboard. Y la ruta solo
+         admite admin/almacen (se quita tecnico del tile). */
+      { path: '/almacen',                 label: 'Recepción',     icon: ICONS.recepcion,     perm: 'stockFabrica', roles: ['admin','almacen'] },
     ],
   },
   {
@@ -132,11 +135,13 @@ const SECCIONES = [
 function tabsParaRol(rol, can) {
   const inicio = { path: '/', label: 'Inicio', icon: ICONS.inicio };
   const tabs = {
-    admin:      [inicio, { path: '/inventario', label: 'Inventario', icon: ICONS.inventario }, { path: '/compras', label: 'Compras', icon: ICONS.compras }],
-    tecnico:    [inicio, { path: '/pedidos',    label: 'Pedidos',    icon: ICONS.pedidos    }, { path: '/stock-fabrica', label: 'Stock fáb.', icon: ICONS.stockFabrica }],
+    admin:      [inicio, { path: '/pedidos',    label: 'Pedidos',    icon: ICONS.pedidos    }, { path: '/inventario', label: 'Inventario', icon: ICONS.inventario }],
+    tecnico:    [inicio, { path: '/pedidos',    label: 'Pedidos',    icon: ICONS.pedidos    }, { path: '/produccion', label: 'Producción', icon: ICONS.produccionSub }],
     compras:    [inicio, { path: '/compras',    label: 'Compras',    icon: ICONS.compras    }, { path: '/inventario', label: 'Inventario', icon: ICONS.inventario }],
-    almacen:    [inicio, { path: '/flujo',      label: 'Flujo',      icon: ICONS.traz       }, { path: '/recoleccion', label: 'Recolección', icon: ICONS.recol }],
-    recolector: [inicio, { path: '/flujo',      label: 'Flujo',      icon: ICONS.traz       }, { path: '/recoleccion', label: 'Recolección', icon: ICONS.recol }],
+    /* jun 2026 (censo menú): Flujo retirado — Josué opera Recepción (su pantalla
+       principal) + Pedidos (despachar); Luis opera Recolección + consulta Trazabilidad. */
+    almacen:    [inicio, { path: '/almacen',    label: 'Recepción',  icon: ICONS.recepcion  }, { path: '/pedidos', label: 'Pedidos', icon: ICONS.pedidos }],
+    recolector: [inicio, { path: '/recoleccion', label: 'Recolección', icon: ICONS.recol    }, { path: '/trazabilidad', label: 'Trazab.', icon: ICONS.traz }],
     inventario: [inicio, { path: '/inventario', label: 'Stock MP',   icon: ICONS.inventario }, { path: '/conteo', label: 'Conteo', icon: ICONS.conteo }],
   };
   return tabs[rol] || tabs.admin;
