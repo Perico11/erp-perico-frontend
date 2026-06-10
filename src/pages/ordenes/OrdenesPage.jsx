@@ -58,15 +58,7 @@ const Icon = {
     </svg>
   ),
 };
-/* Bolita de color por fase (reemplaza el glyph "●" del mockup) */
-function Dot({ color }) {
-  return (
-    <span style={{
-      width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
-      display: 'inline-block', background: color,
-    }} />
-  );
-}
+/* (La bolita de fase del mockup vive en S.phaseDot — div inline, sin glyph) */
 
 /* ── Badge maps ──
    X3 (jun 2026): labels canónicos vienen de lib/estados.js (espejo backend).
@@ -101,6 +93,51 @@ const PRIO_BADGE = {
   normal:  { cls: 'ok',   label: 'NORMAL' },
 };
 
+/* ── Mockup Órdenes.html (jun 2026): color SÓLIDO por estado ──
+   Alimenta el riel izquierdo de la card, el badge de estado (fondo sólido,
+   texto blanco/ink según tema — clase .ordx-est) y el dot de cada fase.
+   Paleta del mockup: pendiente=ámbar, en proceso=verde acc, QC=morado,
+   terminada=verde, entregada=verde. Extensión a estados reales que el
+   mockup no trae (transporte=info azul, qc_hold=danger por semántica de
+   retención, cancelado=gris). Tokens dark-aware (granel-600 flip a lila). */
+const ESTADO_SOLID = {
+  pendiente:      'var(--lp-warning-600)',
+  aceptado:       'var(--lp-warning-600)',
+  en_proceso:     'var(--lp-brand-600)',
+  en_produccion:  'var(--lp-brand-600)',
+  produccion:     'var(--lp-brand-600)',
+  producido:      'var(--lp-granel-600)',
+  qc_hold:        'var(--lp-danger-600)',
+  qc_aprobado:    'var(--lp-granel-600)',
+  en_envasado:    'var(--lp-brand-600)',
+  envasado:       'var(--lp-brand-600)',
+  en_recoleccion: 'var(--lp-info-600)',
+  en_camino:      'var(--lp-info-600)',
+  en_almacen:     'var(--lp-success-600)',
+  entregado:      'var(--lp-success-600)',
+  cancelado:      'var(--lp-text-secondary)',
+  rechazado:      'var(--lp-danger-600)',
+  eliminado:      'var(--lp-danger-600)',
+};
+const estadoSolid = (o) =>
+  ESTADO_SOLID[o.eliminado ? 'eliminado' : o.estado] || 'var(--lp-text-tertiary)';
+
+/* Prioridad estilo mockup: pill tint 14% + texto del color. Solo se muestra
+   ALTA (ámbar) y URGENTE (rojo) — NORMAL se omite como en el mockup. */
+const PRIO_TINT = {
+  urgente: 'var(--lp-danger-600)',
+  alta:    'var(--lp-warning-600)',
+  baja:    'var(--lp-info-600)',
+};
+const tint = (c, p) => `color-mix(in srgb, ${c} ${p}%, transparent)`;
+
+/* Fecha corta del mockup ("06-04") desde ISO o YYYY-MM-DD. */
+const fmtFechaCorta = (f) => {
+  if (!f) return '';
+  const s = String(f);
+  return s.length >= 10 ? s.slice(5, 10) : s;
+};
+
 /* ── Estado transitions allowed per current estado ──
    X3b (jun 2026): SOLO estados canónicos. Las transiciones manuales aplican a
    las fases tempranas (pendiente↔en_proceso, cancelar, reactivar). Los estados
@@ -119,17 +156,28 @@ const TRANSITIONS = {
 /* ── Inline styles (LP design system) ── */
 const S = {
   wrap: { padding: '0 20px 100px' },
-  mainTabs: {
-    display: 'flex', gap: 0, borderBottom: '2px solid var(--lp-border-subtle)',
-    marginBottom: 16, overflowX: 'auto',
-    WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none',
+  /* Header row local (la TopBar compartida no trae subtítulo ni slot de
+     acciones): seg pill izquierda + botón Nueva pill derecha. */
+  headRow: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    gap: 10, flexWrap: 'wrap', marginBottom: 6,
   },
-  mainTab: (active) => ({
-    padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-    color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-    borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-    background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-    fontFamily: 'var(--lp-font-sans)', marginBottom: -2, flexShrink: 0,
+  /* Subtítulo del mockup (.tsub): "N órdenes de fábrica en curso" */
+  tsub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '0 2px 12px' },
+  /* Tabs segmentadas pill del mockup (.seg): Fábrica | OC Materia prima */
+  seg: {
+    display: 'inline-flex', alignSelf: 'flex-start', gap: 3, padding: 3,
+    borderRadius: 999, background: 'var(--lp-bg-sunken)',
+  },
+  segBtn: (active) => ({
+    padding: '8px 15px', borderRadius: 999, border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 12.5,
+    fontWeight: active ? 600 : 500,
+    background: active ? 'var(--lp-bg-raised)' : 'transparent',
+    color: active ? 'var(--lp-text-primary)' : 'var(--lp-text-secondary)',
+    boxShadow: active ? '0 1px 2px rgba(20,30,25,.1)' : 'none',
+    whiteSpace: 'nowrap', flexShrink: 0, minHeight: 34,
+    transition: 'background .15s, color .15s',
   }),
   subTabs: {
     display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto',
@@ -151,10 +199,11 @@ const S = {
     fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
+  /* Botón "Nueva" pill del mockup (.newbtn) — color de texto via .ordx-btn-primary */
   btnNew: {
-    padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
+    height: 44, padding: '0 16px', borderRadius: 999, border: 'none', fontSize: 13,
     fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-brand-600)', color: '#fff', whiteSpace: 'nowrap', minHeight: 44,
+    whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6,
   },
   kpiGrid: {
     display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
@@ -169,27 +218,47 @@ const S = {
   kpiValue: (fg) => ({
     fontSize: 24, fontWeight: 700, color: fg,
   }),
-  card: (isPrueba) => ({
-    /* Modo prueba: card naranja claro SIN borde discontinuo (estilo más limpio
-       solicitado por usuario). Solo el background marca la diferencia visual. */
+  /* ── Card de orden (mockup .ocard): riel de color izquierdo, radio 18 ──
+     Modo prueba (sin mockup — función real): fondo ámbar suave conservado. */
+  ocard: (isPrueba) => ({
+    position: 'relative', overflow: 'hidden',
     background: isPrueba ? 'var(--lp-warning-50)' : 'var(--lp-bg-raised)',
-    border: '1.5px solid ' + (isPrueba ? 'var(--lp-warning-200)' : 'var(--lp-border-subtle)'),
-    borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 10,
+    border: '1px solid ' + (isPrueba ? 'var(--lp-warning-100)' : 'var(--lp-border-subtle)'),
+    borderRadius: 18, padding: '15px 17px 15px 19px',
   }),
-  cardHeader: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    flexWrap: 'wrap', gap: 8, marginBottom: 8,
+  ocardBar: (color) => ({
+    position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: color,
+  }),
+  otop: {
+    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9, flexWrap: 'wrap',
   },
-  cardCode: {
-    fontWeight: 700, fontSize: 12, color: 'var(--lp-brand-600)',
-    fontFamily: 'var(--lp-font-mono)',
+  folio: {
+    fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700,
+    color: 'var(--lp-brand-600)',
   },
-  cardTitle: {
-    fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 4,
+  estSolid: (color) => ({
+    fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+    background: color, display: 'inline-flex', alignItems: 'center',
+  }),
+  prioPill: (color) => ({
+    fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 999,
+    letterSpacing: '.04em', background: tint(color, 14), color,
+    display: 'inline-flex', alignItems: 'center',
+  }),
+  ofecha: {
+    marginLeft: 'auto', fontFamily: 'var(--lp-font-mono)', fontSize: 11,
+    color: 'var(--lp-text-tertiary)',
   },
-  cardMeta: {
-    fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 10,
+  otitle: {
+    fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em',
+    color: 'var(--lp-text-primary)',
   },
+  ometa: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2 },
+  ometaB: {
+    fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-600)',
+    background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5,
+  },
+  metaSub: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 3 },
   badge: (type) => {
     const map = {
       ok:      { bg: 'var(--lp-success-100)', fg: 'var(--lp-success-600)' },
@@ -205,33 +274,75 @@ const S = {
       borderRadius: 6, background: c.bg, color: c.fg, marginRight: 4,
     };
   },
-  cardActions: {
-    display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap',
+  /* Chip QC del mockup (.qcbox): tint verde 8% + texto acento */
+  qcbox: {
+    fontSize: 11.5, padding: '8px 12px', borderRadius: 11,
+    background: tint('var(--lp-brand-600)', 8), color: 'var(--lp-brand-600)',
+    marginBottom: 12,
   },
-  actionBtn: (bg, fg) => ({
-    padding: '6px 12px', fontSize: 11, fontWeight: 600, borderRadius: 6,
-    border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: bg, color: fg, minHeight: 36,
-  }),
-  timeline: {
-    display: 'flex', alignItems: 'center', gap: 0, margin: '10px 0',
-    overflowX: 'auto', fontSize: 11,
+  /* Acciones de card (mockup .oacts/.btn): altura 40, radio 11 */
+  oacts: { display: 'flex', gap: 8, flexWrap: 'wrap' },
+  btn: {
+    height: 40, padding: '0 15px', borderRadius: 11, border: 'none',
+    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13,
+    fontWeight: 600, display: 'inline-flex', alignItems: 'center',
+    justifyContent: 'center', gap: 7,
   },
-  timelineDot: (done) => ({
-    width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-    background: done ? 'var(--lp-success-600)' : 'var(--lp-border-subtle)',
-    border: done ? 'none' : '2px solid var(--lp-border-strong)',
-  }),
-  timelineLine: (done) => ({
-    height: 2, flex: 1, minWidth: 16,
-    background: done ? 'var(--lp-success-600)' : 'var(--lp-border-subtle)',
-  }),
-  timelineLabel: {
-    fontSize: 11, color: 'var(--lp-text-tertiary)', textAlign: 'center',
-    whiteSpace: 'nowrap', marginTop: 2,
+  btnGhost: {
+    background: 'transparent', border: '1px solid var(--lp-border-subtle)',
+    color: 'var(--lp-text-secondary)',
   },
+  btnGhostDanger: {
+    background: 'transparent',
+    border: '1px solid ' + tint('var(--lp-danger-600)', 35),
+    color: 'var(--lp-danger-600)',
+  },
+  /* Encabezado de fase (mockup .phase-h): dot + título + contador mono + sub */
+  phaseH: {
+    display: 'flex', alignItems: 'baseline', gap: 8, margin: '0 2px 10px',
+    flexWrap: 'wrap',
+  },
+  phaseDot: (color) => ({
+    width: 8, height: 8, borderRadius: 999, flexShrink: 0, alignSelf: 'center',
+    background: color,
+  }),
+  phaseT: {
+    fontSize: 13.5, fontWeight: 600, color: 'var(--lp-text-primary)',
+    letterSpacing: '-.01em',
+  },
+  phaseN: {
+    fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700,
+    color: 'var(--lp-text-tertiary)',
+  },
+  phaseS: { fontSize: 11.5, color: 'var(--lp-text-tertiary)' },
+  /* Mini-pipeline del mockup (.tl): 5 puntos con labels */
+  tl: { display: 'flex', alignItems: 'center', margin: '13px 0 12px' },
+  tlStep: (last) => ({
+    display: 'flex', alignItems: 'center', flex: last ? '0 0 auto' : 1,
+  }),
+  tlCol: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 },
+  tdot: (on, cur) => ({
+    width: 10, height: 10, borderRadius: '50%',
+    background: on ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)',
+    boxShadow: cur ? `0 0 0 3px ${tint('var(--lp-brand-600)', 22)}` : 'none',
+  }),
+  tlabel: (on, cur) => ({
+    fontSize: 9, whiteSpace: 'nowrap',
+    color: on ? 'var(--lp-brand-600)' : 'var(--lp-text-tertiary)',
+    fontWeight: cur ? 700 : 500,
+  }),
+  tline: (done) => ({
+    flex: 1, height: 2, margin: '0 3px', marginBottom: 14,
+    background: done ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)',
+  }),
   empty: {
     textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '40px 0',
+  },
+  /* Empty state del mockup (.empty .dash): caja punteada radio 18 */
+  emptyDash: {
+    border: '1px dashed var(--lp-border-default)', borderRadius: 18,
+    padding: '34px 22px', textAlign: 'center', fontSize: 13, lineHeight: 1.5,
+    color: 'var(--lp-text-tertiary)',
   },
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
   groupHeader: {
@@ -304,34 +415,58 @@ const S = {
   },
 };
 
-/* ── Timeline ── */
-const STEPS = ['pendiente', 'produccion', 'qc', 'envasado', 'entregado'];
-const STEP_LABELS = { pendiente: 'Pendiente', produccion: 'Producción', qc: 'QC', envasado: 'Envasado', entregado: 'Entregado' };
-/* Mapa estado canónico de orden → índice de fase del timeline. Los estados
-   mid-flow del lote (en_produccion, qc_hold, en_envasado, en_camino…) caen en
-   su fase para que el timeline NO se vea atascado al inicio mientras el lote
-   avanza. X3b jun 2026 (antes STEPS.indexOf devolvía -1 para estos). */
+/* Overlay/modal responsive: centrado en escritorio, bottom-sheet radio
+   24px en móvil (mockup .sheet / patrón del design system verde). */
+function useSheetStyles() {
+  const isDesktop = useIsDesktop();
+  return {
+    isDesktop,
+    overlay: isDesktop ? S.overlay : { ...S.overlay, alignItems: 'flex-end', padding: 0 },
+    modal: isDesktop ? S.modal : { ...S.modal, maxWidth: '100%', borderRadius: '24px 24px 0 0' },
+  };
+}
+
+/* ── Timeline (mockup Órdenes.html .tl) ──
+   5 pasos con label bajo cada punto: Pendiente → Producción → QC →
+   Terminada → Entregada. Construido con divs inline propios de esta
+   pantalla — NO usa components/pipeline/Checkpoint.jsx (es de otra
+   pantalla). Punto actual lleva anillo tint 22%. */
+const STEPS = [
+  ['pendiente', 'Pendiente'],
+  ['produccion', 'Producción'],
+  ['qc', 'QC'],
+  ['terminada', 'Terminada'],
+  ['entregada', 'Entregada'],
+];
+/* Mapa estado canónico de orden → índice de paso. Los estados mid-flow del
+   lote (en_produccion, qc_hold, en_envasado, en_camino…) caen en su paso para
+   que el pipeline NO se vea atascado al inicio mientras el lote avanza.
+   X3b jun 2026. Solo estados que el backend emite — no inventar. */
 const ESTADO_STEP_IDX = {
   pendiente: 0, aceptado: 0,
-  en_proceso: 1, en_produccion: 1,
+  en_proceso: 1, en_produccion: 1, produccion: 1,
   producido: 2, qc_hold: 2, qc_aprobado: 2,
-  en_envasado: 3, envasado: 3, en_recoleccion: 3, en_camino: 3,
-  en_almacen: 4, entregado: 4,
+  en_envasado: 3, envasado: 3, en_recoleccion: 3, en_camino: 3, terminada: 3,
+  en_almacen: 4, entregado: 4, entregada: 4,
 };
 
 function Timeline({ estado }) {
-  const idx = ESTADO_STEP_IDX[estado] ?? -1;
+  const idx = ESTADO_STEP_IDX[estado] ?? 0;
   return (
-    <div style={S.timeline}>
-      {STEPS.map((step, i) => (
-        <div key={step} style={{ display: 'flex', alignItems: 'center', gap: 0, flex: i < STEPS.length - 1 ? 1 : 0 }}>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <div style={S.timelineDot(i <= idx)} />
-            <div style={S.timelineLabel}>{STEP_LABELS[step]}</div>
+    <div style={S.tl}>
+      {STEPS.map(([key, label], i) => {
+        const on = i <= idx;
+        const cur = i === idx;
+        return (
+          <div key={key} style={S.tlStep(i === STEPS.length - 1)}>
+            <div style={S.tlCol}>
+              <div style={S.tdot(on, cur)} />
+              <div style={S.tlabel(on, cur)}>{label}</div>
+            </div>
+            {i < STEPS.length - 1 && <div style={S.tline(i < idx)} />}
           </div>
-          {i < STEPS.length - 1 && <div style={S.timelineLine(i < idx)} />}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -343,6 +478,7 @@ function Timeline({ estado }) {
    Sin pedidoOrigen: flujo legacy "orden interna" (solo admin debería usarlo). */
 function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedidoOrigen }) {
   const { user } = useAuth();
+  const sheet = useSheetStyles();
   const tienePedido = !!pedidoOrigen;
   const [formula, setFormula] = useState(pedidoOrigen?.producto || '');
   const [cantidad, setCantidad] = useState(pedidoOrigen ? String(pedidoOrigen.cantidad || '') : '');
@@ -458,11 +594,11 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
+    <div style={sheet.overlay} onClick={onClose}>
+      <div style={sheet.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>
+            <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' }}>
               {tienePedido ? 'Crear Orden desde Pedido' : 'Nueva Orden Interna'}
             </div>
             {tienePedido && (
@@ -710,102 +846,154 @@ function ConfirmModal({ title, message, confirmLabel, danger, onConfirm, onCance
   );
 }
 
-/* ── Order Card with actions ── */
-/* FIX jun 2026 (L13): destructurar onIrPedido como prop. Antes el JSX
-   `onClick={() => onIrPedido && onIrPedido(o)}` siempre referenciaba un
-   `onIrPedido` indefinido (no estaba en el destructuring), por short-circuit
-   no fallaba pero el botón era no-op silencioso. Regresión de K9. */
-function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onProducir, onIrPedido }) {
+/* ── Order Card (mockup Órdenes.html .ocard) ──
+   Riel de color por fase, folio mono verde, badge sólido de estado, badge
+   de prioridad tint (solo ALTA/URGENTE), fecha corta derecha, producto
+   grande, "N cubetas · desde pedido PD-XXX" (link) u "orden interna",
+   mini-pipeline de 5 puntos y chip QC cuando hay lecturas reales.
+   FIX jun 2026 (L13): onIrPedido destructurado como prop (antes era no-op).
+   Props nuevas reskin: pedidoCodigo (folio del pedido fuente), qcLote
+   (lecturas QC reales del lote vía trazabilidad), onVerProduccion,
+   onAprobarQC. */
+function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onProducir, onIrPedido, onVerProduccion, onAprobarQC, pedidoCodigo, qcLote }) {
   const o = orden;
   const est = ESTADO_BADGE[o.eliminado ? 'eliminado' : o.estado] || ESTADO_BADGE.pendiente;
-  const prio = PRIO_BADGE[o.prioridad] || PRIO_BADGE.normal;
+  const solid = estadoSolid(o);
+  const prioTint = o.prioridad !== 'normal' ? PRIO_TINT[o.prioridad] : null;
   const isPrueba = o.esPrueba === true;
   const transitions = TRANSITIONS[o.estado] || [];
+  /* QC real: la orden casi nunca trae qcResultados propio — las lecturas
+     viven en el LOTE (trazabilidad). qcLote llega resuelto por ordenId/
+     pedidoId desde la página. Sin lecturas reales NO hay chip (no simular). */
+  const qc = (o.qcResultados && typeof o.qcResultados === 'object' ? o.qcResultados : null) || qcLote || null;
+  const hasQC = !!qc && ['brillo', 'viscosidad', 'ph', 'densidad', 'finura'].some(
+    k => qc[k] != null && qc[k] !== ''
+  );
+  const qcParts = hasQC ? [
+    qc.brillo != null && qc.brillo !== '' ? `Brillo ${qc.brillo}` : null,
+    qc.viscosidad != null && qc.viscosidad !== '' ? `Visc ${qc.viscosidad} KU` : null,
+    qc.ph != null && qc.ph !== '' ? `pH ${qc.ph}` : null,
+    qc.densidad != null && qc.densidad !== '' ? `Dens ${qc.densidad}` : null,
+    qc.finura != null && qc.finura !== '' ? `Finura ${qc.finura}` : null,
+  ].filter(Boolean) : [];
 
   return (
-    <div style={S.card(isPrueba)}>
-      <div style={S.cardHeader}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <span style={S.cardCode}>{o.codigo}</span>
-          {isPrueba && <PruebaBadge size="sm" />}
-          <span style={S.badge(est.cls)}>{est.label}</span>
-          <span style={S.badge(prio.cls)}>{prio.label}</span>
+    <div style={S.ocard(isPrueba)}>
+      <div style={S.ocardBar(solid)} />
+      <div style={S.otop}>
+        <span style={S.folio}>{o.codigo}</span>
+        {isPrueba && <PruebaBadge size="sm" />}
+        <span className="ordx-est" style={S.estSolid(solid)}>{est.label}</span>
+        {prioTint && (
+          <span style={S.prioPill(prioTint)}>
+            {(PRIO_BADGE[o.prioridad] || { label: o.prioridad }).label}
+          </span>
+        )}
+        <span style={S.ofecha} title={o.fechaCreacion || ''}>{fmtFechaCorta(o.fechaCreacion)}</span>
+      </div>
+      <div style={S.otitle}>{o.formula || o.producto}</div>
+      <div style={S.ometa}>
+        {o.cantidad} cubetas{o.litPerUnit && Number(o.litPerUnit) !== 19 ? ` × ${o.litPerUnit}L` : ''} ·{' '}
+        {o.pedidoId ? (
+          <>
+            desde pedido{' '}
+            {onIrPedido ? (
+              <button
+                type="button"
+                style={S.ometaB}
+                onClick={() => onIrPedido(o)}
+                title="Abrir el pedido fuente"
+              >
+                {pedidoCodigo || o.pedidoId}
+              </button>
+            ) : (
+              <b style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-600)' }}>
+                {pedidoCodigo || o.pedidoId}
+              </b>
+            )}
+          </>
+        ) : 'orden interna'}
+      </div>
+      {/* Notas / fecha requerida — el mockup no las trae; se conservan en
+         línea secundaria para no perder información operativa. */}
+      {(o.notas || o.fechaRequerida) && (
+        <div style={S.metaSub}>
+          {o.notas || ''}
+          {o.notas && o.fechaRequerida ? ' · ' : ''}
+          {o.fechaRequerida ? `Requerida: ${o.fechaRequerida}` : ''}
         </div>
-        <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{o.fechaCreacion}</span>
-      </div>
-      <div style={S.cardTitle}>{o.formula || o.producto}</div>
-      <div style={S.cardMeta}>
-        {o.cantidad} cubetas 19L
-        {o.notas ? ` · ${o.notas}` : ''}
-        {o.fechaRequerida ? ` · Requerida: ${o.fechaRequerida}` : ''}
-      </div>
+      )}
       {!o.eliminado && o.estado !== 'cancelado' && o.estado !== 'rechazado' && <Timeline estado={o.estado} />}
-      {/* QC summary — solo se renderiza si hay al menos UN valor */}
-      {o.qcResultados && (
-        o.qcResultados.brillo != null ||
-        o.qcResultados.viscosidad != null ||
-        o.qcResultados.ph != null ||
-        o.qcResultados.densidad != null ||
-        o.qcResultados.notas
-      ) && (
-        <div style={{
-          fontSize: 11, padding: '8px 12px', background: 'var(--lp-brand-50)',
-          borderRadius: 8, marginTop: 8, color: 'var(--lp-brand-700)',
-        }}>
-          <strong>QC:</strong>
-          {o.qcResultados.brillo != null && ` Brillo ${o.qcResultados.brillo}`}
-          {o.qcResultados.viscosidad != null && ` · Visc ${o.qcResultados.viscosidad} KU`}
-          {o.qcResultados.ph != null && ` · pH ${o.qcResultados.ph}`}
-          {o.qcResultados.densidad != null && ` · Dens ${o.qcResultados.densidad}`}
-          {o.qcResultados.notas && ` · ${o.qcResultados.notas}`}
+      {/* Chip QC (mockup .qcbox) — solo con lecturas reales */}
+      {hasQC && (
+        <div style={S.qcbox}>
+          <b style={{ fontWeight: 700 }}>QC registrado:</b> {qcParts.join(' · ')}
         </div>
       )}
       {/* Actions */}
       {canManage && !o.eliminado && (
-        <div style={S.cardActions}>
-          {/* FIX jun 2026 (decisión owner): el botón "Iniciar producción" vive
-             ÚNICAMENTE en /pedidos. Aquí, si la orden viene de un pedido,
-             solo navegamos al pedido. Si es orden interna (sin pedidoId),
-             se mantiene el botón "Producir" en planta. */}
-          {onProducir && (o.estado === 'pendiente' || o.estado === 'en_proceso') && !o.pedidoId && (
+        <div style={S.oacts}>
+          {/* Iniciar producción — SOLO órdenes internas pendientes (decisión
+             owner: las que vienen de pedido se inician desde /pedidos). */}
+          {onProducir && o.estado === 'pendiente' && !o.pedidoId && (
             <button
-              style={{
-                ...S.actionBtn('var(--lp-success-600)', '#fff'),
-                fontWeight: 700, padding: '8px 14px',
-                display: 'inline-flex', alignItems: 'center', gap: 6,
-              }}
+              className="ordx-btn-primary"
+              style={S.btn}
               data-id="ordenes.btn.iniciar-produccion"
-              data-rol="admin,tecnico"
+              data-rol="tecnico,admin"
               onClick={() => onProducir(o)}
               title="Abre el flujo guiado paso-a-paso con cronómetro por materia prima"
             >
               {Icon.play} Iniciar producción
             </button>
           )}
-          {onProducir && o.pedidoId && (o.estado === 'pendiente' || o.estado === 'en_proceso') && (
+          {/* Aprobar QC — fase QC esperando aprobación (mockup). Lleva a la
+             pantalla Producción › Calidad donde vive la aprobación real. */}
+          {onAprobarQC && (o.estado === 'producido' || o.estado === 'qc_hold') && (
             <button
-              style={{ ...S.actionBtn('var(--lp-brand-100)', 'var(--lp-brand-700)'), display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              className="ordx-btn-primary"
+              style={S.btn}
+              data-id="ordenes.btn.aprobar-qc"
+              data-rol="tecnico,admin"
+              onClick={() => onAprobarQC(o)}
+              title="Revisar y aprobar QC en Producción › Calidad"
+            >
+              {Icon.check} Aprobar QC
+            </button>
+          )}
+          {/* Ver producción — órdenes en curso (mockup). Interna → abre el
+             flujo paso-a-paso; de pedido → pantalla Producción. */}
+          {onVerProduccion && (o.estado === 'en_proceso' || o.estado === 'en_produccion' || o.estado === 'produccion') && (
+            <button
+              style={{ ...S.btn, ...S.btnGhost }}
+              data-id="ordenes.btn.ver-produccion"
+              data-rol="tecnico,admin"
+              onClick={() => onVerProduccion(o)}
+            >
+              Ver producción {Icon.arrow}
+            </button>
+          )}
+          {/* Ir al pedido — toda orden con pedido fuente (mockup: si desde) */}
+          {onIrPedido && o.pedidoId && (
+            <button
+              style={{ ...S.btn, ...S.btnGhost }}
               data-id="ordenes.btn.ir-pedido"
-              data-rol="admin,tecnico"
-              onClick={() => onIrPedido && onIrPedido(o)}
+              data-rol="tecnico,admin"
+              onClick={() => onIrPedido(o)}
               title="Esta orden viene de un pedido. Inicia producción desde la pantalla Pedidos."
             >
               Ir al pedido {Icon.arrow}
             </button>
           )}
+          {/* Transiciones manuales (pendiente↔en_proceso, cancelar, reactivar)
+             — el mockup las omite; se conservan como botones ghost. */}
           {transitions.map(nextState => {
             const info = ESTADO_BADGE[nextState] || {};
             const isCancel = nextState === 'cancelado';
             return (
               <button
                 key={nextState}
-                style={{
-                  ...S.actionBtn(
-                    isCancel ? 'var(--lp-danger-100)' : 'var(--lp-brand-100)',
-                    isCancel ? 'var(--lp-danger-600)' : 'var(--lp-brand-700)',
-                  ),
-                  display: 'inline-flex', alignItems: 'center', gap: 5,
-                }}
+                style={{ ...S.btn, ...(isCancel ? S.btnGhostDanger : S.btnGhost) }}
                 data-id={isCancel ? 'ordenes.btn.cancelar' : 'ordenes.btn.cambiar-estado'}
                 data-rol="admin,tecnico"
                 onClick={() => onChangeStatus(o, nextState)}
@@ -816,7 +1004,7 @@ function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onPr
           })}
           {canDelete && (
             <button
-              style={{ ...S.actionBtn('var(--lp-danger-100)', 'var(--lp-danger-600)'), display: 'inline-flex', alignItems: 'center', gap: 5 }}
+              style={{ ...S.btn, ...S.btnGhostDanger }}
               data-id="ordenes.btn.eliminar"
               data-rol="admin"
               onClick={() => onDelete(o)}
@@ -830,8 +1018,8 @@ function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onPr
   );
 }
 
-/* ── Collapsible Group ── */
-function OrderGroup({ label, badgeCls, orders, canManage, canDelete, onChangeStatus, onDelete, onProducir, onIrPedido }) {
+/* ── Collapsible Group (historial) ── */
+function OrderGroup({ label, badgeCls, orders, canManage, canDelete, onChangeStatus, onDelete, onProducir, onIrPedido, getPedidoCodigo, getQcLote }) {
   const [open, setOpen] = useState(false);
   if (!orders?.length) return null;
 
@@ -851,11 +1039,13 @@ function OrderGroup({ label, badgeCls, orders, canManage, canDelete, onChangeSta
         </div>
       </div>
       {open && (
-        <div style={{ padding: '8px 12px' }}>
+        <div style={{ padding: '10px 12px', display: 'grid', gap: 10 }}>
           {orders.map(o => (
             <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
               onChangeStatus={onChangeStatus} onDelete={onDelete} onProducir={onProducir}
-              onIrPedido={onIrPedido} />
+              onIrPedido={onIrPedido}
+              pedidoCodigo={getPedidoCodigo ? getPedidoCodigo(o) : ''}
+              qcLote={getQcLote ? getQcLote(o) : null} />
           ))}
         </div>
       )}
@@ -867,7 +1057,7 @@ function OrderGroup({ label, badgeCls, orders, canManage, canDelete, onChangeSta
 /* MAIN PAGE                                                          */
 /* ════════════════════════════════════════════════════════════════════ */
 export default function OrdenesPage() {
-  const { user, can } = useAuth();
+  const { user } = useAuth(); /* `can` no se usa en esta pantalla (gating por rol) */
   /* FIX jun 2026 (K9): faltaba useNavigate. Las refs `navigate('/pedidos...')`
      en líneas 1156, 1172, 1585 tiraban ReferenceError al click — botón
      "→ Ir al pedido" estaba muerto desde Sprint H. */
@@ -885,13 +1075,19 @@ export default function OrdenesPage() {
   /* Data */
   const { data: ordData, loading, reload: reloadOrd } = useApiData(() => api.getOrdenes(), [], 5000);
   const { data: pedData, reload: reloadPed } = useApiData(() => api.getPedidos(), [], 5000);
+  /* Reskin mockup jun 2026: lecturas QC reales. Las órdenes NO traen
+     qcResultados — vive en el LOTE (trazabilidad.json, match por ordenId o
+     pedidoId). Sin esto el chip "QC registrado: ..." del mockup jamás
+     aparecería. Polling 0 → solo push WS + reload manual. */
+  const { data: trazaData, reload: reloadTraza } = useApiData(() => api.getTrazabilidad(), [], 0);
 
   /* FIX jun 2026 (K1): polling 5s era costoso y aún así dejaba cambios
      invisibles 2-3s. Realtime cierra el gap. */
   useRealtimeSync({
     onOrdenes:     () => reloadOrd(),
     onPedidos:     () => reloadPed(),
-    onTrazabilidad:() => reloadOrd(),
+    onTrazabilidad:() => { reloadOrd(); reloadTraza(); },
+    onQc:          () => reloadTraza(), /* QC registrado/aprobado → chip al instante */
     onOc:          () => reloadOrd(), /* solicitudes OC MP creadas desde aquí */
   });
 
@@ -913,6 +1109,12 @@ export default function OrdenesPage() {
   const [toastMsg, setToastMsg] = useState('');
   const [prodFlowItem, setProdFlowItem] = useState(null); // orden a producir paso-a-paso
   const [pendingNDA, setPendingNDA] = useState(null);     // orden esperando aceptación NDA
+  /* FIX jun 2026 (reskin, bug preexistente): handleDelete usaba `confirm`
+     SIN instanciar useConfirm en esta función — resolvía al window.confirm
+     global, que ignora las opciones y devuelve boolean → el flujo de PIN
+     mandaba `pin=true` al API y la eliminación fallaba siempre. Se instancia
+     el hook aquí (ConfirmEl se monta al final del JSX). */
+  const [confirm, ConfirmEl] = useConfirm();
 
   const showToast = useCallback((msg) => {
     setToastMsg(msg);
@@ -931,6 +1133,45 @@ export default function OrdenesPage() {
     return arr.filter(p => p && !p.eliminado && p.estado !== 'eliminado');
   }, [pedData]);
 
+  /* Folio del pedido fuente para "desde pedido PD-XXX" (mockup ometa).
+     La orden guarda pedidoId — el código legible vive en el pedido. */
+  const pedidoCodigoById = useMemo(() => {
+    const m = {};
+    pedidos.forEach(p => { if (p && p.id) m[p.id] = p.codigo || p.id; });
+    return m;
+  }, [pedidos]);
+
+  /* Lecturas QC del LOTE indexadas por ordenId y pedidoId (algunos lotes
+     viejos traen ordenId vacío pero sí pedidoId). Solo lecturas reales. */
+  const qcPorOrden = useMemo(() => {
+    const arr = trazaData?.data || (Array.isArray(trazaData) ? trazaData : []);
+    const map = {};
+    (Array.isArray(arr) ? arr : []).forEach(l => {
+      if (!l || l.eliminado) return;
+      const qc = l.qcResultados;
+      if (!qc || typeof qc !== 'object') return;
+      const tiene = ['brillo', 'viscosidad', 'ph', 'densidad', 'finura']
+        .some(k => qc[k] != null && qc[k] !== '');
+      if (!tiene) return;
+      if (l.ordenId) map['id:' + l.ordenId] = qc;
+      if (l.pedidoId) map['ped:' + l.pedidoId] = qc;
+    });
+    return map;
+  }, [trazaData]);
+
+  /* Helpers que se pasan a cards/grupos (computed, no capturados) */
+  const getPedidoCodigo = useCallback(
+    (o) => (o && o.pedidoId ? (pedidoCodigoById[o.pedidoId] || o.pedidoId) : ''),
+    [pedidoCodigoById]
+  );
+  const getQcLote = useCallback(
+    (o) => {
+      if (!o) return null;
+      return qcPorOrden['id:' + o.id] || (o.pedidoId ? qcPorOrden['ped:' + o.pedidoId] : null) || null;
+    },
+    [qcPorOrden]
+  );
+
   /* Tabs based on role */
   /* FIX jun 2026 (censo duplicados, decisión owner): se elimina la tab
      "Almacén Terán" — era una lista SOLO-LECTURA de pedidos + un modal de
@@ -940,7 +1181,7 @@ export default function OrdenesPage() {
     if (rol === 'admin' || rol === 'tecnico') t.push({ id: 'ordenes', label: 'Fábrica' });
     /* compras quitado (jun 2026, censo): la ruta /ordenes nunca admitió a Arely
        — la condición era código muerto; sus OCs viven en /compras. */
-    if (rol === 'admin' || rol === 'tecnico') t.push({ id: 'compras', label: 'OC MP' });
+    if (rol === 'admin' || rol === 'tecnico') t.push({ id: 'compras', label: 'OC Materia prima' });
     if (t.length === 0) t.push({ id: 'ordenes', label: 'Fábrica' });
     return t;
   }, [rol]);
@@ -1009,25 +1250,12 @@ export default function OrdenesPage() {
       }));
   }, [ordenes]);
 
-  /* KPIs */
-  const kpis = useMemo(() => {
-    const pend = activas.filter(o => o.estado === 'pendiente').length;
-    const proc = activas.filter(o => o.estado === 'en_proceso' || o.estado === 'en_produccion').length;
-    /* X3b: el KPI de QC contaba el estado legacy 'qc' (que NUNCA existe) → siempre
-       mostraba 0. Canónico = qc_hold + qc_aprobado. */
-    const qc = activas.filter(o => o.estado === 'qc_hold' || o.estado === 'qc_aprobado').length;
-    const urg = activas.filter(o => o.prioridad === 'urgente').length;
-    return { pend, proc, qc, urg };
-  }, [activas]);
+  /* KPI tiles del page viejo eliminados (reskin mockup jun 2026): los
+     contadores por fase se computan en vivo al agrupar (phase-n). */
 
-  /* Pedidos almacén pendientes.
-     FIX jun 2026 (L12): filtrar también `eliminado:true` para que admin
-     cancelando un pedido no deje fantasma en el sidebar de Enrique con
-     botón "→ Crear Orden" activo (regresión C-R2). */
-  const pedidosPend = useMemo(() =>
-    pedidos.filter(p => p.origen === 'almacen' && !p.eliminado && (p.estado === 'pendiente' || p.estado === 'aceptado')),
-    [pedidos]
-  );
+  /* `pedidosPend` eliminado (dead code): alimentaba el panel "Pedidos de
+     Almacén" que se quitó en el censo de duplicados (jun 2026) — los
+     pedidos se gestionan SOLO en /pedidos. */
 
   /* ── Handlers ── */
   /* Lógica real de arranque, reutilizable para flujo NDA y bypass de propietario */
@@ -1064,6 +1292,25 @@ export default function OrdenesPage() {
     }
     setPendingNDA(orden);
   }, [user, arrancarOrden]);
+
+  /* "Ver producción →" (mockup, fase en proceso): orden interna → abre el
+     flujo paso-a-paso (mismo handler real de producir, retoma donde iba);
+     orden de pedido → la producción se monitorea en /produccion. */
+  const handleVerProduccion = useCallback((orden) => {
+    if (!orden?.pedidoId) { handleProducir(orden); return; }
+    navigate('/produccion');
+  }, [handleProducir, navigate]);
+
+  /* "Aprobar QC" (mockup, fase QC): la aprobación real vive en
+     Producción › Calidad (deep-link ?tab=calidad ya soportado). */
+  const handleAprobarQC = useCallback(() => {
+    navigate('/produccion?tab=calidad');
+  }, [navigate]);
+
+  /* "Ir al pedido →" — resalta la card fuente vía ?focus= (M2) */
+  const handleIrPedido = useCallback((orden) => {
+    navigate('/pedidos' + (orden?.pedidoId ? '?focus=' + encodeURIComponent(orden.pedidoId) : ''));
+  }, [navigate]);
 
   /* Cuando acepta el NDA → ejecutar el inicio real */
   const handleNDAAccept = useCallback(async () => {
@@ -1177,14 +1424,45 @@ export default function OrdenesPage() {
   return (
     <>
       <TopBar title="Órdenes" />
+      {/* Texto de badges sólidos / botones primary flipea a tinta en modo
+         oscuro (mockup: .dark .est y .dark .btn-primary). Los estilos inline
+         no pueden usar [data-theme] — por eso este <style> scoped ordx-. */}
+      <style>{`
+        .ordx-est{color:#fff;}
+        [data-theme="dark"] .ordx-est,.dark .ordx-est{color:#0E1413;}
+        .ordx-btn-primary{background:var(--lp-brand-600);color:#fff;border:none;}
+        [data-theme="dark"] .ordx-btn-primary,.dark .ordx-btn-primary{color:#0E1413;}
+        .ordx-btn-primary:active{transform:scale(.97);}
+      `}</style>
       <div style={S.wrap}>
-        {/* Main tabs */}
-        <div style={S.mainTabs}>
-          {mainTabs.map(t => (
-            <button key={t.id} style={S.mainTab(t.id === mainTab)} onClick={() => setMainTab(t.id)}>
-              {t.label}
+        {/* Seg pill Fábrica | OC Materia prima (mockup .seg) + Nueva (mockup
+           .newbtn — la TopBar compartida no trae slot de acciones). */}
+        <div style={S.headRow}>
+          <div style={S.seg}>
+            {mainTabs.map(t => (
+              <button key={t.id} style={S.segBtn(t.id === mainTab)} onClick={() => setMainTab(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {mainTab === 'ordenes' && canManage && (
+            <button
+              className="ordx-btn-primary"
+              style={S.btnNew}
+              data-id="ordenes.btn.nueva"
+              data-rol="admin,tecnico"
+              onClick={() => setShowNewModal(true)}
+            >
+              {Icon.plus} Nueva orden
             </button>
-          ))}
+          )}
+        </div>
+
+        {/* Subtítulo en vivo (mockup .tsub) */}
+        <div style={S.tsub}>
+          {mainTab === 'ordenes'
+            ? `${activas.length} ${activas.length === 1 ? 'orden' : 'órdenes'} de fábrica en curso`
+            : 'Solicitudes a Compras'}
         </div>
 
         {/* ════════ FÁBRICA TAB ════════ */}
@@ -1210,76 +1488,43 @@ export default function OrdenesPage() {
 
             {subTab === 'activas' && (
               <>
-                {/* Toolbar: search + new order button */}
+                {/* Búsqueda — el mockup no la trae; se conserva (función real) */}
                 <div style={S.toolbar}>
                   <input type="text" style={S.search} placeholder="Buscar orden..."
                     value={searchQ} onChange={e => setSearchQ(e.target.value)} />
-                  {canManage && (
-                    <button
-                      style={{ ...S.btnNew, display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                      data-id="ordenes.btn.nueva"
-                      data-rol="admin,tecnico"
-                      onClick={() => setShowNewModal(true)}
-                    >
-                      {Icon.plus} Nueva Orden
-                    </button>
-                  )}
                 </div>
 
-                {/* KPIs */}
-                <div style={S.kpiGrid}>
-                  <div style={S.kpi('var(--lp-brand-100)')}>
-                    <div style={S.kpiLabel('var(--lp-brand-700)')}>Pendientes</div>
-                    <div style={S.kpiValue('var(--lp-brand-700)')}>{kpis.pend}</div>
-                  </div>
-                  <div style={S.kpi('var(--lp-warning-100)')}>
-                    <div style={S.kpiLabel('var(--lp-warning-600)')}>En Proceso</div>
-                    <div style={S.kpiValue('var(--lp-warning-600)')}>{kpis.proc}</div>
-                  </div>
-                  <div style={S.kpi('#EDE9FE')}>
-                    <div style={S.kpiLabel('#7C3AED')}>QC</div>
-                    <div style={S.kpiValue('#7C3AED')}>{kpis.qc}</div>
-                  </div>
-                  {kpis.urg > 0 && (
-                    <div style={S.kpi('var(--lp-danger-100)')}>
-                      <div style={S.kpiLabel('var(--lp-danger-600)')}>Urgentes</div>
-                      <div style={S.kpiValue('var(--lp-danger-600)')}>{kpis.urg}</div>
-                    </div>
-                  )}
-                </div>
+                {/* KPI tiles eliminados (reskin mockup jun 2026): los
+                   contadores viven EN VIVO en el encabezado de cada fase
+                   (.phase-n) — misma información sin duplicar UI. */}
 
                 {filteredActivas.length === 0 ? (
-                  <div style={{ ...S.empty, padding: '60px 20px' }}>
-                    <div style={{ marginBottom: 12, display: 'flex', justifyContent: 'center', color: 'var(--lp-text-tertiary)' }}>{Icon.empty}</div>
-                    <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 8 }}>
-                      {searchQ ? 'Sin resultados' : 'Sin órdenes activas'}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-                      {searchQ ? `No se encontró "${searchQ}"` : 'Crea una nueva orden para comenzar.'}
+                  <div style={S.empty}>
+                    <div style={S.emptyDash}>
+                      {searchQ
+                        ? <>Sin resultados — no se encontró "{searchQ}".</>
+                        : <>Sin órdenes activas. Respira tranquilo.</>}
                     </div>
                   </div>
                 ) : (() => {
-                  /* Z3 (jun 2026): agrupar activas por fase de producción
-                     para que el operario vea de un vistazo "tengo 3 en QC,
-                     5 produciendo, 2 envasando". Antes era grid plana de
-                     20 cards mezcladas sin jerarquía. Las cards siguen
-                     siendo el mismo componente OrdenCard — solo cambia
-                     el layout exterior.
-
-                     Reskin verde (jun 2026): el mockup grpPhase (ERP Escritorio)
-                     usa un label de sección con bolita de color por fase +
-                     grid ancho de cards. El mockup móvil (S.ordenes) apila las
-                     cards limpias. `gridFase` alterna grid ancho (escritorio)
-                     vs columna única (móvil) según `isDesktop`. */
+                  /* Z3 (jun 2026): agrupar activas por fase. Reskin mockup
+                     Órdenes.html: encabezado de fase = dot color + título +
+                     contador mono + "· subtítulo" (computed en vivo).
+                     Fases del mockup ("Por iniciar / En proceso / En control
+                     de calidad") + extensión a los estados reales tardíos
+                     que el mockup demo no trae (envasado/transporte, almacén).
+                     Nota: en_proceso pasa a "En proceso" (el mockup lo define
+                     como 'Producción en curso' y arrancarOrden lo setea justo
+                     al iniciar producción — antes caía en 'Pendientes'). */
                   const FASES = [
-                    { key: 'pendientes',  label: 'Pendientes de iniciar', color: 'var(--lp-warning-600)',  estados: ['pendiente','aceptado','en_proceso'] },
-                    { key: 'produciendo', label: 'En producción',          color: 'var(--lp-brand-600)',    estados: ['en_produccion','produccion'] },
-                    { key: 'qc',          label: 'Control de calidad',     color: '#7C3AED',                estados: ['qc_hold','qc_aprobado','qc'] },
-                    { key: 'envasando',   label: 'Envasado / transporte',  color: 'var(--lp-brand-600)',    estados: ['en_envasado','envasado','en_recoleccion','en_camino'] },
-                    { key: 'listas',      label: 'Listas / entregadas',    color: 'var(--lp-success-600)',  estados: ['en_almacen','entregado','terminada','entregada'] },
+                    { key: 'por_iniciar', titulo: 'Por iniciar',            sub: 'Esperando arranque',    color: 'var(--lp-warning-600)', estados: ['pendiente', 'aceptado'] },
+                    { key: 'en_proceso',  titulo: 'En proceso',             sub: 'Producción en curso',   color: 'var(--lp-brand-600)',   estados: ['en_proceso', 'en_produccion', 'produccion'] },
+                    { key: 'qc',          titulo: 'En control de calidad',  sub: 'Esperando aprobación',  color: 'var(--lp-granel-600)',  estados: ['producido', 'qc_hold', 'qc_aprobado', 'qc'] },
+                    { key: 'envasado',    titulo: 'Envasado y transporte',  sub: 'Rumbo a almacén',       color: 'var(--lp-info-600)',    estados: ['en_envasado', 'envasado', 'en_recoleccion', 'en_camino'] },
+                    { key: 'almacen',     titulo: 'En almacén',             sub: 'Recibidas en Terán',    color: 'var(--lp-success-600)', estados: ['en_almacen', 'terminada', 'entregada'] },
                   ];
                   /* Grid responsive: escritorio = cards anchas en grilla;
-                     móvil = una columna (cards limpias apiladas). */
+                     móvil = una columna (cards apiladas, mockup phone). */
                   const gridFase = {
                     display: 'grid',
                     gridTemplateColumns: isDesktop
@@ -1287,26 +1532,20 @@ export default function OrdenesPage() {
                       : '1fr',
                     gap: 12,
                   };
-                  /* Label de sección con bolita de color (reemplaza el "●"
-                     del mockup) + contador en pill mono. */
-                  const FaseLabel = ({ label, color, count, neutral }) => (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 8,
-                      fontSize: 11, fontWeight: 800,
-                      color: neutral ? 'var(--lp-text-tertiary)' : 'var(--lp-text-secondary)',
-                      textTransform: 'uppercase', letterSpacing: '.06em',
-                      margin: '0 0 8px 2px',
-                    }}>
-                      <Dot color={color} />
-                      <span>{label}</span>
-                      <span style={{
-                        background: neutral ? 'var(--lp-bg-sunken)' : 'var(--lp-brand-100)',
-                        color: neutral ? 'var(--lp-text-secondary)' : 'var(--lp-brand-700)',
-                        borderRadius: 10, padding: '1px 8px',
-                        fontFamily: 'var(--lp-font-mono)', fontSize: 11,
-                      }}>{count}</span>
+                  const PhaseHeader = ({ titulo, sub, color, count }) => (
+                    <div style={S.phaseH}>
+                      <span style={S.phaseDot(color)} />
+                      <span style={S.phaseT}>{titulo}</span>
+                      <span style={S.phaseN}>{count}</span>
+                      <span style={S.phaseS}>· {sub}</span>
                     </div>
                   );
+                  const cardProps = {
+                    canManage, canDelete,
+                    onChangeStatus: handleChangeStatus, onDelete: handleDelete,
+                    onProducir: handleProducir, onIrPedido: handleIrPedido,
+                    onVerProduccion: handleVerProduccion, onAprobarQC: handleAprobarQC,
+                  };
                   const porFase = {};
                   FASES.forEach(f => { porFase[f.key] = []; });
                   const otras = [];
@@ -1319,27 +1558,23 @@ export default function OrdenesPage() {
                   return (
                     <>
                       {FASES.filter(f => porFase[f.key].length > 0).map(f => (
-                        <div key={f.key} style={{ marginBottom: 18 }}>
-                          <FaseLabel label={f.label} color={f.color} count={porFase[f.key].length} />
+                        <div key={f.key} style={{ marginBottom: 20 }}>
+                          <PhaseHeader titulo={f.titulo} sub={f.sub} color={f.color} count={porFase[f.key].length} />
                           <div style={gridFase}>
                             {porFase[f.key].map(o => (
-                              <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
-                                onChangeStatus={handleChangeStatus} onDelete={handleDelete}
-                                onProducir={handleProducir}
-                                onIrPedido={(ord) => navigate('/pedidos' + (ord.pedidoId ? '?focus=' + encodeURIComponent(ord.pedidoId) : ''))} />
+                              <OrdenCard key={o.id} orden={o} {...cardProps}
+                                pedidoCodigo={getPedidoCodigo(o)} qcLote={getQcLote(o)} />
                             ))}
                           </div>
                         </div>
                       ))}
                       {otras.length > 0 && (
-                        <div style={{ marginBottom: 18 }}>
-                          <FaseLabel label="Otros estados" color="var(--lp-border-strong)" count={otras.length} neutral />
+                        <div style={{ marginBottom: 20 }}>
+                          <PhaseHeader titulo="Otros estados" sub="Fuera del flujo estándar" color="var(--lp-border-strong)" count={otras.length} />
                           <div style={gridFase}>
                             {otras.map(o => (
-                              <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
-                                onChangeStatus={handleChangeStatus} onDelete={handleDelete}
-                                onProducir={handleProducir}
-                                onIrPedido={(ord) => navigate('/pedidos' + (ord.pedidoId ? '?focus=' + encodeURIComponent(ord.pedidoId) : ''))} />
+                              <OrdenCard key={o.id} orden={o} {...cardProps}
+                                pedidoCodigo={getPedidoCodigo(o)} qcLote={getQcLote(o)} />
                             ))}
                           </div>
                         </div>
@@ -1352,14 +1587,15 @@ export default function OrdenesPage() {
 
             {subTab === 'pruebas' && (
               pruebasActivas.length === 0 ? (
-                <div style={S.empty}>Sin órdenes de prueba activas.</div>
+                <div style={S.empty}><div style={S.emptyDash}>Sin órdenes de prueba activas.</div></div>
               ) : (
                 <div style={{ display:'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap:12 }}>
                   {pruebasActivas.map(o => (
                     <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
                       onChangeStatus={handleChangeStatus} onDelete={handleDelete}
-                      onProducir={handleProducir}
-                      onIrPedido={(ord) => navigate('/pedidos' + (ord.pedidoId ? '?focus=' + encodeURIComponent(ord.pedidoId) : ''))} />
+                      onProducir={handleProducir} onIrPedido={handleIrPedido}
+                      onVerProduccion={handleVerProduccion} onAprobarQC={handleAprobarQC}
+                      pedidoCodigo={getPedidoCodigo(o)} qcLote={getQcLote(o)} />
                   ))}
                 </div>
               )
@@ -1367,12 +1603,13 @@ export default function OrdenesPage() {
 
             {subTab === 'canceladas' && (
               canceladas.length === 0 ? (
-                <div style={S.empty}>Sin órdenes canceladas.</div>
+                <div style={S.empty}><div style={S.emptyDash}>Sin órdenes canceladas.</div></div>
               ) : (
                 <div style={{ display:'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap:12 }}>
                   {canceladas.map(o => (
                     <OrdenCard key={o.id} orden={o} canManage={canManage} canDelete={canDelete}
-                      onChangeStatus={handleChangeStatus} onDelete={handleDelete} />
+                      onChangeStatus={handleChangeStatus} onDelete={handleDelete}
+                      pedidoCodigo={getPedidoCodigo(o)} qcLote={getQcLote(o)} />
                   ))}
                 </div>
               )
@@ -1380,12 +1617,13 @@ export default function OrdenesPage() {
 
             {subTab === 'todas' && (
               historialGroups.length === 0 ? (
-                <div style={S.empty}>Sin órdenes registradas.</div>
+                <div style={S.empty}><div style={S.emptyDash}>Sin órdenes registradas.</div></div>
               ) : (
                 historialGroups.map(g => (
                   <OrderGroup key={g.status} label={g.label} badgeCls={g.badgeCls}
                     orders={g.orders} canManage={canManage} canDelete={canDelete}
-                    onChangeStatus={handleChangeStatus} onDelete={handleDelete} />
+                    onChangeStatus={handleChangeStatus} onDelete={handleDelete}
+                    getPedidoCodigo={getPedidoCodigo} getQcLote={getQcLote} />
                 ))
               )
             )}
@@ -1475,6 +1713,9 @@ export default function OrdenesPage() {
         </div>
       )}
 
+      {/* ── Confirm con prompt (motivo + PIN de eliminación) ── */}
+      {ConfirmEl}
+
       {/* ── Toast ── */}
       {toastMsg && (
         <div style={{ ...S.toast, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1513,6 +1754,20 @@ const OC_PRIO_BADGE = {
   alta:    { cls: 'warn', label: 'ALTA' },
   normal:  { cls: 'ok',   label: 'NORMAL' },
   baja:    { cls: 'neutral', label: 'BAJA' },
+};
+/* Color sólido por familia visual (riel + badge sólido de la card OC) */
+const OC_CLS_SOLID = {
+  ok:      'var(--lp-success-600)',
+  warn:    'var(--lp-warning-600)',
+  err:     'var(--lp-danger-600)',
+  info:    'var(--lp-info-600)',
+  neutral: 'var(--lp-text-secondary)',
+  purple:  'var(--lp-granel-600)',
+};
+const OC_PRIO_TINT = {
+  urgente: 'var(--lp-danger-600)',
+  alta:    'var(--lp-warning-600)',
+  baja:    'var(--lp-info-600)',
 };
 
 function OCMPTab({ rol, userName, showToast, isDesktop }) {
@@ -1589,7 +1844,8 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
       {canSolicitar && (
         <div style={{ ...S.toolbar, justifyContent: 'flex-end' }}>
           <button
-            style={{ ...S.btnNew, display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            className="ordx-btn-primary"
+            style={S.btnNew}
             data-id="ordenes.btn.nueva-solicitud-oc"
             data-rol="admin,tecnico,compras"
             onClick={() => setShowNew(true)}
@@ -1622,14 +1878,19 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
         <div style={S.spinner}><div className="lp-spinner" /></div>
       ) : filtered.length === 0 ? (
         <div style={S.empty}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>
-            {filter === 'mias' ? 'No tienes solicitudes propias' : 'Sin OCs en este filtro'}
-          </div>
-          {canSolicitar && (
-            <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 8 }}>
-              Pulsa "Nueva Solicitud" para pedir MP a compras.
+          {/* Empty state del mockup (tab OC Materia prima) */}
+          <div style={S.emptyDash}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 6 }}>
+              {filter === 'mias' ? 'No tienes solicitudes propias' : 'Sin OCs en este filtro'}
             </div>
-          )}
+            Solicitudes de OC de materia prima → Compras (Arely).
+            <br />Aquí pides insumos que falten para producir.
+            {canSolicitar && (
+              <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 8 }}>
+                Pulsa "Nueva Solicitud" para pedir MP a compras.
+              </div>
+            )}
+          </div>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap: 12 }}>
@@ -1639,7 +1900,6 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
 
       {showNew && (
         <SolicitudMPModal
-          userName={userName}
           onClose={() => setShowNew(false)}
           onSuccess={(oc) => {
             setShowNew(false);
@@ -1655,31 +1915,34 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
 
 function OCCard({ oc }) {
   const estado = OC_ESTADO_BADGE[oc.estado] || { cls: 'neutral', label: oc.estado || '-' };
-  const prio = OC_PRIO_BADGE[oc.prioridad] || { cls: 'neutral', label: oc.prioridad || '-' };
+  const solid = OC_CLS_SOLID[estado.cls] || OC_CLS_SOLID.neutral;
+  const prioTint = oc.prioridad && oc.prioridad !== 'normal' ? OC_PRIO_TINT[oc.prioridad] : null;
   const fecha = oc.fechaCreacion ? new Date(oc.fechaCreacion).toLocaleString('es-MX', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
   }) : '-';
   const itemsCount = Array.isArray(oc.items) ? oc.items.length : 0;
   const totalKg = Array.isArray(oc.items) ? oc.items.reduce((s, i) => s + (Number(i.kg) || 0), 0) : 0;
   return (
-    <div style={S.card(false)}>
-      <div style={S.cardHeader}>
-        <div>
-          <div style={S.cardCode}>{oc.codigo || oc.id}</div>
-          <div style={S.cardTitle}>{oc.proveedor || 'POR ASIGNAR'}</div>
-          <div style={S.cardMeta}>
-            {fecha} · {oc.creadoPor || '?'} · {itemsCount} MP{itemsCount !== 1 ? 's' : ''} · {totalKg.toFixed(0)} kg total
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
-          <span style={S.badge(estado.cls)}>{estado.label}</span>
-          <span style={S.badge(prio.cls)}>{prio.label}</span>
-        </div>
+    <div style={S.ocard(false)}>
+      <div style={S.ocardBar(solid)} />
+      <div style={S.otop}>
+        <span style={S.folio}>{oc.codigo || oc.id}</span>
+        <span className="ordx-est" style={S.estSolid(solid)}>{estado.label}</span>
+        {prioTint && (
+          <span style={S.prioPill(prioTint)}>
+            {(OC_PRIO_BADGE[oc.prioridad] || { label: oc.prioridad }).label}
+          </span>
+        )}
+        <span style={S.ofecha} title={oc.fechaCreacion || ''}>{fecha}</span>
+      </div>
+      <div style={S.otitle}>{oc.proveedor || 'POR ASIGNAR'}</div>
+      <div style={S.ometa}>
+        {oc.creadoPor || '?'} · {itemsCount} MP{itemsCount !== 1 ? 's' : ''} · {totalKg.toFixed(0)} kg total
       </div>
 
       {/* Lista de items */}
       {Array.isArray(oc.items) && oc.items.length > 0 && (
-        <div style={{ padding: '8px 14px', borderTop: '1px solid var(--lp-border-subtle)' }}>
+        <div style={{ marginTop: 10, paddingTop: 4, borderTop: '1px solid var(--lp-border-subtle)' }}>
           {oc.items.map((it, idx) => (
             <div key={idx} style={{
               display: 'flex', justifyContent: 'space-between', padding: '6px 0',
@@ -1698,7 +1961,7 @@ function OCCard({ oc }) {
 
       {oc.notas && (
         <div style={{
-          padding: '8px 14px', borderTop: '1px solid var(--lp-border-subtle)',
+          marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--lp-border-subtle)',
           fontSize: 11, color: 'var(--lp-text-secondary)', fontStyle: 'italic',
         }}>
           "{oc.notas}"
@@ -1708,7 +1971,9 @@ function OCCard({ oc }) {
   );
 }
 
-function SolicitudMPModal({ userName, onClose, onSuccess }) {
+/* userName no se usa: el backend toma el solicitante de la sesión */
+function SolicitudMPModal({ onClose, onSuccess }) {
+  const sheet = useSheetStyles();
   const [mpsDisponibles, setMpsDisponibles] = useState([]);
   const [items, setItems] = useState([{ mp: '', kg: '', presentacion: '' }]);
   const [prioridad, setPrioridad] = useState('normal');
@@ -1778,8 +2043,8 @@ function SolicitudMPModal({ userName, onClose, onSuccess }) {
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
-      <div style={{ ...S.modal, maxWidth: 560 }} onClick={e => e.stopPropagation()}>
+    <div style={sheet.overlay} onClick={onClose}>
+      <div style={{ ...sheet.modal, ...(sheet.isDesktop ? { maxWidth: 560 } : {}) }} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>
             <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--lp-text-primary)' }}>

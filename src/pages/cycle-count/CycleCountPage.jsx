@@ -6,7 +6,6 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import useConfirm from '../../hooks/useConfirm';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
-import PageTabs from '../../components/ui/PageTabs';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -55,13 +54,15 @@ const S = {
   wrap: { padding: '0 20px 100px' },
   h1: { fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--lp-text-primary)' },
   psub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3, marginBottom: 16 },
-  tab: (active) => ({
-    padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-    color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-    background: 'none', border: 'none',
-    borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-    cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: 'var(--lp-font-sans)',
-    marginBottom: -2, flexShrink: 0,
+  /* Tabs pill del mockup Conteo.html (.tab): radio 999, activo = acento sólido.
+     En móvil cada pill estira (flex:1) igual que el mockup; escritorio = auto. */
+  pillTabs: { display: 'flex', gap: 4, marginBottom: 16, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' },
+  pillTab: (on, grow) => ({
+    flex: grow ? 1 : '0 0 auto', padding: '9px 14px', minHeight: 40, borderRadius: 999,
+    border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    fontSize: 12.5, fontWeight: on ? 600 : 500, whiteSpace: 'nowrap',
+    background: on ? 'var(--lp-brand-600)' : 'transparent',
+    color: on ? '#fff' : 'var(--lp-text-secondary)', transition: 'all .15s',
   }),
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
   searchBox: {
@@ -522,18 +523,9 @@ function PendienteBloque({ titulo, color, badge, items, vacio, isDesktop }) {
   );
 }
 
-function PendientesTab({ isDesktop }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState('');
-
-  useEffect(() => {
-    api.getCalendarioConteos()
-      .then(r => setData(r.data))
-      .catch(e => setErr(e.message))
-      .finally(() => setLoading(false));
-  }, []);
-
+/* El fetch del calendario vive en la page (se comparte con el contador
+   "Vencidos · N" de la tab y el subtítulo "Hola X · N vencidos" del mockup). */
+function PendientesTab({ isDesktop, data, loading, err }) {
   if (loading) return <div style={S.loading}>Cargando calendario…</div>;
   if (err) return <div style={S.err}>{err}</div>;
   if (!data) return <div style={S.empty}>Sin datos</div>;
@@ -686,14 +678,14 @@ function ItemRowDesktop({ item, onRegistrar, onContar }) {
   );
 }
 
-/* ── Card móvil de item (1:1 ERP Móvil.html · Conteo.html) ── */
-function ItemCardMobile({ item, onContar }) {
+/* ── Card móvil de item (1:1 Conteo.html): badge tipo MP/PT + estado pill ── */
+function ItemCardMobile({ item, tipo, onContar }) {
   const est = estadoDeItem(item);
   const contado = item.stockFisico !== null && item.stockFisico !== undefined;
   return (
     <div style={S.mCard(false)}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
-        <span style={S.mTipo}>{item.unidad}</span>
+        <span style={S.mTipo}>{tipo || item.unidad}</span>
         {item.esNueva && <span style={S.badge('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Nueva</span>}
         <span style={{ ...S.estChip(est.color), marginLeft: 'auto' }}>{est.label}</span>
       </div>
@@ -710,7 +702,7 @@ function ItemCardMobile({ item, onContar }) {
         )}
       </div>
       {contado ? (
-        <div style={S.actMobileDone}>{Icon.check(16)}{item.flagged ? 'Enviado a aprobación admin' : 'Conteo registrado'}</div>
+        <div style={S.actMobileDone}>{Icon.check(16)}{item.flagged ? 'Enviado a aprobación de admin' : 'Conteo registrado'}</div>
       ) : (
         <button style={S.actMobile} onClick={() => onContar(item)}
           data-id="conteo.btn.contar" data-rol="inventario,admin">
@@ -727,6 +719,7 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
   const items = useMemo(() => {
     let arr = [...(sesion.items || [])];
     if (filter === 'pendientes') arr = arr.filter(i => i.stockFisico === null || i.stockFisico === undefined);
+    else if (filter === 'contados') arr = arr.filter(i => i.stockFisico !== null && i.stockFisico !== undefined);
     else if (filter === 'flaggeados') arr = arr.filter(i => i.flagged);
     if (search) {
       const q = search.toLowerCase();
@@ -734,6 +727,13 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
     }
     return arr;
   }, [sesion.items, filter, search]);
+
+  /* Conteos por estado — espejo de las tabs del mockup (Programados · Contados) */
+  const nProg = (sesion.items || []).filter(i => i.stockFisico === null || i.stockFisico === undefined).length;
+  const nCont = (sesion.items || []).length - nProg;
+  const nFlag = (sesion.items || []).filter(i => i.flagged).length;
+  /* Badge de tipo para las cards móvil (mockup .tipo: MP / PT) */
+  const tipoBadge = sesion.categoria === 'mp' ? 'MP' : sesion.categoria === 'pt' ? 'PT' : 'ENV';
 
   const tituloAmigable = `Conteo de ${CATEGORIAS.find(c => c.v === sesion.categoria)?.label || sesion.categoria}`;
   const tipoLabel = TIPOS.find(t => t.v === sesion.tipo)?.label || sesion.tipo;
@@ -792,11 +792,13 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
             value={search} onChange={(e) => setSearch(e.target.value)}
             data-id="conteo.input.buscar" data-rol="inventario,admin" />
         </div>
+        {/* Estados del mockup: Programados / Contados (+ Flaggeados, función previa) */}
         <SegmentedControl value={filter} onChange={setFilter}
           options={[
             { value: 'todos', label: 'Todos' },
-            { value: 'pendientes', label: 'Pendientes' },
-            { value: 'flaggeados', label: 'Flaggeados' },
+            { value: 'pendientes', label: `Programados · ${nProg}` },
+            { value: 'contados', label: `Contados · ${nCont}` },
+            { value: 'flaggeados', label: `Flaggeados · ${nFlag}` },
           ]} color="brand" />
         {sesion.categoria === 'mp' && onAgregarMP && (
           <button style={S.btnPrimary} onClick={onAgregarMP} title="Agregar una MP que no está en el inventario"
@@ -808,7 +810,11 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
 
       {/* Lista de items — tabla escritorio / cards móvil */}
       {items.length === 0 ? (
-        <div style={S.empty}>Sin items que coincidan</div>
+        <div style={S.empty}>
+          {(!search && filter === 'todos')
+            ? 'Nada por contar aquí. Respira tranquilo.'
+            : 'Sin items que coincidan'}
+        </div>
       ) : isDesktop ? (
         <div style={S.tablewrap}>
           <table style={S.table}>
@@ -832,7 +838,7 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
       ) : (
         <div>
           {items.map(item => (
-            <ItemCardMobile key={item.key} item={item} onContar={onContar} />
+            <ItemCardMobile key={item.key} item={item} tipo={tipoBadge} onContar={onContar} />
           ))}
         </div>
       )}
@@ -974,6 +980,22 @@ export default function CycleCountPage() {
   const [itemParaContar, setItemParaContar] = useState(null);
   const [toast, setToast] = useState('');
 
+  /* Calendario de conteos (vencidos/esta semana/próximos) — vive a nivel page
+     para alimentar la tab "Vencidos · N" y el subtítulo del mockup
+     ("Hola Burgos · 2 vencidos"). PendientesTab lo recibe por props.
+     Guard `?.` : tolera mocks de api sin el método (tests). */
+  const [calData, setCalData] = useState(null);
+  const [calLoading, setCalLoading] = useState(true);
+  const [calErr, setCalErr] = useState('');
+
+  const cargarCal = useCallback(() => {
+    const p = api.getCalendarioConteos?.();
+    if (!p || typeof p.then !== 'function') { setCalLoading(false); return; }
+    p.then(r => { setCalData(r.data); setCalErr(''); })
+      .catch(e => setCalErr(e.message))
+      .finally(() => setCalLoading(false));
+  }, []);
+
   const cargar = useCallback(() => {
     setLoading(true);
     api.getCycleCounts()
@@ -985,11 +1007,12 @@ export default function CycleCountPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { cargar(); }, [cargar]);
+  useEffect(() => { cargar(); cargarCal(); }, [cargar, cargarCal]);
 
-  /* Realtime: canal 'cycleCount' (filtro ['admin','inventario']) + inventario. */
+  /* Realtime: canal 'cycleCount' (filtro ['admin','inventario']) + inventario.
+     Aprobar/finalizar mueve "último conteo" → también refresca el calendario. */
   useRealtimeSync({
-    onCycleCount: () => cargar(),
+    onCycleCount: () => { cargar(); cargarCal(); },
     onInventario: () => cargar(),
   });
 
@@ -1037,6 +1060,11 @@ export default function CycleCountPage() {
         const varianzas = items.filter(i => i.flagged).length;
         return { ...s, items, contados, varianzas };
       }));
+      /* Feedback del mockup tras registrar (varianza alta → aviso de aprobación) */
+      setToast(r?.item?.flagged
+        ? 'Conteo registrado · se enviará a aprobación de admin'
+        : 'Conteo registrado');
+      setTimeout(() => setToast(''), 3000);
     } catch (e) {
       setToast('Error: ' + e.message);
       setTimeout(() => setToast(''), 3000);
@@ -1113,11 +1141,17 @@ export default function CycleCountPage() {
     }
   };
 
-  const tabs = ['pendientes', 'actual', 'historial'].map(id => ({
-    id,
-    label: { pendientes: 'Mis pendientes', actual: 'Mi conteo actual', historial: 'Historial' }[id],
-    style: S.tab,
-  }));
+  /* Tabs pill del mockup con contadores: Vencidos · N (calendario) /
+     Conteo actual · pendientes de la sesión / Historial · sesiones. */
+  const nVencidos = calData ? (calData.vencidos || []).length : null;
+  const nPorContar = sesionActiva
+    ? (sesionActiva.items || []).filter(i => i.stockFisico === null || i.stockFisico === undefined).length
+    : null;
+  const tabs = [
+    { id: 'pendientes', label: `Vencidos${nVencidos != null ? ' · ' + nVencidos : ''}` },
+    { id: 'actual', label: `Conteo actual${nPorContar != null ? ' · ' + nPorContar : ''}` },
+    { id: 'historial', label: `Historial${sesiones.length ? ' · ' + sesiones.length : ''}` },
+  ];
 
   /* Bloqueo por rol — renderizado tras declarar todos los hooks. */
   if (sinAcceso) {
@@ -1140,19 +1174,33 @@ export default function CycleCountPage() {
       <TopBar title="Conteo" />
       <div style={S.wrap}>
         <div style={S.h1}>Conteo</div>
-        <div style={S.psub}>Cycle count{user?.nombre ? ' · ' + user.nombre : ''}</div>
+        {/* Subtítulo del mockup: "Hola Burgos · 2 vencidos" */}
+        <div style={S.psub}>
+          {user?.nombre ? `Hola ${user.nombre}` : 'Cycle count'}
+          {nVencidos != null ? ` · ${nVencidos} vencido${nVencidos === 1 ? '' : 's'}` : ''}
+        </div>
 
-        <PageTabs
-          tabs={tabs}
-          activeTab={activeTab}
-          onChange={setActiveTab}
-          style={{ display: 'flex', gap: 0, borderBottom: '2px solid var(--lp-border-subtle)', marginBottom: 16, overflowX: 'auto' }}
-        />
+        <div style={S.pillTabs}>
+          {tabs.map(t => (
+            <button key={t.id} type="button" style={S.pillTab(t.id === activeTab, !isDesktop)}
+              data-id={`conteo.tab.${t.id}`} data-rol="inventario,admin"
+              onClick={() => setActiveTab(t.id)}>{t.label}</button>
+          ))}
+        </div>
 
         {err && <div style={S.err}>{err}</div>}
-        {toast && <div style={{ ...S.err, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' }}>{toast}</div>}
+        {toast && (
+          <div style={{
+            ...S.err,
+            ...(toast.startsWith('Error')
+              ? { background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' }
+              : { background: 'var(--lp-success-100)', color: 'var(--lp-success-700)' }),
+          }}>{toast}</div>
+        )}
 
-        {activeTab === 'pendientes' && <PendientesTab isDesktop={isDesktop} />}
+        {activeTab === 'pendientes' && (
+          <PendientesTab isDesktop={isDesktop} data={calData} loading={calLoading} err={calErr} />
+        )}
 
         {activeTab === 'actual' && (
           <>

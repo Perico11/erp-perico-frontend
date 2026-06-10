@@ -44,6 +44,26 @@ const B = (bg, fg) => ({
   borderRadius: 6, background: bg, color: fg, marginRight: 4,
 });
 
+/* CSS inyectado UNA vez — paridad mockup Stock Fábrica.html:
+   - slide-up del bottom-sheet (motion solo transform; reduced-motion ok)
+   - texto oscuro de botones de acento en dark (mockup .dark .lbtn{color:#0E1413})
+   - input central del stepper de cantidad sin spinners nativos */
+const SF_CSS = `
+  [data-theme="dark"] .lp-btn-acc, .dark .lp-btn-acc{ color:#0E1413 !important; }
+  @keyframes lpSheetIn{ from{ transform:translateY(26px) } to{ transform:none } }
+  .lp-qval::-webkit-outer-spin-button, .lp-qval::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  .lp-qval{ -moz-appearance:textfield; }
+  @media (prefers-reduced-motion:reduce){ .lp-sheet{ animation:none !important } }
+`;
+function injectSheetCSS() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('lp-stockfab-css')) return;
+  const st = document.createElement('style');
+  st.id = 'lp-stockfab-css';
+  st.textContent = SF_CSS;
+  document.head.appendChild(st);
+}
+
 function litUsed(lote) {
   /* Evitar doble conteo TOTE + hijos: los sublotes finales que salen de un TOTE
      representan los MISMOS litros que el TOTE contenía. Solo contamos:
@@ -139,9 +159,10 @@ const S = {
     fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
+  /* Card de lote — mockup .lcard: radio 18, padding 15/16, hairline */
   card: {
-    background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
-    borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 10,
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 18, padding: '15px 16px', marginBottom: 10,
   },
   cardHeader: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
@@ -150,11 +171,12 @@ const S = {
   cardTitle: { fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 4 },
   cardMeta: { fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 8 },
   cardActions: { display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' },
-  progressWrap: { height: 8, borderRadius: 4, background: 'var(--lp-bg-sunken)', overflow: 'hidden', marginBottom: 4 },
+  /* Barra de avance de envasado — mockup .pbar/.pfill: 7px, pill, acento */
+  progressWrap: { height: 7, borderRadius: 999, background: 'var(--lp-bg-sunken)', overflow: 'hidden', marginBottom: 0 },
   progressBar: (pct) => ({
-    height: '100%', borderRadius: 4, width: `${Math.min(100, pct)}%`,
-    background: pct >= 100 ? 'var(--lp-success-500)' : 'var(--lp-brand-500)',
-    transition: 'width .3s',
+    height: '100%', borderRadius: 999, width: `${Math.min(100, pct)}%`,
+    background: 'var(--lp-brand-600)',
+    transition: 'width .4s cubic-bezier(.22,1,.36,1)',
   }),
   btnPrimary: {
     padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
@@ -213,62 +235,15 @@ const S = {
     fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     boxSizing: 'border-box', marginBottom: 12, appearance: 'auto',
   },
-  /* ── Z8 (jun 2026): formulario guiado de envasado ─────────────────── */
-  stepBar: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    marginBottom: 16, flexWrap: 'wrap',
-  },
-  stepChip: (st /* done | current | pending */) => ({
-    display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: 11, fontWeight: st === 'current' ? 700 : 600,
-    color: st === 'pending' ? 'var(--lp-text-tertiary)'
-         : st === 'current' ? 'var(--lp-brand-700)'
-         : 'var(--lp-success-700)',
-  }),
-  stepNum: (st) => ({
-    width: 18, height: 18, borderRadius: '50%',
-    background: st === 'pending' ? 'var(--lp-bg-sunken)'
-             : st === 'current' ? 'var(--lp-brand-600)'
-             : 'var(--lp-success-600)',
-    color: st === 'pending' ? 'var(--lp-text-tertiary)' : '#fff',
-    fontSize: 9, fontWeight: 800, fontFamily: 'var(--lp-font-mono)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  }),
-  stepSep: { width: 12, height: 1, background: 'var(--lp-border-default)' },
-  presoGrid: {
-    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(86px, 1fr))',
-    gap: 8, marginBottom: 16,
-  },
-  presoCard: (active, disabled) => ({
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-    padding: '12px 8px', borderRadius: 'var(--lp-radius-sm)',
-    border: '1.5px solid ' + (active ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
-    background: active ? 'var(--lp-brand-50)' : (disabled ? 'var(--lp-bg-sunken)' : 'var(--lp-bg-raised)'),
-    color: active ? 'var(--lp-brand-700)' : (disabled ? 'var(--lp-text-tertiary)' : 'var(--lp-text-secondary)'),
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.45 : 1,
-    fontFamily: 'var(--lp-font-sans)', minHeight: 76,
-    transition: 'all .15s', textAlign: 'center',
-  }),
-  presoNombre: { fontSize: 12, fontWeight: 700, lineHeight: 1.1 },
-  presoCap: { fontSize: 10, opacity: .8, fontFamily: 'var(--lp-font-mono)' },
-  ticket: {
-    background: 'var(--lp-bg-sunken)',
-    border: '1.5px dashed var(--lp-border-default)',
-    borderRadius: 'var(--lp-radius-sm)',
-    padding: '12px 14px', marginTop: 4,
-  },
-  ticketRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    fontSize: 12, padding: '3px 0',
-  },
-  ticketKey: { color: 'var(--lp-text-tertiary)', fontWeight: 600 },
-  ticketVal: { color: 'var(--lp-text-primary)', fontWeight: 700, fontFamily: 'var(--lp-font-mono)' },
+  /* (jun 2026, paridad mockup) Los estilos del formulario Z8 (stepBar/stepChip/
+     presoCard/ticket) se retiraron junto con su markup — el sheet del mockup
+     usa secciones tituladas (S.sec) + resumen tintado (S.summary). */
+  /* Toast invertido (mockup .toast: bg texto / texto fondo) */
   toast: {
-    position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
-    padding: '10px 20px', borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 1001,
-    background: 'var(--lp-success-600)', color: '#fff',
-    boxShadow: '0 4px 16px rgba(0,0,0,.15)',
+    position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)',
+    padding: '12px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1001,
+    background: 'var(--lp-text-primary)', color: 'var(--lp-bg-base)',
+    boxShadow: '0 4px 16px rgba(0,0,0,.15)', display: 'inline-flex', alignItems: 'center',
   },
   sublote: {
     padding: '8px 12px', borderRadius: 8, marginBottom: 4,
@@ -313,6 +288,101 @@ const S = {
     padding: '0 16px 14px', borderBottom: '1px solid var(--lp-border-subtle)',
     background: 'var(--lp-bg-sunken)',
   },
+
+  /* ── Sheet de envasado — mockup Stock Fábrica.html (.overlay/.sheet) ──
+     Bottom-sheet radio 26 arriba en móvil; modal centrado en escritorio. */
+  sheetOverlay: (desk) => ({
+    position: 'fixed', inset: 0, background: 'rgba(10,16,14,.5)', zIndex: 1000,
+    display: 'flex', alignItems: desk ? 'center' : 'flex-end', justifyContent: 'center',
+    padding: desk ? 16 : 0,
+  }),
+  sheetBox: (desk) => ({
+    background: 'var(--lp-bg-base)', width: '100%',
+    maxWidth: desk ? 480 : 'none', maxHeight: desk ? '90vh' : '92vh',
+    overflowY: 'auto', borderRadius: desk ? 16 : '26px 26px 0 0',
+    padding: '20px 20px 26px', boxShadow: '0 8px 32px rgba(0,0,0,.22)',
+    animation: 'lpSheetIn .3s cubic-bezier(.22,1,.36,1)',
+  }),
+  grab: { width: 38, height: 4, borderRadius: 999, background: 'var(--lp-border-default)', margin: '0 auto 14px' },
+  shH: { fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)', display: 'flex', alignItems: 'center', gap: 8 },
+  shS: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 6 },
+  sec: { fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em',
+         color: 'var(--lp-text-tertiary)', margin: '18px 2px 9px' },
+  /* Presentación — mockup .presgrid/.pres: 2 col, icono en tile + nombre + cap mono */
+  presGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 9 },
+  pres: (on, disabled) => ({
+    border: '1.5px solid ' + (on ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
+    background: on ? 'color-mix(in srgb, var(--lp-brand-600) 8%, var(--lp-bg-raised))' : 'var(--lp-bg-raised)',
+    borderRadius: 14, padding: 13, cursor: disabled ? 'not-allowed' : 'pointer',
+    textAlign: 'left', fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: 11,
+    opacity: disabled ? .45 : 1, minHeight: 60,
+  }),
+  presIc: {
+    width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    background: 'color-mix(in srgb, var(--lp-brand-600) 13%, transparent)', color: 'var(--lp-brand-600)',
+  },
+  presN: { fontSize: 13.5, fontWeight: 600, color: 'var(--lp-text-primary)', display: 'block' },
+  presL: { fontSize: 11, color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-mono)' },
+  /* Segmented pills — mockup .seg/.segb (marca / presentación retail) */
+  seg: { display: 'flex', gap: 7, flexWrap: 'wrap' },
+  segb: (on, disabled) => ({
+    padding: '9px 14px', borderRadius: 999, fontFamily: 'inherit', fontSize: 13,
+    fontWeight: on ? 600 : 500, cursor: disabled ? 'not-allowed' : 'pointer',
+    border: '1px solid ' + (on ? 'transparent' : 'var(--lp-border-subtle)'),
+    background: on ? 'var(--lp-text-primary)' : 'var(--lp-bg-raised)',
+    color: on ? 'var(--lp-bg-base)' : 'var(--lp-text-secondary)',
+    opacity: disabled ? .45 : 1, minHeight: 40,
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+  }),
+  /* Stepper de cantidad — mockup .stepper2/.qbtn/.qval/.qhint */
+  stepper2: { display: 'flex', alignItems: 'center', gap: 12 },
+  qbtn: (disabled) => ({
+    width: 44, height: 44, borderRadius: 12, border: '1px solid var(--lp-border-subtle)',
+    background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', fontSize: 22,
+    cursor: disabled ? 'default' : 'pointer', display: 'flex', alignItems: 'center',
+    justifyContent: 'center', fontFamily: 'inherit', opacity: disabled ? .4 : 1, flexShrink: 0,
+  }),
+  qval: {
+    flex: 1, textAlign: 'center', fontFamily: 'var(--lp-font-mono)', fontSize: 26, fontWeight: 700,
+    color: 'var(--lp-text-primary)', border: 'none', background: 'transparent', outline: 'none',
+    width: '100%', minWidth: 0, padding: 0,
+  },
+  qhint: { fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 8, textAlign: 'center' },
+  qhintB: { color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)', fontWeight: 700 },
+  /* Chip "Auto" de la tapa sugerida por marca — mockup .autochip */
+  autochip: {
+    fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+    padding: '3px 8px', borderRadius: 999,
+    background: 'color-mix(in srgb, var(--lp-info-600) 15%, transparent)', color: 'var(--lp-info-600)',
+    flexShrink: 0,
+  },
+  /* Resumen — mockup .summary: caja tintada de acento */
+  summary: {
+    marginTop: 18, padding: '14px 16px', borderRadius: 14,
+    background: 'color-mix(in srgb, var(--lp-brand-600) 9%, var(--lp-bg-raised))',
+    border: '1px solid color-mix(in srgb, var(--lp-brand-600) 22%, transparent)',
+  },
+  summaryT: { fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary)' },
+  summaryS: { fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 3, fontFamily: 'var(--lp-font-mono)' },
+  summaryRow: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    fontSize: 11.5, marginTop: 6, color: 'var(--lp-text-secondary)',
+  },
+  /* Acciones del sheet — mockup .sh-acts: Cancelar ghost + primaria flex:1 */
+  shActs: { display: 'flex', gap: 10, marginTop: 20 },
+  btnSheetGhost: {
+    height: 50, borderRadius: 14, border: '1px solid var(--lp-border-subtle)',
+    background: 'transparent', color: 'var(--lp-text-secondary)', cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: 14.5, fontWeight: 600, padding: '0 20px',
+    flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+  },
+  btnSheetPrimary: (disabled) => ({
+    height: 50, borderRadius: 14, border: 'none', background: 'var(--lp-brand-600)',
+    color: '#fff', cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit',
+    fontSize: 14.5, fontWeight: 600, flex: 1, display: 'inline-flex', alignItems: 'center',
+    justifyContent: 'center', gap: 8, opacity: disabled ? .6 : 1,
+  }),
 };
 
 /* Z8 (jun 2026): metadata de presentaciones con iconos SVG inline.
@@ -320,23 +390,23 @@ const S = {
 const PRESENTACIONES_META = [
   {
     key: 'cubeta', nombre: 'Cubeta', cap: '19 L',
-    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14l-1.2 12.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 7Z"/><path d="M4 7h16"/><path d="M9 4h6l1 3H8l1-3Z"/></svg>),
+    icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M5 7h14l-1.2 12.2a2 2 0 0 1-2 1.8H8.2a2 2 0 0 1-2-1.8L5 7Z"/><path d="M4 7h16"/><path d="M9 4h6l1 3H8l1-3Z"/></svg>),
   },
   {
     key: 'galon', nombre: 'Galón', cap: '3.785 L',
-    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3h4v2.5l2.5 1.8A3 3 0 0 1 18 9.7V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9.7a3 3 0 0 1 1.5-2.4L10 5.5V3Z"/><path d="M6 12h12"/></svg>),
+    icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M10 3h4v2.5l2.5 1.8A3 3 0 0 1 18 9.7V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V9.7a3 3 0 0 1 1.5-2.4L10 5.5V3Z"/><path d="M6 12h12"/></svg>),
   },
   {
     key: 'litro', nombre: 'Litro', cap: '1 L',
-    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6v3l1 2v13a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V7l1-2V2Z"/><path d="M8 11h8"/></svg>),
+    icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6v3l1 2v13a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V7l1-2V2Z"/><path d="M8 11h8"/></svg>),
   },
   {
     key: 'otros', nombre: 'Otros', cap: 'bote/funda',
-    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>),
+    icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>),
   },
   {
     key: 'tote', nombre: 'TOTE', cap: 'granel',
-    icon: (<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="8" ry="2.6"/><path d="M4 5v14a8 2.6 0 0 0 16 0V5"/><path d="M4 12a8 2.6 0 0 0 16 0"/></svg>),
+    icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><ellipse cx="12" cy="5" rx="8" ry="2.6"/><path d="M4 5v14a8 2.6 0 0 0 16 0V5"/><path d="M4 12a8 2.6 0 0 0 16 0"/></svg>),
   },
 ];
 
@@ -377,6 +447,10 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   const [qty, setQty] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  /* Sheet responsive (mockup): bottom-sheet radio 26 en móvil, modal centrado
+     en escritorio. Solo presentación — firma/props/payload intactos. */
+  const isDesktop = useIsDesktop();
+  useEffect(() => { injectSheetCSS(); }, []);
 
   const rest = litRest(lote);
   const tapas = envases?.tapas || {};
@@ -547,46 +621,30 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={S.modalHeader}>
-          <span style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 8 }}>
-            Envasar Lote
-            {lote.esPrueba && <PruebaBadge size="sm" />}
-          </span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4 }} aria-label="Cerrar">
+    <div style={S.sheetOverlay(isDesktop)} onClick={onClose}>
+      <div className="lp-sheet" style={S.sheetBox(isDesktop)} onClick={e => e.stopPropagation()}>
+        {!isDesktop && <div style={S.grab} />}
+        {/* Header del sheet — mockup .sh-h/.sh-s: título + folio mono · producto
+            · disponibles. (El step-bar Z8 se retiró: el mockup no lo trae y las
+            secciones tituladas lo hacen redundante — ninguna acción se perdió.) */}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={S.shH}>
+              Envasar lote
+              {lote.esPrueba && <PruebaBadge size="sm" />}
+            </div>
+            <div style={S.shS}>
+              <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-600)' }}>
+                {lote.codigo || lote.codigoLote || lote.id}
+              </span>
+              {' '}· {lote.producto || lote.nombre} · {rest.toFixed(1)} L disponibles de {(lote.litrosTotal || 0).toFixed(1)} L
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4, flexShrink: 0 }} aria-label="Cerrar">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
           </button>
         </div>
-        <div style={S.modalBody}>
-          {/* Z8: step bar guía — pasos adaptativos según presentación.
-              TOTE: 2 pasos (Presentación · Litros). Cubeta: 4 (Pres · Envase ·
-              Tapa · Cantidad). Galón/Litro/Otros: 3 (Pres · Envase · Cantidad). */}
-          {(() => {
-            const pasos = [{ k: 'preso', label: 'Presentación', ok: !!tipo }];
-            if (!isTote) pasos.push({ k: 'envase', label: 'Envase', ok: !!subKey });
-            if (usaTapa) pasos.push({ k: 'tapa', label: 'Tapa', ok: !!tapaEfectiva });
-            pasos.push({ k: 'cant', label: isTote ? 'Litros' : 'Cantidad', ok: parseFloat(qty) > 0 });
-            /* el "actual" es el primer paso no-ok */
-            const idxActual = pasos.findIndex(p => !p.ok);
-            const nodes = [];
-            pasos.forEach((p, i) => {
-              const st = p.ok ? 'done' : (i === idxActual ? 'current' : 'pending');
-              nodes.push(
-                <span key={p.k} style={S.stepChip(st)}>
-                  <span style={S.stepNum(st)}>
-                    {st === 'done' ? (
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-                    ) : (i + 1)}
-                  </span>
-                  {p.label}
-                </span>
-              );
-              if (i < pasos.length - 1) nodes.push(<span key={'sep' + p.k} style={S.stepSep} />);
-            });
-            return <div style={S.stepBar}>{nodes}</div>;
-          })()}
-
+        <div>
           {error && (
             <div style={{
               padding: '10px 14px',
@@ -604,20 +662,12 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
             </div>
           )}
 
-          <div style={{ padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>{lote.codigo || lote.id}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4 }}>{lote.producto || lote.nombre}</div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
-              Disponible: <strong>{rest.toFixed(1)} L</strong> de {(lote.litrosTotal || 0).toFixed(1)} L
-            </div>
-          </div>
-
-          <label style={S.fieldLabel}>Presentación</label>
-          {/* Z8: tarjetas visuales en vez de <select>. Auto-completar marca/tapa
-             sigue funcionando igual al cambiar de tipo (efecto del setTipo).
-             La regla TOTE-indivisible deshabilita visualmente las opciones
-             incompatibles según lo ya envasado. */}
-          <div style={S.presoGrid}>
+          <div style={S.sec}>Presentación</div>
+          {/* Mockup .presgrid/.pres: tarjetas fila (icono en tile + nombre +
+             capacidad mono), 2 columnas. Auto-completar marca/tapa sigue igual
+             al cambiar de tipo (efecto del setTipo). La regla TOTE-indivisible
+             deshabilita las opciones incompatibles según lo ya envasado. */}
+          <div style={S.presGrid}>
             {PRESENTACIONES_META.map(p => {
               const disabled = p.key === 'tote' ? haySublotesFinales : haySublotesTote;
               const active = tipo === p.key;
@@ -627,21 +677,23 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
                   type="button"
                   disabled={disabled}
                   onClick={() => setTipo(p.key)}
-                  style={S.presoCard(active, disabled)}
+                  style={S.pres(active, disabled)}
                   title={p.key === 'tote' ? 'TOTE / Granel — contenedor para reenvasar en Terán' : `${p.nombre} (${p.cap})`}
                 >
-                  <span>{p.icon}</span>
-                  <span style={S.presoNombre}>{p.nombre}</span>
-                  <span style={S.presoCap}>{p.cap}</span>
+                  <span style={S.presIc}>{p.icon}</span>
+                  <span style={{ minWidth: 0 }}>
+                    <span style={S.presN}>{p.nombre}</span>
+                    <span style={S.presL}>{p.cap}{['cubeta', 'galon', 'litro'].includes(p.key) ? ' c/u' : ''}</span>
+                  </span>
                 </button>
               );
             })}
           </div>
           {(haySublotesFinales || haySublotesTote) && (
             <div style={{
-              padding: '8px 10px', marginBottom: 12,
-              background: 'var(--lp-info-50)', color: 'var(--lp-info-700)',
-              borderRadius: 6, fontSize: 11, lineHeight: 1.5,
+              padding: '9px 12px', marginTop: 10,
+              background: 'var(--lp-info-50)', color: 'var(--lp-info-600)',
+              borderRadius: 10, fontSize: 11, lineHeight: 1.5,
             }}>
               {haySublotesFinales
                 ? 'Este lote ya tiene sublotes en envase final. No puedes agregar TOTE — un lote va completo en envases finales o completo en TOTE, no se mezcla.'
@@ -651,49 +703,53 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
 
           {!isTote && (
             <>
-              <label style={S.fieldLabel}>
-                {tipo === 'cubeta' ? 'Cubeta' : tipo === 'galon' ? 'Galón' : tipo === 'litro' ? 'Litro' : 'Envase'} a usar
-                {subcatActual && (
-                  <span style={{ marginLeft: 6, fontSize: 11,
-                    color: stockEnvase > 0 ? 'var(--lp-success-600)' : 'var(--lp-danger-600)',
-                    fontWeight: 700 }}>
-                    stock {stockEnvase}
-                  </span>
-                )}
-              </label>
+              <div style={S.sec}>
+                Marca · {tipo === 'cubeta' ? 'cubeta' : tipo === 'galon' ? 'galón' : tipo === 'litro' ? 'litro' : 'envase'} a usar
+              </div>
               {subcatList.length === 0 ? (
                 <div style={{ padding: 10, background: 'var(--lp-warning-50)', borderRadius: 8, fontSize: 12, color: 'var(--lp-warning-700)', marginBottom: 12 }}>
                   No hay subcategorías de {tipo} registradas. Pídele a admin que las dé de alta.
                 </div>
               ) : (
-                <select
-                  style={{ ...S.fieldSelect,
-                    borderColor: stockEnvaseInsuf ? 'var(--lp-danger-500)' : 'var(--lp-border-subtle)' }}
-                  value={marca}
-                  onChange={e => setMarca(e.target.value)}
-                >
-                  <option value="">— Selecciona —</option>
-                  {subcatList.map(s => (
-                    <option key={s.key} value={s.marca || s.nombre} disabled={s.stock <= 0}>
-                      {s.nombre} {s.stock > 0 ? `(stock: ${s.stock})` : '— SIN STOCK'}
-                    </option>
-                  ))}
-                </select>
+                /* Mockup .seg/.segb: pills segmentadas (selección oscura).
+                   Mismo dominio que el viejo <select>: valorSubcat(s) → subKey. */
+                <div style={S.seg}>
+                  {subcatList.map(s => {
+                    const on = marca === (s.marca || s.nombre);
+                    const sinStock = s.stock <= 0;
+                    return (
+                      <button
+                        key={s.key}
+                        type="button"
+                        disabled={sinStock}
+                        onClick={() => setMarca(s.marca || s.nombre)}
+                        style={S.segb(on, sinStock)}
+                        title={`${s.nombre} — stock ${s.stock}`}
+                      >
+                        {s.nombre}
+                        <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 11, opacity: .75 }}>
+                          {sinStock ? 'sin stock' : s.stock}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {stockEnvaseInsuf && (
+                <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 600, color: 'var(--lp-danger-600)' }}>
+                  Stock insuficiente de "{subcatActual?.nombre}": tienes {stockEnvase}, pides {parseInt(qty) || 0}.
+                </div>
               )}
             </>
           )}
 
           {usaTapa && Object.keys(tapas).length > 0 && (
             <>
-              <label style={S.fieldLabel}>
-                Tapa (cubeta requiere tapa)
-                {tapaSugerida && !tapaKey && (
-                  <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--lp-brand-600)', fontWeight: 500 }}>
-                    sugerida según marca
-                  </span>
-                )}
-              </label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 6, marginBottom: 12 }}>
+              <div style={S.sec}>Tapa (cubeta requiere tapa)</div>
+              {/* La marca AUTOCOMPLETA la tapa (chip "Auto" del mockup) y sigue
+                 siendo editable eligiendo otra. Texto libre NO aplica: la tapa
+                 debe existir en catálogo para validar y descontar stock. */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6 }}>
                 {Object.entries(tapas).map(([k, t]) => {
                   const stock = t.stock || 0;
                   const cantidadActual = parseInt(qty) || 0;
@@ -708,10 +764,12 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
                       onClick={() => setTapaKey(k)}
                       disabled={sinStock}
                       style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
+                        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px',
                         border: '1.5px solid ' + (isSelected ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
-                        borderRadius: 'var(--lp-radius-sm)',
-                        background: isSelected ? 'var(--lp-brand-50)' : (sinStock ? 'var(--lp-bg-sunken)' : 'var(--lp-bg-raised)'),
+                        borderRadius: 12, minHeight: 44,
+                        background: isSelected
+                          ? 'color-mix(in srgb, var(--lp-brand-600) 8%, var(--lp-bg-raised))'
+                          : (sinStock ? 'var(--lp-bg-sunken)' : 'var(--lp-bg-raised)'),
                         cursor: sinStock ? 'not-allowed' : 'pointer',
                         opacity: sinStock ? 0.5 : 1,
                         fontSize: 11, textAlign: 'left',
@@ -736,12 +794,8 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
                           {sinStock ? 'sin stock' : 'stock ' + stock}
                         </div>
                       </div>
-                      {isDefault && (
-                        <span style={{
-                          fontSize: 11, fontWeight: 700,
-                          background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)',
-                          padding: '1px 5px', borderRadius: 3,
-                        }}>def</span>
+                      {isDefault && !tapaKey && (
+                        <span style={S.autochip}>Auto</span>
                       )}
                     </button>
                   );
@@ -750,69 +804,88 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
             </>
           )}
 
-          <label style={S.fieldLabel}>
-            {isTote ? `Litros a envasar (max ${maxUnidades.toFixed(0)})` : `Cantidad (max ${maxUnidades})`}
-          </label>
-          <input style={S.fieldInput} type="number" inputMode="decimal"
-            min={isTote ? '0.1' : '1'}
-            step={isTote ? '0.1' : '1'}
-            max={maxUnidades}
-            placeholder={isTote ? `Ej: ${Math.min(rest, 1000).toFixed(0)}` : `Ej: ${Math.min(maxUnidades, 30)}`}
-            value={qty} onChange={e => setQty(e.target.value)} />
-
-          {/* Z8: preview tipo "ticket" — resumen visual claro de lo que se
-             va a crear antes de confirmar. Reemplaza la línea de texto densa. */}
-          {qty && parseFloat(qty) > 0 && (
-            <div style={S.ticket}>
-              <div style={{ fontSize: 10, fontWeight: 800, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>
-                Resumen del sublote
-              </div>
-              <div style={S.ticketRow}>
-                <span style={S.ticketKey}>Presentación</span>
-                <span style={S.ticketVal}>
-                  {isTote ? `TOTE granel` : `${parseInt(qty)} × ${PRESENTACIONES_META.find(p => p.key === tipo)?.nombre || tipo}`}
-                </span>
-              </div>
-              {!isTote && (
-                <div style={S.ticketRow}>
-                  <span style={S.ticketKey}>Marca / envase</span>
-                  <span style={S.ticketVal}>{subcatActual?.nombre || marca || '—'}</span>
-                </div>
-              )}
-              {usaTapa && tapaInfo && (
-                <div style={S.ticketRow}>
-                  <span style={S.ticketKey}>Tapa</span>
-                  <span style={{ ...S.ticketVal, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 12, height: 12, borderRadius: '50%', background: tapaInfo.color || '#999', border: '1px solid var(--lp-border-subtle)' }} />
-                    {tapaInfo.color_nombre || tapaInfo.nombre}
-                  </span>
-                </div>
-              )}
-              <div style={S.ticketRow}>
-                <span style={S.ticketKey}>Volumen</span>
-                <span style={S.ticketVal}>{litTotal.toFixed(1)} L</span>
-              </div>
-              <div style={{ ...S.ticketRow, borderTop: '1px dashed var(--lp-border-default)', marginTop: 4, paddingTop: 6 }}>
-                <span style={S.ticketKey}>Quedará en lote</span>
-                <span style={{ ...S.ticketVal, color: (rest - litTotal) < 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
-                  {Math.max(0, rest - litTotal).toFixed(1)} L
-                </span>
-              </div>
-              {usaTapa && tapaInfo && (
-                <div style={S.ticketRow}>
-                  <span style={S.ticketKey}>Tapas restantes</span>
-                  <span style={{ ...S.ticketVal, color: stockTapaInsuf ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
-                    {Math.max(0, (tapaInfo.stock || 0) - parseInt(qty))}
-                  </span>
-                </div>
-              )}
+          <div style={S.sec}>{isTote ? 'Litros a envasar' : 'Cantidad'}</div>
+          {isTote ? (
+            /* TOTE = litros directos (regla indivisible: se sugiere todo el lote) */
+            <input style={{ ...S.fieldInput, marginBottom: 0, fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 18, textAlign: 'center', height: 48 }}
+              type="number" inputMode="decimal"
+              min="0.1" step="0.1" max={maxUnidades}
+              placeholder={`Ej: ${Math.min(rest, 1000).toFixed(0)}`}
+              value={qty} onChange={e => setQty(e.target.value)} />
+          ) : (
+            /* Mockup .stepper2: − / valor mono 26 / + (el centro sigue siendo
+               input editable para teclear directo) */
+            <div style={S.stepper2}>
+              <button type="button" aria-label="Menos"
+                style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) <= 1)}
+                disabled={maxUnidades < 1 || (parseInt(qty) || 0) <= 1}
+                onClick={() => {
+                  const cur = parseInt(qty) || 0;
+                  setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur - 1))));
+                }}>−</button>
+              <input className="lp-qval" style={S.qval} type="number" inputMode="numeric"
+                min="1" step="1" max={maxUnidades}
+                placeholder={`Ej: ${Math.min(maxUnidades, 30)}`}
+                value={qty} onChange={e => setQty(e.target.value)} />
+              <button type="button" aria-label="Más"
+                style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades)}
+                disabled={maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades}
+                onClick={() => {
+                  const cur = parseInt(qty) || 0;
+                  setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur + 1))));
+                }}>+</button>
             </div>
           )}
+          {/* Cálculo visible: litros usados / restantes / máximo (mockup .qhint) */}
+          <div style={S.qhint}>
+            Usa <b style={S.qhintB}>{litTotal.toFixed(1)} L</b>
+            {' '}· quedan <b style={{ ...S.qhintB, ...((rest - litTotal) < 0 ? { color: 'var(--lp-danger-600)' } : {}) }}>{(rest - litTotal).toFixed(1)} L</b>
+            {' '}· máx <b style={S.qhintB}>{isTote ? `${maxUnidades.toFixed(0)} L` : maxUnidades}</b>
+          </div>
+
+          {/* Resumen — mockup .summary: "Generarás N <pres> de X L" + folio ·
+             marca · litros en mono. Conserva los datos extra del ticket viejo
+             (quedará en lote, tapa y tapas restantes) como filas compactas. */}
+          {qty && parseFloat(qty) > 0 && (() => {
+            const PLURAL = { cubeta: 'cubetas', galon: 'galones', litro: 'litros', otros: 'envases' };
+            const n = parseInt(qty) || 0;
+            const presNombre = PRESENTACIONES_META.find(p => p.key === tipo)?.nombre || tipo;
+            return (
+              <div style={S.summary}>
+                <div style={S.summaryT}>
+                  {isTote
+                    ? `Generarás 1 TOTE granel de ${litTotal.toFixed(0)} L`
+                    : `Generarás ${n} ${n === 1 ? presNombre.toLowerCase() : (PLURAL[tipo] || presNombre.toLowerCase() + 's')} de ${litPorUnidad} L`}
+                </div>
+                <div style={S.summaryS}>
+                  {(lote.codigo || lote.codigoLote || lote.id)} · {isTote ? 'granel' : (subcatActual?.nombre || marca || 'sin marca')} · {litTotal.toFixed(1)} L
+                </div>
+                <div style={S.summaryRow}>
+                  <span>Quedará en lote</span>
+                  <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: (rest - litTotal) < 0 ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
+                    {Math.max(0, rest - litTotal).toFixed(1)} L
+                  </span>
+                </div>
+                {usaTapa && tapaInfo && (
+                  <div style={S.summaryRow}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ width: 11, height: 11, borderRadius: '50%', background: tapaInfo.color || '#999', border: '1px solid var(--lp-border-subtle)' }} />
+                      Tapa {tapaInfo.color_nombre || tapaInfo.nombre} · restantes
+                    </span>
+                    <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: stockTapaInsuf ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
+                      {Math.max(0, (tapaInfo.stock || 0) - parseInt(qty))}
+                    </span>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
-        <div style={S.modalFooter}>
-          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={S.btnSuccess} disabled={saving} onClick={handleSubmit}>
-            {saving ? 'Envasando...' : isTote ? `Envasar tote ${qty || 0}L` : `Envasar ${qty || 0} ${tipo}(s)`}
+        {/* Acciones — mockup .sh-acts: Cancelar ghost + "Generar sublotes" primary */}
+        <div style={S.shActs}>
+          <button style={S.btnSheetGhost} onClick={onClose}>Cancelar</button>
+          <button className="lp-btn-acc" style={S.btnSheetPrimary(saving)} disabled={saving} onClick={handleSubmit}>
+            {saving ? 'Envasando…' : 'Generar sublotes'}
           </button>
         </div>
       </div>
@@ -849,6 +922,9 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
   const [qty, setQty] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  /* Sheet responsive (mockup) — solo presentación, payload/SM intactos */
+  const isDesktop = useIsDesktop();
+  useEffect(() => { injectSheetCSS(); }, []);
 
   const marcas = envases?.marcas || [];
   const tote = totes.find(t => t.cod === selectedTote);
@@ -953,27 +1029,31 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ ...S.modalHeader, borderBottom: '3px solid var(--lp-reenvase-600)' }}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>Re-envasar desde tote</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4 }} aria-label="Cerrar">{Icon.x({ s: 18 })}</button>
+    <div style={S.sheetOverlay(isDesktop)} onClick={onClose}>
+      <div className="lp-sheet" style={S.sheetBox(isDesktop)} onClick={e => e.stopPropagation()}>
+        {!isDesktop && <div style={S.grab} />}
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+          <div>
+            <div style={S.shH}>Re-envasar desde tote</div>
+            <div style={S.shS}>
+              <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 600, color: 'var(--lp-granel-600)' }}>
+                {lote.codigo || lote.codigoLote || lote.id}
+              </span>
+              {' '}· {lote.producto || lote.nombre}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4, flexShrink: 0 }} aria-label="Cerrar">{Icon.x({ s: 18 })}</button>
         </div>
-        <div style={S.modalBody}>
+        <div>
           {error && (
-            <div style={{ padding: '8px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+            <div style={{ padding: '8px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 8, fontSize: 12, fontWeight: 600, margin: '12px 0' }}>
               {error}
             </div>
           )}
 
-          <div style={{ padding: 12, background: 'var(--lp-granel-50)', borderRadius: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-granel-600)', fontFamily: 'var(--lp-font-mono)' }}>{lote.codigo || lote.codigoLote || lote.id}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4, color: 'var(--lp-granel-700)' }}>{lote.producto || lote.nombre}</div>
-          </div>
-
           {totes.length > 1 && (
             <>
-              <label style={S.fieldLabel}>Tote origen</label>
+              <div style={S.sec}>Tote origen</div>
               <select style={S.fieldSelect} value={selectedTote} onChange={e => setSelectedTote(e.target.value)}>
                 {totes.map(t => (
                   <option key={t.cod} value={t.cod}>{t.cod} — {t.lit}L</option>
@@ -983,51 +1063,77 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
           )}
 
           {tote && (
-            <div style={{ padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 12, fontSize: 12 }}>
-              Tote: <strong>{selectedTote}</strong> · Disponible: <strong>{litDisponible.toFixed(1)} L</strong> de {tote.lit}L
+            <div style={{ padding: '10px 12px', background: 'var(--lp-granel-50)', borderRadius: 12, margin: '12px 0', fontSize: 12, color: 'var(--lp-granel-700)' }}>
+              Tote <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{selectedTote}</strong>
+              {' '}· Disponible: <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{litDisponible.toFixed(1)} L</strong> de {tote.lit}L
             </div>
           )}
 
-          <label style={S.fieldLabel}>Presentacion retail</label>
-          <select style={S.fieldSelect} value={tipo} onChange={e => setTipo(e.target.value)}>
-            <option value="cubeta">Cubeta (19L)</option>
-            <option value="galon">Galon (3.785L)</option>
-            <option value="litro">Litro (1L)</option>
-          </select>
+          {/* Mockup .seg: presentación retail segmentada (sin TOTE — un tote
+             no se re-envasa en otro tote) */}
+          <div style={S.sec}>Presentación retail</div>
+          <div style={S.seg}>
+            {[['cubeta', 'Cubeta 19L'], ['galon', 'Galón 3.785L'], ['litro', 'Litro 1L']].map(([k, lbl]) => (
+              <button key={k} type="button" style={S.segb(tipo === k, false)} onClick={() => setTipo(k)}>
+                {lbl}
+              </button>
+            ))}
+          </div>
 
-          <label style={S.fieldLabel}>Marca (opcional)</label>
+          <div style={S.sec}>Marca (opcional)</div>
           {marcas.length > 0 ? (
-            <select style={S.fieldSelect} value={marca} onChange={e => setMarca(e.target.value)}>
+            <select style={{ ...S.fieldSelect, marginBottom: 0 }} value={marca} onChange={e => setMarca(e.target.value)}>
               <option value="">— Sin marca —</option>
               {marcas.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
           ) : (
-            <input style={S.fieldInput} placeholder="Ej: Premium" value={marca} onChange={e => setMarca(e.target.value)} />
+            <input style={{ ...S.fieldInput, marginBottom: 0 }} placeholder="Ej: Premium" value={marca} onChange={e => setMarca(e.target.value)} />
           )}
 
-          <label style={S.fieldLabel}>Cantidad (max {maxUnidades})</label>
-          <input style={S.fieldInput} type="number" inputMode="decimal" min="1" max={maxUnidades}
-            placeholder={`Ej: ${Math.min(maxUnidades, 20)}`}
-            value={qty} onChange={e => setQty(e.target.value)} />
+          <div style={S.sec}>Cantidad</div>
+          <div style={S.stepper2}>
+            <button type="button" aria-label="Menos"
+              style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) <= 1)}
+              disabled={maxUnidades < 1 || (parseInt(qty) || 0) <= 1}
+              onClick={() => {
+                const cur = parseInt(qty) || 0;
+                setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur - 1))));
+              }}>−</button>
+            <input className="lp-qval" style={S.qval} type="number" inputMode="numeric"
+              min="1" step="1" max={maxUnidades}
+              placeholder={`Ej: ${Math.min(maxUnidades, 20)}`}
+              value={qty} onChange={e => setQty(e.target.value)} />
+            <button type="button" aria-label="Más"
+              style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades)}
+              disabled={maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades}
+              onClick={() => {
+                const cur = parseInt(qty) || 0;
+                setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur + 1))));
+              }}>+</button>
+          </div>
+          <div style={S.qhint}>
+            Usa <b style={S.qhintB}>{litTotal.toFixed(1)} L</b>
+            {' '}· quedan en tote <b style={{ ...S.qhintB, ...((litDisponible - litTotal) < 0 ? { color: 'var(--lp-danger-600)' } : {}) }}>{Math.max(0, litDisponible - litTotal).toFixed(1)} L</b>
+            {' '}· máx <b style={S.qhintB}>{maxUnidades}</b>
+          </div>
 
           {qty && parseInt(qty) > 0 && (() => {
             const restanteTrasReenv = Math.max(0, litDisponible - litTotal);
             const remanenteMenorUnLitro = restanteTrasReenv > 0.01 && restanteTrasReenv < 1;
+            /* DECISIÓN OWNER 10 jun 2026 (revierte la auto-merma): el remanente
+               <1L ya NO se merma solo — el TOTE queda activo y el cierre es
+               manual con la acción "Vaciar TOTE (merma)" de admin/técnico. */
+            if (!remanenteMenorUnLitro && restanteTrasReenv > 0.01) return null;
             return (
-              <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 8 }}>
-                {parseInt(qty)} {tipo}(s) x {litPorUnidad}L = <strong>{litTotal.toFixed(1)} L</strong>
-                {' · '}Quedaran en tote: <strong>{restanteTrasReenv.toFixed(1)} L</strong>
-                {/* DECISIÓN OWNER 10 jun 2026 (revierte la auto-merma): el remanente
-                    <1L ya NO se merma solo — el TOTE queda activo y el cierre es
-                    manual con la acción "Vaciar TOTE (merma)" de admin/técnico. */}
+              <div style={{ fontSize: 12, padding: '10px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 12, marginTop: 10 }}>
                 {remanenteMenorUnLitro && (
-                  <div style={{ marginTop: 6, color: 'var(--lp-warning-700)', fontWeight: 600 }}>
+                  <div style={{ color: 'var(--lp-warning-700)', fontWeight: 600 }}>
                     Quedarán {restanteTrasReenv.toFixed(2)} L en el TOTE. El lote seguirá
                     activo — ciérralo cuando decidas con "Vaciar TOTE (merma)".
                   </div>
                 )}
                 {restanteTrasReenv <= 0.01 && (
-                  <div style={{ marginTop: 6, color: 'var(--lp-brand-700)', fontWeight: 600 }}>
+                  <div style={{ color: 'var(--lp-brand-700)', fontWeight: 600 }}>
                     El TOTE quedará completamente vaciado.
                   </div>
                 )}
@@ -1035,10 +1141,10 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
             );
           })()}
         </div>
-        <div style={S.modalFooter}>
-          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={{ ...S.btnPrimary, background: 'var(--lp-reenvase-600)' }} disabled={saving} onClick={handleSubmit}>
-            {saving ? 'Re-envasando...' : `Re-envasar ${qty || 0} ${tipo}(s)`}
+        <div style={S.shActs}>
+          <button style={S.btnSheetGhost} onClick={onClose}>Cancelar</button>
+          <button className="lp-btn-acc" style={{ ...S.btnSheetPrimary(saving), background: 'var(--lp-reenvase-600)' }} disabled={saving} onClick={handleSubmit}>
+            {saving ? 'Re-envasando…' : `Re-envasar ${qty || 0} ${tipo}(s)`}
           </button>
         </div>
       </div>
@@ -1466,13 +1572,15 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
   const primary = acciones.find(a => a.kind === 'primary');     /* Envasar */
   const secundarias = acciones.filter(a => a.kind !== 'primary');
   const btnFull = { width: '100%', minHeight: 46, borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 };
-  const btnSec = (danger) => ({ flex: '1 1 auto', minHeight: 40, padding: '0 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', background: 'var(--lp-bg-raised)', border: `1px solid ${danger ? 'color-mix(in srgb, var(--lp-danger-600) 35%, transparent)' : 'var(--lp-border-subtle)'}`, color: danger ? 'var(--lp-danger-600)' : 'var(--lp-text-secondary)' });
+  /* Secundarias — mockup: 40px, radio 10, tile suave; Anular transparente en danger */
+  const btnSec = (danger) => ({ flex: '1 1 auto', minHeight: 40, padding: '0 14px', borderRadius: 10, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', background: danger ? 'transparent' : 'var(--lp-bg-sunken)', border: `1px solid ${danger ? 'color-mix(in srgb, var(--lp-danger-600) 35%, transparent)' : 'var(--lp-border-subtle)'}`, color: danger ? 'var(--lp-danger-600)' : 'var(--lp-text-secondary)' });
 
   return (
     <div style={{ ...S.card, display: 'flex', flexDirection: 'column' }}>
-      {/* header: código + badge (+ 2 fases / prueba) + QR utilitario */}
+      {/* header: código + badge (+ 2 fases / prueba) + QR utilitario
+          (el QR no viene en el mockup — acción existente, se conserva) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontWeight: 700, fontSize: 12.5, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>
+        <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>
           {lote.codigo || lote.codigoLote || lote.id}
         </span>
         <span style={tintBadge(badge.c)}>{badge.label}</span>
@@ -1484,19 +1592,19 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
         </button>
       </div>
 
-      {/* nombre + producidos */}
-      <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--lp-text-primary)', letterSpacing: '-.01em' }}>{lote.producto || lote.nombre}</div>
-      <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
-        <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{total.toFixed(0)} L</span> producidos{lote.ordenCodigo ? ` · ${lote.ordenCodigo}` : ''}
+      {/* nombre + producidos — mockup .ltitle/.lmeta */}
+      <div style={{ fontSize: 15.5, fontWeight: 600, color: 'var(--lp-text-primary)', letterSpacing: '-.01em' }}>{lote.producto || lote.nombre}</div>
+      <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
+        <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{total.toLocaleString('es-MX')} L</span> producidos{lote.ordenCodigo ? ` · ${lote.ordenCodigo}` : ''}
       </div>
 
-      {/* progreso de envasado */}
+      {/* progreso de envasado — mockup .pbar/.pinfo: barra SIEMPRE visible */}
       {total > 0 && (
         <div style={{ margin: '12px 0 2px' }}>
-          {used > 0 && <div style={S.progressWrap}><div style={S.progressBar(pct)} /></div>}
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-mono)', marginTop: used > 0 ? 6 : 0 }}>
-            <span>{used.toFixed(0)} L envasados</span>
-            <span>{rest.toFixed(0)} L restantes</span>
+          <div style={S.progressWrap}><div style={S.progressBar(pct)} /></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11.5, color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-mono)', marginTop: 6 }}>
+            <span>{used.toLocaleString('es-MX', { maximumFractionDigits: 0 })} L envasados</span>
+            <span>{rest.toLocaleString('es-MX', { maximumFractionDigits: 0 })} L restantes</span>
           </div>
         </div>
       )}
@@ -1515,7 +1623,7 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
       {/* acciones: Envasar full-width (o "Lote envasado") + secundarias */}
       <div style={{ marginTop: 'auto', paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {primary ? (
-          <button data-id={primary.dataId} data-rol={primary.dataRol} onClick={primary.onClick} title={primary.title}
+          <button className="lp-btn-acc" data-id={primary.dataId} data-rol={primary.dataRol} onClick={primary.onClick} title={primary.title}
             style={{ ...btnFull, background: 'var(--lp-brand-600)', color: '#fff' }}>
             {primary.icon ? primary.icon({ s: 17 }) : null} {primary.label}
           </button>
@@ -1685,6 +1793,9 @@ export default function StockFabricaPage() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 5000);
   }, []);
+
+  /* CSS de paridad mockup (dark de botones acento, sheet, stepper) — una vez */
+  useEffect(() => { injectSheetCSS(); }, []);
 
   const { data: trazData, loading, reload: reloadTraz } = useApiData(() => api.getTrazabilidad(), [], 5000);
   const { data: envData } = useApiData(() => api.getEnvases(), null, 30000);

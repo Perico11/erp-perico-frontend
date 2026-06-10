@@ -81,18 +81,29 @@ function IconCheck({ size = 18 }) {
   );
 }
 
-/* Pill de estado (badge con bolita) — espejo del .badge del mockup ─── */
-function EstadoBadge({ estado }) {
-  const color = ESTADO_SUBLOTE_COLOR[estado] || 'var(--lp-text-tertiary)';
-  const label = ESTADO_SUBLOTE_LABEL[estado] || estado || '—';
+/* Pill de estado — espejo del .estado del mockup (Recolección.html):
+   bucket pendientes → "Listo" (verde) · enCamino → "En camino" (info) ·
+   entregados → "Entregado" (muted). Sin bolita (el mockup no la trae).
+   Para Luis el detalle envasado/en_recoleccion es lo mismo: "Listo".
+   Fallback: label/color canónico si el sublote cae fuera de bucket. */
+function EstadoBadge({ sublote }) {
+  const bucket = bucketOfSublote(sublote);
+  const MAP = {
+    pendientes: { label: 'Listo',     color: 'var(--lp-brand-600)' },
+    enCamino:   { label: 'En camino', color: 'var(--lp-info-600)' },
+    entregados: { label: 'Entregado', color: 'var(--lp-text-tertiary)' },
+  };
+  const m = MAP[bucket] || {
+    label: ESTADO_SUBLOTE_LABEL[sublote?.estado] || sublote?.estado || '—',
+    color: ESTADO_SUBLOTE_COLOR[sublote?.estado] || 'var(--lp-text-tertiary)',
+  };
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      fontSize: 11, fontWeight: 600, padding: '3px 9px', borderRadius: 999,
-      background: `color-mix(in srgb, ${color} 14%, transparent)`, color,
+      display: 'inline-flex', alignItems: 'center',
+      fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
+      background: `color-mix(in srgb, ${m.color} 14%, transparent)`, color: m.color,
     }}>
-      <i style={{ width: 6, height: 6, borderRadius: 999, background: color }} />
-      {label}
+      {m.label}
     </span>
   );
 }
@@ -401,6 +412,9 @@ export default function RecoleccionPage() {
       <TopBar title="Recolección" />
       <div style={isDesktop ? S.wrapDesktop : S.wrapMobile}>
 
+        {/* Saludo + contador (subtítulo .tsub del mockup — TopBar no trae subtitle) */}
+        <div style={S.greet}>Hola {userName} · {pendientes.length} por recoger</div>
+
         {/* HERO "Leer QR" — móvil: ancho completo; escritorio: botón auto.
             Mismo efecto que "Voy por él" pero identificando la cubeta por su
             QR físico (decisión owner jun 2026: el escaneo de Luis vive aquí). */}
@@ -428,9 +442,10 @@ export default function RecoleccionPage() {
           )
         )}
 
-        {/* TABS tipo pill (estilo mockup) */}
+        {/* TABS tipo pill (estilo mockup: móvil = 3 pills flex:1 que reparten
+            el ancho; escritorio = pills compactas a la izquierda) */}
         <PageTabs
-          tabs={TABS.map(t => ({ ...t, style: (a) => S.tab(a) }))}
+          tabs={TABS.map(t => ({ ...t, style: (a) => S.tab(a, isDesktop) }))}
           activeTab={activeTab}
           onChange={setActiveTab}
           style={S.tabs}
@@ -546,7 +561,7 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
       <div style={S.cardHead}>
         <span style={S.folio}>{s.cod}</span>
         {(esSublotePrueba || esLotePrueba) && <PruebaBadge size="sm" />}
-        <span style={{ marginLeft: 'auto' }}><EstadoBadge estado={s.estado} /></span>
+        <span style={{ marginLeft: 'auto' }}><EstadoBadge sublote={s} /></span>
       </div>
 
       {/* producto + cantidad */}
@@ -602,14 +617,20 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
             );
           })}
         </div>
-      ) : (
+      ) : bucket === 'entregados' ? (
         /* Estado terminal (entregado en Terán) — chip "hecho", no botón */
-        bucket === 'entregados' && (
-          <div style={S.doneChip}>
-            <IconCheck size={16} /> Entregado en Terán
-          </div>
-        )
-      )}
+        <div style={S.doneChip}>
+          <IconCheck size={16} /> Entregado en Terán
+        </div>
+      ) : bucket === 'enCamino' ? (
+        /* En camino: el mockup trae botón "Entregar en Terán" para Luis, pero
+           la regla dura del owner es que la recepción la confirma SOLO Terán
+           vía QR (censo dedup jun 2026 — el botón vive en Recepción de Josué).
+           Aquí va chip pasivo: una "acción" dominante por estado, sin atajo. */
+        <div style={S.doneChip}>
+          <IconTruck size={16} /> En camino — Terán lo recibe por QR
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -620,6 +641,8 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
 const S = {
   wrapMobile: { padding: '4px 16px 100px' },
   wrapDesktop: { padding: '8px 24px 48px' },
+  /* subtítulo "Hola Luis · N por recoger" (.tsub del mockup) */
+  greet: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '2px 2px 12px' },
 
   /* hero scan móvil — ancho completo, verde, hero tipo delivery app */
   scanHeroMobile: {
@@ -641,16 +664,20 @@ const S = {
     display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 44,
   },
 
-  /* tabs pill (estilo mockup): activo verde sólido */
+  /* tabs pill (estilo mockup): activo verde sólido. Móvil = .tab{flex:1}
+     del mockup (las 3 reparten el ancho, inactivas transparentes);
+     escritorio = pills compactas con fondo sunken. */
   tabs: {
-    display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto',
+    display: 'flex', gap: 4, marginBottom: 14, overflowX: 'auto',
     WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none',
   },
-  tab: (active) => ({
-    flexShrink: 0, padding: '9px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
+  tab: (active, isDesktop) => ({
+    ...(isDesktop
+      ? { flexShrink: 0, padding: '9px 16px', background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)' }
+      : { flex: 1, padding: '9px 6px', background: active ? 'var(--lp-brand-600)' : 'transparent' }),
+    borderRadius: 999, border: 'none', cursor: 'pointer',
     fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: active ? 600 : 500,
-    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
-    color: active ? '#fff' : 'var(--lp-text-tertiary)',
+    color: active ? '#fff' : 'var(--lp-text-secondary)',
     whiteSpace: 'nowrap', minHeight: 44,
   }),
 
@@ -676,8 +703,8 @@ const S = {
     fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700,
     color: 'var(--lp-brand-600)',
   },
-  prod: { fontSize: 16, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)' },
-  qty: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 3 },
+  prod: { fontSize: 17, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)' },
+  qty: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3 },
   codLoteInline: { fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' },
 
   route: {
@@ -700,8 +727,8 @@ const S = {
   actionsMobile: { display: 'flex', flexDirection: 'column', gap: 8, marginTop: 'auto' },
   actionsDesktop: { display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 'auto' },
   btnMobile: {
-    width: '100%', height: 50, borderRadius: 14, border: 'none', cursor: 'pointer',
-    fontFamily: 'var(--lp-font-sans)', fontSize: 15, fontWeight: 600,
+    width: '100%', height: 54, borderRadius: 14, border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 15.5, fontWeight: 600,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9,
   },
   btnDesktop: {
@@ -722,12 +749,13 @@ const S = {
   },
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
 
+  /* toast oscuro invertido (.toast del mockup); error en danger */
   toast: {
     position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)',
     padding: '12px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1001,
-    background: 'var(--lp-success-600)', color: '#fff',
+    background: 'var(--lp-text-primary)', color: 'var(--lp-bg-base)',
     boxShadow: '0 4px 16px rgba(0,0,0,.18)',
-    display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap',
+    display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', maxWidth: '90vw',
   },
-  toastErr: { background: 'var(--lp-danger-600)' },
+  toastErr: { background: 'var(--lp-danger-600)', color: '#fff' },
 };

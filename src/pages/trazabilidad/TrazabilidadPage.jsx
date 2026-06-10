@@ -97,15 +97,6 @@ const S = {
     fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
     ...(full ? { flex: 1 } : {}),
   }),
-  btnPrimary: (full) => ({
-    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-    minHeight: 46, padding: '0 16px', borderRadius: 12, border: 'none',
-    background: 'var(--lp-brand-600)', color: '#fff',
-    fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600,
-    cursor: 'pointer', whiteSpace: 'nowrap',
-    ...(full ? { flex: 1 } : {}),
-  }),
-
   filterPill: (active) => ({
     padding: '7px 14px', fontSize: 12, fontWeight: active ? 700 : 600,
     borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
@@ -168,17 +159,23 @@ const S = {
   },
   empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', padding: '48px 0', fontSize: 13.5 },
   spinner: { display: 'flex', justifyContent: 'center', padding: '60px 0' },
-  kpiGrid: {
-    display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-    gap: 12, marginBottom: 16,
+
+  /* subtítulo .tsub del mockup (TopBar no trae subtitle) */
+  greet: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '2px 2px 12px' },
+
+  /* selector de lote .lotes/.lpill del mockup: pills mono scrollables,
+     activa = verde sólido. Tap enfoca SOLO ese lote (card expandida). */
+  lotesRow: {
+    display: 'flex', gap: 8, marginBottom: 10, overflowX: 'auto', paddingBottom: 4,
+    WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none',
   },
-  kpi: (accent) => ({
-    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
-    border: '1.5px solid var(--lp-border-subtle)', padding: '14px 16px',
-    borderTop: `3px solid ${accent}`, textAlign: 'center',
+  lpill: (on) => ({
+    flex: '0 0 auto', padding: '8px 13px', borderRadius: 999, cursor: 'pointer',
+    border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+    background: on ? 'var(--lp-brand-600)' : 'var(--lp-bg-raised)',
+    color: on ? '#fff' : 'var(--lp-text-secondary)',
+    fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
   }),
-  kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.03em', color: 'var(--lp-text-tertiary)' },
-  kpiValue: { fontSize: 26, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 },
 };
 
 /* ── Helper: determine pipeline position index for a given estado ── */
@@ -187,6 +184,19 @@ function pipelineIndex(estado) {
   // Map "envasado" to the same position as "en_envasado" (step index 3)
   if (estado === 'envasado') return 3;
   return idx >= 0 ? idx : -1;
+}
+
+/* fecha corta del mockup para la bitácora: "02 jun 09:12" (.ev-time) */
+function _fechaEvento(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`;
+    const dia = d.toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }).replace('.', '');
+    /* 24h como el mockup ("02 jun 09:12") */
+    const hm = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+    return `${dia} ${hm}`;
+  } catch { return `${iso.slice(0, 10)} ${iso.slice(11, 16)}`; }
 }
 
 /* tiempo relativo legible para la bitácora */
@@ -271,8 +281,10 @@ function LoteTimeline({ lote, isDesktop }) {
           const done = i < lastIdx;
           const current = i === lastIdx;
           const cfg = ESTADO_CONFIG[ev.estado] || { bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
+          /* QC en línea (.ev-note.qc del mockup): lecturas con tinte primario */
+          const esQC = ev.estado === 'qc_aprobado' || ev.estado === 'qc_hold';
           const rel = _tiempoRelativo(ev.fecha);
-          const fecha = ev.fecha ? `${ev.fecha.slice(0, 10)} ${ev.fecha.slice(11, 16)}` : '—';
+          const fecha = _fechaEvento(ev.fecha);
           return (
             <div key={i} style={{
               position: 'relative', paddingLeft: padLeft,
@@ -297,7 +309,9 @@ function LoteTimeline({ lote, isDesktop }) {
                 boxShadow: current ? '0 0 0 4px var(--lp-brand-100)' : 'none',
               }}>
                 {done && (
-                  <svg width={dotSize - 6} height={dotSize - 6} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+                  /* check color = bg de card: blanco en claro, oscuro en dark
+                     (espejo de `.dark .dot.done{color:#0E1413}` del mockup) */
+                  <svg width={dotSize - 6} height={dotSize - 6} viewBox="0 0 24 24" fill="none" stroke="var(--lp-bg-raised)" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M20 6L9 17l-5-5"/>
                   </svg>
                 )}
@@ -329,7 +343,9 @@ function LoteTimeline({ lote, isDesktop }) {
               )}
               {ev.nota && (
                 <div style={{
-                  fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 6,
+                  fontSize: 12.5, marginTop: 6,
+                  color: esQC ? 'var(--lp-text-primary)' : 'var(--lp-text-secondary)',
+                  fontFamily: esQC ? 'var(--lp-font-mono)' : 'var(--lp-font-sans)',
                   padding: '9px 11px', borderRadius: 11, background: 'var(--lp-bg-sunken)',
                   lineHeight: 1.45, borderLeft: `3px solid ${cfg.fg}`,
                 }}>
@@ -348,8 +364,11 @@ function LoteTimeline({ lote, isDesktop }) {
 }
 
 /* ── Lote Card ── */
-function LoteCard({ lote, isDesktop, onShowQR }) {
-  const [open, setOpen] = useState(false);
+/* defaultOpen: al enfocar un lote desde la pill del selector (mockup =
+   detalle único con bitácora visible) la card monta ya expandida. El cambio
+   de selección cambia el `key` → remonta y el default aplica. */
+function LoteCard({ lote, isDesktop, onShowQR, defaultOpen = false }) {
+  const [open, setOpen] = useState(!!defaultOpen);
   const est = ESTADO_CONFIG[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
   const sublotes = lote.sublotes || [];
   const litTotal = lote.litrosTotal || 0;
@@ -518,6 +537,8 @@ export default function TrazabilidadPage() {
 
   const { query, debouncedQuery, setQuery } = useSearch(200);
   const [filter, setFilter] = useState('todos');
+  /* selector de lote del mockup: pill activa = ver SOLO ese lote, expandido */
+  const [selLote, setSelLote] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [qrLote, setQrLote] = useState(null);
   const [toast, setToast] = useState(null);
@@ -578,15 +599,16 @@ export default function TrazabilidadPage() {
     return arr.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
   }, [lotes, filter, debouncedQuery]);
 
-  /* KPIs */
-  const kpis = useMemo(() => {
-    const total = lotes.length;
-    const hoy = new Date().toISOString().slice(0, 10);
-    const lotesHoy = lotes.filter(l => l.fecha?.startsWith(hoy)).length;
-    const envasados = lotes.filter(l => ['envasado', 'en_almacen', 'reenvasado', 'entregado'].includes(l.estado)).length;
-    const enProceso = lotes.filter(l => ['producido', 'qc_aprobado', 'en_envasado'].includes(l.estado)).length;
-    return { total, lotesHoy, envasados, enProceso };
-  }, [lotes]);
+  /* Selector de lote (.lotes del mockup): pills mono con los lotes visibles
+     (ya filtrados/buscados), recientes primero. La activa enfoca su detalle. */
+  const pillLotes = useMemo(() => filtered.slice(0, 14), [filtered]);
+  const shown = useMemo(() => {
+    if (!selLote) return filtered;
+    const m = filtered.filter(l => (l.codigoLote || l.id) === selLote);
+    /* defensivo: si el filtro/búsqueda dejó fuera al lote enfocado, lista normal */
+    return m.length ? m : filtered;
+  }, [filtered, selLote]);
+  const focusOn = selLote && shown.length === 1;
 
   /* §7: Escanear QR → busca el lote escaneado y lo trae al buscador.
      Reutiliza el QRScanner compartido (BarcodeDetector / jsQR / manual). */
@@ -670,25 +692,10 @@ export default function TrazabilidadPage() {
     <>
       <TopBar title="Trazabilidad" />
       <div style={isDesktop ? S.wrapDesk : S.wrap}>
-        {/* KPIs */}
-        <div style={S.kpiGrid}>
-          <div style={S.kpi('var(--lp-brand-600)')}>
-            <div style={S.kpiLabel}>Total Lotes</div>
-            <div style={S.kpiValue}>{kpis.total}</div>
-          </div>
-          <div style={S.kpi('var(--lp-success-600)')}>
-            <div style={S.kpiLabel}>Hoy</div>
-            <div style={S.kpiValue}>{kpis.lotesHoy}</div>
-          </div>
-          <div style={S.kpi('var(--lp-warning-600)')}>
-            <div style={S.kpiLabel}>En Proceso</div>
-            <div style={S.kpiValue}>{kpis.enProceso}</div>
-          </div>
-          <div style={S.kpi('var(--lp-brand-500)')}>
-            <div style={S.kpiLabel}>Envasados</div>
-            <div style={S.kpiValue}>{kpis.envasados}</div>
-          </div>
-        </div>
+        {/* Subtítulo del mockup. (Los 4 KPIs sueltos del page viejo se quitaron:
+            el mockup no los trae — patrón Sprint AG. El conteo por estado sigue
+            visible en las pills de filtro.) */}
+        <div style={S.greet}>Historial completo de cada lote · {lotes.length} lote{lotes.length === 1 ? '' : 's'}</div>
 
         {/* Toolbar §7: buscador + Escanear QR (rol amplio) + Lote manual (admin).
             En escritorio los botones van a la derecha del buscador y NO se
@@ -719,13 +726,37 @@ export default function TrazabilidadPage() {
               data-id="traza.btn.lote-manual"
               data-rol="admin"
               title="Solo admin"
-              style={S.btnPrimary(!isDesktop)}
+              style={S.btnGhost(!isDesktop)}
               onClick={handleLoteManual}
             >
               {ICONS.plus} Lote manual
             </button>
           )}
         </div>
+
+        {/* Selector de lote (.lotes/.lpill del mockup): pills mono scrollables.
+            Tap = enfocar SOLO ese lote con su bitácora abierta; re-tap = volver
+            a la lista completa (función de browse conservada). */}
+        {pillLotes.length > 0 && (
+          <div style={S.lotesRow} className="page-tabs-scroll">
+            {pillLotes.map(l => {
+              const cod = l.codigoLote || l.id;
+              const on = cod === selLote;
+              return (
+                <button
+                  key={cod}
+                  data-id="traza.pill.lote"
+                  data-rol="admin,tecnico,almacen,compras,recolector,inventario"
+                  style={S.lpill(on)}
+                  title={l.producto || l.formula || l.nombre || ''}
+                  onClick={() => setSelLote(on ? null : cod)}
+                >
+                  {cod}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {/* Filter pills por estado (folios mono, scrollable en móvil) */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 4, flexWrap: isDesktop ? 'wrap' : 'nowrap' }}>
@@ -736,18 +767,20 @@ export default function TrazabilidadPage() {
           ))}
         </div>
 
-        {/* Lote cards — cada uno con su timeline individual */}
-        {filtered.length === 0 ? (
+        {/* Lote cards — cada uno con su timeline individual. Con pill activa
+            se muestra solo ese lote ya expandido (vista detalle del mockup). */}
+        {shown.length === 0 ? (
           <div style={S.empty}>
             {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` : 'Sin lotes registrados.'}
           </div>
         ) : (
-          filtered.map(lote => (
+          shown.map(lote => (
             <LoteCard
-              key={lote.id || lote.codigoLote}
+              key={(lote.id || lote.codigoLote) + (focusOn ? '-focus' : '')}
               lote={lote}
               isDesktop={isDesktop}
               onShowQR={setQrLote}
+              defaultOpen={focusOn}
             />
           ))
         )}

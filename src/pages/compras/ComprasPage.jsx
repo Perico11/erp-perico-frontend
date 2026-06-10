@@ -24,23 +24,37 @@ import RegistrarPagoModal from './components/RegistrarPagoModal';
 import EditOCModal from './components/EditOCModal';
 import RecibirOCModal from './components/RecibirOCModal';
 import EliminarOCModal from './components/EliminarOCModal';
+/* Mockup integracion/Compras.html: documento de OC imprimible con partidas */
+import PrintOCOverlay from './components/PrintOCOverlay';
 import ComprasScreen from '../../screens/ComprasScreen';
 import KPICard from '../../components/ui/KPICard';
 
 const S = {
   wrap: { padding: '0 20px 100px' },
+  /* Mockup integracion/Pronóstico.html (.seg): sub-vistas como pills segmented,
+     sin línea inferior — mismo patrón en Compras y Pronóstico. */
   tabs: {
-    display: 'flex', gap: 0, borderBottom: '2px solid var(--lp-border-subtle)',
-    marginBottom: 16, overflowX: 'auto',
+    display: 'flex', gap: 6, marginBottom: 16, overflowX: 'auto', paddingBottom: 2,
     WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none', msOverflowStyle: 'none',
   },
   tab: (active) => ({
-    padding: '10px 16px', fontSize: 13, fontWeight: active ? 700 : 500,
-    color: active ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-    borderBottom: active ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-    background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap',
-    fontFamily: 'var(--lp-font-sans)', marginBottom: -2, flexShrink: 0,
+    padding: '8px 14px', fontSize: 12.5, fontWeight: active ? 600 : 500,
+    color: active ? '#fff' : 'var(--lp-text-secondary)',
+    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
+    border: 'none', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
+    fontFamily: 'var(--lp-font-sans)', flexShrink: 0,
   }),
+  /* Subtítulo de pantalla (tsub del mockup): "Hola Arely · 2 por aprobar" */
+  tsub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '2px 0 12px' },
+  h1: { fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--lp-text-primary)' },
+  h1sub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3, marginBottom: 16 },
+  /* errbox del mockup: estados de error con Reintentar */
+  errbox: {
+    background: 'color-mix(in srgb, var(--lp-danger-600) 9%, var(--lp-bg-raised))',
+    border: '1px solid color-mix(in srgb, var(--lp-danger-600) 26%, transparent)',
+    color: 'var(--lp-danger-600)', borderRadius: 14, padding: '14px 16px',
+    fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 11,
+  },
   toolbar: {
     display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap',
   },
@@ -442,6 +456,9 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
      presentacional y dispara onAccion(cod) → aquí se resuelve la OC real y se
      abre el modal robusto correspondiente (con su comprobante/validaciones). */
   const [active, setActive] = useState(null); /* { oc, type } */
+  /* Mockup Compras.html: "Imprimir OC" abre el documento con partidas en overlay
+     (la versión del servidor sigue disponible desde el propio overlay). */
+  const [printOC, setPrintOC] = useState(null);
 
   /* Si llega prefill desde MRP/Predicción, abrir Levantar OC */
   useEffect(() => { if (prefillNewOC) setShowNew(true); }, [prefillNewOC]);
@@ -513,9 +530,11 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onEliminarOC={(cod) => openModal(cod, 'eliminar')}
         onRecibirMP={(cod) => openModal(cod, 'recibir')}
         onRegistrarPago={(cod) => openModal(cod, 'pago')}
-        onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) window.open(`/api/compras/oc/${oc.id}/print`, '_blank'); }}
+        onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) setPrintOC(oc); }}
         onVerComprobante={(cod) => { const oc = findOC(cod); if (oc) window.open(`/api/compras/oc/comprobante/${oc.id}`, '_blank'); }}
       />
+
+      {printOC && <PrintOCOverlay oc={printOC} onClose={() => setPrintOC(null)} />}
 
       {active?.type === 'aprobar'  && <AprobarOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'pago'     && <RegistrarPagoModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
@@ -1123,7 +1142,7 @@ function PronosticoTab({ forecastData, inventario }) {
   const periyoyConfiable = (yoyProd.confiable || yoyComp.confiable || yoyVentas.confiable);
 
   if (mesesHist === 0) {
-    return <div style={S.empty}>Sin datos historicos de produccion. Se necesitan al menos 3 meses.</div>;
+    return <div style={S.empty}>Sin histórico suficiente para la tendencia. Se necesitan al menos 3 meses de producción.</div>;
   }
 
   return (
@@ -1339,7 +1358,7 @@ function MRPTab({ mrpData, onCrearOC }) {
       </div>
 
       {items.length === 0 ? (
-        <div style={S.empty}>Sin datos de MRP disponibles.</div>
+        <div style={S.empty}>{debouncedQuery ? 'Sin resultados para tu búsqueda.' : 'MRP sin requerimientos netos pendientes.'}</div>
       ) : (
         <>
         <div style={{ overflowX: 'auto' }}>
@@ -1473,6 +1492,24 @@ function MRPTab({ mrpData, onCrearOC }) {
   );
 }
 
+/* ── errbox del mockup (Pronóstico.html): mensaje + Reintentar ── */
+function ErrBox({ msg, onRetry }) {
+  return (
+    <div style={S.errbox}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+        <path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" />
+      </svg>
+      <span style={{ flex: 1, minWidth: 160 }}>{msg}</span>
+      {onRetry && (
+        <button type="button" data-id="pronostico.btn.reintentar" data-rol="compras,admin" onClick={onRetry}
+          style={{ height: 34, padding: '0 14px', borderRadius: 10, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', marginLeft: 'auto' }}>
+          Reintentar
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════════════ */
 /* MAIN COMPONENT                                                    */
 /* ══════════════════════════════════════════════════════════════════ */
@@ -1490,6 +1527,7 @@ export default function ComprasPage({ mode = 'compras' }) {
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuth();
   const esPronostico = mode === 'pronostico';
   /* Tab inicial por modo: compras→ocs (Por aprobar), pronostico→forecast (Forecast IA). */
   const [activeTab, setActiveTab] = useState(esPronostico ? 'forecast' : 'ocs');
@@ -1497,8 +1535,8 @@ export default function ComprasPage({ mode = 'compras' }) {
      (cuando el usuario generó una OC desde /pronostico y se le redirige a /compras). */
   const [newOCPrefill, setNewOCPrefill] = useState(location.state?.newOCPrefill || null); // { mp, kg, proveedor }
 
-  const { data: mrpData, loading: mrpLoading } = useApiData(() => api.getMRP(), [], 15000);
-  const { data: forecastData, loading: fcLoading } = useApiData(() => api.getForecast(), null, 30000);
+  const { data: mrpData, loading: mrpLoading, error: mrpError, reload: reloadMRP } = useApiData(() => api.getMRP(), [], 15000);
+  const { data: forecastData, loading: fcLoading, error: fcError, reload: reloadFc } = useApiData(() => api.getForecast(), null, 30000);
   const { data: invData } = useApiData(() => api.getInventario(), null, 30000);
   const { data: ocsData, loading: ocsLoading, reload: reloadOCs } = useApiData(() => api.get('/api/compras/oc'), [], 20000);
 
@@ -1530,6 +1568,21 @@ export default function ComprasPage({ mode = 'compras' }) {
     if (location.state?.newOCPrefill) navigate(location.pathname, { replace: true, state: {} });
     reloadOCs();
   };
+
+  /* Subtítulo del mockup ("Hola Arely · 2 por aprobar · 1 vencida") con conteos
+     en vivo de las OCs reales — solo informativo, no gatea nada. */
+  const subCompras = useMemo(() => {
+    const raw = Array.isArray(ocsData) ? ocsData : ocsData?.data || [];
+    const porAprobar = raw.filter(o => _ocBucket(o) === 'porAprobar').length;
+    const vencidas = raw.filter(o => {
+      if (_ocBucket(o) !== 'activa') return false;
+      if (o.pago !== 'credito' || o.pagada) return false;
+      const d = _diasVence(o.fechaVencimiento);
+      return d != null && d < 0;
+    }).length;
+    const hola = user?.nombre ? `Hola ${user.nombre}` : 'Órdenes de compra';
+    return `${hola} · ${porAprobar} por aprobar${vencidas ? ` · ${vencidas} vencida${vencidas > 1 ? 's' : ''}` : ''}`;
+  }, [ocsData, user]);
 
   /* Build simple inv map for MP stock lookup */
   const inventario = useMemo(() => {
@@ -1569,6 +1622,20 @@ export default function ComprasPage({ mode = 'compras' }) {
     <>
       <TopBar title={esPronostico ? 'Pronóstico' : 'Compras'} />
       <div style={S.wrap}>
+        {/* Encabezado del mockup: h1+sub en escritorio (Pronóstico) / tsub con conteos (Compras) */}
+        {esPronostico ? (
+          isDesktop ? (
+            <>
+              <div style={S.h1}>Pronóstico</div>
+              <div style={S.h1sub}>Inteligencia de compras · Forecast IA, MRP y tendencias</div>
+            </>
+          ) : (
+            <div style={S.tsub}>Inteligencia de compras</div>
+          )
+        ) : (
+          /* solo con datos cargados — evita el flash "0 por aprobar" */
+          ocsData != null && <div style={S.tsub}>{subCompras}</div>
+        )}
         {esPronostico ? (
           <HelpHint id="pronostico-overview" title="Pronóstico: la inteligencia de compra">
             <strong>Sugerencias</strong>: motor Forecast IA con demanda proyectada + safety stock; generar OC cae en Compras ▸ Por aprobar. <strong>MRP</strong>: detecta MPs que faltan según producción esperada. <strong>Tendencia</strong>: WMA × estacional × YoY blended con demanda POS. <strong>IA avanzada</strong>: Holt forecasting. <strong>Pedidos</strong>: predicción de pedidos.
@@ -1612,13 +1679,17 @@ export default function ComprasPage({ mode = 'compras' }) {
         {activeTab === 'mrp' && (
           mrpLoading
             ? <div style={S.spinner}><div className="lp-spinner" /></div>
-            : <MRPTab mrpData={mrpData} onCrearOC={handleCrearOCFromMRP} />
+            : (mrpError && !mrpData)
+              ? <ErrBox msg="Error al correr el MRP." onRetry={reloadMRP} />
+              : <MRPTab mrpData={mrpData} onCrearOC={handleCrearOCFromMRP} />
         )}
 
         {activeTab === 'pronostico' && (
           fcLoading
             ? <div style={S.spinner}><div className="lp-spinner" /></div>
-            : <PronosticoTab forecastData={forecastData} inventario={inventario} />
+            : (fcError && !forecastData)
+              ? <ErrBox msg="No se pudo cargar la tendencia." onRetry={reloadFc} />
+              : <PronosticoTab forecastData={forecastData} inventario={inventario} />
         )}
 
         {/* Forecast IA genera OCs server-side (generarOCsBulkForecast) que caen

@@ -85,6 +85,16 @@ const S = {
   fieldMono: { padding: '0 12px', height: 44, border: '1px solid var(--lp-border-subtle)', borderRadius: 12, width: 110, fontSize: 14, fontFamily: 'var(--lp-font-mono)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', outline: 'none', boxSizing: 'border-box' },
   lbl: { fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-secondary)' },
 
+  /* selector de periodo (mockup Reportes.html): Este mes · Trimestre · Año */
+  perWrap: { display: 'flex', gap: 4, marginBottom: 10 },
+  perBtn: (on, grow) => ({
+    flex: grow ? 1 : '0 0 auto', padding: '8px 16px', minHeight: 40, borderRadius: 999,
+    border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
+    fontSize: 12.5, fontWeight: on ? 600 : 500, whiteSpace: 'nowrap',
+    background: on ? 'var(--lp-brand-600)' : 'transparent',
+    color: on ? '#fff' : 'var(--lp-text-secondary)', transition: 'all .15s',
+  }),
+
   /* segmented (sub-secciones escritorio) */
   segWrap: { display: 'flex', gap: 6, padding: 4, background: 'var(--lp-bg-sunken)', borderRadius: 999, marginBottom: 18, overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' },
   seg: (on) => ({
@@ -175,6 +185,11 @@ function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
   const [err, setErr] = useState('');
+  /* Mockup: "Producción · últimos 6 meses" (barras) + "Top productos del mes".
+     Datos REALES de /api/reports/production-monthly (endpoint solo-admin →
+     solo se consulta como admin; para inventario/compras los paneles no aplican).
+     Se piden año actual + anterior para cubrir los 6 meses cruzando enero. */
+  const [prod, setProd] = useState(null);
 
   const cargar = useCallback(() => {
     setLoading(true); setErr('');
@@ -184,6 +199,29 @@ function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
       .finally(() => setLoading(false));
   }, []);
   useEffect(() => { cargar(); }, [cargar]);
+
+  useEffect(() => {
+    if (!esAdmin || typeof api.getReportProduction !== 'function') return;
+    const Y = new Date().getFullYear();
+    Promise.all([
+      api.getReportProduction(Y).catch(() => null),
+      api.getReportProduction(Y - 1).catch(() => null),
+    ]).then(([a, b]) => {
+      const meses = { ...(b?.meses || {}), ...(a?.meses || {}) };
+      const keys = Object.keys(meses).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
+      if (!keys.length) return;
+      const last6 = keys.slice(-6);
+      const serie = last6.map(k => ({
+        k,
+        label: MESES_ES[parseInt(k.split('-')[1], 10) - 1] || k,
+        total: Math.round(meses[k]?.total || 0),
+      }));
+      const lastK = last6[last6.length - 1];
+      const top = Object.entries(meses[lastK]?.detalle || {})
+        .sort((x, y) => y[1] - x[1]).slice(0, 5);
+      setProd({ serie, top, mesLabel: periodoLabel(lastK) });
+    });
+  }, [esAdmin]);
 
   const handleCerrar = async () => {
     if (!preview) return;
@@ -249,6 +287,64 @@ function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
         <KPI label="Salidas mes" accent={CHART.amber} value={fmtN(k.salidasMes, 0)} sub="kg consumidos" />
       </div>
 
+      {/* ── Producción · últimos 6 meses (mockup: barras, último mes acento) ── */}
+      {prod && prod.serie.length > 0 && (() => {
+        const max = Math.max(...prod.serie.map(s => s.total), 1);
+        const prom = Math.round(prod.serie.reduce((a, s) => a + s.total, 0) / prod.serie.length);
+        const best = prod.serie.reduce((a, s) => (s.total > a.total ? s : a), prod.serie[0]);
+        return (
+          <div style={S.section}>
+            <div style={S.sectionTitle}>Producción · últimos 6 meses</div>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 120 }}>
+              {prod.serie.map((s, i) => {
+                const last = i === prod.serie.length - 1;
+                return (
+                  <div key={s.k} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, minWidth: 0, height: '100%', justifyContent: 'flex-end' }}>
+                    <div title={`${s.label}: ${s.total.toLocaleString('es-MX')} cub`}
+                      style={{
+                        width: '100%', height: Math.max(3, (s.total / max) * 96), borderRadius: '5px 5px 0 0',
+                        background: last ? CHART.brand : 'color-mix(in srgb, var(--lp-brand-600) 30%, var(--lp-bg-sunken))',
+                      }} />
+                    <div style={{ fontSize: 9.5, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{s.label}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 14, paddingTop: 12, borderTop: '1px solid var(--lp-border-subtle)', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                Promedio <b style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)' }}>{prom.toLocaleString('es-MX')} cub</b>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                Mejor mes <b style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)' }}>{best.total.toLocaleString('es-MX')} ({best.label})</b>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Top productos del mes (mockup: ranking con barra proporcional) ── */}
+      {prod && prod.top.length > 0 && (() => {
+        const maxT = prod.top[0][1] || 1;
+        const colors = [CHART.brand, CHART.info, CHART.amber, 'var(--lp-brand-300)', 'var(--lp-text-tertiary)'];
+        return (
+          <div style={S.section}>
+            <div style={S.sectionTitle}>Top productos · {prod.mesLabel}</div>
+            {prod.top.map(([n, v], i) => (
+              <div key={n} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+                <span style={{ width: 20, height: 20, borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', fontSize: 10, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{i + 1}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--lp-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n}</div>
+                  <div style={{ height: 6, borderRadius: 999, background: 'var(--lp-bg-sunken)', overflow: 'hidden', marginTop: 5 }}>
+                    <div style={{ width: ((v / maxT) * 100) + '%', height: '100%', borderRadius: 999, background: colors[i] || colors[colors.length - 1] }} />
+                  </div>
+                </div>
+                <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700, color: 'var(--lp-text-primary)', minWidth: 48, textAlign: 'right' }}>{Math.round(v).toLocaleString('es-MX')}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       <div style={S.section}>
         <div style={S.sectionTitle}>IRA por clase ABC</div>
         <div className="table-scroll"><table style={S.table}>
@@ -276,16 +372,26 @@ function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
         </table></div>
       </div>
 
-      {esAdmin && (
-        <div style={{ display: 'flex', justifyContent: isDesktop ? 'flex-end' : 'stretch', gap: 10, flexWrap: 'wrap' }}>
-          <button style={S.btnGhost} onClick={cargar}>
-            <Icon d={IC.refresh} size={16} /> Refrescar
-          </button>
-          <button style={{ ...S.btnPrimary, opacity: closing ? 0.6 : 1, flex: isDesktop ? '0 0 auto' : 1, justifyContent: 'center' }} onClick={handleCerrar} disabled={closing}>
-            <Icon d={IC.check} size={16} /> {closing ? 'Cerrando…' : 'Cerrar mes anterior'}
-          </button>
-        </div>
-      )}
+      {/* Mockup: "Descargar reporte (PDF)" — usa el PDF ejecutivo trimestral REAL
+          (routes/reportes.js · pdf-ejecutivo, HTML A4 imprimible). Full-width solo
+          en móvil; en escritorio ancho auto (regla de botones del DS). */}
+      <div style={{ display: 'flex', justifyContent: isDesktop ? 'flex-end' : 'stretch', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <a href={api.urlPDFEjecutivo(new Date().getFullYear(), Math.floor(new Date().getMonth() / 3) + 1)}
+          target="_blank" rel="noopener noreferrer" data-id="reportes.btn.pdf-ejecutivo"
+          style={{ ...S.btnGhost, textDecoration: 'none', ...(isDesktop ? { marginRight: 'auto' } : { flex: '1 1 100%', justifyContent: 'center' }) }}>
+          <Icon d={IC.download} size={16} /> Descargar reporte (PDF)
+        </a>
+        {esAdmin && (
+          <>
+            <button style={S.btnGhost} onClick={cargar}>
+              <Icon d={IC.refresh} size={16} /> Refrescar
+            </button>
+            <button style={{ ...S.btnPrimary, opacity: closing ? 0.6 : 1, flex: isDesktop ? '0 0 auto' : 1, justifyContent: 'center' }} onClick={handleCerrar} disabled={closing}>
+              <Icon d={IC.check} size={16} /> {closing ? 'Cerrando…' : 'Cerrar mes anterior'}
+            </button>
+          </>
+        )}
+      </div>
     </>
   );
 }
@@ -795,6 +901,27 @@ export default function ReportesPage() {
 
   const selectTab = (id) => { setActiveTab(id); setDetallePeriodo(null); };
 
+  /* ── Selector de periodo del mockup (Este mes · Trimestre · Año) ──
+     Mapea a las secciones REALES equivalentes (sin backend nuevo):
+     mes → Cierre mensual · trim → Trimestral · año → Estratégico (anual). */
+  const PERIODOS = [
+    { id: 'mes', label: 'Este mes', tab: 'cierre' },
+    { id: 'trim', label: 'Trimestre', tab: 'trimestral' },
+    { id: 'ano', label: 'Año', tab: 'estrategico' },
+  ];
+  const perActivo = activeTab === 'cierre' ? 'mes' : activeTab === 'trimestral' ? 'trim' : activeTab === 'estrategico' ? 'ano' : null;
+
+  /* Subtítulo dinámico del mockup: "Resumen de junio 2026" / "Trimestre abr–jun 2026" / "Acumulado 2026" */
+  const now = new Date();
+  const TRIM_TXT = ['ene–mar', 'abr–jun', 'jul–sep', 'oct–dic'];
+  const subPeriodo = activeTab === 'cierre'
+    ? `Resumen de ${now.toLocaleDateString('es-MX', { month: 'long' })} ${now.getFullYear()}`
+    : activeTab === 'trimestral'
+      ? `Trimestre ${TRIM_TXT[Math.floor(now.getMonth() / 3)]} ${now.getFullYear()}`
+      : activeTab === 'estrategico'
+        ? `Acumulado ${now.getFullYear()}`
+        : activeSec.full;
+
   /* Export gateado compras/admin (data-id reportes.btn.exportar).
      Usa el endpoint REAL existente: snapshot xlsx del mes en curso.
      (No hay endpoint de import de reportes en el backend — ver flag en el reporte.) */
@@ -810,15 +937,27 @@ export default function ReportesPage() {
       <div style={{ ...S.wrap, ...(isDesktop ? S.wrapDesk : {}) }}>
         <div style={S.h1}>Reportes</div>
         <div style={S.psub}>
-          {detallePeriodo ? 'Detalle de snapshot' : (isDesktop ? activeSec.full : `Sección · ${activeSec.full}`)}
+          {detallePeriodo ? 'Detalle de snapshot' : subPeriodo}
         </div>
+
+        {/* Selector de periodo (mockup): Este mes · Trimestre · Año */}
+        {!detallePeriodo && (
+          <div style={S.perWrap}>
+            {PERIODOS.map(p => (
+              <button key={p.id} type="button" style={S.perBtn(p.id === perActivo, !isDesktop)}
+                data-id={`reportes.periodo.${p.id}`} data-rol="admin,inventario,compras"
+                onClick={() => selectTab(p.tab)}>{p.label}</button>
+            ))}
+          </div>
+        )}
 
         {/* Selector de secciones: segmented escritorio / botón→bottom-sheet móvil */}
         {isDesktop ? (
           <div style={S.segWrap}>
             {SECCIONES.map(sec => (
-              <button key={sec.id} style={S.seg(sec.id === activeTab && !detallePeriodo)} onClick={() => selectTab(sec.id)}>
-                {sec.full}
+              <button key={sec.id} style={S.seg(sec.id === activeTab && !detallePeriodo)} onClick={() => selectTab(sec.id)}
+                data-id={`reportes.sec.${sec.id}`} data-rol="admin,inventario,compras">
+                {sec.label}
               </button>
             ))}
           </div>

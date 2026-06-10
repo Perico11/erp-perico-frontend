@@ -122,6 +122,44 @@ const TRUCK_ICON = (
    era la 3a copia del modal de reenvasado, desincronizada. Se usa el
    ReenvasadoModal compartido de StockFabricaPage (con toteInicial). */
 
+/* ── Tile .from del mockup: "Recolectó Luis · salió 11:40" ──
+   Quién/hora salen del historial REAL del sublote (evento en_camino =
+   Luis escaneó; en_stock_teran = recibido). Sin evento de salida no se
+   inventa nada: la card cae al texto previo "codigo · Fábrica → Terán". */
+const _hm = (iso) => {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    /* 24h como el mockup ("salió 11:40 · recibido 13:30") */
+    return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
+  } catch { return ''; }
+};
+function fromTileInfo(s, esRecibido) {
+  const hist = Array.isArray(s?.historial) ? s.historial : [];
+  const buscar = (estado) => {
+    for (let i = hist.length - 1; i >= 0; i--) {
+      const h = hist[i];
+      if (h && h.estado === estado) return h;
+    }
+    return null;
+  };
+  const salida = buscar('en_camino');
+  const llegada = esRecibido ? buscar('en_stock_teran') : null;
+  if (salida && salida.usuario) {
+    const t = llegada && llegada.fecha
+      ? `recibido ${_hm(llegada.fecha)}`
+      : (salida.fecha ? `salió ${_hm(salida.fecha)}` : '');
+    return { verbo: 'Recolectó', who: salida.usuario, t };
+  }
+  /* Sublote nacido en Terán (hijo de re-envasado de TOTE): nunca viajó —
+     "Recolectó" sería falso. Mostramos quién lo dio de alta en stock. */
+  if (llegada && llegada.usuario) {
+    return { verbo: 'Recibió', who: llegada.usuario, t: llegada.fecha ? _hm(llegada.fecha) : '' };
+  }
+  return null;
+}
+
 /* ─────────────── PAGE PRINCIPAL ─────────────── */
 export default function AlmacenRecepcionPage() {
   const { user } = useAuth();
@@ -372,6 +410,7 @@ export default function AlmacenRecepcionPage() {
               const est = filter === 'en_camino'
                 ? { l: 'En camino', bg: 'color-mix(in srgb, var(--lp-warning-600) 14%, transparent)', fg: 'var(--lp-warning-700)' }
                 : { l: 'Recibido', bg: 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)', fg: 'var(--lp-brand-700)' };
+              const ft = fromTileInfo(s, filter === 'en_almacen');
               return (
                 <div key={s.cod} style={{ ...(isDesktop ? S.cardDesktop : S.card), ...(prueba ? S.cardPrueba : {}) }}>
                   <div style={S.chead}>
@@ -382,7 +421,16 @@ export default function AlmacenRecepcionPage() {
                   </div>
                   <div style={S.prod}>{lote?.producto || lote?.nombre || '—'}</div>
                   <div style={S.qty}>{subloteQtyTxt(s)}</div>
-                  <div style={S.from}>{TRUCK_ICON} {(lote?.codigo || lote?.codigoLote || '')} · Fábrica → Terán</div>
+                  {/* .from del mockup: quién recolectó + hora (historial real);
+                      fallback al codigo de lote + ruta si aún no hay evento */}
+                  <div style={S.from}>
+                    {TRUCK_ICON}
+                    {ft ? (
+                      <span>{ft.verbo} <b style={{ color: 'var(--lp-text-primary)', fontWeight: 600 }}>{ft.who}</b>{ft.t ? ` · ${ft.t}` : ''}</span>
+                    ) : (
+                      <span>{(lote?.codigo || lote?.codigoLote || '')} · Fábrica → Terán</span>
+                    )}
+                  </div>
                   {prueba && filter === 'en_camino' && (
                     <div style={S.pruebaNote}>Lote de prueba — no sumes PT al stock físico, sólo simula la recepción.</div>
                   )}

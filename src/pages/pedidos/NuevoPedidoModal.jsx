@@ -2,57 +2,92 @@ import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import useConfirm from '../../hooks/useConfirm';
+import useIsDesktop from '../../hooks/useIsDesktop';
 import humanizeError from '../../utils/humanizeError';
 
+/* ═══════════════════════════════════════════════════════════════════════
+   NuevoPedidoModal — reskin mockup Pedidos.html (jun 2026).
+
+   Visual del mockup: BOTTOM-SHEET en móvil (radio 24px arriba, sube con
+   transform), modal centrado en escritorio (HANDOFF §4 "Sheets/modales").
+   Campos .flabel/.finput (48px, radio 12, fondo tile, focus borde verde),
+   acciones Cancelar (ghost) + Crear pedido (primario) repartidas.
+
+   LÓGICA INTACTA: validaciones, confirm de esPrueba (useConfirm — no
+   window.confirm, ver Sprint G-4), id 'PA-', api.upsertPedido, datalist de
+   fórmulas con parse multi-shape. Campos que el mockup OMITE y se CONSERVAN:
+   Solicitante (obligatorio) y el checkbox Modo prueba.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* :focus no se puede inline — clase mínima inyectada con el sheet */
+const FOCUS_CSS = `
+  .np-finput:focus{ border-color: var(--lp-brand-600) !important; outline: none; }
+  .np-finput::placeholder{ color: var(--lp-text-tertiary); }
+`;
+
+const EASE = 'cubic-bezier(.22,1,.36,1)';
+
 const S = {
-  overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(26,24,21,.5)',
-    zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+  overlay: (isDesktop, shown) => ({
+    position: 'fixed', inset: 0, background: 'rgba(10,16,14,.45)',
+    zIndex: 100, display: 'flex',
+    alignItems: isDesktop ? 'center' : 'flex-end',
+    justifyContent: 'center',
+    padding: isDesktop ? 20 : 0,
     fontFamily: 'var(--lp-font-sans)',
-  },
-  modal: {
-    background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg, 14px)',
-    maxWidth: 480, width: '100%', maxHeight: '90vh', overflow: 'auto',
+    opacity: shown ? 1 : 0,
+    transition: `opacity .25s ${EASE}`,
+  }),
+  sheet: (isDesktop, shown) => ({
+    background: 'var(--lp-bg-raised)',
+    borderRadius: isDesktop ? 18 : '24px 24px 0 0',
+    width: '100%',
+    maxWidth: isDesktop ? 440 : 'none',
+    maxHeight: '92vh', overflowY: 'auto',
+    padding: '22px 22px 30px',
     boxShadow: '0 12px 40px rgba(26,24,21,.2)',
+    transform: shown ? 'none' : 'translateY(24px)',
+    transition: `transform .3s ${EASE}`,
+  }),
+  head: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  title: { fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)', letterSpacing: '-.01em' },
+  sub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 3 },
+  closeBtn: {
+    width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+    background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer', color: 'var(--lp-text-secondary)',
   },
-  header: {
-    padding: '14px 18px', borderBottom: '1.5px solid var(--lp-border-subtle)',
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-  },
-  title: { fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' },
-  body: { padding: 18 },
-  field: { marginBottom: 12 },
-  label: { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '.04em' },
+  label: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '14px 2px 6px' },
   input: {
-    width: '100%', padding: '9px 12px', fontSize: 14,
-    border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-sm)',
-    background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)',
+    width: '100%', height: 48, padding: '0 14px', fontSize: 15,
+    border: '1.5px solid var(--lp-border-subtle)', borderRadius: 12,
+    background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-primary)',
     fontFamily: 'inherit', boxSizing: 'border-box',
   },
-  footer: {
-    padding: '12px 18px', borderTop: '1.5px solid var(--lp-border-subtle)',
-    display: 'flex', gap: 10, justifyContent: 'flex-end',
-  },
+  acts: { display: 'flex', gap: 10, marginTop: 22 },
   btn: (primary) => ({
-    padding: '9px 16px', fontSize: 13, fontWeight: 600,
-    background: primary ? 'var(--lp-brand-600)' : 'var(--lp-bg-base)',
-    color: primary ? '#fff' : 'var(--lp-text-primary)',
-    border: '1.5px solid ' + (primary ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
-    borderRadius: 'var(--lp-radius-sm)', cursor: primary ? 'pointer' : 'pointer',
-    fontFamily: 'inherit',
+    flex: 1, minHeight: 46, padding: '0 16px',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+    borderRadius: 11,
+    background: primary ? 'var(--lp-brand-600)' : 'transparent',
+    color: primary ? '#fff' : 'var(--lp-text-secondary)',
+    border: primary ? '1.5px solid var(--lp-brand-600)' : '1px solid var(--lp-border-subtle)',
   }),
-  err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12, marginBottom: 12 },
+  err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 10, fontSize: 12, marginTop: 12 },
   pruebaBox: (active) => ({
-    padding: '10px 12px', borderRadius: 'var(--lp-radius-sm)',
+    padding: '12px 14px', borderRadius: 12,
     background: active ? 'var(--lp-warning-50)' : 'var(--lp-bg-sunken)',
     border: '1.5px solid ' + (active ? 'var(--lp-warning-500)' : 'var(--lp-border-subtle)'),
-    fontSize: 12, marginTop: 8, color: active ? 'var(--lp-warning-700)' : 'var(--lp-text-secondary)',
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+    fontSize: 12, marginTop: 14, color: active ? 'var(--lp-warning-700)' : 'var(--lp-text-secondary)',
+    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, minHeight: 44, boxSizing: 'border-box',
   }),
 };
 
 export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto = null }) {
   const { user } = useAuth();
+  const isDesktop = useIsDesktop();
   /* Si llega prefillProducto (desde Inventario → "Pedir reposición"), inicializa el campo */
   const [producto, setProducto] = useState(prefillProducto || '');
   const [cantidad, setCantidad] = useState('');
@@ -62,6 +97,15 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [confirm, ConfirmEl] = useConfirm();
+  /* Animación de entrada del sheet (mockup .overlay.show). prefers-reduced-motion → sin transición. */
+  const [shown, setShown] = useState(false);
+  useEffect(() => {
+    let reduce = false;
+    try { reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches; } catch { /* noop */ }
+    if (reduce) { setShown(true); return undefined; }
+    const raf = requestAnimationFrame(() => setShown(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   useEffect(() => {
     /* BUG FIX: el endpoint /api/formulas/summary devuelve {ok, data:{summary:[...]}}
@@ -130,67 +174,76 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay(isDesktop, shown)} onClick={onClose}>
       {ConfirmEl}
-      <div style={S.modal} onClick={(e) => e.stopPropagation()}>
-        <div style={S.header}>
-          <div style={S.title}>Nuevo pedido</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 4 }} aria-label="Cerrar">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+      <div style={S.sheet(isDesktop, shown)} onClick={(e) => e.stopPropagation()}>
+        <style>{FOCUS_CSS}</style>
+
+        {/* Encabezado del sheet (modal-h + modal-s del mockup). La X no viene
+            en el mockup pero se conserva (cierre accesible además del overlay). */}
+        <div style={S.head}>
+          <div>
+            <div style={S.title}>Nuevo pedido</div>
+            <div style={S.sub}>Captura el producto y la cantidad. Quedará pendiente para producción.</div>
+          </div>
+          <button onClick={onClose} style={S.closeBtn} aria-label="Cerrar">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
         </div>
-        <div style={S.body}>
-          {err && <div style={S.err}>{err}</div>}
 
-          <div style={S.field}>
-            <label style={S.label}>Producto *</label>
-            <input
-              style={S.input}
-              list="formulas-list"
-              value={producto}
-              onChange={(e) => setProducto(e.target.value)}
-              placeholder="Buscar fórmula…"
-              autoFocus
-            />
-            <datalist id="formulas-list">
-              {formulas.map((f, i) => <option key={i} value={f.nombre || f} />)}
-            </datalist>
-          </div>
+        {err && <div style={S.err}>{err}</div>}
 
-          <div style={S.field}>
-            <label style={S.label}>Cantidad (cubetas) *</label>
-            <input
-              style={S.input}
-              type="number"
-              min="1"
-              value={cantidad}
-              onChange={(e) => setCantidad(e.target.value)}
-            />
-          </div>
+        <label style={S.label} htmlFor="np-prod">Producto *</label>
+        <input
+          id="np-prod"
+          className="np-finput"
+          style={S.input}
+          list="formulas-list"
+          value={producto}
+          onChange={(e) => setProducto(e.target.value)}
+          placeholder="Ej. Vinílica blanca 19L"
+          autoFocus
+        />
+        <datalist id="formulas-list">
+          {formulas.map((f, i) => <option key={i} value={f.nombre || f} />)}
+        </datalist>
 
-          <div style={S.field}>
-            <label style={S.label}>Solicitante *</label>
-            <input
-              style={S.input}
-              value={solicitante}
-              onChange={(e) => setSolicitante(e.target.value)}
-              placeholder="Cliente, sucursal, persona…"
-            />
-          </div>
+        <label style={S.label} htmlFor="np-qty">Cantidad (cubetas) *</label>
+        <input
+          id="np-qty"
+          className="np-finput"
+          style={S.input}
+          type="number"
+          inputMode="numeric"
+          min="1"
+          value={cantidad}
+          onChange={(e) => setCantidad(e.target.value)}
+          placeholder="52"
+        />
 
-          <div style={S.pruebaBox(esPrueba)} onClick={() => setEsPrueba(p => !p)}>
-            <input
-              type="checkbox"
-              checked={esPrueba}
-              onChange={(e) => setEsPrueba(e.target.checked)}
-              style={{ cursor: 'pointer' }}
-            />
-            <span>
-              <strong>Modo prueba</strong> — no descuenta MP ni suma PT
-            </span>
-          </div>
+        <label style={S.label} htmlFor="np-sol">Solicitante *</label>
+        <input
+          id="np-sol"
+          className="np-finput"
+          style={S.input}
+          value={solicitante}
+          onChange={(e) => setSolicitante(e.target.value)}
+          placeholder="Cliente, sucursal, persona…"
+        />
+
+        <div style={S.pruebaBox(esPrueba)} onClick={() => setEsPrueba(p => !p)}>
+          <input
+            type="checkbox"
+            checked={esPrueba}
+            onChange={(e) => setEsPrueba(e.target.checked)}
+            style={{ cursor: 'pointer' }}
+          />
+          <span>
+            <strong>Modo prueba</strong> — no descuenta MP ni suma PT
+          </span>
         </div>
-        <div style={S.footer}>
+
+        <div style={S.acts}>
           <button style={S.btn(false)} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={S.btn(true)} onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : 'Crear pedido'}

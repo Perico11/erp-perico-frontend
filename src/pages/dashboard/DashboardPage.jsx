@@ -212,12 +212,37 @@ export default function DashboardPage() {
     'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar',
     'dev-recibir': 'Recibir', 'dev-reembolsar': 'Emitir', 'conteos-vencidos': 'Contar',
   };
+  /* Título del hero en el tono del mockup Inicio Resumen.html ("4 lotes
+     esperan tu QC") en lugar del genérico "4 qc por hacer". Concuerda
+     singular/plural; fallback = formato genérico anterior. */
+  const uno = (n, sing, plur) => (n === 1 ? sing : plur);
+  const HERO_TITLE = {
+    pedidos: n => `${n} ${uno(n, 'pedido espera', 'pedidos esperan')} preparación`,
+    ordenes: n => `${n} ${uno(n, 'orden', 'órdenes')} en proceso`,
+    qc: n => `${n} ${uno(n, 'lote espera', 'lotes esperan')} tu QC`,
+    'qc-hold': n => `${n} ${uno(n, 'lote retenido', 'lotes retenidos')} en QC`,
+    envasado: n => `${n} ${uno(n, 'lote listo', 'lotes listos')} para envasar`,
+    recoleccion: n => `${n} ${uno(n, 'lote', 'lotes')} por recolectar`,
+    almacen: n => `${n} ${uno(n, 'lote', 'lotes')} en camino a Terán`,
+    'oc-vencidas': n => `${n} ${uno(n, 'OC vencida', 'OCs vencidas')}`,
+    'ocs-por-aprobar': n => `${n} ${uno(n, 'OC', 'OCs')} por aprobar`,
+    'dev-recibir': n => `${n} ${uno(n, 'devolución', 'devoluciones')} por recibir`,
+    'dev-reembolsar': n => `${n} ${uno(n, 'reembolso', 'reembolsos')} por emitir`,
+    'conteos-vencidos': n => `${n} ${uno(n, 'conteo vencido', 'conteos vencidos')}`,
+  };
+  /* El hero del mockup lleva una descripción corta de una línea: desc + el
+     PRIMER folio (+N restantes) en vez de la lista de 3 que usan las filas. */
+  const folioCorto = (c) => {
+    const primero = (c.items || '').split(' · ')[0];
+    if (!primero || primero.startsWith('+')) return '';
+    return c.count > 1 ? `${primero} · +${c.count - 1}` : primero;
+  };
   const inicioData = {
     saludo: `Hola, ${user?.nombre || ''}`,
     fecha: fechaHoy,
     hero: heroCard ? {
-      titulo: `${heroCard.count} ${heroCard.titulo.toLowerCase()}`,
-      desc: heroCard.desc + (heroCard.items ? ' · ' + heroCard.items : ''),
+      titulo: (HERO_TITLE[heroCard.key] || ((n) => `${n} ${heroCard.titulo.toLowerCase()}`))(heroCard.count),
+      desc: heroCard.desc + (folioCorto(heroCard) ? ' · ' + folioCorto(heroCard) : ''),
       sev: accToSev(heroCard.accent),
       icon: KEY_ICON[heroCard.key] || 'inventario',
       ruta: heroCard.ruta,

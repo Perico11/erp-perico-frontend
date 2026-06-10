@@ -396,7 +396,18 @@ export default function ForecastIATab() {
     } finally { setCreandoBulk(false); }
   };
 
-  if (err) return <div style={{ background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12 }}>{err}</div>;
+  /* errbox del mockup: mensaje + Reintentar (recarga el forecast) */
+  if (err) return (
+    <div style={{ background: 'color-mix(in srgb, var(--lp-danger-600) 9%, var(--lp-bg-raised))', border: '1px solid color-mix(in srgb, var(--lp-danger-600) 26%, transparent)', color: 'var(--lp-danger-600)', borderRadius: 14, padding: '14px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginTop: 11 }}
+      data-id="pronostico.state.error" data-rol="compras,admin">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+      <span style={{ flex: 1, minWidth: 160 }}>No se pudo calcular el forecast ({err}).</span>
+      <button type="button" data-id="pronostico.btn.reintentar" data-rol="compras,admin" onClick={cargar}
+        style={{ height: 34, padding: '0 14px', borderRadius: 10, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', marginLeft: 'auto' }}>
+        Reintentar
+      </button>
+    </div>
+  );
 
   const k = datos.kpis || {};
   /* Carrito = MPs marcadas (seleccionadas). Una OC por proveedor (BulkOCModal agrupa). */
@@ -442,9 +453,28 @@ export default function ForecastIATab() {
       {/* ── MATERIAS PRIMAS POR REABASTECER — cards 1:1 mockup ── */}
       <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '2px 0 10px' }}>Materias primas por reabastecer</div>
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 30, color: 'var(--lp-text-tertiary)', fontSize: 13 }}>Calculando sugerencias…</div>
+        /* skeleton del mockup (skel + pulse) mientras corre el forecast */
+        <div data-id="pronostico.state.cargando">
+          <style>{`
+            @keyframes lpFcPulse { 50% { opacity: .5; } }
+            .lp-fc-skel { animation: lpFcPulse 1.3s cubic-bezier(.22,1,.36,1) infinite; }
+            @media (prefers-reduced-motion: reduce) { .lp-fc-skel { animation: none; } }
+          `}</style>
+          <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', marginBottom: 10 }}>Generando pronóstico…</div>
+          {[0, 1, 2].map(i => (
+            <div key={i} className="lp-fc-skel" style={{ background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: 15, marginBottom: 11 }}>
+              <div style={{ height: 11, borderRadius: 6, background: 'var(--lp-bg-sunken)', marginBottom: 9, width: '40%' }} />
+              <div style={{ height: 11, borderRadius: 6, background: 'var(--lp-bg-sunken)', marginBottom: 9 }} />
+              <div style={{ height: 11, borderRadius: 6, background: 'var(--lp-bg-sunken)', width: '60%' }} />
+            </div>
+          ))}
+        </div>
       ) : filtradas.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 40, color: 'var(--lp-text-tertiary)', fontSize: 13 }}>Sin sugerencias de compra. Tu inventario está bien cubierto.</div>
+        <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--lp-text-tertiary)', fontSize: 13.5, lineHeight: 1.5 }}>
+          {search
+            ? 'Sin resultados para tu búsqueda.'
+            : <>Sin sugerencias de compra ahora.<br />El forecast no detecta materias primas por reabastecer.</>}
+        </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 14, alignItems: 'start' }}>
           {filtradas.map(f => {

@@ -39,6 +39,20 @@ const IcoChart   = (p) => <Ico {...p} size={p.size || 40} sw={1.6} d={['M3 3v18h
 /* QC accent — morado universal (no es color de marca, es estado QC) */
 const QC = '#7C3AED';
 
+/* CSS inyectado una vez — focus verde de inputs QC (mockup .qci:focus).
+   Mismo selector que en ProduccionFlow; regla idempotente. */
+const PAGE_CSS = `
+  .lp-qci:focus{ border-color: var(--lp-brand-600) !important; box-shadow: var(--lp-focus-ring); }
+`;
+function injectPageCSS() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('lp-prodpage-css')) return;
+  const st = document.createElement('style');
+  st.id = 'lp-prodpage-css';
+  st.textContent = PAGE_CSS;
+  document.head.appendChild(st);
+}
+
 /* ── Badge helper ── */
 const B = (bg, fg) => ({
   display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', fontSize: 10.5, fontWeight: 600,
@@ -71,14 +85,14 @@ const S = {
   kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' },
   kpiValue: { fontSize: 24, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 },
 
-  /* ── Cards móvil ── */
+  /* ── Cards móvil — mockup .lcard/.ltitle/.lmeta ── */
   card: (highlight) => ({
     background: highlight ? 'var(--lp-brand-50)' : 'var(--lp-bg-raised)',
     border: highlight ? '1.5px solid var(--lp-brand-200)' : '1px solid var(--lp-border-subtle)',
-    borderRadius: 18, padding: 16, marginBottom: 10,
+    borderRadius: 18, padding: '15px 16px', marginBottom: 10,
   }),
-  cardTitle: { fontSize: 15, fontWeight: 600, color: 'var(--lp-text-primary)', marginBottom: 3, lineHeight: 1.25 },
-  cardMeta: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginBottom: 4 },
+  cardTitle: { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)', marginBottom: 3, lineHeight: 1.25 },
+  cardMeta: { fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 4 },
   cardActions: { display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' },
 
   /* ── Tabla escritorio (estilo SCREENS.produccion) ── */
@@ -93,7 +107,7 @@ const S = {
   td: { padding: '13px 16px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13.5, color: 'var(--lp-text-primary)', verticalAlign: 'middle' },
   tdR: { textAlign: 'right' },
   tdMono: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600 },
-  folio: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-600)', fontSize: 12.5 },
+  folio: { fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-600)', fontSize: 12 },
   noteCard: {
     background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14,
     padding: '14px 16px', marginTop: 14, color: 'var(--lp-text-secondary)', fontSize: 13, lineHeight: 1.55,
@@ -145,10 +159,11 @@ const S = {
     fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)',
     outline: 'none', boxSizing: 'border-box', marginBottom: 12,
   },
+  /* Toast invertido (mockup .toast: bg texto / texto fondo) */
   toast: {
-    position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
-    padding: '11px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1001,
-    background: 'var(--lp-brand-600)', color: '#fff',
+    position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)',
+    padding: '12px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1001,
+    background: 'var(--lp-text-primary)', color: 'var(--lp-bg-base)',
     boxShadow: '0 8px 28px rgba(0,0,0,.20)', display: 'inline-flex', alignItems: 'center', gap: 8,
   },
   ingTable: { width: '100%', borderCollapse: 'collapse', fontSize: 12, marginBottom: 12 },
@@ -164,9 +179,10 @@ const S = {
   infoBox: { padding: 14, background: 'var(--lp-bg-sunken)', borderRadius: 12, marginBottom: 16 },
 };
 
-/* botones por variante — width auto en escritorio, fluido en card móvil */
+/* botones por variante — width auto en escritorio, fluido en card móvil
+   (acción dominante de card móvil = 46px como el .lbtn del mockup) */
 const btn = (variant, fullWidth) => {
-  const base = { ...S.btnBase, ...(fullWidth ? { width: '100%' } : { width: 'auto' }) };
+  const base = { ...S.btnBase, ...(fullWidth ? { width: '100%', minHeight: 46 } : { width: 'auto' }) };
   switch (variant) {
     case 'primary': return { ...base, background: 'var(--lp-brand-600)', color: '#fff' };
     case 'success': return { ...base, background: 'var(--lp-success-600)', color: '#fff' };
@@ -348,11 +364,21 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 4 }}>
+          {/* Grid QC 2 col — mockup .qcgrid/.qcf/.qci: tile suave, input mono
+             con focus verde (.lp-qci). */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
             {qcFields.map(f => (
-              <div key={f.key}>
-                <label style={S.fieldLabel}>{f.label}</label>
-                <input style={{ ...S.fieldInput, fontFamily: 'var(--lp-font-mono)' }} type="number" inputMode="decimal"
+              <div key={f.key} style={{ padding: 12, borderRadius: 14, background: 'var(--lp-bg-sunken)' }}>
+                <label style={{ ...S.fieldLabel, marginBottom: 0 }}>{f.label}</label>
+                <input
+                  className="lp-qci"
+                  style={{
+                    width: '100%', height: 42, marginTop: 6, padding: '0 10px', borderRadius: 10,
+                    border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)',
+                    color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)', fontSize: 16,
+                    outline: 'none', boxSizing: 'border-box',
+                  }}
+                  type="number" inputMode="decimal"
                   step={f.step} placeholder={f.ph} value={f.value} onChange={e => f.set(e.target.value)} />
               </div>
             ))}
@@ -422,6 +448,9 @@ export default function ProduccionPage() {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 5000);
   }, []);
+
+  /* CSS de paridad mockup (focus verde inputs QC) — una sola vez */
+  useEffect(() => { injectPageCSS(); }, []);
 
   /* Emmanuel (id='admin') es el propietario de las fórmulas — bypass del NDA.
      Para cualquier otro usuario se muestra el modal NDA antes de arrancar. */

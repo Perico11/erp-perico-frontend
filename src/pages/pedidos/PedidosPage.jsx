@@ -89,15 +89,17 @@ const S = {
     display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 16,
   },
   pillRow: { display: 'flex', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 },
+  /* Tabs pill del mockup Pedidos.html: inactiva TRANSPARENTE (sin borde),
+     activa rellena verde. Conteo vivo "Label · N". */
   pill: (active) => ({
     display: 'inline-flex', alignItems: 'center', gap: 6,
-    minHeight: 36, padding: '0 14px',
+    minHeight: 36, padding: '0 15px',
     borderRadius: 999,
-    border: '1.5px solid ' + (active ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
-    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-raised)',
+    border: 'none',
+    background: active ? 'var(--lp-brand-600)' : 'transparent',
     color: active ? '#fff' : 'var(--lp-text-secondary)',
-    fontSize: 13, fontWeight: active ? 700 : 500, cursor: 'pointer',
-    fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', transition: 'all .15s',
+    fontSize: 13, fontWeight: active ? 600 : 500, cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', transition: 'background .15s, color .15s',
   }),
   pillCount: (active) => ({
     fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700,
@@ -112,60 +114,86 @@ const S = {
     whiteSpace: 'nowrap', flexShrink: 0,
   },
 
-  /* KPIs */
-  metric: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 10, marginBottom: 16 },
-  metricCard: (color) => ({
-    background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
-    borderTop: `3px solid ${color}`,
-    borderRadius: 'var(--lp-radius)', padding: '12px 14px',
-  }),
-  metricVal: { fontSize: 22, fontWeight: 800, color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)' },
-  metricLabel: { fontSize: 11, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4, fontWeight: 700 },
+  /* Subtítulo bajo el título (tsub del mockup Pedidos.html) — conteo vivo
+     por pestaña ("4 activos · esperan tu acción"). El TopBar compartido no
+     tiene prop subtitle (pendiente conocido), así que vive aquí en la page. */
+  tsub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '-2px 2px 12px' },
 
-  /* Card de pedido (radio 18px, header → mini-timeline → cuerpo → acciones) */
+  /* ── Embudo de KPIs (HANDOFF §5 Pedidos): Pendientes→Producción→QC→
+     Envasando→Camino→Entregados, contadores EN VIVO de la data real ── */
+  funnel: {
+    display: 'flex', alignItems: 'center',
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 18, padding: '12px 10px', marginBottom: 14,
+    overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+  },
+  funnelStage: { flex: '1 0 auto', minWidth: 74, textAlign: 'center', padding: '0 4px' },
+  funnelVal: (color) => ({
+    fontSize: 20, fontWeight: 700, fontFamily: 'var(--lp-font-mono)',
+    color, lineHeight: 1.2, fontVariantNumeric: 'tabular-nums',
+  }),
+  funnelLabel: {
+    fontSize: 9.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em',
+    color: 'var(--lp-text-tertiary)', marginTop: 3, whiteSpace: 'nowrap',
+  },
+  funnelSep: { display: 'flex', alignItems: 'center', color: 'var(--lp-border-strong)', flex: '0 0 auto' },
+
+  /* Card de pedido (mockup Pedidos.html + HANDOFF §4: superficie raised,
+     borde HAIRLINE 1px, radio 18, RIEL de color a la izquierda por urgencia.
+     Estructura: header → mini-timeline → cuerpo → acciones.) */
   pedidoCard: (estado, esPrueba) => ({
+    position: 'relative', overflow: 'hidden',
     background: esPrueba ? 'var(--lp-warning-50)' : 'var(--lp-bg-raised)',
-    border: '1.5px solid var(--lp-border-subtle)',
-    borderTop: `3px solid ${esPrueba ? 'var(--lp-warning-600)' : (ESTADO_COLOR[estado] || 'var(--lp-border-strong)')}`,
+    border: '1px solid var(--lp-border-subtle)',
     borderRadius: 18,
-    padding: '15px 16px',
+    padding: '15px 16px 15px 19px', /* +3px izq para que el riel no pise el contenido */
     display: 'flex', flexDirection: 'column', gap: 12,
+  }),
+  /* Riel izquierdo 3px — color por URGENCIA (ver urgenciaPedido) */
+  pedidoRail: (color) => ({
+    position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: color,
   }),
   pedidoHeader: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   pedidoBody: { display: 'flex', flexDirection: 'column', gap: 4 },
-  pedidoActions: {
-    display: 'grid', gap: 8,
-    gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
-    marginTop: 2,
-  },
+  /* Acciones: primarias se reparten el ancho (flex), las destructivas quedan
+     compactas como en el mockup (btn-danger sin flex). */
+  pedidoActions: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 },
   pedidoId: { fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' },
-  pedidoTitle: { fontSize: 15.5, fontWeight: 700, letterSpacing: '-.01em', color: 'var(--lp-text-primary)' },
-  pedidoMeta: { fontSize: 12, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 },
+  pedidoTitle: { fontSize: 15.5, fontWeight: 600, letterSpacing: '-.01em', color: 'var(--lp-text-primary)' },
+  pedidoMeta: { fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5, marginTop: 2 },
   cantidad: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-text-secondary)' },
-  estadoBadge: (estado) => ({
-    display: 'inline-flex', alignItems: 'center', padding: '3px 9px', fontSize: 11, fontWeight: 700,
-    background: (ESTADO_COLOR[estado] || '#9C9589') + '1f',
-    color: ESTADO_COLOR[estado] || '#6B6560',
-    borderRadius: 999, whiteSpace: 'nowrap',
-  }),
-  /* Botones de acción de la card */
+  /* Badge de estado tintado como el mockup. FIX visual: el tint anterior
+     concatenaba alfa hex ('1f') sobre valores var(--lp-*) → color inválido
+     (el badge quedaba SIN fondo). color-mix sí funciona con custom props. */
+  estadoBadge: (estado) => {
+    const c = ESTADO_COLOR[estado] || 'var(--lp-text-tertiary)';
+    return {
+      display: 'inline-flex', alignItems: 'center', padding: '3px 9px', fontSize: 11, fontWeight: 700,
+      background: `color-mix(in srgb, ${c} 13%, transparent)`,
+      color: c,
+      borderRadius: 999, whiteSpace: 'nowrap',
+    };
+  },
+  /* Botones de acción de la card (mockup: primary relleno verde flex:1;
+     ghost transparente hairline; danger OUTLINE transparente con borde
+     danger al 30% — ya no relleno). minHeight 44 = touch target (regla
+     global, prima sobre los 42px del mockup). */
   btn: (kind = 'primary') => ({
     minHeight: 44, padding: '0 16px',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
     fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
     borderRadius: 11,
+    flex: kind === 'danger' ? '0 0 auto' : '1 1 130px',
     background: kind === 'primary' ? 'var(--lp-brand-600)'
               : kind === 'warning' ? 'var(--lp-warning-600)'
-              : kind === 'danger'  ? 'var(--lp-danger-100)'
-              :                      'var(--lp-bg-base)',
+              :                      'transparent',
     color: (kind === 'primary' || kind === 'warning') ? '#fff'
-         : kind === 'danger' ? 'var(--lp-danger-700)'
+         : kind === 'danger' ? 'var(--lp-danger-600)'
          :                     'var(--lp-text-secondary)',
-    border: '1.5px solid ' + (
-      kind === 'primary' ? 'var(--lp-brand-600)'
-      : kind === 'warning' ? 'var(--lp-warning-600)'
-      : kind === 'danger'  ? 'var(--lp-danger-200)'
-      :                      'var(--lp-border-subtle)'),
+    border: kind === 'primary' ? '1.5px solid var(--lp-brand-600)'
+          : kind === 'warning' ? '1.5px solid var(--lp-warning-600)'
+          : kind === 'danger'  ? '1px solid color-mix(in srgb, var(--lp-danger-600) 30%, transparent)'
+          :                      '1px solid var(--lp-border-subtle)',
     transition: 'transform .1s',
   }),
 
@@ -283,6 +311,84 @@ function PipelinePedido({ estado }) {
 }
 
 /* X3 (jun 2026): ESTADO_COLOR y ESTADO_LABEL vienen de lib/estados.js. */
+
+/* ── Urgencia visual del pedido → color del riel izquierdo de la card
+   (HANDOFF §4: "riel de color a la izquierda para urgencia").
+   danger    = bloqueado / terminal negativo (qc_hold, rechazado, cancelado)
+   warning   = espera ACCIÓN humana (aceptar, QC, envasar, recolectar,
+               reenvasar TOTE en Terán) — también toda PRUEBA (ámbar global)
+   brand     = fluyendo (alguien ya lo está trabajando)
+   brand-700 = entregado (cerrado OK) ── */
+function urgenciaPedido(p) {
+  if (p?.esPrueba) return 'var(--lp-warning-600)';
+  const e = (p?.estado || '').toLowerCase();
+  if (['qc_hold', 'rechazado', 'cancelado'].includes(e)) return 'var(--lp-danger-600)';
+  if (['pendiente', 'producido', 'qc_aprobado', 'envasado', 'en_recoleccion', 'en_almacen'].includes(e)) return 'var(--lp-warning-600)';
+  if (e === 'entregado') return 'var(--lp-brand-700)';
+  return 'var(--lp-brand-600)'; /* aceptado, en_proceso, en_produccion, en_envasado, en_camino */
+}
+
+/* Fecha relativa corta del mockup ("hace 1 h", "ayer 17:55", "2 jun").
+   El datetime completo va en title= para no perder precisión. */
+function fmtRel(iso) {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const hoy = new Date();
+    const hm = d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === hoy.toDateString()) {
+      const min = Math.floor((hoy.getTime() - d.getTime()) / 60000);
+      if (min < 1) return 'ahora';
+      if (min < 60) return `hace ${min} min`;
+      const h = Math.floor(min / 60);
+      if (h < 6) return `hace ${h} h`;
+      return `hoy ${hm}`;
+    }
+    const ayer = new Date(hoy.getTime() - 86400000);
+    if (d.toDateString() === ayer.toDateString()) return `ayer ${hm}`;
+    return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+  } catch { return ''; }
+}
+
+/* ── Embudo de KPIs (mockup Pedidos.html / HANDOFF §5): contadores EN VIVO
+   del ciclo completo. Cada etapa agrupa estados reales del backend; los
+   colores reutilizan las fases del lenguaje ck (Checkpoint.jsx) para que el
+   embudo y el checkpoint de cada card hablen el mismo idioma.
+   Excluye pruebas y rechazados/cancelados (no son flujo operativo);
+   "Entregados" usa el MISMO conteo que la pestaña Historial (pedidos
+   entregados + órdenes internas terminadas) para que ambos cuadren. ── */
+const EMBUDO_ETAPAS = [
+  { key: 'pendientes', label: 'Pendientes', color: CK_COLOR.info,   estados: ['pendiente', 'aceptado', 'en_proceso'] },
+  { key: 'produccion', label: 'Producción', color: CK_COLOR.brand,  estados: ['en_produccion'] },
+  { key: 'qc',         label: 'QC',         color: CK_COLOR.purple, estados: ['producido', 'qc_hold'] },
+  { key: 'envasando',  label: 'Envasando',  color: CK_COLOR.brand,  estados: ['qc_aprobado', 'en_envasado', 'envasado'] },
+  { key: 'camino',     label: 'Camino',     color: CK_COLOR.amber,  estados: ['en_recoleccion', 'en_camino', 'en_almacen'] },
+  { key: 'entregados', label: 'Entregados', color: CK_COLOR.brandd, estados: ['entregado'] },
+];
+
+function EmbudoPedidos({ pedidosActivos, totalEntregados }) {
+  const nodos = [];
+  EMBUDO_ETAPAS.forEach((et, i) => {
+    const n = et.key === 'entregados'
+      ? totalEntregados
+      : pedidosActivos.filter(p => et.estados.includes((p.estado || '').toLowerCase())).length;
+    nodos.push(
+      <div key={et.key} style={S.funnelStage} title={`Estados: ${et.estados.join(', ')}`}>
+        <div style={S.funnelVal(et.color)}>{n}</div>
+        <div style={S.funnelLabel}>{et.label}</div>
+      </div>
+    );
+    if (i < EMBUDO_ETAPAS.length - 1) {
+      nodos.push(
+        <div key={'sep_' + et.key} style={S.funnelSep} aria-hidden="true">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 6l6 6-6 6" /></svg>
+        </div>
+      );
+    }
+  });
+  return <div style={S.funnel} role="group" aria-label="Embudo de pedidos">{nodos}</div>;
+}
 
 export default function PedidosPage() {
   const { user, can } = useAuth();
@@ -418,8 +524,8 @@ export default function PedidosPage() {
     ...ordenesInternasHist,
   ];
 
-  /* (jun 2026, censo: memo de KPIs eliminado — se calculaba sin renderizarse
-     desde el rediseño que quitó la fila de KPIs) */
+  /* (jun 2026, mockup Pedidos.html: la fila de KPIs regresa como EMBUDO —
+     <EmbudoPedidos> computa los contadores en vivo de activos+historial) */
   const canCrear = can('crearPedidos') || can('admin') || user?.rol === 'almacen';
   const canAceptar = can('admin') || user?.rol === 'tecnico';
 
@@ -668,12 +774,23 @@ export default function PedidosPage() {
             data-rol="almacen,admin,tecnico"
             onClick={() => setShowNuevo(true)}
           >
-            {Icon.plus}{isDesktop ? 'Nuevo' : ''}
+            {Icon.plus}Nuevo
           </button>
         ) : null}
       />
       <div style={S.wrap}>
         {err && <div style={S.err}>{err}</div>}
+
+        {/* Subtítulo vivo por pestaña (tsub del mockup) */}
+        <div style={S.tsub}>
+          {tab === 'activos' ? `${activos.length} activos · esperan tu acción`
+            : tab === 'pruebas' ? `${pruebas.length} en modo prueba`
+            : tab === 'rechazados' ? `${rechazados.length} rechazados o cancelados`
+            : `${historial.length} entregados`}
+        </div>
+
+        {/* Embudo de KPIs en vivo (mockup/HANDOFF §5) */}
+        <EmbudoPedidos pedidosActivos={activos} totalEntregados={historial.length} />
 
         {/* Filtros (el botón "Nuevo" vive en el TopBar, estilo limpio) */}
         <div style={S.toolbar}>
@@ -739,6 +856,8 @@ export default function PedidosPage() {
             const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
             return (
               <div key={p.id} id={'ped-' + p.id} style={{ ...S.pedidoCard(p.estado, p.esPrueba), ...(p.id === focusId ? { outline: '2px solid var(--lp-brand-600)', outlineOffset: 2, boxShadow: '0 0 0 4px color-mix(in srgb, var(--lp-brand-600) 18%, transparent)' } : {}) }}>
+                {/* Riel izquierdo de urgencia (mockup/HANDOFF §4) */}
+                <span aria-hidden="true" style={S.pedidoRail(urgenciaPedido(p))} />
                 {/* Header: folio + badge estado + prueba + cronómetro */}
                 <div style={S.pedidoHeader}>
                   <span style={S.pedidoId}>{p._folio || p.id}</span>
@@ -755,19 +874,24 @@ export default function PedidosPage() {
                 </div>
 
                 {/* Mini-pipeline horizontal del estado del pedido. Ayuda visual
-                    rápida — el operario ve la fase de un vistazo. */}
-                <PipelinePedido estado={p.estado} esPrueba={p.esPrueba} />
+                    rápida — el operario ve la fase de un vistazo. Mockup: las
+                    cards ENTREGADAS (historial) van compactas, sin timeline. */}
+                {p.estado !== 'entregado' && (
+                  <PipelinePedido estado={p.estado} esPrueba={p.esPrueba} />
+                )}
 
-                {/* Cuerpo: título + metadata */}
+                {/* Cuerpo: título + metadata (mockup: título = producto;
+                    "52 cubetas · solicitó Josué · hace 1 h" en la meta).
+                    Extras que el mockup omite y se CONSERVAN: lote, creadoPor,
+                    quién inició producción. */}
                 <div style={S.pedidoBody}>
-                  <div style={S.pedidoTitle}>
-                    {p.producto} <span style={S.cantidad}>× {p.cantidad} cub</span>
-                  </div>
+                  <div style={S.pedidoTitle}>{p.producto}</div>
                   <div style={S.pedidoMeta}>
-                    {p.solicitante && <>Solicitante: <strong>{p.solicitante}</strong></>}
-                    {p.lote && <> · Lote: <code>{p.lote}</code></>}
-                    {p.fecha && <> · {new Date(p.fecha).toLocaleString('es-MX', { dateStyle: 'short', timeStyle: 'short' })}</>}
-                    {p.creadoPor && <> · por {p.creadoPor}</>}
+                    <span style={S.cantidad}>{p.cantidad} cubetas</span>
+                    {p.solicitante && <> · solicitó <strong>{p.solicitante}</strong></>}
+                    {p.fecha && <span title={new Date(p.fecha).toLocaleString('es-MX')}> · {fmtRel(p.fecha)}</span>}
+                    {p.lote && <> · Lote <code style={{ fontFamily: 'var(--lp-font-mono)' }}>{p.lote}</code></>}
+                    {p.creadoPor && p.creadoPor !== p.solicitante && <> · por {p.creadoPor}</>}
                     {p.estado === 'en_produccion' && p.produccionIniciadaPor && (
                       <> · Producción por <strong>{p.produccionIniciadaPor}</strong></>
                     )}
@@ -786,12 +910,12 @@ export default function PedidosPage() {
                         disabled={busyId === p.id}
                         onClick={() => handleAceptar(p)}
                       >
-                        {busyId === p.id ? '…' : <>{Icon.check} Aceptar</>}
+                        {busyId === p.id ? '…' : <>{Icon.check} Aceptar y producir</>}
                       </button>
                     )}
                     {mostrarIniciar && (
                       <button
-                        style={S.btn('warning')}
+                        style={S.btn('primary')}
                         data-id="pedidos.btn.iniciar-produccion"
                         data-rol="tecnico,admin"
                         disabled={busyId === p.id}
@@ -802,8 +926,10 @@ export default function PedidosPage() {
                       </button>
                     )}
                     {mostrarIrProduccion && (
+                      /* mockup: en_produccion lleva botón GHOST (la acción
+                         fuerte ya ocurrió; esto solo navega al wizard) */
                       <button
-                        style={S.btn('primary')}
+                        style={S.btn('ghost')}
                         data-id="pedidos.btn.ir-produccion"
                         data-rol="tecnico,admin"
                         onClick={() => navigate('/produccion')}

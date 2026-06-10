@@ -30,8 +30,40 @@ const TYPE_COLOR = {
   qc:    '#7C3AED',
 };
 
+/* Label de categoría cuando el paso no trae mpCat (mockup .scat) */
+const CAT_FALLBACK = {
+  prep: 'Preparación', dual: 'Materia prima', wait: 'Reposo',
+  eval: 'Evaluación', qc: 'Control de calidad', ajustes: 'Ajustes',
+};
+
+/* CSS inyectado UNA vez — cosas que inline-styles no cubren:
+   - focus verde de inputs QC (mockup .qci:focus → border acc)
+   - texto oscuro de botones de acento en dark (mockup .dark .tbtn.start)
+   - pop del ring de éxito (mockup @keyframes pop) + reduced-motion */
+const FLOW_CSS = `
+  .lp-qci:focus{ border-color: var(--lp-brand-600) !important; box-shadow: var(--lp-focus-ring); }
+  [data-theme="dark"] .lp-btn-acc, .dark .lp-btn-acc{ color:#0E1413 !important; }
+  [data-theme="dark"] .lp-ring svg, .dark .lp-ring svg{ stroke:#0E1413; }
+  @keyframes lpRingPop{ from{ transform:scale(0) } to{ transform:scale(1) } }
+  @media (prefers-reduced-motion:reduce){ .lp-ring{ animation:none !important } }
+`;
+function injectFlowCSS() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('lp-prodflow-css')) return;
+  const st = document.createElement('style');
+  st.id = 'lp-prodflow-css';
+  st.textContent = FLOW_CSS;
+  document.head.appendChild(st);
+}
+
+/* Palomita mini para el chip de fase completada (dual add→disp) */
+const CheckMini = () => (
+  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+    strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12" /></svg>
+);
+
 const S = {
-  wrap: { padding: 16, maxHeight: '90vh', overflowY: 'auto' },
+  wrap: { padding: '16px 16px 0', maxHeight: '90vh', overflowY: 'auto' },
   header: { marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   title: { fontSize: 18, fontWeight: 800, color: 'var(--lp-text-primary)' },
   meta: { fontSize: 12, color: 'var(--lp-text-secondary)' },
@@ -39,44 +71,54 @@ const S = {
      progreso fallback se sustituyeron por el riel de checkpoint compartido
      components/pipeline/Checkpoint.jsx (CkStripStepper + CkPill). */
 
-  card: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
-          borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 12 },
-  badgeCat: { background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)',
-              fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
-              textTransform: 'uppercase', letterSpacing: '.05em', display: 'inline-block', marginRight: 8 },
-  badgeKg: { fontSize: 13, fontWeight: 600, color: 'var(--lp-brand-500)' },
-  stepTitle: (color) => ({ fontSize: 22, fontWeight: 800, color, marginTop: 8, marginBottom: 12, lineHeight: 1.2 }),
+  /* Card del paso — mockup Producción.html (.stepcard): radio 20, badge de
+     categoría pill tintado con el color del type + kg mono grande a la derecha,
+     título 24px en texto primario, texto de acción 14px secundario. */
+  card: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+          borderRadius: 20, padding: '20px 18px', marginBottom: 12 },
+  cardTop: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 },
+  scat: (color) => ({
+    display: 'inline-block', fontSize: 10.5, fontWeight: 600, letterSpacing: '.06em',
+    textTransform: 'uppercase', padding: '4px 11px', borderRadius: 999,
+    background: `color-mix(in srgb, ${color} 14%, transparent)`, color,
+  }),
+  skg: { fontFamily: 'var(--lp-font-mono)', fontSize: 18, fontWeight: 700,
+         color: 'var(--lp-text-primary)', whiteSpace: 'nowrap' },
+  stepTitle: { fontSize: 24, fontWeight: 600, letterSpacing: '-.02em',
+               color: 'var(--lp-text-primary)', margin: '12px 0 8px', lineHeight: 1.15 },
+  saction: { fontSize: 14, color: 'var(--lp-text-secondary)', lineHeight: 1.55 },
   alerta: { background: 'var(--lp-warning-100)', border: '1px solid var(--lp-warning-600)',
-            borderRadius: 10, padding: '10px 13px', marginBottom: 12,
+            borderRadius: 10, padding: '10px 13px', margin: '12px 0',
             display: 'flex', gap: 8, alignItems: 'flex-start',
             fontSize: 12, color: 'var(--lp-warning-700)', lineHeight: 1.4 },
 
-  dualGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 },
-  panel: (active, color) => ({
-    border: '2px solid ' + (active ? color : 'var(--lp-border-subtle)'),
-    background: active ? color + '0F' : 'var(--lp-bg-raised)',
-    borderRadius: 'var(--lp-radius)', padding: 14, textAlign: 'center',
-    transition: 'border-color .2s',
+  /* Timerbox — mockup .timerbox/.timerlbl/.timer/.tbtn: caja centrada con
+     label uppercase, dígitos mono 52px tabulares y botón Iniciar/Pausar. */
+  timerbox: { marginTop: 18, padding: 18, borderRadius: 16, background: 'var(--lp-bg-sunken)', textAlign: 'center' },
+  timerlbl: { fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.06em', color: 'var(--lp-text-tertiary)' },
+  timer: (state) => ({
+    fontFamily: 'var(--lp-font-mono)', fontSize: 52, fontWeight: 700, lineHeight: 1.05,
+    margin: '6px 0 12px', fontVariantNumeric: 'tabular-nums',
+    color: state === 'done' ? 'var(--lp-brand-600)'
+         : state === 'danger' ? 'var(--lp-danger-600)'
+         : 'var(--lp-text-primary)',
   }),
-  panelLabel: (color, active) => ({
-    fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em',
-    color: active ? color : 'var(--lp-text-tertiary)', marginBottom: 6,
+  tbtn: (kind) => ({
+    height: 46, padding: '0 24px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 14, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 8,
+    ...(kind === 'start'
+      ? { border: 'none', background: 'var(--lp-brand-600)', color: '#fff' }
+      : { border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)' }),
   }),
-  bigTimer: (color, danger) => ({
-    fontSize: 36, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-    color: danger ? 'var(--lp-danger-600)' : color, lineHeight: 1, fontFamily: 'var(--lp-font-mono)',
+  tdone: { display: 'inline-flex', alignItems: 'center', gap: 8, color: 'var(--lp-brand-600)', fontWeight: 600, fontSize: 14 },
+  faseChip: (active, color) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
+    padding: '3px 10px', borderRadius: 999,
+    background: active ? `color-mix(in srgb, ${color} 14%, transparent)` : 'transparent',
+    color: active ? color : 'var(--lp-text-tertiary)',
+    border: active ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
   }),
 
-  bigTimerStandalone: (color, danger) => ({
-    fontSize: 64, fontWeight: 800, fontVariantNumeric: 'tabular-nums',
-    color: danger ? 'var(--lp-danger-600)' : color, textAlign: 'center',
-    margin: '20px 0', fontFamily: 'var(--lp-font-mono)',
-  }),
-
-  accion: { fontSize: 13, color: 'var(--lp-text-primary)', lineHeight: 1.5,
-            padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 12 },
-
-  btnRow: { display: 'flex', gap: 8, justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 16 },
   btn: (kind) => {
     const map = {
       primary: { bg: 'var(--lp-brand-600)', fg: '#fff', bd: 'var(--lp-brand-600)' },
@@ -93,12 +135,39 @@ const S = {
     };
   },
 
-  qcGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10, marginBottom: 12 },
-  qcField: { padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)' },
-  qcLbl: { fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 6 },
-  qcInput: { width: '100%', padding: '10px 12px', fontSize: 14, fontFamily: 'var(--lp-font-mono)',
-             border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, boxSizing: 'border-box' },
-  qcRange: { fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4 },
+  accion: { fontSize: 13, color: 'var(--lp-text-primary)', lineHeight: 1.5,
+            padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 12 },
+
+  /* QC — mockup .qcgrid/.qcf/.qci/.qcr: 2 columnas, tile suave, input mono
+     con focus verde (clase .lp-qci) y rango como hint. */
+  qcGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 16, marginBottom: 12 },
+  qcField: { padding: 12, borderRadius: 14, background: 'var(--lp-bg-sunken)' },
+  qcLbl: { fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em' },
+  qcInput: { width: '100%', height: 42, marginTop: 6, padding: '0 10px', fontSize: 16,
+             fontFamily: 'var(--lp-font-mono)', border: '1.5px solid var(--lp-border-subtle)',
+             borderRadius: 10, boxSizing: 'border-box', background: 'var(--lp-bg-raised)',
+             color: 'var(--lp-text-primary)', outline: 'none' },
+  qcRange: { fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 5 },
+
+  /* Footer de navegación — mockup .foot: Anterior ghost / Completar primary,
+     pegado abajo del modal con hairline arriba. */
+  foot: { position: 'sticky', bottom: 0, display: 'flex', gap: 10, padding: '14px 16px',
+          margin: '16px -16px 0', borderTop: '1px solid var(--lp-border-subtle)',
+          background: 'var(--lp-bg-raised)', zIndex: 2 },
+  footGhost: (disabled) => ({
+    height: 50, padding: '0 18px', borderRadius: 14, cursor: disabled ? 'default' : 'pointer',
+    fontFamily: 'inherit', fontSize: 14.5, fontWeight: 600, background: 'transparent',
+    border: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)',
+    flex: '0 0 auto', display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+    gap: 6, opacity: disabled ? .4 : 1,
+  }),
+  footPrimary: (disabled) => ({
+    height: 50, padding: '0 18px', borderRadius: 14, border: 'none',
+    cursor: disabled ? 'default' : 'pointer', fontFamily: 'inherit', fontSize: 14.5,
+    fontWeight: 600, background: 'var(--lp-brand-600)', color: '#fff', flex: 1,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    opacity: disabled ? .4 : 1,
+  }),
 };
 
 export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
@@ -121,6 +190,15 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState(null); /* timestamp ultimo checkpoint */
+  /* Pantalla de éxito (mockup .success): al finalizar mostramos ring verde +
+     folio mono; "Continuar" dispara el onSuccess original (cierra + recarga). */
+  const [successInfo, setSuccessInfo] = useState(null);
+  /* Marca visual "ya se corrió el timer de este paso" (mockup s._started) —
+     SOLO presentación: decide Iniciar/Reanudar y el estado "Tiempo cumplido".
+     No se persiste en el checkpoint (payload de autoguardado intocable). */
+  const [startedSteps, setStartedSteps] = useState({});
+
+  useEffect(() => { injectFlowCSS(); }, []);
 
   /* === Registro de tiempos: cada evento queda timestampeado para reporte ===
      events = [{ tipo, ts, paso }]
@@ -250,6 +328,8 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
     } else {
       setTimerSec(step.tiempo || 0);
     }
+    /* marca visual para el timerbox (Iniciar vs Reanudar / Tiempo cumplido) */
+    setStartedSteps(p => (p[curStep] ? p : { ...p, [curStep]: true }));
     setRunning(true);
   }, [step, curStep, logEvent]);
 
@@ -532,13 +612,21 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         : estadoFinal === 'qc_hold'
           ? ' · QC en HOLD (lecturas fuera de rango) — revisa en Calidad'
           : '';
-      onSuccess(`Lote ${loteCreado.codigoLote} producido: ${productoNombre} x${lotes}${sufijoMsg}`);
+      /* Pantalla de éxito (mockup): ring + "¡Lote completado!" + folio mono.
+         El onSuccess original (cerrar modal + reload + toast) se dispara con
+         "Continuar" — toda la persistencia de arriba ya quedó hecha. */
+      setSuccessInfo({
+        codigo: loteCreado.codigoLote,
+        cantidad: lotes,
+        estadoFinal,
+        msg: `Lote ${loteCreado.codigoLote} producido: ${productoNombre} x${lotes}${sufijoMsg}`,
+      });
     } catch (e) {
       setError(e.message || 'Error al finalizar producción');
     } finally {
       setSaving(false);
     }
-  }, [item, productoNombre, qcReadings, ajustesMP, total, tipo, userName, onSuccess, saving, events, curStep, steps]);
+  }, [item, productoNombre, qcReadings, ajustesMP, total, tipo, userName, saving, events, curStep, steps]);
 
   if (loading) {
     return (
@@ -555,7 +643,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
 
   if (error && !steps.length) {
     return (
-      <div style={S.wrap}>
+      <div style={{ ...S.wrap, padding: 16 }}>
         <div style={{ background:'var(--lp-danger-100)', color:'var(--lp-danger-700)', padding:16, borderRadius:10, fontSize:13 }}>
           <strong>Error:</strong> {error}
         </div>
@@ -563,6 +651,42 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           <button style={S.btn('ghost')} onClick={onClose}>Cerrar</button>
         </div>
       </div>
+    );
+  }
+
+  /* ── Pantalla de éxito (mockup .success): ring verde con palomita,
+        "¡Lote completado!", folio mono en acento. ── */
+  if (successInfo) {
+    const okQC = successInfo.estadoFinal === 'qc_aprobado';
+    const hold = successInfo.estadoFinal === 'qc_hold';
+    return (
+      <SecureView context="produccion" productoNombre={productoNombre}>
+        <div style={{ ...S.wrap, padding: 16 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                        textAlign: 'center', gap: 16, padding: '48px 24px' }}>
+            <div className="lp-ring" style={{
+              width: 80, height: 80, borderRadius: '50%', background: 'var(--lp-brand-600)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              animation: 'lpRingPop .45s cubic-bezier(.34,1.56,.64,1)',
+            }}>
+              <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6"
+                strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 600, color: 'var(--lp-text-primary)' }}>¡Lote completado!</div>
+            <div style={{ fontSize: 14, color: 'var(--lp-text-secondary)', marginTop: -8, lineHeight: 1.55, maxWidth: 420 }}>
+              Lote <b style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-brand-600)' }}>{successInfo.codigo}</b>
+              {' '}producido · {productoNombre} × {successInfo.cantidad}.
+              {okQC && ' QC aprobado — listo para envasar. El equipo se la rifó.'}
+              {hold && ' QC en HOLD: alguna lectura salió de rango — revísalo en Calidad.'}
+              {!okQC && !hold && ' Pendiente de QC.'}
+            </div>
+            <button className="lp-btn-acc" style={{ ...S.footPrimary(false), flex: '0 0 auto', padding: '0 28px' }}
+              onClick={() => onSuccess(successInfo.msg)}>
+              Continuar
+            </button>
+          </div>
+        </div>
+      </SecureView>
     );
   }
 
@@ -576,6 +700,18 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   const isAjustes = step.type === 'ajustes';
 
   const danger = timerSec > 0 && timerSec <= 30 && running;
+  /* ── Derivados SOLO de presentación del timerbox (mockup) ──
+     started=false en dual presenta la fase "add" aunque el efecto auto-switch
+     ya haya precargado disp — handleStart resetea a add de todas formas, así
+     que lo que se muestra es exactamente lo que va a pasar al presionar. */
+  const started = !!startedSteps[curStep];
+  const phaseShow = (isDual && !started) ? 'add' : dualPhase;
+  const phaseTotalShow = isDual
+    ? (phaseShow === 'add' ? (step.tiempo || 0) : (step.tiempoDisp || 0))
+    : (step.tiempo || 0);
+  const displaySec = (isDual && !started) ? (step.tiempo || 0) : (timerSec > 0 ? timerSec : phaseTotalShow);
+  const timerDone = started && !running && timerSec === 0 && (isWait || (isDual && dualPhase === 'disp'));
+  const catLabel = step.mpCat || CAT_FALLBACK[step.type] || step.type;
 
   return (
     <SecureView context="produccion" productoNombre={productoNombre}>
@@ -622,18 +758,26 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         </div>
       )}
 
-      {/* CARD PRINCIPAL */}
+      {/* CARD PRINCIPAL — mockup .stepcard */}
       <div style={S.card}>
-        {/* Cat + kg */}
-        {(step.mpCat || step.kg) && (
-          <div style={{ marginBottom:8 }}>
-            {step.mpCat && <span style={S.badgeCat}>{step.mpCat}</span>}
-            {step.kg && <span style={S.badgeKg}>{step.kg}</span>}
-          </div>
-        )}
+        {/* Badge categoría (pill tintado con color del type) + kg mono grande */}
+        <div style={S.cardTop}>
+          <span style={S.scat(stepColor)}>{catLabel}</span>
+          {step.kg && <span style={S.skg}>{step.kg}</span>}
+        </div>
 
-        {/* Título */}
-        <div style={S.stepTitle(stepColor)}>{step.titulo}</div>
+        {/* Título 24px texto primario (mockup .stitle) */}
+        <div style={S.stepTitle}>{step.titulo}</div>
+
+        {/* Texto de acción (mockup .saction). En dual cambia con la fase. */}
+        {isDual ? (
+          <div style={S.saction}>
+            <strong style={{ color: 'var(--lp-text-primary)' }}>{phaseShow === 'add' ? 'Agregar: ' : 'Dispersar: '}</strong>
+            {phaseShow === 'add' ? step.accion : step.accionDisp}
+          </div>
+        ) : (!isPrep && !isQC && !isAjustes && (step.accion || step.desc)) ? (
+          <div style={S.saction}>{step.accion || step.desc}</div>
+        ) : null}
 
         {/* Alerta */}
         {step.alerta && (
@@ -646,7 +790,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         {/* PREP — lista de ingredientes */}
         {isPrep && step.grupos && (
           <div>
-            <div style={{ fontSize:13, color:'var(--lp-text-secondary)', marginBottom:14, lineHeight:1.5 }}>
+            <div style={{ ...S.saction, marginBottom: 14 }}>
               {step.desc}
             </div>
             {Object.entries(step.grupos).map(([cat, ings]) => ings.length > 0 && (
@@ -665,40 +809,43 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           </div>
         )}
 
-        {/* DUAL — agregar + dispersar */}
-        {isDual && (
-          <>
-            <div style={S.dualGrid}>
-              <div style={S.panel(dualPhase === 'add', 'var(--lp-success-700)')}>
-                <div style={S.panelLabel('var(--lp-success-700)', dualPhase === 'add')}>Agregar</div>
-                {dualPhase === 'add' ? (
-                  <div style={S.bigTimer('var(--lp-success-700)', danger)}>{fmtTimer(timerSec)}</div>
-                ) : (
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--lp-success-600)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
-                )}
-                <div style={{ fontSize:11, color:'var(--lp-text-tertiary)', marginTop:6 }}>{fmtTimer(step.tiempo || 0)}</div>
+        {/* TIMERBOX (dual + wait) — mockup .timerbox: label uppercase, dígitos
+            mono 52px tabulares, Iniciar/Pausar dentro de la caja. El flujo dual
+            CONSERVA sus dos fases (add→disp automático): los chips de fase
+            muestran en cuál vas; la lógica del timer no cambió. */}
+        {(isDual || isWait) && (
+          <div style={S.timerbox}>
+            {isDual && (
+              <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginBottom: 10 }}>
+                <span style={S.faseChip(phaseShow === 'add', 'var(--lp-success-700)')}>
+                  {phaseShow === 'disp' && <CheckMini />} Agregar
+                </span>
+                <span style={S.faseChip(phaseShow === 'disp', 'var(--lp-brand-600)')}>Dispersar</span>
               </div>
-              <div style={S.panel(dualPhase === 'disp', 'var(--lp-brand-600)')}>
-                <div style={S.panelLabel('var(--lp-brand-600)', dualPhase === 'disp')}>Dispersar</div>
-                <div style={S.bigTimer('var(--lp-brand-600)', danger && dualPhase === 'disp')}>
-                  {fmtTimer(dualPhase === 'disp' ? timerSec : (step.tiempoDisp || 0))}
-                </div>
-                <div style={{ fontSize:11, color:'var(--lp-text-tertiary)', marginTop:6 }}>{fmtTimer(step.tiempoDisp || 0)}</div>
-              </div>
+            )}
+            <div style={S.timerlbl}>
+              {isWait ? 'Tiempo de reposo' : phaseShow === 'add' ? 'Tiempo sugerido' : 'Tiempo de dispersión'}
             </div>
-            <div style={S.accion}>
-              <strong>{dualPhase === 'add' ? 'Agregar:' : 'Dispersar:'}</strong>{' '}
-              {dualPhase === 'add' ? step.accion : step.accionDisp}
+            <div style={S.timer(timerDone ? 'done' : danger ? 'danger' : 'norm')}>
+              {fmtTimer(displaySec)}
             </div>
-          </>
-        )}
-
-        {/* WAIT — solo timer grande */}
-        {isWait && (
-          <>
-            <div style={S.bigTimerStandalone(stepColor, danger)}>{fmtTimer(timerSec || step.tiempo || 0)}</div>
-            <div style={S.accion}>{step.accion}</div>
-          </>
+            {timerDone ? (
+              <span style={S.tdone}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+                Tiempo cumplido
+              </span>
+            ) : running ? (
+              <button style={S.tbtn('pause')} onClick={handlePause}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1" /><rect x="14" y="5" width="4" height="14" rx="1" /></svg>
+                Pausar
+              </button>
+            ) : (
+              <button className="lp-btn-acc" style={S.tbtn('start')} onClick={handleStart}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 5l12 7-12 7z" /></svg>
+                {started && timerSec > 0 ? 'Reanudar' : 'Iniciar'}
+              </button>
+            )}
+          </div>
         )}
 
         {/* AJUSTES MP — registro de agregados post-molienda
@@ -707,7 +854,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             lo que físicamente entró al batch. */}
         {isAjustes && (
           <>
-            <div style={{ fontSize:13, color:'var(--lp-text-secondary)', marginBottom:14, lineHeight:1.5 }}>
+            <div style={{ ...S.saction, marginBottom: 14 }}>
               {step.desc}
             </div>
             {ajustesMP.length === 0 && (
@@ -771,10 +918,12 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           </>
         )}
 
-        {/* QC — campos de prueba */}
+        {/* QC — campos de prueba (mockup .qcgrid: 2 col, input mono, focus
+            verde vía .lp-qci, rango como hint). El borde verde/rojo por
+            validez se conserva — es señal operativa, el focus lo pisa. */}
         {isQC && (
           <>
-            <div style={{ fontSize:13, color:'var(--lp-text-secondary)', marginBottom:14, lineHeight:1.5 }}>
+            <div style={S.saction}>
               {step.desc}
             </div>
             <div style={S.qcGrid}>
@@ -789,6 +938,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
                     <div style={S.qcLbl}>{p.lbl}{p.unidad ? ` (${p.unidad})` : ''}</div>
                     {p.tipo === 'select' ? (
                       <select
+                        className="lp-qci"
                         style={{ ...S.qcInput, borderColor: val ? (inRange ? 'var(--lp-success-500)' : 'var(--lp-danger-500)') : 'var(--lp-border-subtle)' }}
                         value={val}
                         onChange={e => setQcReadings(r => ({ ...r, [curStep]: { ...(r[curStep] || {}), [p.id]: e.target.value } }))}
@@ -798,13 +948,14 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
                       </select>
                     ) : (
                       <input
-                        type="number" step={p.step || 0.1}
+                        className="lp-qci"
+                        type="number" step={p.step || 0.1} inputMode="decimal" placeholder={p.rango || ''}
                         style={{ ...S.qcInput, borderColor: val ? (inRange ? 'var(--lp-success-500)' : 'var(--lp-danger-500)') : 'var(--lp-border-subtle)' }}
                         value={val}
                         onChange={e => setQcReadings(r => ({ ...r, [curStep]: { ...(r[curStep] || {}), [p.id]: e.target.value } }))}
                       />
                     )}
-                    {p.rango && <div style={S.qcRange}>Rango: {p.rango} · {p.equipo}</div>}
+                    {p.rango && <div style={S.qcRange}>Rango {p.rango}{p.equipo ? ` · ${p.equipo}` : ''}</div>}
                   </div>
                 );
               })}
@@ -815,45 +966,40 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
                 <span>Completa todas las mediciones dentro de rango antes de avanzar.</span>
               </div>
             )}
-            <div style={S.accion}>{step.accion}</div>
+            <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>{step.accion}</div>
           </>
         )}
       </div>
 
-      {/* BOTONES */}
-      <div style={S.btnRow}>
-        <div style={{ display:'flex', gap:8 }}>
-          <button style={S.btn('ghost')} onClick={handlePrev} disabled={curStep === 0}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign:'-2px', marginRight:4 }}><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>Anterior</button>
-        </div>
+      {/* FOOTER DE NAVEGACIÓN — mockup .foot: Anterior ghost / Completar paso
+          primary flex:1. Iniciar/Pausar viven en el timerbox (arriba).
+          Último paso = "Terminar lote" (mockup type finish). */}
+      <div style={S.foot}>
+        <button style={S.footGhost(curStep === 0)} onClick={handlePrev} disabled={curStep === 0}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+          Anterior
+        </button>
 
-        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          {(isDual || isWait) && (
-            running
-              ? <button style={S.btn('warn')} onClick={handlePause}><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ verticalAlign:'-1px', marginRight:5 }}><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pausar</button>
-              : <button style={S.btn('success')} onClick={handleStart}><svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ verticalAlign:'-1px', marginRight:5 }}><polygon points="6 4 20 12 6 20 6 4"/></svg>{timerSec === 0 ? 'Iniciar timer' : 'Reanudar'}</button>
-          )}
-
-          {!isLast && (
-            <button
-              style={S.btn('primary')}
-              onClick={handleNext}
-              disabled={isQC && !qcEnRango}
-            >
-              Siguiente
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ verticalAlign:'-2px', marginLeft:4 }}><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            </button>
-          )}
-
-          {isLast && (
-            <button
-              style={S.btn('success')}
-              onClick={handleFinalize}
-              disabled={saving || (isQC && !qcEnRango)}
-            >
-              {saving ? 'Finalizando...' : 'Finalizar produccion'}
-            </button>
-          )}
-        </div>
+        {!isLast ? (
+          <button
+            className="lp-btn-acc"
+            style={S.footPrimary(isQC && !qcEnRango)}
+            onClick={handleNext}
+            disabled={isQC && !qcEnRango}
+          >
+            Completar paso
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        ) : (
+          <button
+            className="lp-btn-acc"
+            style={S.footPrimary(saving || (isQC && !qcEnRango))}
+            onClick={handleFinalize}
+            disabled={saving || (isQC && !qcEnRango)}
+          >
+            {saving ? 'Finalizando…' : 'Terminar lote'}
+          </button>
+        )}
       </div>
     </div>
     </SecureView>

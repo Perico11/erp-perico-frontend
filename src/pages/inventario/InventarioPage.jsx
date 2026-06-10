@@ -165,15 +165,31 @@ const S = {
   h1: { fontSize: 22, fontWeight: 600, letterSpacing: '-.02em', color: 'var(--lp-text-primary)' },
   psub: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3, marginBottom: 16 },
   toolbarRow: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, flexWrap: 'wrap' },
-  searchBox: {
-    display: 'flex', alignItems: 'center', gap: 9, flex: 1, minWidth: 200, maxWidth: 440,
-    height: 44, padding: '0 14px', borderRadius: 12, background: 'var(--lp-bg-raised)',
-    border: '1.5px solid var(--lp-border-subtle)', color: 'var(--lp-text-tertiary)',
-  },
+  /* Buscador prominente (mockup Inventarios.html): 48px, radio 14, borde acento
+     al enfocar y botón limpiar (X) cuando hay texto. */
+  searchBox: (focused) => ({
+    display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 200, maxWidth: 440,
+    height: 48, padding: '0 14px', borderRadius: 14, background: 'var(--lp-bg-raised)',
+    border: focused ? '1.5px solid var(--lp-brand-600)' : '1.5px solid var(--lp-border-subtle)',
+    color: 'var(--lp-text-tertiary)', transition: 'border-color .2s',
+  }),
   searchInput: {
     flex: 1, minWidth: 0, border: 'none', background: 'none', outline: 'none',
-    fontFamily: 'var(--lp-font-sans)', fontSize: 14.5, color: 'var(--lp-text-primary)',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 15, color: 'var(--lp-text-primary)',
   },
+  searchClr: {
+    background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)',
+    padding: 4, display: 'flex', alignItems: 'center', flexShrink: 0,
+  },
+  /* Segmented MP/PT (mockup .seg/.segb): contenedor tile + pills, activo = acento */
+  segWrap: { display: 'flex', gap: 3, background: 'var(--lp-bg-sunken)', borderRadius: 999, padding: 3 },
+  segBtn: (on) => ({
+    padding: '7px 14px', minHeight: 36, borderRadius: 999, border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 600 : 500,
+    background: on ? 'var(--lp-brand-600)' : 'transparent',
+    color: on ? '#fff' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap',
+  }),
+  countLbl: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', margin: '2px 2px 8px' },
   pillGroup: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' },
   pill: (on) => ({
     fontSize: 12.5, fontWeight: 600, padding: '8px 15px', borderRadius: 999, cursor: 'pointer',
@@ -201,10 +217,6 @@ const S = {
     background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', fontFamily: 'var(--lp-font-sans)',
     fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
   },
-  estDot: (c) => ({
-    display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600,
-    padding: '3px 9px', borderRadius: 999, background: `color-mix(in srgb, ${c} 14%, transparent)`, color: c,
-  }),
   /* sheet "Ajustar existencia" */
   sheetOverlay: (desktop) => ({
     position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 1200,
@@ -301,10 +313,14 @@ const S = {
     fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
     background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', minHeight: 44,
   },
+  /* Mockup: "+ Recepción MP" como chip acentuado (tile bg + texto/borde acento),
+     no botón sólido. minHeight 44 se conserva (touch ≥44px > los 36px del mockup). */
   btnAdd: {
-    padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12,
+    padding: '8px 14px', borderRadius: 10, fontSize: 12.5,
     fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-    background: 'var(--lp-success-600)', color: '#fff', whiteSpace: 'nowrap', minHeight: 44,
+    border: '1px solid color-mix(in srgb, var(--lp-brand-600) 30%, transparent)',
+    background: 'var(--lp-bg-sunken)', color: 'var(--lp-brand-700)',
+    whiteSpace: 'nowrap', minHeight: 44,
   },
   toast: (type) => ({
     position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)',
@@ -447,12 +463,27 @@ function resaltar(texto, query) {
   return (
     <>
       {t.slice(0, idx)}
-      <mark style={{ background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)', borderRadius: 3, padding: '0 1px' }}>
+      {/* Mockup hl(): acento al 30% + color heredado (funciona claro/oscuro) */}
+      <mark style={{ background: 'color-mix(in srgb, var(--lp-brand-600) 30%, transparent)', color: 'inherit', borderRadius: 3, padding: '0 1px' }}>
         {t.slice(idx, idx + query.length)}
       </mark>
       {t.slice(idx + query.length)}
     </>
   );
+}
+
+/* Lápiz de "editar" del mockup — afordancia visual; el click lo maneja la card */
+function PencilIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--lp-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }} aria-hidden="true">
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z" />
+    </svg>
+  );
+}
+
+/* Barra de severidad del mockup: pct = existencia/mínimo, clamp 4–100 */
+function barPctOf(qty, min) {
+  return Math.max(4, Math.min(100, min > 0 ? (qty / min) * 100 : 100));
 }
 
 function MPRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
@@ -470,7 +501,9 @@ function MPRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
           {prov && <span style={{ ...S.provSub, fontWeight: 400 }}> · {prov}</span>}
         </span>
         <EstadoBadge qty={qty} pct={pct} />
+        {canEdit && <PencilIcon />}
       </div>
+      <div style={S.sevBar}><div style={S.sevFill(barPctOf(qty, inv.min || 0), sev.color)} /></div>
       <div style={S.mNums}>
         <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} kg</span>
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} kg</span>
@@ -492,7 +525,9 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
       <div style={S.mTop}>
         <span style={S.mName}>{resaltar(nombre, query)}</span>
         <EstadoBadge qty={qty} pct={pct} />
+        {canEdit && <PencilIcon />}
       </div>
+      <div style={S.sevBar}><div style={S.sevFill(barPctOf(qty, inv.min || 0), sev.color)} /></div>
       <div style={S.mNums}>
         <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} cub</span>
@@ -671,14 +706,10 @@ function sevOf(qty, pct) {
   return { key: 'ok', color: 'var(--lp-success-600)', label: 'OK' };
 }
 
+/* Mockup .est: pill compacta SIN punto — solo texto coloreado sobre tinte 15% */
 function EstadoBadge({ qty, pct }) {
   const s = sevOf(qty, pct);
-  return (
-    <span style={S.estDot(s.color)}>
-      <i style={{ width: 6, height: 6, borderRadius: 999, background: s.color, display: 'inline-block' }} />
-      {s.label}
-    </span>
-  );
+  return <span style={S.estBadge(s.color)}>{s.label}</span>;
 }
 
 /* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
@@ -900,9 +931,10 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
   );
 }
 
-/* Chips de filtro por severidad (Todos · Crítico · Bajo) */
+/* Chips de filtro por severidad (Todos · Crítico · Bajo) — mockup .fchip:
+   activo = tinte 16% del color + borde transparente; inactivo = borde hairline. */
 function FilterChips({ activeFilter, onPick }) {
-  const FILTS = [['todos', 'Todos', 'var(--lp-text-secondary)'], ['sin', 'Crítico', 'var(--lp-danger-600)'], ['bajo', 'Bajo', 'var(--lp-warning-600)']];
+  const FILTS = [['todos', 'Todos', 'var(--lp-brand-600)'], ['sin', 'Crítico', 'var(--lp-danger-600)'], ['bajo', 'Bajo', 'var(--lp-warning-600)']];
   return (
     <div style={{ display: 'flex', gap: 6 }}>
       {FILTS.map(([k, l, c]) => {
@@ -910,11 +942,11 @@ function FilterChips({ activeFilter, onPick }) {
         return (
           <button key={k} type="button" onClick={() => onPick(k)}
             style={{
-              height: 34, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
-              fontFamily: 'var(--lp-font-sans)', fontSize: 12, fontWeight: 600,
-              border: '1px solid var(--lp-border-subtle)',
-              background: on ? `color-mix(in srgb, ${c} 14%, transparent)` : 'transparent',
-              color: on ? c : 'var(--lp-text-secondary)',
+              height: 34, padding: '0 11px', borderRadius: 999, cursor: 'pointer',
+              fontFamily: 'var(--lp-font-sans)', fontSize: 11.5, fontWeight: on ? 600 : 500,
+              border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+              background: on ? `color-mix(in srgb, ${c} 16%, transparent)` : 'var(--lp-bg-raised)',
+              color: on ? c : 'var(--lp-text-secondary)', whiteSpace: 'nowrap',
             }}>{l}</button>
         );
       })}
@@ -1124,6 +1156,8 @@ export default function InventarioPage() {
   const [importPreview, setImportPreview] = useState(null);
   /* Cola de aprobación: el rol inventario propone, el admin aprueba. */
   const [showAprobar, setShowAprobar] = useState(false);
+  /* Mockup: borde acento del buscador al enfocar (inline styles no tienen :focus-within) */
+  const [searchFocus, setSearchFocus] = useState(false);
 
   /* Fetch data */
   const { data: invData, loading: invLoading, reload: reloadInv } = useApiData(() => api.getInventario(), [], 8000);
@@ -1475,7 +1509,7 @@ export default function InventarioPage() {
       <TopBar title="Inventarios" />
       <div style={S.wrap}>
         <div style={S.h1}>Inventario</div>
-        <div style={S.psub}>{isDesktop ? 'Materia prima y producto terminado' : 'MP y PT'}</div>
+        <div style={S.psub}>Materia prima y producto terminado</div>
 
         {/* Banner cola de aprobación */}
         {pendientes.length > 0 && esAdmin && (
@@ -1496,18 +1530,33 @@ export default function InventarioPage() {
         {/* P2: inventario inicial canónico (congelar base + delta) — solo admin */}
         {esAdmin && <CanonicoCard />}
 
-        {/* Toolbar: búsqueda + pills MP / PT / Envases (móvil = apiladas) */}
+        {/* Toolbar (mockup): fila buscador prominente + fila segmented MP/PT con
+            chips de severidad a la derecha. En móvil se apilan igual que el mockup. */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
-          <div style={{ ...S.searchBox, ...(isDesktop ? {} : { maxWidth: '100%' }) }}>
+          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }) }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query} onChange={e => setQuery(e.target.value)} />
-          </div>
-          <div style={S.pillGroup}>
-            {tabs.map(t => (
-              <button key={t.id} type="button" data-id={`inventario.tab.${t.id}`} style={S.pill(activeTab === t.id)} onClick={() => handleTabChange(t.id)}>
-                {t.id === 'mp' ? 'MP' : t.id === 'pt' ? 'PT' : 'Envases'}
+            <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query}
+              onChange={e => setQuery(e.target.value)}
+              onFocus={() => setSearchFocus(true)} onBlur={() => setSearchFocus(false)} />
+            {query && (
+              <button type="button" style={S.searchClr} aria-label="Limpiar búsqueda" onClick={() => setQuery('')}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
-            ))}
+            )}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: '1 1 auto' }}>
+            <div style={S.segWrap}>
+              {tabs.map(t => (
+                <button key={t.id} type="button" data-id={`inventario.tab.${t.id}`} style={S.segBtn(activeTab === t.id)} onClick={() => handleTabChange(t.id)}>
+                  {t.id === 'mp' ? 'MP' : t.id === 'pt' ? 'PT' : 'Envases'}
+                </button>
+              ))}
+            </div>
+            {((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total')) && (
+              <div style={{ marginLeft: 'auto' }}>
+                <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
+              </div>
+            )}
           </div>
         </div>
 
@@ -1523,7 +1572,6 @@ export default function InventarioPage() {
               </div>
               {mpSubtab === 'stock' && (
                 <div style={S.actionsCluster(isDesktop)}>
-                  {isDesktop && <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />}
                   {canRecibirMP && (
                     <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
                   )}
@@ -1549,7 +1597,10 @@ export default function InventarioPage() {
               <div style={S.empty}>
                 {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` : activeFilter !== 'todos' ? 'Sin materias primas en este filtro' : 'Sin materias primas registradas'}
               </div>
-            ) : isDesktop ? (
+            ) : (
+              <div style={S.countLbl}>{filteredMP.length} de {mpItems.length} materias primas</div>
+            )}
+            {filteredMP.length > 0 && (isDesktop ? (
               <InvTable items={filteredMP} tipo="mp" unidad="kg" canEdit={canEditMP} canDelete={canDeleteMP}
                 canContar={canContar} onContar={handleContar}
                 mpsDisponibles={mpsDisponibles} onAdjust={handleAdjustMP} onAction={handleMPAction} query={debouncedQuery} />
@@ -1559,7 +1610,7 @@ export default function InventarioPage() {
                   <MPRow key={item.mp} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustMP} onContar={handleContar} query={debouncedQuery} />
                 ))}
               </div>
-            )}
+            ))}
               </>
             )}
           </>
@@ -1582,7 +1633,6 @@ export default function InventarioPage() {
               </div>
               {ptSubtab === 'total' && (
                 <div style={S.actionsCluster(isDesktop)}>
-                  {isDesktop && <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />}
                   {canEditMP && (
                     <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
                   )}
@@ -1603,16 +1653,21 @@ export default function InventarioPage() {
                 <div style={S.empty}>
                   {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` : activeFilter !== 'todos' ? 'Sin productos en este filtro' : 'Sin productos terminados'}
                 </div>
-              ) : isDesktop ? (
-                <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
-                  canContar={canContar} onContar={handleContar}
-                  onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
               ) : (
-                <div>
-                  {filteredPT.map(item => (
-                    <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery} />
-                  ))}
-                </div>
+                <>
+                  <div style={S.countLbl}>{filteredPT.length} de {ptItems.length} productos terminados</div>
+                  {isDesktop ? (
+                    <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
+                      canContar={canContar} onContar={handleContar}
+                      onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
+                  ) : (
+                    <div>
+                      {filteredPT.map(item => (
+                        <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery} />
+                      ))}
+                    </div>
+                  )}
+                </>
               )
             )}
 

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import api from '../../../services/api';
+import useIsDesktop from '../../../hooks/useIsDesktop';
 
 const PRESENTACIONES = [
   { v: 'cubeta_20', lbl: 'CUBETA / 20 kg' },
@@ -153,6 +154,9 @@ const S = {
 };
 
 export default function NewOCModal({ onClose, onCreated, prefillMP }) {
+  /* Mockup integracion/Compras.html: en móvil el alta de OC es un bottom-sheet
+     (radio 24 arriba, pegado abajo); en escritorio queda el modal centrado. */
+  const isDesktop = useIsDesktop();
   const [catalog, setCatalog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -336,10 +340,19 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
     };
   }, [prefillMP, catalog]);
 
+  /* Bottom-sheet en móvil / modal centrado en escritorio (no son hooks) */
+  const ovl = { ...S.overlay, alignItems: isDesktop ? 'center' : 'flex-end', padding: isDesktop ? 16 : 0 };
+  const box = {
+    ...S.modal,
+    width: isDesktop ? '92%' : '100%',
+    borderRadius: isDesktop ? 'var(--lp-radius)' : '24px 24px 0 0',
+    maxHeight: '92vh',
+  };
+
   if (loading) {
     return (
-      <div style={S.overlay} onClick={onClose}>
-        <div style={S.modal} onClick={e => e.stopPropagation()}>
+      <div style={ovl} onClick={onClose}>
+        <div style={box} onClick={e => e.stopPropagation()}>
           <div style={{ textAlign: 'center', padding: '40px' }}>Cargando catálogo...</div>
         </div>
       </div>
@@ -348,8 +361,8 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
 
   if (error) {
     return (
-      <div style={S.overlay} onClick={onClose}>
-        <div style={S.modal} onClick={e => e.stopPropagation()}>
+      <div style={ovl} onClick={onClose}>
+        <div style={box} onClick={e => e.stopPropagation()}>
           <div style={{ color: 'var(--lp-danger-600)', marginBottom: 16 }}>Error: {error}</div>
           <button style={{ ...S.btn, ...S.btnSecondary }} onClick={onClose}>
             Cerrar
@@ -360,9 +373,9 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   }
 
   return (
-    <div style={S.overlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={S.title}>Nueva Orden de Compra</div>
+    <div style={ovl} onClick={onClose}>
+      <div style={box} onClick={e => e.stopPropagation()}>
+        <div style={S.title}>Nueva orden de compra</div>
 
         {/* Banner contextual cuando viene de MRP */}
         {prefillContext && (
@@ -579,21 +592,21 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           />
         </div>
 
-        {/* Buttons */}
+        {/* Buttons — orden del mockup: Cancelar discreto, primario dominante */}
         <div style={S.buttons}>
+          <button
+            style={{ ...S.btn, ...S.btnSecondary, flex: '0 0 auto', padding: '12px 18px' }}
+            onClick={onClose}
+            disabled={creating}
+          >
+            Cancelar
+          </button>
           <button
             style={{ ...S.btn, ...S.btnPrimary }}
             onClick={handleCreate}
             disabled={creating || items.length === 0}
           >
-            {creating ? 'Creando...' : 'Crear OC'}
-          </button>
-          <button
-            style={{ ...S.btn, ...S.btnSecondary }}
-            onClick={onClose}
-            disabled={creating}
-          >
-            Cancelar
+            {creating ? 'Creando...' : 'Levantar OC'}
           </button>
         </div>
       </div>

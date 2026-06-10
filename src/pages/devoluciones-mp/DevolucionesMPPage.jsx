@@ -43,7 +43,11 @@ const S = {
   nc: { fontFamily: 'var(--lp-font-mono)', fontSize: 12, color: 'var(--lp-brand-700)', fontWeight: 700 },
   act: { width: '100%', height: 46, borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8 },
   actPrimary: { background: 'var(--lp-brand-600)', color: '#fff' },
+  /* Mockup Devoluciones.html: dos caminos de cierre como botones lado a lado */
+  actGhost: { background: 'transparent', border: '1px solid var(--lp-border-default)', color: 'var(--lp-text-secondary)' },
+  actRow: { display: 'flex', gap: 8 },
   actDone: { background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', border: '1px solid var(--lp-border-subtle)', cursor: 'default' },
+  tsub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '2px 0 12px' },
   link: { display: 'inline-block', marginTop: 8, fontSize: 12.5, fontWeight: 600, color: 'var(--lp-brand-700)', textDecoration: 'none' },
   empty: { textAlign: 'center', color: 'var(--lp-text-tertiary)', fontSize: 13.5, padding: '60px 20px', lineHeight: 1.5 },
   obs: { fontSize: 11.5, color: 'var(--lp-warning-700)', marginTop: 6 },
@@ -84,10 +88,11 @@ const ESTADO_COLOR = {
   merma:         'var(--lp-text-secondary)',
 };
 
+/* Tints del mockup (color-mix 14%): Por gestionar=ámbar, cerrada=acento, merma=neutro */
 const ESTADO_BADGE = {
-  por_gestionar: { bg: 'var(--lp-warning-50)', fg: 'var(--lp-warning-700)', label: 'Por gestionar' },
-  registrada:    { bg: 'var(--lp-success-50)', fg: 'var(--lp-success-700)', label: 'NC / reembolso' },
-  merma:         { bg: 'var(--lp-bg-sunken)',  fg: 'var(--lp-text-secondary)', label: 'Merma' },
+  por_gestionar: { bg: 'color-mix(in srgb, var(--lp-warning-600) 14%, transparent)', fg: 'var(--lp-warning-600)', label: 'Por gestionar' },
+  registrada:    { bg: 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)', fg: 'var(--lp-brand-700)', label: 'NC / reembolso' },
+  merma:         { bg: 'color-mix(in srgb, var(--lp-text-secondary) 14%, transparent)', fg: 'var(--lp-text-secondary)', label: 'Merma' },
 };
 
 const fmtMoney = (n) => (n == null || n === '') ? '—' : '$' + Number(n).toLocaleString('es-MX');
@@ -97,7 +102,8 @@ export default function DevolucionesMPPage() {
   const isDesktop = useIsDesktop();
   const [tab, setTab] = useState('por_gestionar');
   const [crear, setCrear] = useState(false);
-  const [cerrar, setCerrar] = useState(null); /* devolución a cerrar */
+  /* { dev, tipo } — tipo viene del botón elegido (mockup: Nota de crédito | Reembolso) */
+  const [cerrar, setCerrar] = useState(null);
 
   const { data, loading, reload } = useApiData(() => api.getDevolucionesMP(), null, 60000);
   const { data: invData } = useApiData(() => api.getInventario(), null, 0);
@@ -138,7 +144,7 @@ export default function DevolucionesMPPage() {
 
           <div style={S.toolbarRow}>
             <PageTabs tabs={tabs} activeTab={tab} onChange={setTab} />
-            <button style={{ ...S.newBtn, margin: 0, marginLeft: 'auto' }} onClick={() => setCrear(true)}>
+            <button style={{ ...S.newBtn, margin: 0, marginLeft: 'auto' }} data-id="devoluciones.btn.nueva" data-rol="compras,admin" onClick={() => setCrear(true)}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
               Nueva devolución
             </button>
@@ -149,7 +155,7 @@ export default function DevolucionesMPPage() {
           ) : !visibles.length ? (
             <div style={S.empty}>Sin devoluciones aquí.</div>
           ) : (
-            <DevTable devs={visibles} onCerrar={setCerrar} />
+            <DevTable devs={visibles} onCerrar={(d, tipo) => setCerrar({ dev: d, tipo })} />
           )}
         </div>
 
@@ -162,7 +168,7 @@ export default function DevolucionesMPPage() {
         )}
         {cerrar && (
           <CerrarSheet
-            isDesktop={isDesktop} dev={cerrar}
+            isDesktop={isDesktop} dev={cerrar.dev} initialTipo={cerrar.tipo}
             onClose={() => setCerrar(null)}
             onSaved={() => { setCerrar(null); reload(); }}
           />
@@ -176,7 +182,10 @@ export default function DevolucionesMPPage() {
     <>
       <TopBar title="Devoluciones a proveedor" />
       <div style={S.wrap}>
-        <button style={S.newBtn} onClick={() => setCrear(true)}>
+        {/* tsub del mockup: "MP a proveedor · N por gestionar" con conteo en vivo */}
+        <div style={S.tsub}>MP a proveedor · {counts.por_gestionar} por gestionar</div>
+
+        <button style={S.newBtn} data-id="devoluciones.btn.nueva" data-rol="compras,admin" onClick={() => setCrear(true)}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
           Nueva devolución
         </button>
@@ -188,7 +197,7 @@ export default function DevolucionesMPPage() {
         ) : !visibles.length ? (
           <div style={S.empty}>Sin devoluciones aquí.</div>
         ) : (
-          visibles.map(d => <DevCard key={d.id} d={d} onCerrar={() => setCerrar(d)} />)
+          visibles.map(d => <DevCard key={d.id} d={d} onCerrar={(tipo) => setCerrar({ dev: d, tipo })} />)
         )}
       </div>
 
@@ -254,10 +263,18 @@ function DevTable({ devs, onCerrar }) {
                 </td>
                 <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
                   {d.estado === 'por_gestionar' && (
-                    <button type="button" data-id="devoluciones-mp.btn.cerrar" data-rol="admin,compras"
-                      style={S.actBtn} onClick={() => onCerrar(d)}>
-                      Registrar NC / reembolso
-                    </button>
+                    /* Mockup: NC primario + Reembolso secundario, mismos dos caminos */
+                    <span style={{ display: 'inline-flex', gap: 6 }}>
+                      <button type="button" data-id="devoluciones.btn.registrar-nc" data-rol="admin,compras"
+                        style={S.actBtn} onClick={() => onCerrar(d, 'nota_credito')}>
+                        Nota de crédito
+                      </button>
+                      <button type="button" data-id="devoluciones.btn.reembolso" data-rol="admin,compras"
+                        style={{ ...S.actBtn, background: 'transparent', border: '1px solid var(--lp-border-default)', color: 'var(--lp-text-secondary)' }}
+                        onClick={() => onCerrar(d, 'reembolso')}>
+                        Reembolso
+                      </button>
+                    </span>
                   )}
                   {d.estado === 'registrada' && (
                     <div style={{ ...S.tdMut, textAlign: 'right' }}>
@@ -305,9 +322,19 @@ function DevCard({ d, onCerrar }) {
             <span style={S.k}>Crédito esperado</span>
             <span style={S.v}>{fmtMoney(d.montoEstimado)}</span>
           </div>
-          <button style={{ ...S.act, ...S.actPrimary }} onClick={onCerrar}>
-            Registrar nota de crédito o reembolso
-          </button>
+          {/* Mockup: dos caminos de cierre auditables, lado a lado */}
+          <div style={S.actRow}>
+            <button style={{ ...S.act, ...S.actPrimary, flex: 1, width: 'auto' }}
+              data-id="devoluciones.btn.registrar-nc" data-rol="compras,admin"
+              onClick={() => onCerrar('nota_credito')}>
+              Nota de crédito
+            </button>
+            <button style={{ ...S.act, ...S.actGhost, flex: 1, width: 'auto' }}
+              data-id="devoluciones.btn.reembolso" data-rol="compras,admin"
+              onClick={() => onCerrar('reembolso')}>
+              Reembolso
+            </button>
+          </div>
         </>
       )}
       {d.estado === 'registrada' && (
@@ -414,7 +441,8 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
         <div style={SH.s}>La materia prima se descuenta del inventario al registrar.</div>
 
         <label style={SH.lbl}>Materia prima</label>
-        <input style={SH.input} list="mp-list" value={mp} onChange={(e) => onMp(e.target.value)} placeholder="Escribe o elige una MP" />
+        <input style={SH.input} list="mp-list" value={mp} onChange={(e) => onMp(e.target.value)}
+          data-id="devoluciones.input.mp" data-rol="compras,admin" placeholder="Escribe o elige una MP" />
         <datalist id="mp-list">{mpList.map(m => <option key={m} value={m} />)}</datalist>
         {mp && stock != null && <div style={SH.hint}>Stock actual: {stock.toLocaleString('es-MX')} {unidad}</div>}
 
@@ -439,10 +467,12 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
         <textarea style={SH.area} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. Humedad fuera de especificación, no pasó QC de entrada…" />
 
         <label style={SH.lbl}>Disposición</label>
-        <SegmentedControl
-          options={[{ value: 'devolver', label: 'Devolver a proveedor' }, { value: 'descartar', label: 'Descartar (merma)' }]}
-          value={disposicion} onChange={setDisposicion}
-        />
+        <div data-id="devoluciones.select.disposicion" data-rol="compras,admin">
+          <SegmentedControl
+            options={[{ value: 'devolver', label: 'Devolver a proveedor' }, { value: 'descartar', label: 'Descartar (merma)' }]}
+            value={disposicion} onChange={setDisposicion}
+          />
+        </div>
 
         {disposicion === 'devolver' && (
           <>
@@ -458,8 +488,10 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
 
         <div style={SH.acts}>
           <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }} onClick={guardar} disabled={!puede || saving}>
-            {saving ? 'Registrando…' : 'Registrar devolución'}
+          <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
+            data-id="devoluciones.btn.crear" data-rol="compras,admin"
+            onClick={guardar} disabled={!puede || saving}>
+            {saving ? 'Creando…' : 'Crear devolución'}
           </button>
         </div>
       </div>
@@ -475,8 +507,9 @@ const IFile = (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /></svg>
 );
 
-function CerrarSheet({ isDesktop, dev, onClose, onSaved }) {
-  const [tipo, setTipo] = useState('nota_credito');
+function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
+  /* initialTipo: el botón elegido en la card pre-selecciona el camino (mockup §7) */
+  const [tipo, setTipo] = useState(initialTipo === 'reembolso' ? 'reembolso' : 'nota_credito');
   const [nc, setNc] = useState('');
   const [ref, setRef] = useState('');
   const [monto, setMonto] = useState(dev.montoEstimado || '');
@@ -517,8 +550,8 @@ function CerrarSheet({ isDesktop, dev, onClose, onSaved }) {
   return (
     <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
       <div style={SH.sheet(isDesktop)}>
-        <div style={SH.h}>Cerrar devolución</div>
-        <div style={SH.s}>{dev.codigo} · {dev.mp} → {dev.proveedor}</div>
+        <div style={SH.h}>Cerrar {dev.codigo || 'devolución'}</div>
+        <div style={SH.s}>{dev.mp} · {dev.proveedor}{dev.montoEstimado != null ? ` · ${fmtMoney(dev.montoEstimado)}` : ''}</div>
 
         <SegmentedControl
           options={[{ value: 'nota_credito', label: 'Nota de crédito' }, { value: 'reembolso', label: 'Reembolso' }]}
@@ -533,7 +566,7 @@ function CerrarSheet({ isDesktop, dev, onClose, onSaved }) {
         ) : (
           <>
             <label style={SH.lbl}>Comprobante del reembolso · obligatorio</label>
-            <label style={SH.drop(!!fileB64)}>
+            <label style={SH.drop(!!fileB64)} data-id="devoluciones.btn.adjuntar-comprobante" data-rol="compras,admin">
               {fileB64 ? IFile : ICloud}
               {fileB64
                 ? <div style={SH.fn}>{fileName}</div>
@@ -555,8 +588,10 @@ function CerrarSheet({ isDesktop, dev, onClose, onSaved }) {
 
         <div style={SH.acts}>
           <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }} onClick={guardar} disabled={!puede || saving}>
-            {saving ? 'Guardando…' : 'Registrar cierre'}
+          <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
+            data-id="devoluciones.btn.confirmar-cierre" data-rol="compras,admin"
+            onClick={guardar} disabled={!puede || saving}>
+            {saving ? 'Guardando…' : 'Confirmar cierre'}
           </button>
         </div>
       </div>
