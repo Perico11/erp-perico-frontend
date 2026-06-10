@@ -15,6 +15,7 @@ import PageTabs from '../../components/ui/PageTabs';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
 import CanonicoCard from './CanonicoCard';
 import useConfirm from '../../hooks/useConfirm';
+import Fab from '../../components/ui/Fab';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
    Iconos abreviados estilo "tag" de 2 letras (sin emojis para consistencia
@@ -864,6 +865,9 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
         <thead>
           <tr>
             <th style={S.th}>{tipo === 'mp' ? 'Material' : 'Producto'}</th>
+            {/* Paquete MOCKUP 8 (propuesta A): gauge de nivel de stock con
+                marcador del mínimo en línea */}
+            <th style={{ ...S.th, width: 170 }}>Nivel de stock</th>
             <th style={{ ...S.th, textAlign: 'right' }}>Existencia</th>
             <th style={{ ...S.th, textAlign: 'right' }}>Mínimo</th>
             <th style={S.th}>Estado</th>
@@ -886,6 +890,9 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {tipo === 'pt' && it.inv.sku && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline', fontFamily: 'var(--lp-font-mono)' }}>· {it.inv.sku}</span>
                   )}
+                </td>
+                <td style={S.td}>
+                  <StockGauge qty={qty} min={min} color={sev.color} />
                 </td>
                 <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
                   {qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {unidad}
@@ -950,6 +957,243 @@ function FilterChips({ activeFilter, onPick }) {
             }}>{l}</button>
         );
       })}
+    </div>
+  );
+}
+
+/* ════════ Paquete MOCKUP 8 — Inventarios v8 ════════════════════════════
+   Móvil decluttered: la fila de chips se sustituye por UN botón de filtros
+   (mfilt) que abre la hoja "Vista y filtros"; las acciones (Recepción MP /
+   Agregar PT / Importar-Exportar-Imprimir) se mueven al FAB → hoja
+   "Acciones"; los filtros activos se muestran como chips removibles.
+   Escritorio: KPIs con riel + banda de atención de críticos + gauge de
+   nivel de stock por fila en la tabla. */
+
+/* Botón de filtros móvil (mockup .mfilt) con dot cuando hay filtros activos */
+function MFiltBtn({ active, onClick }) {
+  return (
+    <button type="button" aria-label="Vista y filtros" onClick={onClick}
+      style={{
+        width: 48, height: 48, flexShrink: 0, borderRadius: 14, position: 'relative',
+        background: 'var(--lp-bg-raised)', border: `1.5px solid ${active ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        color: active ? 'var(--lp-brand-600)' : 'var(--lp-text-secondary)', cursor: 'pointer',
+      }}>
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6h16M7 12h10M10 18h4" /></svg>
+      {active && <span style={{ position: 'absolute', top: 8, right: 8, width: 9, height: 9, borderRadius: '50%', background: 'var(--lp-brand-600)', border: '2px solid var(--lp-bg-raised)' }} />}
+    </button>
+  );
+}
+
+/* Chips de filtros ACTIVOS removibles (mockup .actchip) — móvil */
+function ActiveChips({ chips }) {
+  if (!chips.length) return null;
+  return (
+    <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', alignItems: 'center', margin: '2px 2px 8px' }}>
+      {chips.map(ch => (
+        <span key={ch.key} style={{
+          display: 'inline-flex', alignItems: 'center', gap: 7, height: 30, padding: '0 6px 0 11px',
+          borderRadius: 999, fontSize: 12, fontWeight: 600,
+          background: 'color-mix(in srgb, var(--lp-brand-600) 11%, transparent)', color: 'var(--lp-brand-700)',
+          border: '1px solid color-mix(in srgb, var(--lp-brand-600) 26%, transparent)',
+        }}>
+          {ch.label}
+          <button type="button" aria-label={`Quitar ${ch.label}`} onClick={ch.clear}
+            style={{ width: 18, height: 18, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', border: 'none', background: 'color-mix(in srgb, var(--lp-brand-600) 18%, transparent)', color: 'inherit', padding: 0 }}>
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/* Hoja "Vista y filtros" móvil (mockup .vsheet): Estado / Vista / Almacén PT */
+function VistaFiltrosSheet({ activeTab, activeFilter, onFilter, mpSubtab, onMpSubtab, ptSubtab, onPtSubtab, onClose }) {
+  const opt = (on) => ({
+    height: 44, padding: '0 16px', borderRadius: 13, cursor: 'pointer',
+    border: on ? '1.5px solid transparent' : '1.5px solid var(--lp-border-subtle)',
+    background: on ? 'var(--lp-brand-600)' : 'var(--lp-bg-raised)', color: on ? '#fff' : 'var(--lp-text-primary)',
+    fontFamily: 'var(--lp-font-sans)', fontSize: 14, fontWeight: 600,
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+  });
+  const grp = { marginBottom: 18 };
+  const lbl = { fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', margin: '0 2px 9px' };
+  const row = { display: 'flex', gap: 8, flexWrap: 'wrap' };
+  const FILTS = [['todos', 'Todos', null], ['sin', 'Crítico', 'var(--lp-danger-600)'], ['bajo', 'Bajo', 'var(--lp-warning-600)']];
+  return (
+    <div style={S.sheetOverlay(false)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.sheet(false)} onClick={e => e.stopPropagation()}>
+        <div style={S.shH}>Vista y filtros</div>
+        <div style={S.shS}>Ajusta qué ves del inventario.</div>
+        <div style={grp}>
+          <div style={lbl}>Estado</div>
+          <div style={row}>
+            {FILTS.map(([k, l, c]) => (
+              <button key={k} type="button" style={opt(activeFilter === k)} onClick={() => onFilter(k)}>
+                {c && <span style={{ width: 8, height: 8, borderRadius: '50%', background: activeFilter === k ? '#fff' : c }} />}{l}
+              </button>
+            ))}
+          </div>
+        </div>
+        {activeTab === 'mp' && (
+          <div style={grp}>
+            <div style={lbl}>Vista</div>
+            <div style={row}>
+              {[['stock', 'Stock'], ['costos', 'Costos'], ['maestro', 'Maestro']].map(([k, l]) => (
+                <button key={k} type="button" style={opt(mpSubtab === k)} onClick={() => onMpSubtab(k)}>{l}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        {activeTab === 'pt' && (
+          <div style={grp}>
+            <div style={lbl}>Almacén</div>
+            <div style={row}>
+              {[['total', 'Total'], ['fabrica', 'Fábrica'], ['teran', 'Terán']].map(([k, l]) => (
+                <button key={k} type="button" style={opt(ptSubtab === k)} onClick={() => onPtSubtab(k)}>{l}</button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ display: 'flex', marginTop: 4 }}>
+          <button type="button" onClick={onClose}
+            style={{ flex: 1, height: 50, borderRadius: 14, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 14.5, fontWeight: 600, background: 'var(--lp-brand-600)', color: '#fff' }}>
+            Listo
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Hoja "Acciones" móvil (mockup .asheet, la abre el FAB) — acciones REALES */
+function AccionesSheet({ rows, importExportNode, onClose }) {
+  return (
+    <div style={S.sheetOverlay(false)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.sheet(false)} onClick={e => e.stopPropagation()}>
+        <div style={S.shH}>Acciones</div>
+        <div style={S.shS}>Operaciones sobre el inventario.</div>
+        <div>
+          {rows.map(r => (
+            <button key={r.key} type="button" onClick={() => { onClose(); r.onClick(); }}
+              data-id={r.dataId} data-rol={r.dataRol}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 13, width: '100%', padding: '14px 6px',
+                border: 'none', borderBottom: '1px solid var(--lp-border-subtle)', background: 'none',
+                cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 15, fontWeight: 500,
+                color: 'var(--lp-text-primary)', textAlign: 'left',
+              }}>
+              <span style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--lp-bg-sunken)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--lp-brand-600)', flexShrink: 0 }}>{r.icon}</span>
+              <span style={{ flex: 1 }}>{r.label}<div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 400, marginTop: 1 }}>{r.desc}</div></span>
+            </button>
+          ))}
+          {importExportNode && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '14px 6px' }}>
+              <span style={{ width: 40, height: 40, borderRadius: 12, background: 'var(--lp-bg-sunken)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--lp-brand-600)', flexShrink: 0 }}>
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19V5M5 12l7-7 7 7" /></svg>
+              </span>
+              <span style={{ flex: 1, fontSize: 15, fontWeight: 500, color: 'var(--lp-text-primary)' }}>
+                Importar / Exportar / Imprimir
+                <div style={{ marginTop: 6 }}>{importExportNode}</div>
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* KPIs de escritorio (mockup .kpis, propuesta A "Centro de control") */
+function KpisInventario({ items, tipo, unidad }) {
+  const crit = items.filter(i => (i.inv.qty || 0) <= 0);
+  const bajo = items.filter(i => (i.inv.qty || 0) > 0 && i.pct <= 100);
+  /* Valor estimado SOLO con costo real (maestro.costo.costoKg en MP);
+     sin dato → '—' (no se inventan precios). */
+  let valor = null;
+  if (tipo === 'mp') {
+    let suma = 0, con = 0;
+    items.forEach(i => {
+      const ck = Number(i.maestro?.costo?.costoKg);
+      if (ck > 0) { suma += (i.inv.qty || 0) * ck; con++; }
+    });
+    if (con > 0) valor = suma;
+  }
+  const money = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n).toLocaleString('es-MX');
+  const noun = tipo === 'env' ? 'envases' : tipo === 'pt' ? 'productos' : 'materia prima';
+  const K = [
+    ['SKUs activos', String(items.length), noun, 'var(--lp-brand-600)', 'var(--lp-text-primary)'],
+    ['En crítico', String(crit.length), 'Reabastecer ya', 'var(--lp-danger-600)', 'var(--lp-danger-600)'],
+    ['Stock bajo', String(bajo.length), 'Por debajo del mínimo', 'var(--lp-warning-600)', 'var(--lp-warning-600)'],
+    ['Valor estimado', valor != null ? money(valor) : '—', valor != null ? `Inventario ${tipo.toUpperCase()}` : 'Sin costo unitario', 'var(--lp-info-600)', 'var(--lp-text-primary)'],
+  ];
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 16 }}>
+      {K.map(([l, v, s, c, vc]) => (
+        <div key={l} style={{ background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 16, padding: '15px 17px', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: c }} />
+          <div style={{ fontSize: 11.5, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' }}>{l}</div>
+          <div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 26, fontWeight: 700, letterSpacing: '-.01em', marginTop: 7, color: vc }}>{v}</div>
+          <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 3 }}>{s}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Banda de atención de críticos (mockup .att) — escritorio, MP/Envases */
+function BandaAtencion({ criticos, unidad, canOC, onGenerarOC }) {
+  if (!criticos.length) return null;
+  const c0 = criticos[0];
+  const nombre0 = c0.mp || c0.nombre;
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 14, borderRadius: 14, padding: '13px 16px', marginBottom: 16,
+      background: 'color-mix(in srgb, var(--lp-danger-600) 7%, var(--lp-bg-raised))',
+      border: '1px solid color-mix(in srgb, var(--lp-danger-600) 28%, transparent)',
+    }}>
+      <div style={{ width: 38, height: 38, borderRadius: 11, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'color-mix(in srgb, var(--lp-danger-600) 14%, transparent)', color: 'var(--lp-danger-600)' }}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h16.9a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0z" /><path d="M12 9v4M12 17h.01" /></svg>
+      </div>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary)' }}>
+          {criticos.length} material{criticos.length > 1 ? 'es' : ''} en crítico requiere{criticos.length > 1 ? 'n' : ''} atención
+        </div>
+        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 1 }}>
+          {nombre0} en {(c0.inv.qty || 0).toLocaleString('es-MX')} {unidad} · revisa OCs pendientes con Compras
+        </div>
+      </div>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 12, fontWeight: 700, padding: '6px 11px', borderRadius: 9, background: 'color-mix(in srgb, var(--lp-danger-600) 12%, transparent)', color: 'var(--lp-danger-600)', whiteSpace: 'nowrap' }}>
+          {nombre0} · {(c0.inv.qty || 0).toLocaleString('es-MX')} {unidad}
+        </span>
+        {canOC && (
+          <button type="button" data-id="inventario.btn.generar-oc" data-rol="compras,admin" onClick={onGenerarOC}
+            style={{ height: 40, padding: '0 14px', borderRadius: 11, border: 'none', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 600, background: 'var(--lp-brand-600)', color: '#fff', whiteSpace: 'nowrap' }}>
+            Generar OC
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* Gauge de nivel de stock por fila (mockup .gauge) — tabla de escritorio */
+function StockGauge({ qty, min, color }) {
+  const max = Math.max(qty, min) * 1.25 || 1;
+  const fillPct = Math.max(2, Math.min(100, (qty / max) * 100));
+  const minPct = Math.min(100, (min / max) * 100);
+  return (
+    <div style={{ width: 150 }}>
+      <div style={{ position: 'relative', height: 8, borderRadius: 99, background: 'var(--lp-bg-sunken)' }}>
+        <div style={{ height: '100%', borderRadius: 99, width: fillPct + '%', background: color }} />
+        <div style={{ position: 'absolute', top: -3, width: 2, height: 14, borderRadius: 2, background: 'var(--lp-text-secondary)', opacity: .55, left: minPct + '%' }} />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 5, fontFamily: 'var(--lp-font-mono)', fontSize: 11 }}>
+        <span style={{ color }}>{(qty || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 })}</span>
+        <span style={{ color: 'var(--lp-text-tertiary)' }}>mín {(min || 0).toLocaleString('es-MX')}</span>
+      </div>
     </div>
   );
 }
@@ -1141,6 +1385,9 @@ export default function InventarioPage() {
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
   const [activeFilter, setActiveFilter] = useState(searchParams.get('filter') || 'todos');
+  /* Paquete MOCKUP 8 — hojas móviles "Vista y filtros" (mfilt) y "Acciones" (FAB) */
+  const [vSheetOpen, setVSheetOpen] = useState(false);
+  const [aSheetOpen, setASheetOpen] = useState(false);
   const { query, debouncedQuery, setQuery } = useSearch(200);
   const [showRecepcion, setShowRecepcion] = useState(false);
   const [showAgregarPT, setShowAgregarPT] = useState(false);
@@ -1552,13 +1799,49 @@ export default function InventarioPage() {
                 </button>
               ))}
             </div>
-            {((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total')) && (
+            {/* Paquete MOCKUP 8: en escritorio los chips siguen inline; en
+                móvil se decluttera — UN botón de filtros abre la hoja. */}
+            {((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total')) && isDesktop && (
               <div style={{ marginLeft: 'auto' }}>
                 <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
               </div>
             )}
+            {!isDesktop && (
+              <div style={{ marginLeft: 'auto' }}>
+                <MFiltBtn
+                  active={activeFilter !== 'todos' || (activeTab === 'mp' && mpSubtab !== 'stock') || (activeTab === 'pt' && ptSubtab !== 'total')}
+                  onClick={() => setVSheetOpen(true)} />
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Chips activos removibles (móvil, mockup .actchip) */}
+        {!isDesktop && (
+          <ActiveChips chips={[
+            ...(activeFilter !== 'todos' ? [{ key: 'estado', label: activeFilter === 'sin' ? 'Crítico' : activeFilter === 'bajo' ? 'Bajo' : 'OK', clear: () => handleKpiClick(activeFilter) }] : []),
+            ...(activeTab === 'mp' && mpSubtab !== 'stock' ? [{ key: 'vista', label: mpSubtab === 'costos' ? 'Costos' : 'Maestro', clear: () => setMpSubtab('stock') }] : []),
+            ...(activeTab === 'pt' && ptSubtab !== 'total' ? [{ key: 'almacen', label: ptSubtab === 'fabrica' ? 'Fábrica' : 'Terán', clear: () => setPtSubtab('total') }] : []),
+          ]} />
+        )}
+
+        {/* KPIs + banda de atención (escritorio, mockup propuesta A) */}
+        {isDesktop && ((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total') || activeTab === 'env') && (() => {
+          const kpiItems = activeTab === 'mp' ? mpItems : activeTab === 'pt' ? ptItems : [];
+          const unidad = activeTab === 'mp' ? 'kg' : 'cub';
+          if (activeTab === 'env') return null; /* envases tienen su propio tab con catálogo */
+          const criticos = kpiItems.filter(i => (i.inv.qty || 0) <= 0);
+          return (
+            <>
+              <KpisInventario items={kpiItems} tipo={activeTab} unidad={unidad} />
+              {activeTab === 'mp' && (
+                <BandaAtencion criticos={criticos} unidad={unidad}
+                  canOC={user?.rol === 'admin' || user?.rol === 'compras'}
+                  onGenerarOC={() => navigate('/pronostico')} />
+              )}
+            </>
+          );
+        })()}
 
         {/* ════════ TAB: MATERIA PRIMA ════════ */}
         {activeTab === 'mp' && (
@@ -1572,7 +1855,8 @@ export default function InventarioPage() {
               </div>
               {mpSubtab === 'stock' && (
                 <div style={S.actionsCluster(isDesktop)}>
-                  {canRecibirMP && (
+                  {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
+                  {canRecibirMP && isDesktop && (
                     <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
                   )}
                   {isDesktop && (
@@ -1633,7 +1917,8 @@ export default function InventarioPage() {
               </div>
               {ptSubtab === 'total' && (
                 <div style={S.actionsCluster(isDesktop)}>
-                  {canEditMP && (
+                  {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
+                  {canEditMP && isDesktop && (
                     <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
                   )}
                   {isDesktop && <ImportExportPrint
@@ -1721,6 +2006,50 @@ export default function InventarioPage() {
             reloadInv();
             setTimeout(() => setToastMsg(''), 4000);
           }}
+        />
+      )}
+
+      {/* ── Paquete MOCKUP 8: FAB de acciones + hojas móviles ── */}
+      {(activeTab === 'mp' || activeTab === 'pt') && (
+        <Fab label="Acciones de inventario" dataId="inventario.fab.acciones"
+          dataRol="admin,compras,inventario,almacen,tecnico"
+          onClick={() => setASheetOpen(true)} />
+      )}
+      {vSheetOpen && (
+        <VistaFiltrosSheet
+          activeTab={activeTab}
+          activeFilter={activeFilter} onFilter={(k) => handleKpiClick(k === activeFilter ? activeFilter : k)}
+          mpSubtab={mpSubtab} onMpSubtab={setMpSubtab}
+          ptSubtab={ptSubtab} onPtSubtab={setPtSubtab}
+          onClose={() => setVSheetOpen(false)}
+        />
+      )}
+      {aSheetOpen && (
+        <AccionesSheet
+          onClose={() => setASheetOpen(false)}
+          rows={[
+            ...(activeTab === 'mp' && canRecibirMP ? [{
+              key: 'recepcion', label: 'Recepción MP', desc: 'Captura entrada de materia prima',
+              dataId: 'inventario.btn.recepcion-mp', dataRol: 'almacen,compras,admin',
+              onClick: () => setShowRecepcion(true),
+              icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="M3.27 6.96 12 12.01l8.73-5.05" /></svg>,
+            }] : []),
+            ...(activeTab === 'pt' && canEditMP ? [{
+              key: 'agregarpt', label: 'Agregar PT', desc: 'Inventario inicial de producto terminado',
+              dataId: 'inventario.btn.agregar-pt', dataRol: 'admin',
+              onClick: () => setShowAgregarPT(true),
+              icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>,
+            }] : []),
+          ]}
+          importExportNode={(
+            <ImportExportPrint
+              exportUrl={() => api.urlExportInv(activeTab === 'pt' ? 'pt' : 'mp', activeFilter)}
+              printUrl={() => api.urlPrintInv(activeTab === 'pt' ? 'pt' : 'mp', activeFilter)}
+              importEndpoint={canEditMP ? (activeTab === 'pt' ? api.urlImportInvPT() : (api.urlImportInv && api.urlImportInv())) : null}
+              onImported={(data) => { setASheetOpen(false); if (data && data.importId) setImportPreview({ ...data, tipo: activeTab === 'pt' ? 'pt' : 'mp' }); else reloadInv(); }}
+              permisos={{ import: canEditMP }}
+            />
+          )}
         />
       )}
 

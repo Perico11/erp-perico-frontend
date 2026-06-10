@@ -7,6 +7,7 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useAuth } from '../../context/AuthContext';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import Fab from '../../components/ui/Fab';
 
 /* DevolucionesMPPage — Capa 3 (Arely / rol compras).
    Devoluciones de MATERIA PRIMA al proveedor. Flujo SEPARADO del de PT.
@@ -185,10 +186,10 @@ export default function DevolucionesMPPage() {
         {/* tsub del mockup: "MP a proveedor · N por gestionar" con conteo en vivo */}
         <div style={S.tsub}>MP a proveedor · {counts.por_gestionar} por gestionar</div>
 
-        <button style={S.newBtn} data-id="devoluciones.btn.nueva" data-rol="compras,admin" onClick={() => setCrear(true)}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
-          Nueva devolución
-        </button>
+        {/* Paquete MOCKUP 8 (lp-createbtn): en móvil el botón inline se va —
+            lo cubre el FAB flotante (mismo handler). */}
+        <Fab label="Nueva devolución" dataId="devoluciones.fab.nueva" dataRol="compras,admin"
+          onClick={() => setCrear(true)} />
 
         <PageTabs tabs={tabs} activeTab={tab} onChange={setTab} style={{ marginBottom: 14 }} />
 

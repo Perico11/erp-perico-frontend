@@ -19,6 +19,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import PageTabs from '../../components/ui/PageTabs';
 /* Modales reales del flujo OC (Sprint AC) — se REUSAN tal cual, sin tocarlos. */
 import NewOCModal from './components/NewOCModal';
+import Fab from '../../components/ui/Fab';
 import AprobarOCModal from './components/AprobarOCModal';
 import RegistrarPagoModal from './components/RegistrarPagoModal';
 import EditOCModal from './components/EditOCModal';
@@ -524,7 +525,9 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         isDesktop={isDesktop}
         role={user?.rol}
         can={canForScreen}
-        onNuevaOC={() => setShowNew(true)}
+        /* Paquete MOCKUP 8 (lp-createbtn): en móvil el inline "Levantar OC"
+           se oculta — lo cubre el FAB flotante de abajo. */
+        onNuevaOC={isDesktop ? () => setShowNew(true) : undefined}
         onAprobarOC={(cod) => openModal(cod, 'aprobar')}
         onEditarOC={(cod) => openModal(cod, 'editar')}
         onEliminarOC={(cod) => openModal(cod, 'eliminar')}
@@ -533,6 +536,12 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) setPrintOC(oc); }}
         onVerComprobante={(cod) => { const oc = findOC(cod); if (oc) window.open(`/api/compras/oc/comprobante/${oc.id}`, '_blank'); }}
       />
+
+      {/* FAB móvil (paquete MOCKUP 8) — misma acción que "Levantar OC" */}
+      {canForScreen('compras') && (
+        <Fab label="Nueva OC" dataId="compras.fab.levantar-oc" dataRol="compras,admin"
+          onClick={() => setShowNew(true)} />
+      )}
 
       {printOC && <PrintOCOverlay oc={printOC} onClose={() => setPrintOC(null)} />}
 

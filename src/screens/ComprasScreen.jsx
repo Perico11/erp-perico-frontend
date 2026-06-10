@@ -78,8 +78,10 @@ export default function ComprasScreen({
             }}>{l} · {cnt(k)}</button>
           ))}
         </div>
-        {can('compras') && (
-          <button data-id="compras.btn.levantar-oc" data-rol={role} onClick={() => onNuevaOC?.()} style={{ ...btn('primary'), flex: '0 0 auto', height: 40, padding: '0 15px', marginLeft: isDesktop ? 'auto' : 0 }}>
+        {/* Paquete MOCKUP 8 (lp-createbtn): si el caller no pasa onNuevaOC
+            (móvil → lo cubre el FAB), el botón inline no se renderiza. */}
+        {can('compras') && onNuevaOC && (
+          <button data-id="compras.btn.levantar-oc" data-rol={role} onClick={() => onNuevaOC()} style={{ ...btn('primary'), flex: '0 0 auto', height: 40, padding: '0 15px', marginLeft: isDesktop ? 'auto' : 0 }}>
             <Ico d={I_PLUS} s={16} /> Levantar OC
           </button>
         )}

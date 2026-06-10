@@ -10,6 +10,7 @@ import ProduccionFlow from '../produccion/ProduccionFlow';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import PruebaBadge from '../../components/ui/PruebaBadge';
+import Fab from '../../components/ui/Fab';
 import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
 
 /* ── Iconos line (sin emojis) — verde Claude Design ──────────────────────
@@ -1445,7 +1446,9 @@ export default function OrdenesPage() {
               </button>
             ))}
           </div>
-          {mainTab === 'ordenes' && canManage && (
+          {/* Paquete MOCKUP 8 (lp-createbtn): inline solo en escritorio —
+              en móvil lo cubre el FAB flotante. */}
+          {mainTab === 'ordenes' && canManage && isDesktop && (
             <button
               className="ordx-btn-primary"
               style={S.btnNew}
@@ -1457,6 +1460,11 @@ export default function OrdenesPage() {
             </button>
           )}
         </div>
+        {/* FAB móvil (paquete MOCKUP 8) — misma acción que "Nueva orden" */}
+        {mainTab === 'ordenes' && canManage && (
+          <Fab label="Nueva orden" dataId="ordenes.fab.nueva" dataRol="admin,tecnico"
+            onClick={() => setShowNewModal(true)} />
+        )}
 
         {/* Subtítulo en vivo (mockup .tsub) */}
         <div style={S.tsub}>
