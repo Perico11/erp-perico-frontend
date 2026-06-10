@@ -1,11 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
-import PageTabs from '../../components/ui/PageTabs';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import PushSettings from '../../components/PushSettings';
+import { getPushPermission } from '../../utils/pushNotifications';
 import SegmentedControl from '../../components/ui/SegmentedControl';
 
 const S = {
@@ -35,6 +35,40 @@ const S = {
     textTransform: 'uppercase', letterSpacing: '.04em',
   }),
   loading: { textAlign: 'center', padding: '40px 0', fontSize: 13, color: 'var(--lp-text-tertiary)' },
+  /* Card colapsable de push (decisión owner jun 2026: push para TODOS los roles) */
+  pushCard: {
+    background: 'var(--lp-bg-raised)',
+    border: '1.5px solid var(--lp-border-subtle)',
+    borderRadius: 'var(--lp-radius)',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  pushHeader: {
+    display: 'flex', alignItems: 'center', gap: 10,
+    padding: '12px 14px', minHeight: 48,
+    cursor: 'pointer', userSelect: 'none',
+    fontFamily: 'var(--lp-font-sans)',
+  },
+  pushTitle: { fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)', flex: 1, minWidth: 0 },
+  pushBadge: (perm) => ({
+    fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 4, flexShrink: 0,
+    textTransform: 'uppercase', letterSpacing: '.04em',
+    background: perm === 'granted' ? 'var(--lp-success-100)' :
+                perm === 'denied' ? 'var(--lp-danger-100)' :
+                perm === 'unsupported' ? 'var(--lp-bg-sunken)' : 'var(--lp-warning-100)',
+    color:      perm === 'granted' ? 'var(--lp-success-700)' :
+                perm === 'denied' ? 'var(--lp-danger-700)' :
+                perm === 'unsupported' ? 'var(--lp-text-secondary)' : 'var(--lp-warning-700)',
+  }),
+};
+
+/* Etiqueta del estado del permiso de push en el navegador:
+   activado / bloqueado por el navegador / no soportado / sin activar */
+const PUSH_PERM_LABEL = {
+  granted: 'Activadas',
+  denied: 'Bloqueadas',
+  unsupported: 'No soportado',
+  default: 'Sin activar',
 };
 
 const SEV_BADGE = {
@@ -119,10 +153,27 @@ function humanizar(txt) {
 
 export default function NotificacionesPage() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('alertas'); /* alertas | configuracion */
+  /* Sección colapsable "Notificaciones push en este dispositivo" — visible
+     para TODOS los roles (esta pantalla no tiene RoleRoute). Cerrada por
+     default para no empujar las alertas hacia abajo. */
+  const [pushOpen, setPushOpen] = useState(false);
+  const [pushPerm, setPushPerm] = useState(getPushPermission());
   const [filterSev, setFilterSev] = useState('todas');
   const [filterArea, setFilterArea] = useState('todas');
   const { data, loading, reload } = useApiData(() => api.getNotificaciones(), null, 30000);
+
+  /* Refrescar el badge del permiso: al volver el foco (pudo cambiar en
+     ajustes del navegador) y cuando PushSettings lo pide tras "Activar"
+     (evento 'pp-push-permission'). */
+  useEffect(() => {
+    const sync = () => setPushPerm(getPushPermission());
+    window.addEventListener('focus', sync);
+    window.addEventListener('pp-push-permission', sync);
+    return () => {
+      window.removeEventListener('focus', sync);
+      window.removeEventListener('pp-push-permission', sync);
+    };
+  }, []);
 
   /* Realtime: recargar cuando hay cambios de inventario, OC o trazabilidad (QC) */
   useRealtimeSync({
@@ -159,40 +210,39 @@ export default function NotificacionesPage() {
     <div>
       <TopBar title="Alertas y Notificaciones" />
       <div style={S.wrap}>
-        {/* Tabs Alertas / Configuración */}
-        <PageTabs
-          tabs={[
-            { id: 'alertas', label: 'Alertas activas', style: (a) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: a ? 700 : 500,
-              color: a ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: a ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap',
-              fontFamily: 'var(--lp-font-sans)', marginBottom: -1.5, flexShrink: 0,
-            }) },
-            { id: 'configuracion', label: 'Configurar push', style: (a) => ({
-              padding: '10px 16px', fontSize: 13, fontWeight: a ? 700 : 500,
-              color: a ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
-              background: 'none', border: 'none',
-              borderBottom: a ? '2px solid var(--lp-brand-600)' : '2px solid transparent',
-              cursor: 'pointer', whiteSpace: 'nowrap',
-              fontFamily: 'var(--lp-font-sans)', marginBottom: -1.5, flexShrink: 0,
-            }) },
-          ]}
-          activeTab={tab}
-          onChange={setTab}
-          style={{
-            display: 'flex', gap: 0,
-            borderBottom: '1.5px solid var(--lp-border-subtle)',
-            marginBottom: 16,
-            overflowX: 'auto', WebkitOverflowScrolling: 'touch',
-            scrollbarWidth: 'none', msOverflowStyle: 'none',
-          }}
-        />
+        {/* DECISIÓN OWNER (jun 2026): push para TODOS los roles — cada quien
+            activa en su dispositivo y solo recibe eventos de su pipeline
+            (gate por rol en utils/pushNotifications.js). Card colapsable en
+            vez de tab para que conviva con las alertas sin ocultarlas. */}
+        <div style={S.pushCard}>
+          <div
+            style={S.pushHeader}
+            role="button"
+            tabIndex={0}
+            aria-expanded={pushOpen}
+            aria-label="Notificaciones push en este dispositivo"
+            onClick={() => setPushOpen(o => !o)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setPushOpen(o => !o); } }}
+          >
+            {/* Campana (SVG line, sin emojis) */}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--lp-brand-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0 }}>
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+            <span style={S.pushTitle}>Notificaciones push en este dispositivo</span>
+            <span style={S.pushBadge(pushPerm)}>{PUSH_PERM_LABEL[pushPerm] || PUSH_PERM_LABEL.default}</span>
+            {/* Chevron */}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--lp-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ flexShrink: 0, transform: pushOpen ? 'rotate(180deg)' : 'none', transition: 'transform .15s ease' }}>
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </div>
+          {pushOpen && (
+            <div style={{ padding: '0 14px 14px' }}>
+              <PushSettings embedded />
+            </div>
+          )}
+        </div>
 
-        {tab === 'configuracion' && <PushSettings />}
-
-        {tab === 'alertas' && <>
         <div style={S.metric}>
           <div style={S.metricCard('var(--lp-brand-600)')}>
             <div style={S.metricVal}>{k.total}</div>
@@ -289,7 +339,6 @@ export default function NotificacionesPage() {
             );
           })
         )}
-        </>}
       </div>
     </div>
   );

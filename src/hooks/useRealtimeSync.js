@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { dispatchPushFromEvent } from '../utils/pushNotifications';
+import { dispatchPushFromEvent, getCurrentRol } from '../utils/pushNotifications';
 
 /**
  * Hook de sincronización en tiempo real con WebSocket del backend.
@@ -108,9 +108,15 @@ export function useRealtimeSync(handlers = {}) {
           } catch (e) {
             console.warn('[WS] onAny falló:', e?.message);
           }
-          /* Push notifications del navegador para eventos críticos */
+          /* Push notifications del navegador para eventos críticos.
+             GATE POR ROL (decisión owner jun 2026): se pasa el rol del usuario
+             para que el dispatch filtre por pipeline (PUSH_TIPO_ROLES). Aquí
+             NO podemos usar useAuth — AuthContext importa este hook (ciclo de
+             imports) — así que el rol viene de la capa de push: sessionStorage
+             'pp_user' (escrito por PushSettings al montar con sesión) con
+             auto-resolución vía GET /api/session si falta. */
           try {
-            dispatchPushFromEvent(evento, msg.payload, navigateRef.current);
+            dispatchPushFromEvent(evento, msg.payload, navigateRef.current, getCurrentRol());
           } catch (e) { /* no romper sync por fallo de notif */ }
         } catch (e) {
           /* mensaje malformado, ignorar */

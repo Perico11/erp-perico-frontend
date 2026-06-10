@@ -5,7 +5,10 @@ import {
   getPushPermission,
   requestPushPermission,
   showPush,
+  rolPuedeRecibir,
+  setCurrentRol,
 } from '../utils/pushNotifications';
+import { useAuth } from '../context/AuthContext';
 
 const S = {
   card: {
@@ -59,18 +62,44 @@ const S = {
   actions: { display: 'flex', gap: 8, marginTop: 8 },
 };
 
+/* Catálogo completo de toggles (labels humanos en español). Cada usuario ve
+   SOLO los tipos de su pipeline — el filtro real es rolPuedeRecibir(), que
+   reusa PUSH_TIPO_ROLES/TIPOS_POR_ROL (espejo de server.js). Un técnico no
+   ve "OC vencida"; un recolector solo ve "Lote listo en fábrica". */
 const TIPOS = [
-  { key: 'stockCritico',   label: 'Stock crítico',           sub: 'MP sin existencia' },
-  { key: 'ocVencida',      label: 'OC vencida',              sub: 'Pasó fecha de entrega' },
+  { key: 'stockCritico',   label: 'Stock crítico',           sub: 'MP sin existencia o bajo mínimo' },
+  { key: 'ocVencida',      label: 'OC vencida',              sub: 'Orden de compra pasó la fecha de entrega' },
+  { key: 'ocNueva',        label: 'Solicitudes de OC',       sub: 'Un técnico solicita materia prima' },
   { key: 'devolucion',     label: 'Devoluciones',            sub: 'Cliente devuelve producto' },
-  { key: 'loteEnCamino',   label: 'Lote en camino',          sub: 'Luis escaneó para llevar' },
-  { key: 'qcHold',         label: 'QC retenido',             sub: 'Lote requiere revisión' },
-  { key: 'conteoVarianza', label: 'Conteo con varianza',     sub: 'Diferencia > 5% en cycle count' },
+  { key: 'pedidoNuevo',    label: 'Pedido nuevo',            sub: 'Almacén pide producto a fábrica' },
+  { key: 'qcHold',         label: 'QC retenido',             sub: 'Lote requiere revisión de calidad' },
+  { key: 'loteListo',      label: 'Lote listo en fábrica',   sub: 'Producido o envasado, listo para recolección' },
+  { key: 'loteEnCamino',   label: 'Lote en camino',          sub: 'Recolección rumbo a Almacén Terán' },
+  { key: 'conteoVarianza', label: 'Conteo con varianza',     sub: 'Diferencia > 5% por aprobar' },
+  { key: 'conteoAprobado', label: 'Conteo procesado',        sub: 'Tu sesión de conteo fue aprobada o finalizada' },
 ];
 
-export default function PushSettings() {
+/**
+ * Panel de push — funciona para CUALQUIER rol autenticado (decisión owner
+ * jun 2026), no solo admin. Montado en /notificaciones (todos) y en la zona
+ * admin (AdminPage).
+ * @param {boolean} [embedded] — sin chrome de card propio (cuando ya vive
+ *   dentro de una card colapsable, ej. NotificacionesPage).
+ */
+export default function PushSettings({ embedded = false }) {
   const [perm, setPerm] = useState(getPushPermission());
   const [settings, setSettings] = useState(getPushSettings());
+
+  /* useAuth defensivo — mismo patrón que useNavigate en useRealtimeSync:
+     si algún mount quedara fuera del AuthProvider (tests), no rompemos. */
+  let auth = null;
+  try { auth = useAuth(); } catch { /* sin provider: rol desconocido */ }
+  const rol = auth?.user?.rol || null;
+
+  /* Write-through del rol a sessionStorage: la capa de dispatch
+     (useRealtimeSync → dispatchPushFromEvent) corre fuera del AuthContext
+     y lee 'pp_user' para el gate por pipeline. */
+  useEffect(() => { if (rol) setCurrentRol(rol); }, [rol]);
 
   useEffect(() => {
     const onVis = () => setPerm(getPushPermission());
@@ -78,11 +107,16 @@ export default function PushSettings() {
     return () => window.removeEventListener('focus', onVis);
   }, []);
 
+  /* Solo los toggles del pipeline del rol (admin ve todos) */
+  const tiposVisibles = TIPOS.filter(t => rolPuedeRecibir(t.key, rol));
+
   const toggle = (key) => {
     const next = setPushSettings({ [key]: !settings[key] });
     setSettings(next);
   };
 
+  /* Notification.requestPermission() DENTRO del click (gesto de usuario —
+     requisito de los navegadores móviles para mostrar el prompt). */
   const pedirPermiso = async () => {
     const r = await requestPushPermission();
     setPerm(r);
@@ -90,13 +124,17 @@ export default function PushSettings() {
       const next = setPushSettings({ enabled: true });
       setSettings(next);
     }
+    /* Avisar a contenedores (header colapsable de NotificacionesPage) que
+       el estado del permiso cambió, para refrescar su badge. */
+    try { window.dispatchEvent(new Event('pp-push-permission')); } catch {}
   };
 
   const probar = () => {
+    /* Sin `tipo`: la prueba no se gatea por rol ni por toggle de evento —
+       cualquier usuario puede verificar que su dispositivo recibe push. */
     const result = showPush({
-      tipo: 'stockCritico',
       title: 'Notificación de prueba',
-      body: 'Si ves esto, las notificaciones están funcionando ✓',
+      body: 'Si ves esto, las notificaciones están funcionando',
       tag: 'test-' + Date.now(),
     });
     if (!result) {
@@ -112,15 +150,18 @@ export default function PushSettings() {
   };
 
   return (
-    <div style={S.card}>
-      <div style={S.header}>
-        <div style={S.title}>Notificaciones del navegador</div>
-        {permBadge()}
-      </div>
+    <div style={embedded ? { fontFamily: 'var(--lp-font-sans)' } : S.card}>
+      {!embedded && (
+        <div style={S.header}>
+          <div style={S.title}>Notificaciones del navegador</div>
+          {permBadge()}
+        </div>
+      )}
 
       <div style={S.desc}>
-        Recibe alertas en tu escritorio cuando ocurren eventos críticos del sistema,
-        incluso si tienes otra pestaña activa.
+        Recibe alertas en este dispositivo (escritorio o celular) cuando ocurren
+        eventos de tu pipeline, incluso con la app en segundo plano. Solo verás
+        los eventos que involucran tu rol.
       </div>
 
       {perm === 'unsupported' && (
@@ -181,10 +222,10 @@ export default function PushSettings() {
           </div>
 
           <div style={{ marginTop: 14, marginBottom: 4, fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.06em' }}>
-            Eventos a notificar
+            Eventos a notificar{rol && rol !== 'admin' ? ' (según tu rol)' : ''}
           </div>
 
-          {TIPOS.map(t => (
+          {tiposVisibles.map(t => (
             <div key={t.key} style={S.row}>
               <div>
                 <div style={S.rowLabel}>{t.label}</div>
