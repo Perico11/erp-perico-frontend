@@ -12,7 +12,6 @@
    ════════════════════════════════════════════════════════════════════════ */
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import TopBar from '../../components/layout/TopBar';
-import PageTabs from '../../components/ui/PageTabs';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
@@ -25,7 +24,7 @@ import PedidoLoteActions from '../../components/PedidoLoteActions';
 import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import { bucketOfSublote } from '../recoleccion/RecoleccionPage';
 import {
-  calcularEstadoLote, getAccionesLote, getAccionesSublote,
+  calcularEstadoLote, getAccionesSublote,
   LABELS_ACCION_SUBLOTE, ESTADO_SUBLOTE_LABEL, ESTADO_SUBLOTE_COLOR,
   ESTADO_LOTE_LABEL, ESTADO_LOTE_COLOR,
 } from '../../lib/loteTransiciones';
@@ -103,12 +102,17 @@ function PipelineRow({ estado }) {
 }
 
 /* ── Fila de sublote (etapa recolección → recepción → reenvasado) ─────── */
-function SubloteRow({ s, rol, busy, onAccion }) {
+function SubloteRow({ s, rol, busy, onAccion, cubiertasNivelLote }) {
   const bucket = bucketOfSublote(s);
-  /* En 'entregados' no mostramos acción (ya llegó a Terán). */
+  /* En 'entregados' no mostramos acción (ya llegó a Terán).
+     FIX jun 2026 (feedback owner — duplicados): si la MISMA acción ya tiene
+     botón a nivel LOTE en esta card (Enviar a recolectar / Recibir en Terán /
+     Re-envasar TOTE), NO se repite por sublote. Cada acción aparece UNA vez. */
   const acciones = bucket === 'entregados'
     ? []
-    : getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote');
+    : getAccionesSublote(s, rol)
+        .filter(a => a !== 'cancelarSublote')
+        .filter(a => !(cubiertasNivelLote && cubiertasNivelLote.has(a)));
   const color = ESTADO_SUBLOTE_COLOR[s.estado] || 'var(--lp-text-tertiary)';
   const label = ESTADO_SUBLOTE_LABEL[s.estado] || s.estado || '—';
   const qtyTxt = [s.qty != null ? `${s.qty} ${s.tipo || 'cub'}` : null, s.lit ? `${s.lit} L` : null].filter(Boolean).join(' · ');
@@ -154,6 +158,33 @@ function FlujoCard({ item, lotes, rol, userName, isDesktop, onSubAccion, busySub
   /* El pedido/orden que PedidoLoteActions usa para resolver el lote por id */
   const pedidoForActions = source || (lote ? { id: lote.ordenId || lote.pedidoId || lote.id, producto, cantidad, estado: lote.estado, esPrueba: prueba } : null);
 
+  /* FIX jun 2026 (feedback owner — duplicados): acciones que YA tienen botón a
+     nivel LOTE en PedidoLoteActions (espejo de sus condiciones). Las filas de
+     sublote no las repiten — cada acción aparece UNA sola vez por card. */
+  const cubiertasNivelLote = useMemo(() => {
+    const set = new Set();
+    if (!lote) return set;
+    const subsAll = lote.sublotes || [];
+    const esAlmAdmin = rol === 'almacen' || rol === 'admin';
+    if (esAlmAdmin && lote.estado === 'envasado' && subsAll.some(x => x && x.estado === 'envasado' && !x.esMerma)) {
+      set.add('marcarRecoleccion'); /* cubierto por "Enviar a recolectar" */
+    }
+    if (esAlmAdmin && subsAll.some(x => x && x.estado === 'en_camino' && !x.esMerma)) {
+      set.add('escanearRecibirTeran'); /* cubierto por "Recibir en Terán · escanear QR" */
+    }
+    const hayToteActivo = subsAll.some(x => {
+      if (!x || x.esMerma) return false;
+      const esTote = x.claseSublote === 'tote' || x.tipo === 'tote' || x.fase === 1;
+      if (!esTote || x.estado === 'tote_vaciado' || x.estado === 'cancelado') return false;
+      const lr = typeof x.litrosRestante === 'number' ? x.litrosRestante : Number(x.lit) || 0;
+      return lr > 0.5 && (x.ub === 'teran' || x.estado === 'tote_activo');
+    });
+    if (hayToteActivo && (esAlmAdmin || rol === 'tecnico')) {
+      set.add('reenvasarTote'); /* cubierto por "Re-envasar TOTE en Terán" */
+    }
+    return set;
+  }, [lote, rol]);
+
   return (
     <div style={isDesktop ? S.cardDesktop : S.card}>
       <div style={S.cardHead}>
@@ -177,6 +208,7 @@ function FlujoCard({ item, lotes, rol, userName, isDesktop, onSubAccion, busySub
           onError={onLoteError}
           onEnvasarInline={onEnvasarInline}
           onReenvasarInline={onReenvasarInline}
+          ocultarVerSublotes
         />
       )}
 
@@ -184,7 +216,7 @@ function FlujoCard({ item, lotes, rol, userName, isDesktop, onSubAccion, busySub
       {sublotes.length > 0 && (
         <div style={S.subList}>
           {sublotes.map(s => (
-            <SubloteRow key={s.cod} s={s} rol={rol} busy={busySub === s.cod} onAccion={onSubAccion} />
+            <SubloteRow key={s.cod} s={s} rol={rol} busy={busySub === s.cod} onAccion={onSubAccion} cubiertasNivelLote={cubiertasNivelLote} />
           ))}
         </div>
       )}
@@ -200,7 +232,6 @@ export default function FlujoPage() {
   const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
 
-  const [tab, setTab] = useState('activos');     /* activos | accionables | todos */
   const [toast, setToast] = useState(null);
   const [busySub, setBusySub] = useState(null);
   const [scanAccion, setScanAccion] = useState(null);   /* escanearRecoger | escanearRecibirTeran */
@@ -280,28 +311,14 @@ export default function FlujoPage() {
     return items;
   }, [lotes, pedidos, ordenes]);
 
-  const itemHasActions = useCallback((it) => {
-    /* FIX jun 2026 (auditoría M3): evaluar acciones sobre el estado ROLL-UP del
-       lote (el mismo que muestra el badge/pipeline), no el estado persistido
-       crudo — si divergen, el filtro "Para mí" mentía respecto a la card. */
-    const estObj = it.lote
-      ? { ...it.lote, estado: calcularEstadoLote(it.lote) || it.lote.estado }
-      : (it.source || {});
-    const loteAcc = getAccionesLote(estObj, rol).filter(a => a !== 'cancelarLote');
-    if (loteAcc.length > 0) return true;
-    return (it.lote?.sublotes || []).some(s => !s.esMerma && getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote').length > 0);
-  }, [rol]);
-
+  /* FIX jun 2026 (feedback owner — duplicados): SIN pestañas. Flujo es UNA
+     sola lista de lo ACTIVO; "Para mí"/"Todos" duplicaban lo que Pedidos ya
+     resuelve (el historial vive en Pedidos > Historial). */
   const TERMINALES = ['entregado', 'cancelado', 'rechazado'];
-  const visibles = useMemo(() => {
-    return flowItems.filter(it => {
-      const est = it.lote ? (calcularEstadoLote(it.lote) || it.lote.estado) : (it.source?.estado);
-      if (tab === 'todos') return true;
-      if (tab === 'accionables') return itemHasActions(it);
-      /* activos: ocultar terminales */
-      return !TERMINALES.includes(est);
-    });
-  }, [flowItems, tab, itemHasActions]);
+  const visibles = useMemo(() => flowItems.filter(it => {
+    const est = it.lote ? (calcularEstadoLote(it.lote) || it.lote.estado) : (it.source?.estado);
+    return !TERMINALES.includes(est);
+  }), [flowItems]);
 
   /* ── Acción de sublote ── */
   const onSubAccion = useCallback(async (s, accion, meta) => {
@@ -354,22 +371,14 @@ export default function FlujoPage() {
   const onLoteSuccess = useCallback((msg) => { reloadAll(); if (msg) showToast(typeof msg === 'string' ? msg : 'Listo'); }, [reloadAll, showToast]);
   const onLoteError = useCallback((msg) => showToast(msg || 'Error', true), [showToast]);
 
-  const TABS = [
-    { id: 'activos', label: 'Activos' },
-    { id: 'accionables', label: 'Para mí' },
-    { id: 'todos', label: 'Todos' },
-  ];
-
   return (
     <>
       <TopBar title="Flujo" />
       <div style={isDesktop ? S.wrapD : S.wrap}>
-        <PageTabs tabs={TABS.map(t => ({ ...t, style: (a) => S.tab(a) }))} activeTab={tab} onChange={setTab} style={S.tabs} />
-
         {visibles.length === 0 ? (
           <div style={S.empty}>
             <IcoCheck s={36} />
-            <div style={{ marginTop: 10 }}>{tab === 'accionables' ? 'Nada pendiente para tu rol ahora.' : 'Sin lotes en este filtro.'}</div>
+            <div style={{ marginTop: 10 }}>Sin lotes activos. Cuando se cree un pedido u orden, aparecerá aquí con su pipeline.</div>
           </div>
         ) : (
           <div style={isDesktop ? S.grid : undefined}>
@@ -438,13 +447,6 @@ export default function FlujoPage() {
 const S = {
   wrap: { padding: '4px 16px 100px' },
   wrapD: { padding: '8px 24px 48px' },
-  tabs: { display: 'flex', gap: 6, marginBottom: 14, overflowX: 'auto', scrollbarWidth: 'none' },
-  tab: (active) => ({
-    flexShrink: 0, padding: '9px 14px', borderRadius: 999, border: 'none', cursor: 'pointer',
-    fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: active ? 600 : 500,
-    background: active ? 'var(--lp-brand-600)' : 'var(--lp-bg-sunken)',
-    color: active ? '#fff' : 'var(--lp-text-tertiary)', whiteSpace: 'nowrap', minHeight: 44,
-  }),
   /* 440px: más aire para el pipeline de 11 pasos (feedback owner jun 2026) */
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(440px, 1fr))', gap: 14, alignItems: 'start' },
   card: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 16, padding: 14, marginBottom: 12 },

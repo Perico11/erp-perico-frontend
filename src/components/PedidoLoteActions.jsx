@@ -171,10 +171,12 @@ function QCInline({ lote, accion, userName, onSuccess, onCancel }) {
   );
 }
 
-export default function PedidoLoteActions({ pedido, lotes, userRol, userName, onSuccess, onError, onEnvasarInline, onReenvasarInline }) {
+export default function PedidoLoteActions({ pedido, lotes, userRol, userName, onSuccess, onError, onEnvasarInline, onReenvasarInline, ocultarVerSublotes }) {
   /* onEnvasarInline(lote) / onReenvasarInline(tote, lote): si se pasan (pantalla
      /flujo), los botones Envasar / Re-envasar abren el modal EN SITIO en vez de
-     navegar a otra pestaña. Sin ellos, conservan el navigate (PedidosPage etc.). */
+     navegar a otra pestaña. Sin ellos, conservan el navigate (PedidosPage etc.).
+     ocultarVerSublotes: en /flujo los sublotes ya se listan en la misma card —
+     el botón sería un duplicado (feedback owner jun 2026). */
   const navigate = useNavigate();
   const [busy, setBusy] = useState('');
   const [qcMode, setQcMode] = useState(null); /* 'aprobarQC' | 'rechazarQC' | null */
@@ -488,7 +490,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>Envasar
               </button>
             )}
-            {tieneSublotes && (
+            {tieneSublotes && !ocultarVerSublotes && (
               <button style={S.btn('ghost')} onClick={() => navigate('/stock-fabrica?lote=' + encodeURIComponent(lote.codigoLote || lote.codigo || lote.id))}>
                 Ver sublotes
               </button>
