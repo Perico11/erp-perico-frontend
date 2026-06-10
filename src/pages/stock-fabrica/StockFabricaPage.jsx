@@ -1010,12 +1010,29 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
             placeholder={`Ej: ${Math.min(maxUnidades, 20)}`}
             value={qty} onChange={e => setQty(e.target.value)} />
 
-          {qty && parseInt(qty) > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 8 }}>
-              {parseInt(qty)} {tipo}(s) x {litPorUnidad}L = <strong>{litTotal.toFixed(1)} L</strong>
-              {' · '}Quedaran en tote: <strong>{Math.max(0, litDisponible - litTotal).toFixed(1)} L</strong>
-            </div>
-          )}
+          {qty && parseInt(qty) > 0 && (() => {
+            const restanteTrasReenv = Math.max(0, litDisponible - litTotal);
+            const seraMerma = restanteTrasReenv > 0.01 && restanteTrasReenv < 1;
+            return (
+              <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 8 }}>
+                {parseInt(qty)} {tipo}(s) x {litPorUnidad}L = <strong>{litTotal.toFixed(1)} L</strong>
+                {' · '}Quedaran en tote: <strong>{restanteTrasReenv.toFixed(1)} L</strong>
+                {/* Regla owner jun 2026: remanente < 1L no es envasable — el server
+                    lo registra como merma y vacía el TOTE (el lote puede concluir). */}
+                {seraMerma && (
+                  <div style={{ marginTop: 6, color: 'var(--lp-warning-700)', fontWeight: 600 }}>
+                    El remanente de {restanteTrasReenv.toFixed(2)} L es menor a 1 L: se registrará como
+                    MERMA automática y el TOTE quedará vaciado (el lote podrá concluir).
+                  </div>
+                )}
+                {restanteTrasReenv <= 0.01 && (
+                  <div style={{ marginTop: 6, color: 'var(--lp-brand-700)', fontWeight: 600 }}>
+                    El TOTE quedará completamente vaciado.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
         <div style={S.modalFooter}>
           <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
