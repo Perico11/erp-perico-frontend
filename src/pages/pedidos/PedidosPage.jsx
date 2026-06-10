@@ -12,6 +12,7 @@ import Cronometro from '../../components/Cronometro';
 import NDAModal from '../../components/NDAModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
 import PedidoLoteActions from '../../components/PedidoLoteActions';
+import { ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import {
   ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
@@ -200,7 +201,7 @@ const S = {
   pipelineLine: (done, accent) => ({
     flex: 1, height: 2,
     background: done ? accent : 'var(--lp-border-subtle)',
-    minWidth: 12, marginBottom: 20,
+    minWidth: 10, marginBottom: 20,
     transition: 'background .2s',
   }),
 };
@@ -215,7 +216,10 @@ const PIPELINE_FASES = [
   { key: 'produccion', label: 'Producción', estados: ['en_produccion', 'producido', 'qc_hold', 'qc_aprobado'] },
   { key: 'envasado',   label: 'Envasado',   estados: ['en_envasado', 'envasado'] },
   { key: 'camino',     label: 'En camino',  estados: ['en_recoleccion', 'en_camino'] },
-  { key: 'entregado',  label: 'Entregado',  estados: ['en_almacen', 'entregado'] },
+  /* jun 2026 (regla owner): en_almacen = recibido en Terán pero con TOTE por
+     reenvasar — el pedido sigue ACTIVO. Fase propia para que se vea que falta. */
+  { key: 'teran',      label: 'En Terán',   estados: ['en_almacen'] },
+  { key: 'entregado',  label: 'Entregado',  estados: ['entregado'] },
 ];
 
 /* Devuelve el índice de fase actual del pedido (0..5) o -1 si no aplica */
@@ -340,6 +344,13 @@ export default function PedidosPage() {
      así que sin esto el trabajo completado por orden directa quedaba invisible
      en Pedidos. Polling lento — el historial no es time-critical. */
   const { data: ordData, reload: reloadOrd } = useApiData(() => api.getOrdenes(), [], 30000);
+
+  /* FIX jun 2026 (feedback owner): "Re-envasar TOTE" abre el modal EMERGENTE
+     aquí mismo (como el envasado de fábrica), ya no navega a otra página. */
+  const { data: envData } = useApiData(() => api.getEnvases(), null, 30000);
+  const envases = envData?.data || envData || null;
+  const [reenvasarModal, setReenvasarModal] = useState(null); /* lote */
+  const [printQR, setPrintQR] = useState(null);
 
   /* Realtime: refrescar cuando hay cambios */
   useRealtimeSync({
@@ -682,8 +693,8 @@ export default function PedidosPage() {
           <div style={{
             display: 'grid',
             /* FIX jun 2026 (feedback owner): 340px cortaba el último paso del
-               pipeline ("Entregado") en desktop. 420px = caben las 6 fases. */
-            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(420px, 1fr))' : '1fr',
+               pipeline en desktop. 460px = caben las 7 fases (incl. En Terán). */
+            gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(460px, 1fr))' : '1fr',
             gap: 12,
           }}>
           {listaOrdenada.map(p => {
@@ -829,6 +840,7 @@ export default function PedidosPage() {
                     setErr('');
                   }}
                   onError={(msg) => setErr(msg)}
+                  onReenvasarInline={(tote, lote) => setReenvasarModal(lote)}
                 />
               </div>
             );
@@ -844,6 +856,23 @@ export default function PedidosPage() {
           onCreated={() => { setShowNuevo(false); setPrefillProducto(null); reload(); }}
         />
       )}
+
+      {/* Re-envasado de TOTE inline (modal emergente, como el envasado de fábrica) */}
+      {reenvasarModal && (
+        <ReenvasadoModal
+          lote={reenvasarModal}
+          envases={envases}
+          userName={user?.nombre || '?'}
+          onClose={() => setReenvasarModal(null)}
+          onSuccess={(payload) => {
+            setReenvasarModal(null);
+            reload(); reloadTraz();
+            const s = payload?.sublotes?.[0];
+            if (s?.qrPayload || s?.cod) setPrintQR(payload);
+          }}
+        />
+      )}
+      {printQR && <SubloteQRPrintModal payload={printQR} onClose={() => setPrintQR(null)} />}
 
       {/* Aviso NDA antes de iniciar producción — fórmula = secreto industrial */}
       {pendingProd && (

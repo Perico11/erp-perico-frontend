@@ -73,6 +73,8 @@ export const ESTADO_LOTE_LABEL = {
   en_envasado:    'En envasado',
   envasado:       'Envasado',
   en_proceso:     'En proceso de entrega',
+  /* jun 2026: TOTE en Terán con litros por reenvasar — activo hasta vaciarlo */
+  en_almacen:     'En Terán · por reenvasar',
   entregado:      'Entregado',
   cancelado:      'Cancelado',
 };
@@ -98,6 +100,7 @@ export const ESTADO_LOTE_COLOR = {
   en_envasado:    '#06B6D4',
   envasado:       '#0EA5E9',
   en_proceso:     'var(--lp-warning-500)',
+  en_almacen:     '#7C3AED', /* púrpura TOTE — pendiente de reenvasado */
   entregado:      'var(--lp-success-600)',
   cancelado:      'var(--lp-text-tertiary)',
 };
@@ -170,13 +173,20 @@ export function calcularEstadoLote(lote) {
   const terminales = ['en_stock_teran','tote_vaciado','cancelado'];
   if (subs.every(s => terminales.includes(s.estado))) return 'entregado';
 
-  /* FIX jun 2026 (L4): sync con backend — TOTE activo en Terán cuenta
-     como entregado (Josué ya lo recibió, lo está consumiendo). */
-  const todosEntregadosOToteTeran = subs.every(s =>
+  /* REGLA jun 2026 (decisión owner, reemplaza L4; sync con backend): un TOTE
+     activo en Terán con litros NO cierra el lote — queda 'en_almacen' (activo,
+     pendiente de reenvasado total) hasta tote_vaciado. */
+  const todosEnTeranOTerminales = subs.every(s =>
     terminales.includes(s.estado) ||
     (s.estado === 'tote_activo' && (s.ub || 'fabrica') === 'teran')
   );
-  if (todosEntregadosOToteTeran) return 'entregado';
+  if (todosEnTeranOTerminales) {
+    const hayToteConLitros = subs.some(s =>
+      s.estado === 'tote_activo' && (s.ub || 'fabrica') === 'teran' &&
+      Number(s.litrosRestante ?? s.lit ?? 0) > 0.5
+    );
+    return hayToteConLitros ? 'en_almacen' : 'entregado';
+  }
 
   const hayToteActivoFabrica = subs.some(s =>
     s.estado === 'tote_activo' &&
