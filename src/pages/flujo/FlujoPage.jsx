@@ -58,8 +58,11 @@ const IcoCheck = ({ s = 15 }) => (<svg width={s} height={s} viewBox="0 0 24 24" 
 
 /* Mapa acción de sublote → presentación del botón */
 const SUB_BTN = {
-  escanearRecoger:      { label: 'Voy por él',          bg: 'var(--lp-brand-600)', Ico: IcoTruck, scan: true },
-  escanearRecibirTeran: { label: 'Recibir (escanear)',  bg: 'var(--lp-info-600)',  Ico: IcoQR,    scan: true },
+  /* DECISIÓN OWNER jun 2026: "Voy por él" NO abre cámara — cambio de status
+     directo (el escaneo de Luis vive en el hero "Leer QR" de Recolección).
+     "Recibir" sí exige el QR físico (recepción en Terán = verificación). */
+  escanearRecoger:      { label: 'Voy por él',          bg: 'var(--lp-brand-600)', Ico: IcoTruck, scan: false },
+  escanearRecibirTeran: { label: 'Recibir',             bg: 'var(--lp-info-600)',  Ico: IcoQR,    scan: true },
   marcarRecoleccion:    { label: 'Listo para recolectar', bg: 'var(--lp-text-tertiary)', Ico: IcoTruck, scan: false },
   reenvasarTote:        { label: 'Re-envasar TOTE',     bg: '#7C3AED',             Ico: IcoQR,    scan: false },
 };
@@ -327,11 +330,11 @@ export default function FlujoPage() {
       if (lote) setReenvasarModal(lote);
       return;
     }
-    if (meta?.scan) {            /* escanearRecoger / escanearRecibirTeran → cámara */
+    if (meta?.scan) {            /* escanearRecibirTeran → cámara (QR físico) */
       setScanAccion(accion);
       return;
     }
-    /* marcarRecoleccion (sin escaneo).
+    /* marcarRecoleccion / escanearRecoger (sin escaneo).
        FIX jun 2026 (censo M3): override FEFO de caducidad — el guard del backend
        bloquea lotes caducados; antes el admin no tenía aquí la ruta de override
        con nota que sí existe en "Enviar a recolectar" (botón que falla sin recurso). */
@@ -357,6 +360,9 @@ export default function FlujoPage() {
         yaConfirmado = true;
       }
     }
+    /* Guard del backend: escanearRecoger exige scanCod===cod. El click en la
+       card ES la confirmación visual del sublote elegido. */
+    if (accion === 'escanearRecoger') payloadExtra = { ...payloadExtra, scanCod: s.cod };
     const label = LABELS_ACCION_SUBLOTE[accion] || accion;
     if (!yaConfirmado) {
       const ok = await confirm(`¿${label}: ${s.cod}?`, { confirmText: label });

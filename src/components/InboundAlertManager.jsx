@@ -12,11 +12,14 @@ import { QRScanner } from './QRModal';
 /* state machine y muestra banners emergentes para que Luis (recolector)*/
 /* y Josué (almacén) compitan por tomar un sublote.                     */
 /*                                                                      */
-/* Comportamiento clave:                                                */
-/*  - El claim del banner ABRE LA CÁMARA — la transición solo viaja con */
-/*    el código físicamente escaneado (decisión owner jun 2026:         */
-/*    "obligalo a scanear"). No hay camino sin QR.                      */
-/*  - El primero en escanear gana — la state machine garantiza que el   */
+/* Comportamiento clave (decisión owner jun 2026, refinada):            */
+/*  - "Voy por él" (Luis, etapa envasado) NO abre cámara: es un cambio  */
+/*    de status directo que los demás ven por el sync de trazabilidad.  */
+/*    El escaneo de Luis vive en el hero "Leer QR" de Recolección.      */
+/*  - "Recibir" (Josué, etapa enCamino) SÍ abre el escáner: la          */
+/*    recepción en Terán es SOLO vía QR físico de la cubeta (regla      */
+/*    original del owner — el escaneo ES la verificación de llegada).   */
+/*  - El primero en tomar gana — la state machine garantiza que el      */
 /*    segundo intento devuelve 409 (estado cambió).                     */
 /*  - Cuando alguien acepta, el WS broadcast de la transición elimina   */
 /*    el banner del otro cliente.                                       */
@@ -128,6 +131,7 @@ function injectAnimCSS() {
 export default function InboundAlertManager() {
   const { user } = useAuth();
   const rol = user?.rol || '';
+  const userName = user?.nombre || '';
   const [alerts, setAlerts] = useState([]);
   const [taking, setTaking] = useState(null); /* cod actualmente en POST */
 
@@ -286,13 +290,15 @@ export default function InboundAlertManager() {
     },
   });
 
-  /* DECISIÓN OWNER jun 2026 ("obligalo a scanear"): el claim del banner YA NO
-     ejecuta la transición con scanCod auto-rellenado (alert.cod) — eso era el
-     único camino que se saltaba el escaneo físico del QR. Ahora el botón abre
-     la CÁMARA (mismo patrón scanIntent de RecoleccionPage) y la transición
-     viaja con el código realmente escaneado. El guard `scanCod===sublote.cod`
-     del state machine se satisface solo si el QR físico coincide. */
-  const [scanFor, setScanFor] = useState(null); /* alert que abrió el escáner */
+  /* DECISIÓN OWNER jun 2026 (refinada — "voy por él no debe abrir la cámara"):
+     - etapa 'envasado' (Luis): "Voy por él" despacha DIRECTO la transición con
+       scanCod = alert.cod (click = confirmación; el cod difundido es el del
+       server desde el fix del broadcast). El status cambia y todos los que
+       ven la trazabilidad lo ven al instante. SIN cámara — el escaneo de Luis
+       vive en el hero "Leer QR" de Recolección.
+     - etapa 'enCamino' (Josué): "Recibir" ABRE el escáner — la recepción en
+       Terán es solo vía QR físico (regla original del owner intacta). */
+  const [scanFor, setScanFor] = useState(null); /* alert que abrió el escáner (solo recibir) */
 
   /* Acción según la ETAPA del banner (no el rol): un banner 'envasado' se
      recoge, un banner 'enCamino' se recibe en Terán. Antes se derivaba del
@@ -301,10 +307,47 @@ export default function InboundAlertManager() {
   const accionDeAlert = (alert) =>
     alert.etapa === 'enCamino' ? 'escanearRecibirTeran' : 'escanearRecoger';
 
-  const handleClaim = useCallback((alert) => {
+  /* Marca un banner como "tomado por otro" y lo purga tras 1.5s (race 409) */
+  const marcarTomado = useCallback((alertId) => {
+    setAlerts(prev => prev.map(a => a.id === alertId
+      ? { ...a, tomadoPor: 'otro usuario' }
+      : a
+    ));
+    setTimeout(() => {
+      setAlerts(prev => prev.filter(a => a.id !== alertId));
+    }, 1500);
+  }, []);
+
+  const handleClaim = useCallback(async (alert) => {
     if (taking || scanFor) return;
-    setScanFor(alert);
-  }, [taking, scanFor]);
+    /* Recibir en Terán → escáner obligatorio */
+    if (alert.etapa === 'enCamino') {
+      setScanFor(alert);
+      return;
+    }
+    /* Voy por él → despacho directo (cambio de status, sin cámara) */
+    setTaking(alert.cod);
+    try {
+      await api.transicionSublote(alert.cod, 'escanearRecoger', {
+        usuario: userName,
+        scanCod: alert.cod,
+      });
+      /* La transición exitosa dispara su propio WS que removerá el banner.
+         FIX U2: removemos por id (cod+etapa) para no purgar OTRO banner del
+         mismo cod en etapa distinta (el banner 'enCamino' de Josué debe quedar). */
+      setAlerts(prev => prev.filter(a => a.id !== alert.id));
+    } catch (e) {
+      const msg = e?.message || '';
+      if (msg.includes('estado') || e?.status === 409) {
+        marcarTomado(alert.id); /* otro lo tomó entre el banner y mi click */
+      } else {
+        console.warn('[Inbound] Error claim:', msg, e?.data);
+        window.alert(`No se pudo tomar el sublote: ${msg}`);
+      }
+    } finally {
+      setTaking(null);
+    }
+  }, [taking, scanFor, userName, marcarTomado]);
 
   const handleScanResult = useCallback(async (result) => {
     const alert = scanFor;
@@ -318,22 +361,18 @@ export default function InboundAlertManager() {
     try {
       /* /api/sublotes/scan resuelve el sublote POR el código escaneado — la
          verdad física manda. Si escanean otro envase, la acción aplica a ese
-         (igual que el escáner hero de Recolección). */
+         (igual que el escáner hero de Recepción). */
       const r = await api.escanearSublote(code, accion);
       const codReal = r?.sublote?.cod || code;
-      /* La transición exitosa dispara su propio WS que removerá el banner.
-         FIX U2: removemos por id (cod+etapa) para no purgar OTRO banner del
-         mismo cod en etapa distinta (ej: Luis recoge → su banner envasado
-         desaparece, pero el banner enCamino para Josué debe quedar). */
       setAlerts(prev => prev.filter(a => !(a.cod === codReal && a.etapa === alert.etapa)));
     } catch (e) {
       const msg = e?.message || '';
       const data = e?.data;
       /* Escanearon el QR del LOTE completo → ofrecer bulk (mismo flujo que
-         RecoleccionPage). El guard anti-robo del backend exige el scanCod. */
+         Recepción). El guard anti-robo del backend exige el scanCod. */
       if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
         const ok = window.confirm(
-          `Escaneaste el QR del LOTE ${data.codigoLote}. ¿Tomar TODOS los sublotes elegibles del lote en una sola acción?`
+          `Escaneaste el QR del LOTE ${data.codigoLote}. ¿Recibir TODOS los sublotes elegibles del lote en una sola acción?`
         );
         if (ok) {
           try {
@@ -341,19 +380,11 @@ export default function InboundAlertManager() {
             setAlerts(prev => prev.filter(a => a.etapa !== alert.etapa || a.loteId !== data.loteId));
           } catch (e2) {
             console.warn('[Inbound] Error bulk claim:', e2?.message, e2?.data);
-            window.alert(`No se pudo tomar el lote: ${e2?.message || 'error'}`);
+            window.alert(`No se pudo recibir el lote: ${e2?.message || 'error'}`);
           }
         }
       } else if (msg.includes('estado') || e?.status === 409) {
-        /* 409 = ya fue tomado por otro entre que vi el banner y escaneé.
-           FIX U2: filtros por id (cod+etapa) */
-        setAlerts(prev => prev.map(a => a.id === alert.id
-          ? { ...a, tomadoPor: 'otro usuario' }
-          : a
-        ));
-        setTimeout(() => {
-          setAlerts(prev => prev.filter(a => a.id !== alert.id));
-        }, 1500);
+        marcarTomado(alert.id); /* otro lo tomó entre el banner y mi escaneo */
       } else {
         console.warn('[Inbound] Error claim:', msg, e?.data);
         window.alert(`No se pudo tomar el sublote: ${msg}`);
@@ -361,7 +392,7 @@ export default function InboundAlertManager() {
     } finally {
       setTaking(null);
     }
-  }, [scanFor]);
+  }, [scanFor, marcarTomado]);
 
   /* FIX U2: dismiss por id, no por cod — cada banner es independiente */
   const handleDismiss = useCallback((alertId) => {
@@ -381,13 +412,14 @@ export default function InboundAlertManager() {
       {alerts.map(a => {
         const yaTomado = !!a.tomadoPor;
         const isBusy = taking === a.cod || scanFor?.id === a.id;
-        /* Label por ETAPA (quien puede actuar va a escanear):
-           - etapa envasado → "Escanear y recoger" (Luis o admin)
-           - etapa enCamino → "Escanear y recibir" (Josué o admin)
-           El botón abre la CÁMARA — ya no despacha a ciegas. */
+        /* Label por ETAPA:
+           - etapa envasado → "Voy por él" (Luis o admin): despacho directo,
+             sin cámara — solo cambia el status para todos.
+           - etapa enCamino → "Recibir" (Josué o admin): abre el escáner —
+             la recepción en Terán exige el QR físico. */
         const labelAccion = a.etapa === 'enCamino'
-          ? 'Escanear y recibir'
-          : 'Escanear y recoger';
+          ? 'Recibir'
+          : 'Voy por él';
         const labelTitulo = rol === 'recolector'
           ? 'Lote listo para recoger'
           : (a.etapa === 'enCamino'
@@ -466,8 +498,8 @@ export default function InboundAlertManager() {
         );
       })}
     </div>
-    {/* Escáner físico OBLIGATORIO para tomar el sublote del banner (decisión
-        owner jun 2026). Mismo componente que Recolección/Recepción. */}
+    {/* Escáner físico — solo para "Recibir" en Terán (etapa enCamino).
+        Mismo componente que Recepción. */}
     {scanFor && (
       <QRScanner
         onResult={handleScanResult}

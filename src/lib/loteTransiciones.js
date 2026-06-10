@@ -53,11 +53,13 @@ export const LABELS_ACCION_LOTE = {
 
 export const LABELS_ACCION_SUBLOTE = {
   /* FIX jun 2026 (bug Luis): labels más naturales por rol/acción.
-     Antes 'Escanear (Luis)' era confuso — Luis no entiende qué dispara.
-     'Voy por él' refleja la intención operativa real: tomar el sublote. */
+     'Voy por él' = Luis toma el sublote (cambio de status directo, sin
+     cámara — el escaneo vive en el hero "Leer QR" de Recolección).
+     'Recibir' = botón único de Josué para PT en camino a Terán (decisión
+     owner jun 2026) — siempre vía QR físico. */
   marcarRecoleccion:    'Marcar listo para recolectar',
   escanearRecoger:      'Voy por él',
-  escanearRecibirTeran: 'Confirmar recepción en Terán',
+  escanearRecibirTeran: 'Recibir',
   reenvasarTote:        'Re-envasar TOTE',
   cancelarSublote:      'Anular sublote',
 };

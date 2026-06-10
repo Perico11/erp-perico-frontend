@@ -233,12 +233,14 @@ export default function RecoleccionPage() {
 
   /* Ejecutar transición de sublote vía state machine */
   const doTransicion = useCallback(async (sublote, accion) => {
-    /* FIX jun 2026: escanearRecoger / escanearRecibirTeran exigen el QR FÍSICO
-       (guard scanCod===cod en el backend). NO se pueden disparar con un botón
-       "a ciegas" — eso devolvía "El código escaneado no coincide con este
-       sublote". El botón ahora ABRE LA CÁMARA con la acción correcta; al leer
-       el QR de la cubeta (o teclear el código) se marca en automático. */
-    if (accion === 'escanearRecoger' || accion === 'escanearRecibirTeran') {
+    /* DECISIÓN OWNER jun 2026 (refinada): "Voy por él" NO abre la cámara —
+       es un cambio de status directo que los demás ven por el sync de
+       trazabilidad. El guard scanCod===cod se satisface con el cod de la
+       card (click = confirmación visual del sublote elegido). El escaneo
+       físico queda como camino paralelo en el hero "Leer QR" (identificar
+       la cubeta correcta entre varias). Recibir en Terán NO vive aquí —
+       es botón único de Josué en Recepción (siempre vía escáner). */
+    if (accion === 'escanearRecibirTeran') {
       setScanIntent(accion);
       setScannerOpen(true);
       return;
@@ -248,7 +250,9 @@ export default function RecoleccionPage() {
     if (!ok) return;
     setBusy(sublote.cod);
     try {
-      await api.transicionSublote(sublote.cod, accion, { usuario: userName });
+      const payload = { usuario: userName };
+      if (accion === 'escanearRecoger') payload.scanCod = sublote.cod;
+      await api.transicionSublote(sublote.cod, accion, payload);
       reload();
       showToast(`${sublote.cod}: ${label.toLowerCase()}`);
     } catch (err) {
@@ -323,7 +327,7 @@ export default function RecoleccionPage() {
     if (!code) { feedbackScanError(); return showToast('QR no reconocido', true); }
 
     /* Acción: la del botón que abrió el escáner (scanIntent), o la default por
-       rol (recolector/admin → escanearRecoger) cuando se usa el hero "Escanear QR". */
+       rol (recolector/admin → escanearRecoger) cuando se usa el hero "Leer QR". */
     const accion = scanIntent
       || ((rol === 'recolector' || rol === 'admin') ? 'escanearRecoger' : null);
     setScanIntent(null);
@@ -366,7 +370,7 @@ export default function RecoleccionPage() {
     }
   }, [rol, reload, showToast, confirm, feedbackScanOK, feedbackScanError, scanIntent]);
 
-  /* canScan: quién puede usar el hero "Escanear QR" (handleScan gatea por rol).
+  /* canScan: quién puede usar el hero "Leer QR" (handleScan gatea por rol).
      Las acciones por card las decide la state machine (getAccionesSublote). */
   const canScan = rol === 'admin' || rol === 'recolector';
 
@@ -397,27 +401,29 @@ export default function RecoleccionPage() {
       <TopBar title="Recolección" />
       <div style={isDesktop ? S.wrapDesktop : S.wrapMobile}>
 
-        {/* HERO "Escanear QR" — móvil: ancho completo; escritorio: botón auto */}
+        {/* HERO "Leer QR" — móvil: ancho completo; escritorio: botón auto.
+            Mismo efecto que "Voy por él" pero identificando la cubeta por su
+            QR físico (decisión owner jun 2026: el escaneo de Luis vive aquí). */}
         {canScan && (
           isDesktop ? (
             <div style={S.scanRowDesktop}>
               <button
                 style={S.scanBtnDesktop}
                 onClick={() => { setScanIntent(null); setScannerOpen(true); }}
-                aria-label="Escanear QR de sublote"
+                aria-label="Leer QR de sublote"
               >
                 <IconQR size={20} />
-                Escanear QR
+                Leer QR
               </button>
             </div>
           ) : (
             <button
               style={S.scanHeroMobile}
               onClick={() => setScannerOpen(true)}
-              aria-label="Escanear QR de sublote"
+              aria-label="Leer QR de sublote"
             >
               <IconQR size={24} />
-              Escanear QR
+              Leer QR
             </button>
           )
         )}
