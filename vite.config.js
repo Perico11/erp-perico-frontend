@@ -31,6 +31,14 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true
       },
+      /* WebSocket realtime: useRealtimeSync conecta a ws://<host>/ws con
+         host = location.host (5173 en dev). Sin este proxy el WS de dev
+         moría y nada realtime (banners inbound, sync cruzado) era
+         verificable en preview — solo en producción. */
+      '/ws': {
+        target: 'ws://localhost:3000',
+        ws: true
+      },
       '/static': {
         target: 'http://localhost:3000',
         changeOrigin: true
