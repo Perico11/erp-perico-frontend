@@ -14,6 +14,8 @@ import NuevoPedidoModal from './NuevoPedidoModal';
 import PedidoLoteActions from '../../components/PedidoLoteActions';
 import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import PruebaBadge from '../../components/ui/PruebaBadge';
+/* Lenguaje visual del checkpoint (handoff Claude Design jun 2026) */
+import { ETAPAS_PEDIDO, CK_COLOR, CkCheck, injectCkCSS } from '../../components/pipeline/Checkpoint';
 import {
   ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
   ESTADO_PEDIDO_COLOR as ESTADO_COLOR,
@@ -177,20 +179,17 @@ const S = {
     overflowX: 'auto',
     WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
   },
-  pipelineStep: () => ({
+  /* (jun 2026, handoff Claude Design) Los nodos del checkpoint usan el
+     lenguaje compartido de components/pipeline/Checkpoint.jsx (clases ck*):
+     icono por fase, done=✓ relleno, current con halo+pulso. Aquí solo queda
+     el layout propio de esta card (columna nodo+label y conector alineado). */
+  pipelineStep: {
     display: 'flex', flexDirection: 'column', alignItems: 'center',
-    gap: 4, flex: '0 0 auto', minWidth: 52,
-  }),
-  pipelineDot: (estado, accent) => ({
-    width: estado === 'current' ? 20 : 13, height: estado === 'current' ? 20 : 13,
-    borderRadius: '50%',
-    background: estado === 'pending' ? 'var(--lp-bg-sunken)' : accent,
-    border: estado === 'pending' ? '1.5px solid var(--lp-border-default)' : 'none',
-    boxShadow: estado === 'current' ? `0 0 0 4px ${accent}22` : 'none',
-    transition: 'all .2s',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    color: '#fff',
-  }),
+    gap: 4, flex: '0 0 auto', minWidth: 56,
+  },
+  pipelineDotBox: {
+    height: 46, display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
   pipelineLabel: (estado) => ({
     fontSize: 8.5, fontWeight: estado === 'current' ? 700 : 500,
     color: estado === 'current' ? 'var(--lp-text-primary)'
@@ -198,11 +197,11 @@ const S = {
          : 'var(--lp-text-tertiary)',
     textTransform: 'uppercase', letterSpacing: '.03em', textAlign: 'center', whiteSpace: 'nowrap',
   }),
-  pipelineLine: (done, accent) => ({
-    flex: 1, height: 2,
-    background: done ? accent : 'var(--lp-border-subtle)',
-    minWidth: 10, marginBottom: 20,
-    transition: 'background .2s',
+  pipelineLine: (done) => ({
+    flex: 1, height: 3, borderRadius: 99,
+    background: done ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)',
+    minWidth: 10, marginBottom: 16, /* sube el conector al centro del dot (label debajo) */
+    transition: 'background .35s cubic-bezier(.22,1,.36,1)',
   }),
 };
 
@@ -211,15 +210,17 @@ const S = {
    son ambos "Aceptado"). Si el pedido está en cancelado/rechazado,
    no renderizamos el pipeline (no aplica). */
 const PIPELINE_FASES = [
-  { key: 'pendiente',  label: 'Pedido',     estados: ['pendiente'] },
-  { key: 'aceptado',   label: 'Aceptado',   estados: ['aceptado', 'en_proceso'] },
-  { key: 'produccion', label: 'Producción', estados: ['en_produccion', 'producido', 'qc_hold', 'qc_aprobado'] },
-  { key: 'envasado',   label: 'Envasado',   estados: ['en_envasado', 'envasado'] },
-  { key: 'camino',     label: 'En camino',  estados: ['en_recoleccion', 'en_camino'] },
+  /* `ck` = key de la etapa equivalente en ETAPAS_PEDIDO (Checkpoint.jsx) —
+     de ahí salen el icono y el color de fase del lenguaje compartido. */
+  { key: 'pendiente',  label: 'Pedido',     estados: ['pendiente'], ck: 'pedido' },
+  { key: 'aceptado',   label: 'Aceptado',   estados: ['aceptado', 'en_proceso'], ck: 'aceptado' },
+  { key: 'produccion', label: 'Producción', estados: ['en_produccion', 'producido', 'qc_hold', 'qc_aprobado'], ck: 'en_produccion' },
+  { key: 'envasado',   label: 'Envasado',   estados: ['en_envasado', 'envasado'], ck: 'en_envasado' },
+  { key: 'camino',     label: 'En camino',  estados: ['en_recoleccion', 'en_camino'], ck: 'en_camino' },
   /* jun 2026 (regla owner): en_almacen = recibido en Terán pero con TOTE por
      reenvasar — el pedido sigue ACTIVO. Fase propia para que se vea que falta. */
-  { key: 'teran',      label: 'En Terán',   estados: ['en_almacen'] },
-  { key: 'entregado',  label: 'Entregado',  estados: ['entregado'] },
+  { key: 'teran',      label: 'En Terán',   estados: ['en_almacen'], ck: 'en_almacen' },
+  { key: 'entregado',  label: 'Entregado',  estados: ['entregado'], ck: 'entregado' },
 ];
 
 /* Devuelve el índice de fase actual del pedido (0..5) o -1 si no aplica */
@@ -235,9 +236,10 @@ function _idxFasePedido(estado) {
    FIX jun 2026 (feedback owner): cuando el pipeline no cabe (móvil / card
    estrecha), el contenedor scrollea lateral y se AUTO-CENTRA en el checkpoint
    actual al avanzar — antes el último paso quedaba cortado sin pista visual. */
-function PipelinePedido({ estado, esPrueba }) {
+function PipelinePedido({ estado }) {
   const idx = _idxFasePedido(estado);
   const wrapRef = useRef(null);
+  useEffect(() => { injectCkCSS(); }, []);
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap || idx < 0) return;
@@ -251,27 +253,29 @@ function PipelinePedido({ estado, esPrueba }) {
     catch { wrap.scrollLeft = Math.max(0, target); }
   }, [idx, estado]);
   if (idx < 0) return null; /* cancelado/rechazado/eliminado: ocultar */
-  const accent = esPrueba ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
-  /* Construimos un array plano de nodos (step + línea + step + ...) para
-     que cada uno tenga key propia sin necesidad de Fragment con key. */
+  /* (jun 2026, handoff Claude Design) Nodos con el lenguaje ck compartido:
+     icono por fase con su color (solicitud=info, fabricación=verde,
+     logística=ámbar, cierre=verde oscuro), done=✓ relleno, current grande
+     con halo+pulso. esPrueba ya se distingue por el badge de la card. */
   const nodos = [];
   PIPELINE_FASES.forEach((fase, i) => {
     const st = i < idx ? 'done' : i === idx ? 'current' : 'pending';
+    const etapa = ETAPAS_PEDIDO.find(e => e.key === fase.ck) || ETAPAS_PEDIDO[0];
+    const cc = CK_COLOR[etapa.color];
+    const Icon = etapa.Icon;
     nodos.push(
-      <div key={'s_' + fase.key} data-current={st === 'current' ? '1' : undefined} style={S.pipelineStep(st)}>
-        <div style={S.pipelineDot(st, accent)}>
-          {st === 'done' && (
-            <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="20 6 9 17 4 12" />
-            </svg>
-          )}
+      <div key={'s_' + fase.key} data-current={st === 'current' ? '1' : undefined} style={S.pipelineStep}>
+        <div style={S.pipelineDotBox}>
+          <div className={`cknode ${st}`} style={{ '--cc': cc }}>
+            <div className="ckdot">{st === 'done' ? <CkCheck /> : <Icon />}</div>
+          </div>
         </div>
         <div style={S.pipelineLabel(st)}>{fase.label}</div>
       </div>
     );
     if (i < PIPELINE_FASES.length - 1) {
       nodos.push(
-        <div key={'l_' + fase.key} style={S.pipelineLine(i < idx, accent)} />
+        <div key={'l_' + fase.key} style={S.pipelineLine(i < idx)} />
       );
     }
   });

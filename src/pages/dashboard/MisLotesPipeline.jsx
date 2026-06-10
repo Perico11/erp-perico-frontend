@@ -19,32 +19,11 @@ import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import PruebaBadge from '../../components/ui/PruebaBadge';
-
-const PASOS = [
-  { key: 'aceptado',       label: 'Aceptado',    short: 'Acep' },
-  { key: 'en_produccion',  label: 'Producción',  short: 'Prod' },
-  { key: 'producido',      label: 'Terminado',   short: 'Term' },
-  { key: 'qc_aprobado',    label: 'QC OK',       short: 'QC' },
-  { key: 'en_envasado',    label: 'Envasando',   short: 'Env' },
-  { key: 'envasado',       label: 'Listo recolectar', short: 'Listo' },
-  { key: 'en_camino',      label: 'En camino',   short: 'Camino' },
-  { key: 'en_almacen',     label: 'En Terán',    short: 'Terán' },
-  { key: 'entregado',      label: 'Entregado',   short: 'OK' },
-];
-
-function _idxPaso(estado) {
-  /* qc_hold no está en PASOS → antes caía a 0 y el timeline/badge lo mostraban
-     como "Aceptado" (engañoso para Josué/Luis). Lo ubicamos en la etapa QC.
-     FIX jun 2026 (auditoría): en_recoleccion/en_proceso/en_almacen tampoco
-     estaban mapeados — los lotes MÁS avanzados de Luis se pintaban "Aceptado"
-     y se ordenaban al fondo. */
-  if (estado === 'qc_hold') return PASOS.findIndex(p => p.key === 'qc_aprobado');
-  if (estado === 'en_recoleccion') return PASOS.findIndex(p => p.key === 'envasado');
-  if (estado === 'en_proceso') return PASOS.findIndex(p => p.key === 'en_camino');
-  if (estado === 'en_almacen') return PASOS.findIndex(p => p.key === 'en_almacen');
-  const i = PASOS.findIndex(p => p.key === estado);
-  return i >= 0 ? i : 0;
-}
+/* Checkpoint B (handoff Claude Design jun 2026): el timeline horizontal de
+   puntos se sustituye por el riel VERTICAL canónico con icono + responsable
+   + hora por etapa. Las etapas y el mapeo de estados viven en el módulo
+   compartido (espejo de los PASOS que antes estaban aquí + 'pedido'). */
+import { RutaPedidoRail, ETAPAS_PEDIDO, idxEtapaLote, CK_COLOR } from '../../components/pipeline/Checkpoint';
 
 const S = {
   card: {
@@ -86,48 +65,22 @@ const S = {
     borderRadius: 10, fontSize: 10, fontWeight: 600,
     background: color, color: '#fff', whiteSpace: 'nowrap',
   }),
-  timeline: {
-    display: 'flex', alignItems: 'center', gap: 0,
-    marginTop: 4, overflowX: 'auto', paddingBottom: 2,
-  },
-  step: (done, current) => ({
-    flex: '0 0 auto', display: 'flex', flexDirection: 'column',
-    alignItems: 'center', minWidth: 50, position: 'relative',
-  }),
-  dot: (done, current) => ({
-    width: 12, height: 12, borderRadius: '50%',
-    background: current ? 'var(--lp-brand-600)'
-              : done ? 'var(--lp-success-500)'
-              : 'var(--lp-border-subtle)',
-    border: current ? '2px solid var(--lp-brand-600)' : 'none',
-    boxShadow: current ? '0 0 0 3px var(--lp-brand-100)' : 'none',
-    zIndex: 2,
-  }),
-  line: (done) => ({
-    flex: 1, height: 2,
-    background: done ? 'var(--lp-success-500)' : 'var(--lp-border-subtle)',
-    minWidth: 12,
-  }),
-  stepLabel: (done, current) => ({
-    fontSize: 9, marginTop: 4,
-    color: current ? 'var(--lp-brand-700)' : done ? 'var(--lp-success-700)' : 'var(--lp-text-tertiary)',
-    fontWeight: current ? 700 : 400,
-    textAlign: 'center',
-  }),
+  /* (jun 2026, handoff Claude Design) Los estilos del timeline horizontal de
+     puntos se sustituyeron por el riel de components/pipeline/Checkpoint.jsx. */
 };
 
 function LoteCard({ lote, onClick }) {
-  const idxActual = _idxPaso(lote.estado);
-  const estadoActual = PASOS[idxActual];
-  const labelEstado = lote.estado === 'qc_hold' ? 'QC retenido' : estadoActual.label;
-  const colorEstado = lote.estado === 'envasado' ? 'var(--lp-success-600)'
-                    : lote.estado === 'qc_hold' ? 'var(--lp-danger-600)'
-                    : lote.estado === 'en_camino' ? 'var(--lp-warning-600)'
-                    : 'var(--lp-brand-600)';
+  const esHold = lote.estado === 'qc_hold';
+  const idxActual = idxEtapaLote(lote.estado);
+  const etapaActual = ETAPAS_PEDIDO[idxActual];
+  const labelEstado = esHold ? 'QC retenido' : etapaActual.label;
+  const colorEstado = esHold ? CK_COLOR.danger : CK_COLOR[etapaActual.color];
 
   return (
-    <div style={S.loteRow} onClick={onClick}>
-      <div style={S.loteHeader}>
+    <div style={S.loteRow}>
+      {/* Header clickeable → navega a la pantalla del rol (el riel no navega
+          para permitir scroll/lectura sin brincos). */}
+      <div style={{ ...S.loteHeader, cursor: 'pointer' }} onClick={onClick} role="button">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
           <span style={S.loteCodigo}>{lote.codigoLote || lote.codigo || lote.id}</span>
           {lote.esPrueba && <PruebaBadge size="sm" />}
@@ -138,21 +91,9 @@ function LoteCard({ lote, onClick }) {
           <span style={S.badge(colorEstado)}>{labelEstado}</span>
         </div>
       </div>
-      {/* Timeline horizontal compacto */}
-      <div style={S.timeline}>
-        {PASOS.map((paso, i) => {
-          const done = i < idxActual;
-          const current = i === idxActual;
-          return (
-            <div key={paso.key} style={{ display: 'flex', alignItems: 'center', flex: '0 0 auto' }}>
-              <div style={S.step(done, current)}>
-                <div style={S.dot(done, current)} />
-                <div style={S.stepLabel(done, current)}>{paso.short}</div>
-              </div>
-              {i < PASOS.length - 1 && <div style={S.line(done)} />}
-            </div>
-          );
-        })}
+      {/* Checkpoint B: riel vertical con responsable + hora por etapa */}
+      <div style={{ marginTop: 10 }}>
+        <RutaPedidoRail lote={lote} />
       </div>
     </div>
   );
@@ -199,7 +140,7 @@ export default function MisLotesPipeline({ rol }) {
     }
     /* almacen (Josué): ve TODOS los activos */
     /* Ordenar por estado más avanzado primero */
-    activos.sort((a, b) => _idxPaso(b.estado) - _idxPaso(a.estado));
+    activos.sort((a, b) => idxEtapaLote(b.estado) - idxEtapaLote(a.estado));
     return activos;
   }, [lotes, rol]);
 

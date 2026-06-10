@@ -11,6 +11,10 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import SecureView from '../../components/SecureView';
 import PruebaBadge from '../../components/ui/PruebaBadge';
+/* Checkpoint A (handoff Claude Design jun 2026): riel horizontal con icono
+   por type + píldora del paso activo con "✓ guardado". Solo visual — el
+   estado (curStep/savedAt/autosave/reanudar) se mantiene intacto. */
+import { CkStripStepper, CkPill } from '../../components/pipeline/Checkpoint';
 
 const fmtTimer = (s) => {
   const m = Math.floor(s / 60);
@@ -31,31 +35,9 @@ const S = {
   header: { marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   title: { fontSize: 18, fontWeight: 800, color: 'var(--lp-text-primary)' },
   meta: { fontSize: 12, color: 'var(--lp-text-secondary)' },
-  prog: { background: 'var(--lp-bg-sunken)', borderRadius: 8, height: 8, overflow: 'hidden', marginBottom: 6 },
-  progBar: (pct, color) => ({ height: '100%', width: pct + '%', background: color, borderRadius: 8, transition: 'width .4s' }),
-  pasoLbl: { fontSize: 11, color: 'var(--lp-text-tertiary)', textAlign: 'right', marginBottom: 12 },
-
-  /* ── Z5 (jun 2026): stepper visual guided-tour ────────────────────── */
-  stepper: {
-    display: 'flex', alignItems: 'center', gap: 0,
-    padding: '4px 2px 12px',
-    overflowX: 'auto', WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
-  },
-  stepperDot: (st /* 'done' | 'current' | 'pending' */, color) => ({
-    width: st === 'current' ? 28 : 16, height: st === 'current' ? 28 : 16,
-    borderRadius: '50%',
-    background: st === 'pending' ? 'var(--lp-bg-sunken)' : color,
-    border: st === 'pending' ? '1.5px solid var(--lp-border-default)' : 'none',
-    boxShadow: st === 'current' ? `0 0 0 5px ${color}22` : 'none',
-    color: '#fff', fontSize: 11, fontWeight: 800, fontFamily: 'var(--lp-font-mono)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flex: '0 0 auto', transition: 'all .2s',
-  }),
-  stepperLine: (done, color) => ({
-    flex: 1, height: 2,
-    background: done ? color : 'var(--lp-border-subtle)',
-    minWidth: 8, transition: 'background .2s',
-  }),
+  /* (jun 2026, handoff Claude Design) El stepper de puntos Z5 y la barra de
+     progreso fallback se sustituyeron por el riel de checkpoint compartido
+     components/pipeline/Checkpoint.jsx (CkStripStepper + CkPill). */
 
   card: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
           borderRadius: 'var(--lp-radius)', padding: 16, marginBottom: 12 },
@@ -232,7 +214,6 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
 
   const step = steps[curStep];
   const total = steps.length;
-  const pct = total > 1 ? Math.round((curStep / (total - 1)) * 100) : 0;
   const stepColor = step ? (TYPE_COLOR[step.type] || TYPE_COLOR.prep) : TYPE_COLOR.prep;
 
   /* Helper: agrega un evento al timeline */
@@ -316,6 +297,20 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
     setCurStep(c => Math.max(0, c - 1));
     setTimerSec(0);
     setDualPhase('add');
+  }, [logEvent]);
+
+  /* Click en un nodo done del riel → regresar a ESE paso (handoff §8.4).
+     Misma semántica que "Anterior": corta el timer y deja rastro. */
+  const handleJump = useCallback((i) => {
+    setCurStep(c => {
+      if (i >= c) return c; /* solo hacia atrás — adelante es con Completar */
+      setRunning(false);
+      if (pauseStartRef.current) pauseStartRef.current = null;
+      logEvent('retroceso');
+      setTimerSec(0);
+      setDualPhase('add');
+      return i;
+    });
   }, [logEvent]);
 
   /* QC validation: todos los campos obligatorios deben estar dentro de rango */
@@ -593,45 +588,30 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             {item.esPrueba && <PruebaBadge size="sm" />}
           </div>
           <div style={{ ...S.meta, display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            {/* El "✓ guardado" del autosave ahora vive en la píldora del paso
+                activo (CkPill), como en el mockup — no se duplica aquí. */}
             <span>{tipo === 'pedido' ? 'Pedido' : 'Orden'} {item.codigo} · {item.cantidad} cubetas</span>
-            {savedAt && (
-              <span style={{ display:'inline-flex', alignItems:'center', gap:4, color:'var(--lp-success-600)', fontWeight:600 }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12"/>
-                </svg>
-                guardado
-              </span>
-            )}
           </div>
         </div>
         <button style={S.btn('ghost')} onClick={onClose}>Cerrar</button>
       </div>
 
-      {/* Z5: STEPPER VISUAL guided-tour — chips numerados si ≤10 pasos,
-          si > 10 fallback a barra de progreso clásica (legibilidad). */}
-      {total > 0 && total <= 10 ? (
-        <div style={S.stepper} role="progressbar" aria-valuenow={curStep + 1} aria-valuemin={1} aria-valuemax={total}>
-          {steps.map((sp, i) => {
-            const st = i < curStep ? 'done' : i === curStep ? 'current' : 'pending';
-            const c = TYPE_COLOR[sp.type] || TYPE_COLOR.prep;
-            const nodes = [];
-            nodes.push(
-              <div key={'d_' + i} style={S.stepperDot(st, c)} title={sp.titulo}>
-                {st === 'done' ? (
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                ) : (i + 1)}
-              </div>
-            );
-            if (i < total - 1) nodes.push(<div key={'l_' + i} style={S.stepperLine(i < curStep, c)} />);
-            return nodes;
-          })}
-        </div>
-      ) : (
+      {/* Checkpoint A (handoff Claude Design): riel horizontal con icono por
+          type, done=✓ relleno, current con halo+pulso, conectores que se
+          llenan, auto-centrado y click en done para regresar (misma
+          semántica que "Anterior": corta timer y loggea retroceso). La
+          píldora muestra el paso activo + "✓ guardado" del autosave.
+          El riel scrollea, así que ya no hace falta el fallback a barra
+          para >10 pasos. */}
+      {total > 0 && (
         <>
-          <div style={S.prog}><div style={S.progBar(pct, stepColor)} /></div>
-          <div style={S.pasoLbl}>Paso {curStep + 1} de {total}</div>
+          <CkStripStepper
+            steps={steps}
+            curStep={curStep}
+            typeColor={TYPE_COLOR}
+            onJump={handleJump}
+          />
+          <CkPill step={step} curStep={curStep} total={total} typeColor={TYPE_COLOR} savedAt={savedAt} />
         </>
       )}
 
