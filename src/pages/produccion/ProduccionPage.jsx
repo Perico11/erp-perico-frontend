@@ -10,6 +10,11 @@ import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import NDAModal from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
+/* DECISIÓN OWNER jun 2026: al terminar la producción, la card del lote NO se
+   va de esta pantalla — permanece aquí (QC → envasado) hasta envasarse por
+   completo; después sigue su ciclo en Pedidos. Card canónica + modal inline. */
+import PedidoLoteActions from '../../components/PedidoLoteActions';
+import { EnvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /* ICONOS — line SVG (sin emojis). Diseño verde Claude Design.         */
@@ -448,6 +453,11 @@ export default function ProduccionPage() {
   const { data: pedData, reload: reloadPed } = useApiData(() => api.getPedidos(), [], 5000);
   const { data: trazData, reload: reloadTraz } = useApiData(() => api.getTrazabilidad(), [], 8000);
   const { data: qcData } = useApiData(() => api.getQC(), [], 10000);
+  /* Catálogo de envases para el modal de envasado inline (sección En envasado) */
+  const { data: envData } = useApiData(() => api.getEnvases(), null, 30000);
+  const envases = envData?.data || envData || null;
+  const [envasarModal, setEnvasarModal] = useState(null); /* lote */
+  const [printQR, setPrintQR] = useState(null);
 
   /* Realtime: refrescar todas las fuentes ante cambios */
   useRealtimeSync({
@@ -500,6 +510,24 @@ export default function ProduccionPage() {
       .sort((a, b) => (a.fechaInicioProduccion || a.fecha || '').localeCompare(b.fechaInicioProduccion || b.fecha || '')),
     [pedidos]
   );
+
+  /* DECISIÓN OWNER jun 2026 ("al terminar un lote de producción, ahí mismo debe
+     quedar la card hasta terminar envasado"): lotes post-producción que aún NO
+     completan su envasado viven en ESTA pantalla. Al llegar a 'envasado' la
+     card se suelta y el ciclo continúa visible en Pedidos. */
+  const lotesEnEnvasado = useMemo(() => {
+    const ESTADOS_POST_PROD = ['producido', 'qc_hold', 'qc_aprobado', 'en_envasado'];
+    return lotes
+      .filter(l => ESTADOS_POST_PROD.includes(l.estado))
+      .map(l => ({
+        lote: l,
+        /* PedidoLoteActions resuelve el lote desde su pedido u orden fuente */
+        fuente: (l.pedidoId && pedidos.find(p => p.id === l.pedidoId))
+          || (l.ordenId && ordenes.find(o => o && !o.eliminado && o.id === l.ordenId))
+          || null,
+      }))
+      .filter(x => x.fuente);
+  }, [lotes, pedidos, ordenes]);
 
   /* Lista unificada de items productibles, normalizada para el modal */
   const productibles = useMemo(() => {
@@ -774,6 +802,36 @@ export default function ProduccionPage() {
                 </div>
               </>
             )}
+
+            {/* ── EN ENVASADO (decisión owner): la card del lote permanece AQUÍ
+                  desde que termina producción hasta envasarse por completo —
+                  "sigue en producción, luego pasa a Pedidos". Card canónica con
+                  QC inline + Envasar (modal emergente). ── */}
+            {lotesEnEnvasado.length > 0 && (
+              <div style={{ marginTop: 24 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', marginBottom: 4 }}>
+                  En envasado ({lotesEnEnvasado.length})
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginBottom: 12 }}>
+                  El lote sigue en producción hasta envasarse por completo — después continúa su ciclo en Pedidos.
+                </div>
+                <div style={isDesktop ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: 12, alignItems: 'start' } : undefined}>
+                  {lotesEnEnvasado.map(({ lote, fuente }) => (
+                    <div key={lote.id} style={{ background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 14, padding: 14, marginBottom: isDesktop ? 0 : 12 }}>
+                      <PedidoLoteActions
+                        pedido={fuente}
+                        lotes={lotes}
+                        userRol={user?.rol || ''}
+                        userName={userName}
+                        onSuccess={(msg) => { showToast(msg || 'Listo'); reloadTraz(); reloadPed(); reloadOrd(); }}
+                        onError={(msg) => showToast('Error: ' + msg)}
+                        onEnvasarInline={(l) => setEnvasarModal(l)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -992,6 +1050,22 @@ export default function ProduccionPage() {
           }}
         />
       )}
+
+      {/* ── Envasado inline (sección En envasado) — mismo modal canónico de
+            Stock Fábrica; imprime QR del sublote al terminar. ── */}
+      {envasarModal && (
+        <EnvasadoModal
+          lote={envasarModal} envases={envases} userName={userName}
+          onClose={() => setEnvasarModal(null)}
+          onSuccess={(payload) => {
+            setEnvasarModal(null); reloadTraz(); reloadPed(); reloadOrd();
+            showToast(`Envasado: ${payload?.q ?? ''} ${payload?.tipo || ''}`.trim());
+            const s = payload?.sublotes?.[0];
+            if (s?.qrPayload || s?.cod) setPrintQR(payload);
+          }}
+        />
+      )}
+      {printQR && <SubloteQRPrintModal payload={printQR} onClose={() => setPrintQR(null)} />}
 
       {/* ── Toast ── */}
       {toastMsg && <div style={S.toast}><IcoCheck size={16} />{toastMsg}</div>}
