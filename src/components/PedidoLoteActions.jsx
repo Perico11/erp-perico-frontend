@@ -69,19 +69,28 @@ const S = {
     display: 'grid', gap: 6, flexWrap: 'wrap',
     gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
   },
-  btn: (kind) => ({
-    padding: '7px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer',
-    fontFamily: 'var(--lp-font-sans)',
-    borderRadius: 6, minHeight: 36,
-    background: kind === 'success' ? 'var(--lp-success-600)'
-              : kind === 'danger'  ? 'var(--lp-danger-600)'
-              : kind === 'warn'    ? 'var(--lp-warning-600)'
-              : kind === 'info'    ? 'var(--lp-info-600)'
-              : kind === 'ghost'   ? 'var(--lp-bg-raised)'
-              :                      'var(--lp-brand-600)',
-    color: kind === 'ghost' ? 'var(--lp-text-primary)' : '#fff',
-    border: kind === 'ghost' ? '1.5px solid var(--lp-border-subtle)' : 'none',
-  }),
+  /* Lenguaje M7 (paquete MOCKUP 7) — coherente con las cards de Pedidos para
+     TODOS los roles que ven esta card (técnico/almacén/admin): acciones de
+     avance = verde sólido dominante (el mockup no diferencia ámbar/azul),
+     Aprobar QC = verde success, destructivas = outline danger tint,
+     navegación/secundarias = ghost. Touch ≥44px. */
+  btn: (kind) => {
+    const destructiva = kind === 'danger';
+    const ghost = kind === 'ghost';
+    return {
+      padding: '0 14px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+      fontFamily: 'var(--lp-font-sans)',
+      borderRadius: 12, minHeight: 44,
+      display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+      background: destructiva ? 'color-mix(in srgb, var(--lp-danger-600) 10%, transparent)'
+                : ghost ? 'transparent'
+                : kind === 'success' ? 'var(--lp-success-600)'
+                : 'var(--lp-brand-600)',
+      color: destructiva ? 'var(--lp-danger-600)' : ghost ? 'var(--lp-text-secondary)' : '#fff',
+      border: destructiva ? '1px solid color-mix(in srgb, var(--lp-danger-600) 35%, transparent)'
+            : ghost ? '1px solid var(--lp-border-subtle)' : 'none',
+    };
+  },
   errMsg: {
     fontSize: 11, padding: '6px 10px', borderRadius: 6,
     background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)',
