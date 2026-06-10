@@ -12,7 +12,7 @@ import Cronometro from '../../components/Cronometro';
 import NDAModal from '../../components/NDAModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
 import PedidoLoteActions from '../../components/PedidoLoteActions';
-import { ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
+import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import {
   ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
@@ -346,9 +346,13 @@ export default function PedidosPage() {
   const { data: ordData, reload: reloadOrd } = useApiData(() => api.getOrdenes(), [], 30000);
 
   /* FIX jun 2026 (feedback owner): "Re-envasar TOTE" abre el modal EMERGENTE
-     aquí mismo (como el envasado de fábrica), ya no navega a otra página. */
+     aquí mismo (como el envasado de fábrica), ya no navega a otra página.
+     jun 2026 (decisión owner): "Envasar" también abre el EnvasadoModal EN
+     SITIO con un solo click — antes navegaba a /stock-fabrica y obligaba a
+     volver a pulsar "Envasar" allá (doble click). */
   const { data: envData } = useApiData(() => api.getEnvases(), null, 30000);
   const envases = envData?.data || envData || null;
+  const [envasarModal, setEnvasarModal] = useState(null);     /* lote */
   const [reenvasarModal, setReenvasarModal] = useState(null); /* lote */
   const [printQR, setPrintQR] = useState(null);
 
@@ -852,6 +856,7 @@ export default function PedidosPage() {
                     setErr('');
                   }}
                   onError={(msg) => setErr(msg)}
+                  onEnvasarInline={(l) => setEnvasarModal(l)}
                   onReenvasarInline={(tote, lote) => setReenvasarModal({ lote, toteCod: tote?.cod })}
                 />
               </div>
@@ -866,6 +871,24 @@ export default function PedidosPage() {
           prefillProducto={prefillProducto}
           onClose={() => { setShowNuevo(false); setPrefillProducto(null); }}
           onCreated={() => { setShowNuevo(false); setPrefillProducto(null); reload(); }}
+        />
+      )}
+
+      {/* Envasado inline — mismo modal canónico de Stock Fábrica; abre con UN
+          solo click desde la card (antes navegaba a /stock-fabrica y había que
+          volver a pulsar "Envasar" allá). Imprime QR del sublote al terminar. */}
+      {envasarModal && (
+        <EnvasadoModal
+          lote={envasarModal}
+          envases={envases}
+          userName={user?.nombre || '?'}
+          onClose={() => setEnvasarModal(null)}
+          onSuccess={(payload) => {
+            setEnvasarModal(null);
+            reload(); reloadTraz(); reloadOrd();
+            const s = payload?.sublotes?.[0];
+            if (s?.qrPayload || s?.cod) setPrintQR(payload);
+          }}
         />
       )}
 
