@@ -135,7 +135,7 @@ export const NOTIF_TARGETS_POR_EVENTO = {
   'lote.registrarEnvasado':   ['almacen', 'recolector', 'admin'],
   'lote.marcarEnvasado':      ['recolector', 'almacen', 'admin'],
   'sublote.marcarRecoleccion':    ['recolector', 'almacen', 'admin'],
-  'sublote.escanearRecoger':      ['almacen', 'admin'],
+  'sublote.escanearRecoger':      ['recolector', 'almacen', 'admin'],
   'sublote.escanearRecibirTeran': ['almacen', 'tecnico', 'recolector', 'admin'],
   'sublote.reenvasarTote':        ['tecnico', 'admin'],
 };

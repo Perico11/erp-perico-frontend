@@ -410,15 +410,8 @@ export default function PedidosPage() {
     ...ordenesInternasHist,
   ];
 
-  const k = useMemo(() => ({
-    pendientes: pedidos.filter(p => p.estado === 'pendiente').length,
-    enProduccion: pedidos.filter(p => ['aceptado', 'en_produccion'].includes(p.estado)).length,
-    enQC: pedidos.filter(p => ['producido', 'qc_hold'].includes(p.estado)).length,
-    enEnvasado: pedidos.filter(p => ['qc_aprobado', 'en_envasado'].includes(p.estado)).length,
-    enCamino: pedidos.filter(p => ['envasado', 'en_recoleccion', 'en_camino'].includes(p.estado)).length,
-    entregados: pedidos.filter(p => p.estado === 'entregado').length,
-  }), [pedidos]);
-
+  /* (jun 2026, censo: memo de KPIs eliminado — se calculaba sin renderizarse
+     desde el rediseño que quitó la fila de KPIs) */
   const canCrear = can('crearPedidos') || can('admin') || user?.rol === 'almacen';
   const canAceptar = can('admin') || user?.rol === 'tecnico';
 
@@ -602,9 +595,26 @@ export default function PedidosPage() {
   };
 
   /* Iniciar producción: muestra NDA al técnico/admin antes de arrancar.
-     Bypass: Emmanuel (id='admin') es el propietario y arranca sin modal. */
-  const handleIniciarProduccion = (p) => {
+     Bypass: Emmanuel (id='admin') es el propietario y arranca sin modal.
+     FIX jun 2026 (reparación censo): VALIDAR STOCK MP antes de lanzar — el
+     widget de validación vivía en el panel eliminado de Órdenes; sin esto se
+     podía producir sin MP (el descuento hace clamp a 0 silencioso). */
+  const handleIniciarProduccion = async (p) => {
     setErr('');
+    try {
+      setBusyId(p.id);
+      const v = await api.validarStock(p.producto, p.cantidad);
+      if (v && v.suficiente === false) {
+        const falt = (v.faltantes || []).slice(0, 4)
+          .map(f => `${f.mp} (faltan ${Number(f.faltanteKg || 0).toFixed(1)} kg)`).join(' · ');
+        setErr(`Stock MP insuficiente para producir ${p.producto} ×${p.cantidad}: ${falt}${(v.faltantes || []).length > 4 ? ' …' : ''}. Recibe MP o ajusta inventario antes de iniciar.`);
+        return;
+      }
+    } catch (e) {
+      /* Si la validación falla (red/endpoint), NO bloquear el flujo. */
+    } finally {
+      setBusyId('');
+    }
     if (user && user.id === 'admin') {
       arrancarProduccion(p);
       return;

@@ -382,12 +382,10 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   const tapas = envases?.tapas || {};
   const tapaDefault = envases?.tapa_default || {};
 
-  /* Capacidad por tipo — tote usa litros directos, no qty × cap */
+  /* Capacidad por tipo — tote usa litros directos, no qty × cap.
+     (litPorUnidad/maxUnidades/litTotal se calculan más abajo, después de
+     resolver la subcategoría — "otros" usa su capacidad_ml individual.) */
   const isTote = tipo === 'tote';
-  const capMap = { cubeta: 19, galon: 3.785, litro: 1, tote: 1 };
-  const litPorUnidad = capMap[tipo] || 19;
-  const maxUnidades = isTote ? rest : Math.floor(rest / litPorUnidad);
-  const litTotal = isTote ? (parseFloat(qty) || 0) : (parseInt(qty) || 0) * litPorUnidad;
 
   /* TOTE indivisible: al cambiar a TOTE, auto-llenar litros con TODO el restante.
      Si el técnico necesita dos TOTEs (lote más grande que un solo contenedor),
@@ -415,29 +413,45 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
         key: k,
         nombre: v.nombre,
         marca: v.marca,
+        capacidad_ml: v.capacidad_ml || null,
         stock: v.stock || 0,
         min: v.min || 0,
       }))
       .sort((a, b) => (b.stock - a.stock) || a.nombre.localeCompare(b.nombre));
   }, [tipo, isTote, envases]);
 
+  /* FIX jun 2026 (censo H5 — "Otros" inutilizable): las subcats de "otros"
+     (bote/funda/tubo) NO tienen marca — el option usaba `marca||nombre` pero la
+     resolución buscaba SOLO por marca → subKey siempre null y el submit se
+     bloqueaba. Resolución simétrica por el mismo valor del option. */
+  const valorSubcat = (s) => s.marca || s.nombre;
+
   /* Auto-seleccionar primera subcat con stock cuando cambia el tipo */
   useEffect(() => {
     if (isTote) { setMarca(''); return; }
     /* Si la marca actual no coincide con ninguna subcat del nuevo tipo, reset */
-    const found = subcatList.find(s => s.marca === marca);
+    const found = subcatList.find(s => valorSubcat(s) === marca);
     if (!found) {
       const firstWithStock = subcatList.find(s => s.stock > 0);
-      setMarca(firstWithStock?.marca || '');
+      setMarca(firstWithStock ? valorSubcat(firstWithStock) : '');
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, [tipo]);
 
   /* subKey real para enviar al backend */
-  const subcatActual = subcatList.find(s => s.marca === marca);
+  const subcatActual = subcatList.find(s => valorSubcat(s) === marca);
   const subKey = subcatActual?.key || null;
   const stockEnvase = subcatActual?.stock || 0;
   const stockEnvaseInsuf = !isTote && parseInt(qty) > 0 && stockEnvase < parseInt(qty);
+
+  /* Capacidad: "otros" usa la capacidad_ml individual del item (bote 750ml,
+     funda 250ml, etc.) — antes caía al default 19L (censo H5). */
+  const capMap = { cubeta: 19, galon: 3.785, litro: 1, tote: 1 };
+  const litPorUnidad = (tipo === 'otros' && subcatActual?.capacidad_ml > 0)
+    ? +(subcatActual.capacidad_ml / 1000).toFixed(3)
+    : (capMap[tipo] || 19);
+  const maxUnidades = isTote ? rest : Math.floor(rest / litPorUnidad);
+  const litTotal = isTote ? (parseFloat(qty) || 0) : (parseInt(qty) || 0) * litPorUnidad;
 
   /* Auto-sugerir tapa cuando cambia la marca (si no hay override manual) */
   const tapaSugerida = marca ? tapaDefault[marca] : '';
@@ -807,7 +821,9 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
 /* El backend crea sublotes hijo con esHijoDe=toteCod y decrementa    */
 /* litrosRestante del TOTE. Si el TOTE se vacía pasa a tote_vaciado.  */
 /* ═══════════════════════════════════════════════════════════════════ */
-export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
+export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, toteInicial }) {
+  /* toteInicial (jun 2026): preselecciona un TOTE específico — lo usa el buffer
+     de Recepción Terán (que reemplazó su modal local por éste, censo dedup). */
   const sublotes = lote.sublotes || [];
   /* TOTEs candidatos = sublotes con estado tote_activo y litrosRestante > 0.
      Compat: viejos sublotes sin estado se infieren por tipo==='tote' */
@@ -820,7 +836,9 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess })
     if (typeof s.litrosRestante === 'number') return s.litrosRestante > 0.5;
     return true;
   });
-  const [selectedTote, setSelectedTote] = useState(totes[0]?.cod || '');
+  const [selectedTote, setSelectedTote] = useState(
+    (toteInicial && totes.some(t => t.cod === toteInicial)) ? toteInicial : (totes[0]?.cod || '')
+  );
   const [tipo, setTipo] = useState('cubeta');
   const [marca, setMarca] = useState('');
   const [qty, setQty] = useState('');

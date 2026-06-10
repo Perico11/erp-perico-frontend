@@ -10,6 +10,7 @@ import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import { getAccionesSublote } from '../../lib/loteTransiciones';
+import { ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 
 /* ──────────────────────────────────────────────────────────────────────────
    AlmacenRecepcionPage — Recepción Terán (Josué)
@@ -117,107 +118,9 @@ const TRUCK_ICON = (
   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M1 4h13v12H1z" /><path d="M14 8h4l3 3v5h-7" /><circle cx="5.5" cy="18.5" r="2" /><circle cx="17.5" cy="18.5" r="2" /></svg>
 );
 
-function buildQrUrl(cod) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  let base = '';
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) {
-      base = String(import.meta.env.BASE_URL).replace(/\/$/, '');
-    }
-  } catch {}
-  return `${origin}${base}/qr/${encodeURIComponent(cod)}`;
-}
-
-/* ─────────────── MODAL: Re-envasar desde TOTE en Terán ─────────────── */
-function ReenvasarToteModal({ tote, lote, userName, onClose, onSuccess }) {
-  const [tipo, setTipo] = useState('cubeta');
-  const [marca, setMarca] = useState('');
-  const [qty, setQty] = useState('');
-  const [error, setError] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  const litDisponible = typeof tote.litrosRestante === 'number' ? tote.litrosRestante : (Number(tote.lit) || 0);
-  const capMap = { cubeta: 19, galon: 3.785, litro: 1 };
-  const litPorUnidad = capMap[tipo] || 19;
-  const maxUnidades = Math.floor(litDisponible / litPorUnidad);
-  const litTotal = (parseInt(qty) || 0) * litPorUnidad;
-
-  const handleSubmit = async () => {
-    const q = parseInt(qty);
-    if (!q || q < 1) return setError('Cantidad debe ser >= 1');
-    if (litTotal > litDisponible + 0.5) return setError(`Solo quedan ${litDisponible.toFixed(1)} L en el tote`);
-    setSaving(true);
-    setError('');
-    try {
-      const sublotesActuales = (lote?.sublotes || []).length;
-      const cod = (lote?.codigo || lote?.codigoLote || lote?.id || tote.cod) + '-' + String.fromCharCode(65 + sublotesActuales);
-      const litExact = +litTotal.toFixed(2);
-      /* jun 2026 (censo — drift): ya NO mandamos estado/ub desde el cliente —
-         el backend los deriva de la ubicación física del TOTE (whitelist).
-         Era la 3ª copia del modal, desincronizada del de StockFabrica. */
-      const subloteHijo = {
-        cod, claseSublote: 'envasado_final', tipo,
-        env: tipo === 'cubeta' ? '19L Estandar' : tipo === 'galon' ? '3.785L' : '1L',
-        marca: marca || null, qty: q, lit: litExact, litrosOriginal: litExact, litrosRestante: 0,
-        tapa: null, esMerma: false, fase: 2, esHijoDe: tote.cod, fromTote: tote.cod,
-        qrPayload: buildQrUrl(cod),
-      };
-      await api.transicionSublote(tote.cod, 'reenvasarTote', { nuevosSublotes: [subloteHijo], litrosConsumidos: litExact, lugar: 'teran' });
-      onSuccess({ sublote: subloteHijo, tote, q, tipo, litTotal: litExact });
-    } catch (err) {
-      setError(err.message || 'Error al re-envasar');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={S.overlay} onClick={onClose}>
-      <div style={S.modal} onClick={e => e.stopPropagation()}>
-        <div style={{ ...S.modalHeader, borderBottom: '3px solid var(--lp-brand-600)' }}>
-          <span style={{ fontSize: 15, fontWeight: 700 }}>Re-envasar TOTE en Terán</span>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }}>×</button>
-        </div>
-        <div style={S.modalBody}>
-          {error && <div style={{ padding: '8px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>{error}</div>}
-          <div style={{ padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 16 }}>
-            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-700)', fontFamily: 'var(--lp-font-mono)' }}>{tote.cod}</div>
-            <div style={{ fontSize: 14, fontWeight: 700, marginTop: 4 }}>{lote?.producto || lote?.nombre}</div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
-              Disponible en TOTE: <strong>{litDisponible.toFixed(1)} L</strong>
-              {typeof tote.litrosOriginal === 'number' && <> de {tote.litrosOriginal.toFixed(1)} L originales</>}
-            </div>
-          </div>
-          <label style={S.fieldLabel}>Presentación final</label>
-          <select style={S.fieldSelect} value={tipo} onChange={e => setTipo(e.target.value)}>
-            <option value="cubeta">Cubeta (19L)</option>
-            <option value="galon">Galón (3.785L)</option>
-            <option value="litro">Litro (1L)</option>
-          </select>
-          <label style={S.fieldLabel}>Marca (opcional)</label>
-          <input style={S.fieldInput} placeholder="Ej: Premium" value={marca} onChange={e => setMarca(e.target.value)} />
-          <label style={S.fieldLabel}>Cantidad (máx {maxUnidades})</label>
-          <input style={S.fieldInput} type="number" inputMode="numeric" pattern="[0-9]*" min="1" max={maxUnidades}
-            placeholder={`Ej: ${Math.min(maxUnidades, 20)}`} value={qty} onChange={e => setQty(e.target.value)} />
-          {qty && parseInt(qty) > 0 && (
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 8 }}>
-              {parseInt(qty)} {tipo}(s) × {litPorUnidad}L = <strong>{litTotal.toFixed(1)} L</strong>
-              {' · '}Quedará en TOTE: <strong>{Math.max(0, litDisponible - litTotal).toFixed(1)} L</strong>
-            </div>
-          )}
-        </div>
-        <div style={S.modalFooter}>
-          <button style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)', fontSize: 12, fontWeight: 600, cursor: 'pointer', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)' }} onClick={onClose}>Cancelar</button>
-          <button data-id="recepcion.btn.reenvasar-confirmar" data-rol="almacen,admin"
-            style={{ padding: '8px 16px', borderRadius: 8, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: 'var(--lp-brand-600)', color: '#fff' }}
-            disabled={saving} onClick={handleSubmit}>
-            {saving ? 'Re-envasando...' : `Re-envasar ${qty || 0} ${tipo}(s)`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ReenvasarToteModal local + buildQrUrl eliminados (jun 2026, censo dedup):
+   era la 3a copia del modal de reenvasado, desincronizada. Se usa el
+   ReenvasadoModal compartido de StockFabricaPage (con toteInicial). */
 
 /* ─────────────── PAGE PRINCIPAL ─────────────── */
 export default function AlmacenRecepcionPage() {
@@ -229,6 +132,10 @@ export default function AlmacenRecepcionPage() {
   const [filter, setFilter] = useState('en_camino'); /* en_camino | en_almacen */
   const [scanning, setScanning] = useState(false);
   const [reenvaseFor, setReenvaseFor] = useState(null);
+  const [printQR, setPrintQR] = useState(null);
+  /* envases: marcas para el modal compartido de reenvasado */
+  const { data: envDataRec } = useApiData(() => api.getEnvases(), null, 30000);
+  const envases = envDataRec?.data || envDataRec || null;
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -473,13 +380,23 @@ export default function AlmacenRecepcionPage() {
 
       {scanning && <QRScanner onResult={handleScanResult} onClose={() => setScanning(false)} />}
 
+      {/* Modal COMPARTIDO de reenvasado (jun 2026, censo dedup): se eliminó la
+          copia local desincronizada — una sola implementación para todo el ERP,
+          con impresión de QR del sublote nuevo incluida. */}
       {reenvaseFor && (
-        <ReenvasarToteModal
-          tote={reenvaseFor.tote} lote={reenvaseFor.lote} userName={userName}
+        <ReenvasadoModal
+          lote={reenvaseFor.lote} envases={envases} userName={userName}
+          toteInicial={reenvaseFor.tote?.cod}
           onClose={() => setReenvaseFor(null)}
-          onSuccess={(payload) => { setReenvaseFor(null); reload(); showToast(`Re-envasado: ${payload.q} ${payload.tipo}(s) desde ${payload.tote.cod}`); }}
+          onSuccess={(payload) => {
+            setReenvaseFor(null); reload();
+            showToast(`Re-envasado: ${payload?.q} ${payload?.tipo}(s) desde ${payload?.desdeTote}`);
+            const s = payload?.sublotes?.[0];
+            if (s?.qrPayload || s?.cod) setPrintQR(payload);
+          }}
         />
       )}
+      {printQR && <SubloteQRPrintModal payload={printQR} onClose={() => setPrintQR(null)} />}
 
       {toast && <div style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>{toast.msg}</div>}
       {ConfirmEl}

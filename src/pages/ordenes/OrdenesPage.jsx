@@ -938,7 +938,9 @@ export default function OrdenesPage() {
   const mainTabs = useMemo(() => {
     const t = [];
     if (rol === 'admin' || rol === 'tecnico') t.push({ id: 'ordenes', label: 'Fábrica' });
-    if (rol === 'admin' || rol === 'compras' || rol === 'tecnico') t.push({ id: 'compras', label: 'OC MP' });
+    /* compras quitado (jun 2026, censo): la ruta /ordenes nunca admitió a Arely
+       — la condición era código muerto; sus OCs viven en /compras. */
+    if (rol === 'admin' || rol === 'tecnico') t.push({ id: 'compras', label: 'OC MP' });
     if (t.length === 0) t.push({ id: 'ordenes', label: 'Fábrica' });
     return t;
   }, [rol]);

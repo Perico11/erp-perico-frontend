@@ -331,19 +331,46 @@ export default function FlujoPage() {
       setScanAccion(accion);
       return;
     }
-    /* marcarRecoleccion (sin escaneo) */
+    /* marcarRecoleccion (sin escaneo).
+       FIX jun 2026 (censo M3): override FEFO de caducidad — el guard del backend
+       bloquea lotes caducados; antes el admin no tenía aquí la ruta de override
+       con nota que sí existe en "Enviar a recolectar" (botón que falla sin recurso). */
+    let payloadExtra = { usuario: userName };
+    let yaConfirmado = false;
+    if (accion === 'marcarRecoleccion') {
+      const loteDe = lotes.find(l => (l.sublotes || []).some(x => x.cod === s.cod));
+      const caducado = loteDe?.fechaCaducidad && !loteDe?.esPrueba &&
+        new Date(loteDe.fechaCaducidad).getTime() < Date.now();
+      if (caducado) {
+        const fecha = String(loteDe.fechaCaducidad).slice(0, 10);
+        if (rol !== 'admin') {
+          showToast(`Lote CADUCADO (venció ${fecha}) — no puede salir a recolección. Avisa a un administrador.`, true);
+          return;
+        }
+        const nota = await confirm(
+          `Este lote está CADUCADO (venció ${fecha}). Despacharlo requiere tu autorización y queda en auditoría.`,
+          { title: 'Forzar despacho de lote caducado', confirmText: 'Forzar con esta nota', danger: true,
+            prompt: { label: 'Motivo del override', required: true, minLength: 5, maxLength: 300, rows: 2 } }
+        );
+        if (!nota) return;
+        payloadExtra = { ...payloadExtra, overrideCaducidad: true, notaOverride: nota };
+        yaConfirmado = true;
+      }
+    }
     const label = LABELS_ACCION_SUBLOTE[accion] || accion;
-    const ok = await confirm(`¿${label}: ${s.cod}?`, { confirmText: label });
-    if (!ok) return;
+    if (!yaConfirmado) {
+      const ok = await confirm(`¿${label}: ${s.cod}?`, { confirmText: label });
+      if (!ok) return;
+    }
     setBusySub(s.cod);
     try {
-      await api.transicionSublote(s.cod, accion, { usuario: userName });
+      await api.transicionSublote(s.cod, accion, payloadExtra);
       reloadAll();
       showToast(`${s.cod}: ${label.toLowerCase()}`);
     } catch (e) {
       showToast('Error: ' + (e.message || 'No se pudo'), true);
     } finally { setBusySub(null); }
-  }, [lotes, confirm, userName, reloadAll, showToast]);
+  }, [lotes, confirm, userName, rol, reloadAll, showToast]);
 
   /* ── Escaneo físico (recoger / recibir) ── */
   const handleScan = useCallback(async (result) => {
