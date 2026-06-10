@@ -34,8 +34,14 @@ const PASOS = [
 
 function _idxPaso(estado) {
   /* qc_hold no está en PASOS → antes caía a 0 y el timeline/badge lo mostraban
-     como "Aceptado" (engañoso para Josué/Luis). Lo ubicamos en la etapa QC. */
+     como "Aceptado" (engañoso para Josué/Luis). Lo ubicamos en la etapa QC.
+     FIX jun 2026 (auditoría): en_recoleccion/en_proceso/en_almacen tampoco
+     estaban mapeados — los lotes MÁS avanzados de Luis se pintaban "Aceptado"
+     y se ordenaban al fondo. */
   if (estado === 'qc_hold') return PASOS.findIndex(p => p.key === 'qc_aprobado');
+  if (estado === 'en_recoleccion') return PASOS.findIndex(p => p.key === 'envasado');
+  if (estado === 'en_proceso') return PASOS.findIndex(p => p.key === 'en_camino');
+  if (estado === 'en_almacen') return PASOS.findIndex(p => p.key === 'en_almacen');
   const i = PASOS.findIndex(p => p.key === estado);
   return i >= 0 ? i : 0;
 }

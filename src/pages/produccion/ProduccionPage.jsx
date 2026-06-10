@@ -286,6 +286,8 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
       if (lote?.id) {
         await api.transicionLote(lote.id, 'rechazarQC', {
           qc: buildQcPayload('rechazado'),
+          /* nota Y motivo — el guard del backend lee nota (auditoría D1). */
+          nota: notas,
           motivo: notas,
           usuario: userName,
         });
@@ -397,6 +399,15 @@ export default function ProduccionPage() {
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
+  /* FIX jun 2026 (auditoría D8): deep-link ?tab= VIVO — si la página ya está
+     montada (tile "Calidad QC" del menú, cards del dashboard), el initialTab
+     no se re-evalúa; este efecto cambia la tab al vuelo. */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t === 'calidad') setActiveTab('calidad');
+    else if (t === 'produccion') setActiveTab('produccion');
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [searchParams]);
   const [toastMsg, setToastMsg] = useState('');
   const [prodModal, setProdModal] = useState(null);  // orden/pedido a producir paso-a-paso
   const [qcModal, setQcModal] = useState(null);      // orden a QC
@@ -469,9 +480,13 @@ export default function ProduccionPage() {
     return Array.isArray(arr) ? arr : [];
   }, [qcData]);
 
-  /* PRODUCCIÓN ACTIVA REAL — sin pruebas, sin canceladas */
+  /* FIX jun 2026 (auditoría D7): INCLUIR pruebas — la regla del owner es que
+     las pruebas se comportan IDÉNTICAS al flujo real. Antes el filtro
+     `!esPrueba` las excluía y `enPrueba` se calculaba sin renderizarse jamás
+     → el wizard de una producción de prueba era INACCESIBLE desde /produccion.
+     El badge 🧪 en la card/wizard las hace inconfundibles. */
   const enProceso = useMemo(() =>
-    ordenes.filter(o => !o.eliminado && o.estado === 'en_proceso' && o.fechaInicioProduccion && !o.esPrueba)
+    ordenes.filter(o => !o.eliminado && o.estado === 'en_proceso' && o.fechaInicioProduccion)
       .sort((a, b) => {
         const p = { urgente: 0, alta: 1, normal: 2 };
         return (p[a.prioridad] || 2) - (p[b.prioridad] || 2);
@@ -479,19 +494,12 @@ export default function ProduccionPage() {
     [ordenes]
   );
 
-  /* Pedidos en producción activa REAL */
+  /* Pedidos en producción activa (reales y prueba) */
   const pedidosListos = useMemo(() =>
-    pedidos.filter(p => p && p.estado === 'en_produccion' && p.fechaInicioProduccion && !p.esPrueba)
+    pedidos.filter(p => p && p.estado === 'en_produccion' && p.fechaInicioProduccion)
       .sort((a, b) => (a.fechaInicioProduccion || a.fecha || '').localeCompare(b.fechaInicioProduccion || b.fecha || '')),
     [pedidos]
   );
-
-  /* Items en producción de PRUEBA (separados, no contaminan vista activa) */
-  const enPrueba = useMemo(() => {
-    const ords = ordenes.filter(o => !o.eliminado && o.estado === 'en_proceso' && o.fechaInicioProduccion && o.esPrueba);
-    const peds = pedidos.filter(p => p && p.estado === 'en_produccion' && p.fechaInicioProduccion && p.esPrueba);
-    return [...ords, ...peds];
-  }, [ordenes, pedidos]);
 
   /* Lista unificada de items productibles, normalizada para el modal */
   const productibles = useMemo(() => {

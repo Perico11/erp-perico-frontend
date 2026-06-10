@@ -252,6 +252,11 @@ const api = {
          (no-admin). El caller lo manda tras pasar el NDAModal. */
       ndaAceptado: !!opts.ndaAceptado,
     }),
+  /* Rechazar pedido (técnico): endpoint dedicado que valida estado server-side
+     y CANCELA la orden vinculada (jun 2026 — antes el upsert dejaba la orden
+     huérfana producible). */
+  rechazarPedido: (pedidoId, motivo) =>
+    request('POST', '/api/pedidos/rechazar', { pedidoId, motivo }),
   getProduccionHistorial: () => request('GET', '/api/produccion-historial'),
   getQC: () => request('GET', '/api/qc'),
   /* saveQC = legacy overwrite (admin only). NO USAR — usar transicionLote('aprobarQC') */
@@ -286,9 +291,13 @@ const api = {
   getAccionesSublote: (cod) =>
     request('GET', '/api/sublotes/acciones?cod=' + encodeURIComponent(cod)),
   /* Aplicar una acción a TODOS los sublotes elegibles de un lote en una sola
-     operación atómica. Caso: Luis/Josué escaneó el QR del LOTE completo. */
-  escanearLoteBulk: ({ loteId, codigoLote, accion }) =>
-    request('POST', '/api/sublotes/scan-bulk', { loteId, codigoLote, accion }),
+     operación atómica. Caso: Luis/Josué escaneó el QR del LOTE completo.
+     FIX jun 2026 (auditoría D1): el guard anti-"robo de lote" del backend exige
+     scanCod/qrPayload del QR físico para escanearRecoger/RecibirTeran — sin
+     reenviarlo, el bulk respondía 400 SIEMPRE y "tomar todo el lote" nunca
+     funcionó. El caller pasa el código que escaneó. */
+  escanearLoteBulk: ({ loteId, codigoLote, accion, scanCod, qrPayload }) =>
+    request('POST', '/api/sublotes/scan-bulk', { loteId, codigoLote, accion, scanCod, qrPayload }),
   getFormulaOrden: (ordenId) => request('POST', '/api/formulas/orden', { ordenId }),
   registrarProduccion: (body) => request('POST', '/api/inventario/produccion', body),
 

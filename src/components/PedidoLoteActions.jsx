@@ -109,6 +109,9 @@ function QCInline({ lote, accion, userName, onSuccess, onCancel }) {
           fecha: new Date().toISOString(),
           usuario: userName,
         },
+        /* nota Y motivo: el guard del backend lee nota (jun 2026 — mandar solo
+           motivo hacía que "Rechazar QC" diera 422 SIEMPRE). */
+        nota: nota,
         motivo: nota,
         usuario: userName,
       });
@@ -266,12 +269,36 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
         </button>
       );
     }
+    /* FIX jun 2026 (auditoría): cancelarLote exige motivo (guard) — antes
+       despachaba sin campo para indicarlo → 422 SIEMPRE. Prompt con nota. */
+    if (accion === 'cancelarLote') {
+      return (
+        <button key={accion} style={S.btn('danger')} disabled={!!busy}
+          onClick={async () => {
+            const nota = await confirm(
+              `Vas a CANCELAR el lote ${lote.codigoLote || lote.codigo || lote.id}. Indica el motivo (queda en auditoría).`,
+              { title: 'Cancelar lote', confirmText: 'Cancelar lote', danger: true,
+                prompt: { label: 'Motivo de cancelación', required: true, minLength: 5, maxLength: 300, rows: 2 } }
+            );
+            if (!nota) return;
+            handleTransicion(accion, { nota, motivo: nota });
+          }}>
+          {isBusy ? '…' : label}
+        </button>
+      );
+    }
+    /* FIX jun 2026 (auditoría): finalizarProduccion exige payload.lotes (guard
+       'Cantidad de lotes inválida') — antes despachaba vacío → 422 SIEMPRE
+       (callejón sin salida tras reabrirProduccion). */
+    const payloadExtra = accion === 'finalizarProduccion'
+      ? { lotes: Number(lote.cantidad) || 1 }
+      : {};
     return (
       <button
         key={accion}
         style={S.btn(kindMap[accion])}
         disabled={!!busy}
-        onClick={() => handleTransicion(accion)}
+        onClick={() => handleTransicion(accion, payloadExtra)}
       >
         {isBusy ? '…' : label}
       </button>
@@ -291,8 +318,11 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
      (los que controlan el almacén Terán). Marca todos los sublotes elegibles
      vía /api/sublotes/scan-bulk con accion='marcarRecoleccion' — esto
      dispara push a Luis automáticamente vía NOTIF_TARGETS_POR_EVENTO. */
+  /* FIX jun 2026 (auditoría #8): incluir 'en_proceso' — tras un despacho
+     PARCIAL el roll-up deja el lote en_proceso y los sublotes 'envasado'
+     restantes perdían el botón (quedaban huérfanos en esta card). */
   const puedeEnviarRecolectar =
-    lote.estado === 'envasado' &&
+    (lote.estado === 'envasado' || lote.estado === 'en_proceso') &&
     (userRol === 'almacen' || userRol === 'admin') &&
     sublotes.some(s => s.estado === 'envasado' && !s.esMerma);
 
@@ -380,7 +410,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
         );
         if (ok) {
           try {
-            const r2 = await api.escanearLoteBulk({ loteId: data.loteId, accion: 'escanearRecibirTeran' });
+            const r2 = await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion: 'escanearRecibirTeran', scanCod: code });
             const n = r2?.procesados?.length || 0;
             const omit = r2?.omitidos?.length || 0;
             if (onSuccess) onSuccess(`Lote recibido: ${n} sublote(s)${omit ? ` · ${omit} omitido(s)` : ''}`);

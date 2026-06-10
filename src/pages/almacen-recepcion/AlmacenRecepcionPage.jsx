@@ -222,7 +222,7 @@ export default function AlmacenRecepcionPage() {
         const ok = await confirm(`Escaneaste el QR del LOTE ${data.codigoLote}. ¿Recibir TODOS los sublotes en camino del lote?`, { confirmText: 'Recibir todo el lote' });
         if (ok) {
           try {
-            const r2 = await api.escanearLoteBulk({ loteId: data.loteId, accion: 'escanearRecibirTeran' });
+            const r2 = await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion: 'escanearRecibirTeran', scanCod: code });
             reload();
             const n = r2?.procesados?.length || 0;
             const omit = r2?.omitidos?.length || 0;

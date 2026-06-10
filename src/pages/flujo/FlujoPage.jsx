@@ -388,7 +388,7 @@ export default function FlujoPage() {
       if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
         const ok = await confirm(`Escaneaste el QR del LOTE ${data.codigoLote || ''}. ¿Aplicar a TODOS sus sublotes elegibles?`, { confirmText: 'Todo el lote' });
         if (ok) {
-          try { const r2 = await api.escanearLoteBulk({ loteId: data.loteId, accion }); reloadAll(); showToast(`Lote: ${r2?.procesados?.length || 0} sublote(s)`); }
+          try { const r2 = await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion, scanCod: code }); reloadAll(); showToast(`Lote: ${r2?.procesados?.length || 0} sublote(s)`); }
           catch (e2) { showToast('Error: ' + (e2.message || 'bulk'), true); }
         }
       } else { showToast('Error: ' + (err.message || 'El QR no coincide'), true); }

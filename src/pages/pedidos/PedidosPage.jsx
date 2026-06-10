@@ -494,13 +494,10 @@ export default function PedidosPage() {
         console.log('[CANCELAR]', msg);
         setErr(''); /* limpiar errores previos */
       } else {
-        await api.upsertPedido({
-          ...p,
-          estado: 'rechazado',
-          rechazadoPor: user?.nombre,
-          motivoRechazo: motivo,
-          fechaRechazo: new Date().toISOString(),
-        });
+        /* FIX jun 2026 (auditoría): endpoint dedicado — valida el estado
+           server-side y CANCELA la orden vinculada. El upsert anterior dejaba
+           la orden huérfana viva (producible) y podía pisar campos con caché. */
+        await api.rechazarPedido(p.id, motivo);
       }
       reload();
     } catch (e) {
@@ -708,16 +705,21 @@ export default function PedidosPage() {
             gap: 12,
           }}>
           {listaOrdenada.map(p => {
-            const mostrarAceptar = tab === 'activos' && p.estado === 'pendiente' && canAceptar;
-            const mostrarIniciar = tab === 'activos' && p.estado === 'aceptado' && canAceptar;
-            const mostrarIrProduccion = tab === 'activos' && p.estado === 'en_produccion' && canAceptar;
+            /* FIX jun 2026 (auditoría #5): la pestaña PRUEBAS tiene los mismos
+               botones de ciclo — la regla del owner es que las pruebas se
+               comportan IDÉNTICAS al flujo real. Antes solo 'activos' los
+               mostraba y un pedido de prueba no se podía aceptar/iniciar. */
+            const tabOperable = tab === 'activos' || tab === 'pruebas';
+            const mostrarAceptar = tabOperable && p.estado === 'pendiente' && canAceptar;
+            const mostrarIniciar = tabOperable && p.estado === 'aceptado' && canAceptar;
+            const mostrarIrProduccion = tabOperable && p.estado === 'en_produccion' && canAceptar;
             /* Cancelar disponible siempre que el pedido no esté en estado terminal.
                Admin puede cancelar cualquier pedido (cascada orden + reversa MP).
                Técnico solo pedidos pendientes/aceptados (no producidos aún). */
             const esTerminal = TERMINALES.includes(p.estado);
             const puedeAdminCancelar = user?.rol === 'admin' && !esTerminal;
             const puedeTecnicoCancelar = canAceptar && !puedeAdminCancelar && ['pendiente', 'aceptado'].includes(p.estado);
-            const mostrarCancelar = (puedeAdminCancelar || puedeTecnicoCancelar) && tab === 'activos';
+            const mostrarCancelar = (puedeAdminCancelar || puedeTecnicoCancelar) && tabOperable;
             /* §7: Eliminar = SOLO admin. No se renderiza para otros roles.
                Disponible en cualquier filtro mientras el pedido no esté ya
                eliminado (los terminales sí pueden eliminarse del histórico). */
@@ -850,7 +852,7 @@ export default function PedidosPage() {
                     setErr('');
                   }}
                   onError={(msg) => setErr(msg)}
-                  onReenvasarInline={(tote, lote) => setReenvasarModal(lote)}
+                  onReenvasarInline={(tote, lote) => setReenvasarModal({ lote, toteCod: tote?.cod })}
                 />
               </div>
             );
@@ -870,7 +872,8 @@ export default function PedidosPage() {
       {/* Re-envasado de TOTE inline (modal emergente, como el envasado de fábrica) */}
       {reenvasarModal && (
         <ReenvasadoModal
-          lote={reenvasarModal}
+          lote={reenvasarModal.lote || reenvasarModal}
+          toteInicial={reenvasarModal.toteCod}
           envases={envases}
           userName={user?.nombre || '?'}
           onClose={() => setReenvasarModal(null)}

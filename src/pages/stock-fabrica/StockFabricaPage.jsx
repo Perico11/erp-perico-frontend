@@ -524,8 +524,13 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
          si algo falla. El usuario puede abrir DevTools (F12) y ver el JSON
          exacto que se intentó enviar. */
       console.log('[ENVASADO] POST /api/envasado/registrar', { loteId: lote.id, sublote });
-      await api.registrarEnvasado(lote.id, [sublote]);
-      onSuccess({ sublotes: [sublote], lote, isTote, q, tipo, litTotal });
+      const prevCods = new Set((lote.sublotes || []).map(s => s && s.cod).filter(Boolean));
+      const r = await api.registrarEnvasado(lote.id, [sublote]);
+      /* FIX jun 2026 (auditoría D4): usar el cod REAL asignado por el server
+         para el QR impreso (puede reasignar letra por colisión/concurrencia —
+         un QR impreso con cod de cliente stale no escaneaba). */
+      const nuevos = (r?.lote?.sublotes || []).filter(s => s && s.cod && !prevCods.has(s.cod));
+      onSuccess({ sublotes: nuevos.length > 0 ? nuevos : [sublote], lote: r?.lote || lote, isTote, q, tipo, litTotal });
     } catch (err) {
       /* FIX jun 2026: mostrar error completo + detalles del backend si vienen.
          Antes solo se mostraba "Datos inválidos" sin saber qué campo falló. */
@@ -863,6 +868,18 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
   const maxUnidades = Math.floor(litDisponible / litPorUnidad);
   const litTotal = (parseInt(qty) || 0) * litPorUnidad;
 
+  /* FIX jun 2026 (auditoría D6): resolver subKey/tapaKey para que el backend
+     VALIDE y DESCUENTE envases/tapas — el reenvase consume envases físicos
+     (antes este camino no descontaba nada). Tapa solo para cubeta (default
+     por marca, mismo patrón que EnvasadoModal). */
+  const subcatReenv = (() => {
+    const cat = envases?.categorias?.[tipo];
+    if (!cat?.subcategorias) return null;
+    const entries = Object.entries(cat.subcategorias).map(([k, v]) => ({ key: k, nombre: v.nombre, marca: v.marca, stock: v.stock || 0 }));
+    return entries.find(s => (s.marca || s.nombre) === marca) || null;
+  })();
+  const tapaKeyReenv = (tipo === 'cubeta' && marca && envases?.tapa_default) ? (envases.tapa_default[marca] || null) : null;
+
   const handleSubmit = async () => {
     const q = parseInt(qty);
     if (!q || q < 1) return setError('Cantidad debe ser >= 1');
@@ -874,6 +891,9 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
       const letraBase = sublotes.length;
       const cod = (lote.codigo || lote.codigoLote || lote.id) + '-' + String.fromCharCode(65 + letraBase);
       const litExact = +litTotal.toFixed(2);
+      /* Para detectar los cods REALES que asigne el server (puede renombrar
+         por colisión — el QR impreso debe ser el de la BD, auditoría D4). */
+      const prevCods = new Set(sublotes.map(s => s && s.cod).filter(Boolean));
       /* Hijo de TOTE. NOTA (jun 2026): ya NO mandamos `estado` — el backend lo
          deriva de la ubicación física del TOTE (fábrica→'envasado', Terán→
          'en_stock_teran'). Mandar estado desde el cliente causaba la regresión
@@ -888,7 +908,9 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
         lit: litExact,
         litrosOriginal: litExact,
         litrosRestante: 0,
-        tapa: null,
+        subKey: subcatReenv?.key || null,
+        tapaKey: tapaKeyReenv,
+        tapa: tapaKeyReenv ? (envases?.tapas?.[tapaKeyReenv]?.nombre || null) : null,
         esMerma: false,
         fase: 2,
         esHijoDe: selectedTote,
@@ -904,16 +926,19 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
         }],
       };
       /* Usar la state machine: el backend valida tote_activo + crea hijos + decrementa */
-      await api.transicionSublote(selectedTote, 'reenvasarTote', {
+      const r = await api.transicionSublote(selectedTote, 'reenvasarTote', {
         nuevosSublotes: [subloteHijo],
         litrosConsumidos: litExact,
         /* lugar derivado de la ubicación física del TOTE (el server lo re-deriva
            igual, pero dejamos el contrato explícito). */
         lugar: (tote?.ub === 'teran') ? 'teran' : 'fabrica',
       });
+      /* FIX jun 2026 (auditoría D4): imprimir el cod REAL del server — puede
+         renombrar por colisión; el QR impreso con cod de cliente no escaneaba. */
+      const hijosReales = (r?.lote?.sublotes || []).filter(s => s && s.cod && !prevCods.has(s.cod));
       onSuccess({
-        sublotes: [subloteHijo],
-        lote,
+        sublotes: hijosReales.length > 0 ? hijosReales : [subloteHijo],
+        lote: r?.lote || lote,
         isTote: false,
         q,
         tipo,
@@ -1223,7 +1248,12 @@ function buildLoteAcciones(lote, ctx) {
   const envSt = envEstado(lote);
   const sublotes = lote.sublotes || [];
   const enFabrica = sublotes.filter(s => s.ub === 'fabrica' && !s.esMerma);
-  const totesSinConsumir = sublotes.filter(s => (s.tipo === 'tote' || s.fase === 1) && !s.consumido);
+  /* FIX jun 2026 (auditoría D3): solo TOTEs en 'tote_activo' son reenvasables
+     — la SM exige desde:['tote_activo']. Un TOTE recién envasado en fábrica
+     (estado 'envasado') mostraba el botón y daba 409 SIEMPRE. */
+  const totesSinConsumir = sublotes.filter(s =>
+    (s.tipo === 'tote' || s.fase === 1 || s.claseSublote === 'tote') &&
+    !s.consumido && s.estado === 'tote_activo');
   const haySublotesEnvasados = sublotes.some(s => s.estado === 'envasado' && !s.esMerma);
 
   const acciones = [];
@@ -1239,8 +1269,9 @@ function buildLoteAcciones(lote, ctx) {
       dataId: 'stock.btn.envasar', dataRol: 'tecnico,almacen,admin',
       onClick: () => onEnvasar(lote) });
   }
-  /* Enviar a recolectar — §8 almacen,admin */
-  if (canTransfer && lote.estado === 'envasado' && haySublotesEnvasados && onEnviarRecolectar) {
+  /* Enviar a recolectar — §8 almacen,admin. FIX jun 2026 (auditoría #8):
+     +'en_proceso' para no perder el botón tras un despacho parcial. */
+  if (canTransfer && (lote.estado === 'envasado' || lote.estado === 'en_proceso') && haySublotesEnvasados && onEnviarRecolectar) {
     acciones.push({ key: 'recolectar', label: 'Enviar a recolectar', icon: Icon.truck, kind: 'success',
       dataId: 'stock.btn.enviar-recolectar', dataRol: 'almacen,admin',
       title: 'Marcar listos para recolectar — Luis recibe notificación',
@@ -1354,8 +1385,11 @@ function SublotesList({ lote, sublotes, canAnular, onAnularSublote }) {
                 </div>
               )}
               {/* Sprint G-1: Anular sublote mal capturado. §8: almacen,admin.
-                 Solo si NO está en Terán, NO es merma, NO cancelado y sin hijos. */}
+                 Solo si NO está en Terán, NO es merma, NO cancelado y sin hijos.
+                 FIX jun 2026 (auditoría D13): solo estados que la SM acepta
+                 (envasado/en_recoleccion) — en_camino mostraba botón → 409. */}
               {onAnularSublote && canAnular && !s.esMerma && !s.cancelado
+                && ['envasado', 'en_recoleccion'].includes(s.estado)
                 && s.ub !== 'teran' && hijosDelTote.length === 0 && (
                 <div style={{ marginTop: 4, textAlign: 'right' }}>
                   <button

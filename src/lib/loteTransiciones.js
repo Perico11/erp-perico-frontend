@@ -35,7 +35,7 @@ export const TRANSICIONES_SUBLOTE = {
      prematuramente y saltaba el paso de Luis. */
   escanearRecibirTeran:   { desde: ['en_camino','tote_activo'], a: '__auto__', roles: ['almacen','admin'] },
   reenvasarTote:          { desde: ['tote_activo'], a: '__same__', roles: ['almacen','tecnico','admin'] },
-  cancelarSublote:        { desde: ['envasado','en_recoleccion'], a: 'cancelado', roles: ['admin'] },
+  cancelarSublote:        { desde: ['envasado','en_recoleccion'], a: 'cancelado', roles: ['admin','almacen'] },
 };
 
 export const LABELS_ACCION_LOTE = {

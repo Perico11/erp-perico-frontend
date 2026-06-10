@@ -346,7 +346,7 @@ export default function RecoleccionPage() {
         );
         if (ok) {
           try {
-            const r = await api.escanearLoteBulk({ loteId: data.loteId, accion });
+            const r = await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion, scanCod: code });
             reload();
             const n = r?.procesados?.length || 0;
             const omit = r?.omitidos?.length || 0;
