@@ -189,6 +189,11 @@ const api = {
       sesionConteoFolio: opts.sesionConteoFolio,
       codigoAutorizacion: opts.codigoAutorizacion,
     }),
+  /* Metadatos de catálogo de un PT (nombre / SKU) — no toca stock, no exige
+     candado. El backend bloquea renombrar PTs ligados a fórmula y SKUs
+     duplicados (decisión owner jun 2026: Burgos edita nombre + SKU). */
+  ptMeta: (producto, { sku, nuevoNombre } = {}) =>
+    request('POST', '/api/inventario/pt-meta', { producto, sku, nuevoNombre }),
 
   /* ── Estado TOTP del usuario actual (read-only, no genera secret) ── */
   getTOTPStatus: () => request('GET', '/api/totp/status'),

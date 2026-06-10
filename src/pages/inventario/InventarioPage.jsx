@@ -496,6 +496,7 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
       <div style={S.mNums}>
         <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} cub</span>
+        {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
     </div>
@@ -686,19 +687,50 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
+  /* Catálogo PT (pedido owner jun 2026): nombre editable + SKU. Solo para PT —
+     el rename de MP tiene su propio flujo (/api/mp/renombrar, propaga a todos
+     los JSON). Estos campos NO tocan stock: se guardan directo (sin candado ni
+     propuesta) vía /api/inventario/pt-meta, con auditoría. */
+  const esPT = item.tipo === 'pt';
+  const [nombreEdit, setNombreEdit] = useState(item.nombre || '');
+  const [skuEdit, setSkuEdit] = useState(item.sku || '');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
   useEffect(() => { const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 120); return () => clearTimeout(t); }, []);
 
-  const minValido = !canEditMin || (min !== '' && !isNaN(parseFloat(min)) && parseFloat(min) >= 0);
-  const puedeGuardar = motivo.trim().length >= 3 && qty !== '' && !isNaN(parseFloat(qty)) && parseFloat(qty) >= 0 && minValido;
+  const qtyNum = parseFloat(qty);
+  const minNum = parseFloat(min);
+  const stockChanged = (qty !== '' && !isNaN(qtyNum) && qtyNum !== (item.qty ?? 0))
+    || (canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
+  const nombreChanged = esPT && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
+  const skuChanged = esPT && skuEdit.trim() !== String(item.sku || '');
+  const metaChanged = nombreChanged || skuChanged;
+
+  const minValido = !canEditMin || (min !== '' && !isNaN(minNum) && minNum >= 0);
+  const qtyValida = qty !== '' && !isNaN(qtyNum) && qtyNum >= 0;
+  /* El motivo solo es obligatorio cuando se mueve STOCK; un cambio de
+     nombre/SKU solo (catálogo) se guarda sin motivo ni candado. */
+  const puedeGuardar = stockChanged
+    ? (motivo.trim().length >= 3 && qtyValida && minValido)
+    : (metaChanged && qtyValida && minValido);
 
   const handleSave = async () => {
     if (!puedeGuardar) return;
     setSaving(true);
     try {
-      /* 3er arg = nuevo mínimo (solo si el rol puede editarlo; si no, se conserva el actual). */
-      await onSave(parseFloat(qty), motivo.trim(), canEditMin ? parseFloat(min) : (item.min ?? 0));
+      /* 3er arg = nuevo mínimo (solo si el rol puede editarlo; si no, se conserva el actual).
+         4to arg = metadatos de catálogo (solo PT) + flags de qué cambió. */
+      await onSave(
+        qtyValida ? qtyNum : (item.qty ?? 0),
+        motivo.trim(),
+        canEditMin ? minNum : (item.min ?? 0),
+        {
+          stockChanged,
+          metaChanged,
+          nuevoNombre: nombreChanged ? nombreEdit.trim() : undefined,
+          sku: skuChanged ? skuEdit.trim() : undefined,
+        }
+      );
       onClose();
     } catch { /* el handler ya avisó; mantener abierto para reintentar */ }
     finally { setSaving(false); }
@@ -713,7 +745,25 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
           <div style={S.bigK}>Existencia actual</div>
           <div style={S.bigV}>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</div>
         </div>
-        <label style={S.flbl}>Nueva cantidad</label>
+        {/* Catálogo PT: nombre + SKU (pedido owner). Aplican directo con
+            auditoría — no son stock. El backend bloquea renombrar PTs ligados
+            a fórmula (la existencia se partiría) y SKUs duplicados. */}
+        {esPT && (
+          <>
+            <label style={S.flbl}>Nombre del producto</label>
+            <input style={S.finTxt} type="text" maxLength={200}
+              value={nombreEdit} onChange={e => setNombreEdit(e.target.value)} />
+            <label style={{ ...S.flbl, marginTop: 12 }}>SKU</label>
+            <input style={S.finTxt} type="text" maxLength={64} placeholder="Ej. PT-BM4-CUB"
+              value={skuEdit} onChange={e => setSkuEdit(e.target.value)} />
+            {metaChanged && (
+              <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+                Nombre/SKU se guardan al instante con auditoría (no requieren código).
+              </div>
+            )}
+          </>
+        )}
+        <label style={{ ...S.flbl, marginTop: esPT ? 12 : 0 }}>Nueva cantidad</label>
         <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
           value={qty} onChange={e => setQty(e.target.value)} />
         {canEditMin && (
@@ -723,19 +773,22 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
               value={min} onChange={e => setMin(e.target.value)} />
           </>
         )}
-        <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste</label>
+        <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste{stockChanged ? '' : ' (solo si mueves stock)'}</label>
         <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, merma, corrección"
           value={motivo} onChange={e => setMotivo(e.target.value)} />
-        {modoPropuesta && (
+        {modoPropuesta && stockChanged && (
           <div style={{ marginTop: 12, padding: '9px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 12, color: 'var(--lp-warning-700)' }}>
-            Tu cambio quedará <strong>pendiente</strong> hasta que el admin lo apruebe. No se aplica todavía.
+            El cambio de <strong>stock</strong> quedará <strong>pendiente</strong> hasta que el admin lo apruebe.
+            {metaChanged ? ' El nombre/SKU sí se aplica al instante.' : ''}
           </div>
         )}
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose}>Cancelar</button>
           <button style={{ ...S.act2(true), opacity: puedeGuardar && !saving ? 1 : 0.5 }}
             disabled={!puedeGuardar || saving} onClick={handleSave}>
-            {saving ? (modoPropuesta ? 'Enviando…' : 'Guardando…') : (modoPropuesta ? 'Enviar a aprobación' : 'Guardar')}
+            {saving
+              ? (modoPropuesta && stockChanged ? 'Enviando…' : 'Guardando…')
+              : (modoPropuesta && stockChanged ? 'Enviar a aprobación' : 'Guardar')}
           </button>
         </div>
 
@@ -799,6 +852,9 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                 <td style={S.td}>
                   <span style={{ fontWeight: 600 }}>{resaltar(nombre, query)}</span>
                   {prov && <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· {prov}</span>}
+                  {tipo === 'pt' && it.inv.sku && (
+                    <span style={{ ...S.provSub, marginLeft: 8, display: 'inline', fontFamily: 'var(--lp-font-mono)' }}>· {it.inv.sku}</span>
+                  )}
                 </td>
                 <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
                   {qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {unidad}
@@ -1215,7 +1271,9 @@ export default function InventarioPage() {
     let items = filterFn(ptItems, it => it.inv.qty || 0, it => it.pct);
     if (debouncedQuery) {
       const q = debouncedQuery.toLowerCase();
-      items = items.filter(it => it.nombre.toLowerCase().includes(q));
+      /* También por SKU (catálogo PT, jun 2026) — Burgos busca por etiqueta */
+      items = items.filter(it => it.nombre.toLowerCase().includes(q)
+        || String(it.inv.sku || '').toLowerCase().includes(q));
     }
     return items;
   }, [ptItems, debouncedQuery, filterFn]);
@@ -1340,23 +1398,48 @@ export default function InventarioPage() {
     setAjusteItem({ tipo: 'mp', nombre: item.mp, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'kg' });
   }, []);
   const handleAdjustPT = useCallback((item) => {
-    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub' });
+    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '' });
   }, []);
-  /* El guardado del sheet pasa por handleSaveMP/PT → ajustarConCandado (candado intacto). */
-  const handleAjusteSave = useCallback(async (newQty, motivo, newMin) => {
+  /* El guardado del sheet pasa por handleSaveMP/PT → ajustarConCandado (candado intacto).
+     extras (solo PT): {stockChanged, metaChanged, nuevoNombre?, sku?} — el catálogo
+     (nombre/SKU) se aplica PRIMERO y directo vía pt-meta (sin candado: no es stock);
+     el ajuste de stock posterior apunta al nombre YA renombrado (también la
+     propuesta de Burgos — si no, el admin la aprobaría sobre la clave vieja y
+     recrearía el PT con el nombre anterior). */
+  const handleAjusteSave = useCallback(async (newQty, motivo, newMin, extras = {}) => {
     if (!ajusteItem) return;
+    let nombreEfectivo = ajusteItem.nombre;
+    if (ajusteItem.tipo === 'pt' && extras.metaChanged) {
+      try {
+        const r = await api.ptMeta(ajusteItem.nombre, { sku: extras.sku, nuevoNombre: extras.nuevoNombre });
+        if (r?.producto) nombreEfectivo = r.producto;
+      } catch (e) {
+        const msg = e?.data?.error || e?.message || 'No se pudo actualizar nombre/SKU';
+        alert(msg);
+        throw e; /* mantener el sheet abierto para corregir */
+      }
+      if (!extras.stockChanged) {
+        setToastMsg('Catálogo actualizado (nombre/SKU)');
+        setTimeout(() => setToastMsg(''), 4000);
+        reloadInv();
+        return;
+      }
+    }
     const minFinal = newMin != null ? newMin : ajusteItem.min;
     /* Proponente (Burgos/no-admin): NO aplica — crea una propuesta pendiente de aprobación. */
     if (esProponente) {
-      await api.proponerAjuste(ajusteItem.tipo, ajusteItem.nombre, newQty, minFinal, motivo);
-      setToastMsg('Cambio enviado · pendiente de aprobación del admin');
+      await api.proponerAjuste(ajusteItem.tipo, nombreEfectivo, newQty, minFinal, motivo);
+      setToastMsg(extras.metaChanged
+        ? 'Catálogo aplicado · cambio de stock pendiente de aprobación del admin'
+        : 'Cambio enviado · pendiente de aprobación del admin');
       setTimeout(() => setToastMsg(''), 4500);
       reloadPendientes();
+      if (extras.metaChanged) reloadInv();
       return;
     }
-    if (ajusteItem.tipo === 'mp') await handleSaveMP(ajusteItem.nombre, newQty, minFinal, motivo);
-    else await handleSavePT(ajusteItem.nombre, newQty, minFinal, motivo);
-  }, [ajusteItem, esProponente, handleSaveMP, handleSavePT, reloadPendientes]);
+    if (ajusteItem.tipo === 'mp') await handleSaveMP(nombreEfectivo, newQty, minFinal, motivo);
+    else await handleSavePT(nombreEfectivo, newQty, minFinal, motivo);
+  }, [ajusteItem, esProponente, handleSaveMP, handleSavePT, reloadPendientes, reloadInv]);
 
   /* ── KPI click handler ── */
   const handleKpiClick = (filter) => {

@@ -74,6 +74,7 @@ const TECH_LABELS = {
   conteo_varianza: 'Varianza en conteo',
   conteo_pendiente_aprobacion: 'Conteo por aprobar',
   devolucion_mp_pendiente: 'Devolución a proveedor',
+  rendimiento_bajo: 'Rendimiento bajo',
   lote_en_camino: 'Lote en camino',
   devolucion: 'Devolución registrada',
 };
