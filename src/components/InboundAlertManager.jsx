@@ -24,6 +24,17 @@ import { QRScanner } from './QRModal';
 /*  - Cuando alguien acepta, el WS broadcast de la transición elimina   */
 /*    el banner del otro cliente.                                       */
 /*  - Push notification del navegador en paralelo (si está habilitada). */
+/*                                                                      */
+/* Decisión owner jun 2026 (v2):                                        */
+/*  - POSICIÓN: banners AL CENTRO arriba (left 50% + translateX(-50%),  */
+/*    top 72) — antes laterales top-right. Entrada desde arriba con     */
+/*    fade. Sin overlay: la pantalla sigue operable.                    */
+/*  - AVANCE PERCIBIDO: al éxito del claim PROPIO el banner muta ~1.45s */
+/*    a confirmación VERDE (palomita + "la card avanzó") y luego se     */
+/*    purga — antes desaparecía de golpe. Campo alert.confirmado        */
+/*    ('recogido'|'recibido'), patrón análogo a tomadoPor. El eco WS    */
+/*    del propio claim NO pisa el verde (guard en removeAlertByCod);    */
+/*    el 409 "tomado por otro" conserva su estado gris de siempre.      */
 /* ──────────────────────────────────────────────────────────────────── */
 
 const ROLES_INBOUND = ['recolector', 'almacen', 'admin'];
@@ -48,9 +59,15 @@ function tryShowPushNotif(title, body) {
 
 const S = {
   container: {
-    position: 'fixed', top: 64, right: 16, zIndex: 9999,
+    /* DECISIÓN OWNER jun 2026: banners AL CENTRO de la pantalla (antes
+       laterales top-right con slide desde la derecha). Anclado arriba-centro:
+       left 50% + translateX(-50%); top 72 para no tapar el TopBar. En móvil
+       el width calc(100vw - 32px) deja 16px de margen por lado. Sigue SIN
+       overlay: pointerEvents none en contenedor, auto en cada card. */
+    position: 'fixed', top: 72, left: '50%', transform: 'translateX(-50%)',
+    zIndex: 9999,
     display: 'flex', flexDirection: 'column', gap: 10,
-    maxWidth: 380, width: 'calc(100vw - 32px)',
+    maxWidth: 420, width: 'calc(100vw - 32px)',
     pointerEvents: 'none',
   },
   card: {
@@ -93,7 +110,9 @@ const S = {
   actions: { display: 'flex', gap: 6, flexWrap: 'wrap' },
   btn: (variant) => ({
     flex: 1, minWidth: 100,
-    padding: '10px 12px', borderRadius: 8, border: 'none',
+    /* (limpieza jun 2026: había `border:'none'` duplicado aquí — el ternario
+       de abajo ya cubre ambos casos y el duplicado generaba warning de build) */
+    padding: '10px 12px', borderRadius: 8,
     fontSize: 12, fontWeight: 700, cursor: 'pointer',
     fontFamily: 'var(--lp-font-sans)',
     background: variant === 'primary' ? 'var(--lp-brand-600)'
@@ -108,6 +127,14 @@ const S = {
     fontSize: 11, color: 'var(--lp-text-tertiary)',
     fontStyle: 'italic', marginTop: 6,
   },
+  /* Estado de confirmación post-claim (decisión owner jun 2026): palomita +
+     texto del avance en verde success. minHeight 44 = misma altura que la
+     fila de botones que reemplaza → la card no brinca de tamaño al mutar. */
+  confirm: {
+    display: 'flex', alignItems: 'center', gap: 8,
+    fontSize: 13, fontWeight: 700, color: 'var(--lp-success-600)',
+    minHeight: 44,
+  },
 };
 
 /* Inyectar keyframes una sola vez */
@@ -116,13 +143,18 @@ function injectAnimCSS() {
   if (document.getElementById('inbound-anim-css')) return;
   const style = document.createElement('style');
   style.id = 'inbound-anim-css';
+  /* Banners centrados (owner jun 2026): entrada desde ARRIBA con leve fade
+     (antes slide lateral desde la derecha); salida = fade hacia arriba.
+     Los transform animan la CARD, no el contenedor (que lleva el
+     translateX(-50%) del centrado — sin conflicto entre ambos). */
   style.textContent = `
     @keyframes inbound-slide-in {
-      from { transform: translateX(120%); opacity: 0; }
-      to   { transform: translateX(0); opacity: 1; }
+      from { transform: translateY(-24px); opacity: 0; }
+      to   { transform: translateY(0); opacity: 1; }
     }
     @keyframes inbound-fade-out {
-      to { opacity: 0; transform: translateX(120%); }
+      from { opacity: 1; transform: translateY(0); }
+      to   { opacity: 0; transform: translateY(-12px); }
     }
   `;
   document.head.appendChild(style);
@@ -237,12 +269,21 @@ export default function InboundAlertManager() {
     setAlerts(prev => prev.map(a => {
       if (a.cod !== cod) return a;
       if (etapaToRemove && a.etapa !== etapaToRemove) return a;
+      /* GUARD jun 2026 (avance percibido): _broadcast del server NO excluye al
+         emisor — el eco WS de MI PROPIO claim llega ms después del 200 del
+         POST y este map lo convertiría en gris "Tomado por <yo>", pisando la
+         confirmación verde recién puesta. Un alert confirmado es intocable:
+         lo purga su propio setTimeout (marcado en marcarConfirmado). */
+      if (a.confirmado) return a;
       return { ...a, tomadoPor: takenBy || 'otro usuario' };
     }));
     setTimeout(() => {
       setAlerts(prev => prev.filter(a => {
         if (a.cod !== cod) return true;
         if (etapaToRemove && a.etapa !== etapaToRemove) return true;
+        /* Mismo guard: la purga del confirmado es exclusiva de su timer (1.45s),
+           para garantizar la ventana completa de feedback verde. */
+        if (a.confirmado) return true;
         return false;
       }));
     }, 1500);
@@ -318,6 +359,23 @@ export default function InboundAlertManager() {
     }, 1500);
   }, []);
 
+  /* AVANCE INMEDIATO PERCIBIDO (decisión owner jun 2026): al éxito del claim
+     PROPIO el banner ya no desaparece de golpe — muta ~1.45s a un estado de
+     confirmación verde (palomita + "la card avanzó") y LUEGO se purga.
+     Patrón análogo a tomadoPor (marcarTomado): campo en el alert + setTimeout.
+     tipo: 'recogido' (Voy por él) | 'recibido' (Recibir en Terán).
+     FIX U2 intacto: la purga es por id (cod:etapa), nunca por cod global —
+     el banner 'enCamino' de Josué sobrevive a la confirmación del de Luis. */
+  const marcarConfirmado = useCallback((alertId, tipo) => {
+    setAlerts(prev => prev.map(a => a.id === alertId
+      ? { ...a, confirmado: tipo, tomadoPor: null }
+      : a
+    ));
+    setTimeout(() => {
+      setAlerts(prev => prev.filter(a => a.id !== alertId));
+    }, 1450);
+  }, []);
+
   const handleClaim = useCallback(async (alert) => {
     if (taking || scanFor) return;
     /* Recibir en Terán → escáner obligatorio */
@@ -332,10 +390,13 @@ export default function InboundAlertManager() {
         usuario: userName,
         scanCod: alert.cod,
       });
-      /* La transición exitosa dispara su propio WS que removerá el banner.
-         FIX U2: removemos por id (cod+etapa) para no purgar OTRO banner del
-         mismo cod en etapa distinta (el banner 'enCamino' de Josué debe quedar). */
-      setAlerts(prev => prev.filter(a => a.id !== alert.id));
+      /* Éxito → feedback de avance: el banner muta a confirmación verde
+         ("En camino — la card avanzó") y se purga ~1.45s después. El WS de la
+         transición refresca las pantallas; el guard de removeAlertByCod evita
+         que ese mismo eco pise el verde con "tomado por".
+         FIX U2: la purga sigue siendo por id (cod+etapa) — el banner
+         'enCamino' de Josué (mismo cod, otra etapa) no se toca. */
+      marcarConfirmado(alert.id, 'recogido');
     } catch (e) {
       const msg = e?.message || '';
       if (msg.includes('estado') || e?.status === 409) {
@@ -347,7 +408,7 @@ export default function InboundAlertManager() {
     } finally {
       setTaking(null);
     }
-  }, [taking, scanFor, userName, marcarTomado]);
+  }, [taking, scanFor, userName, marcarTomado, marcarConfirmado]);
 
   const handleScanResult = useCallback(async (result) => {
     const alert = scanFor;
@@ -364,7 +425,13 @@ export default function InboundAlertManager() {
          (igual que el escáner hero de Recepción). */
       const r = await api.escanearSublote(code, accion);
       const codReal = r?.sublote?.cod || code;
-      setAlerts(prev => prev.filter(a => !(a.cod === codReal && a.etapa === alert.etapa)));
+      /* Éxito → confirmación verde sobre el banner del sublote EFECTIVAMENTE
+         recibido (la verdad física manda: si escaneó otro envase, codReal
+         difiere y el banner origen queda intacto — su sublote sigue pendiente).
+         El id es determinístico `${cod}:${etapa}` (FIX U2), así que se
+         construye directo; si ese banner no existe, marcarConfirmado es no-op. */
+      marcarConfirmado(`${codReal}:${alert.etapa}`,
+        accion === 'escanearRecibirTeran' ? 'recibido' : 'recogido');
     } catch (e) {
       const msg = e?.message || '';
       const data = e?.data;
@@ -377,7 +444,17 @@ export default function InboundAlertManager() {
         if (ok) {
           try {
             await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion, scanCod: code });
-            setAlerts(prev => prev.filter(a => a.etapa !== alert.etapa || a.loteId !== data.loteId));
+            /* Bulk OK → confirmar en verde TODOS los banners de ese lote en
+               esta etapa (mismo predicado del filter anterior) y purgar tras
+               la ventana de feedback, igual que el claim individual. */
+            const tipoConf = accion === 'escanearRecibirTeran' ? 'recibido' : 'recogido';
+            setAlerts(prev => prev.map(a => (a.etapa === alert.etapa && a.loteId === data.loteId)
+              ? { ...a, confirmado: tipoConf, tomadoPor: null }
+              : a
+            ));
+            setTimeout(() => {
+              setAlerts(prev => prev.filter(a => a.etapa !== alert.etapa || a.loteId !== data.loteId));
+            }, 1450);
           } catch (e2) {
             console.warn('[Inbound] Error bulk claim:', e2?.message, e2?.data);
             window.alert(`No se pudo recibir el lote: ${e2?.message || 'error'}`);
@@ -392,7 +469,7 @@ export default function InboundAlertManager() {
     } finally {
       setTaking(null);
     }
-  }, [scanFor, marcarTomado]);
+  }, [scanFor, marcarTomado, marcarConfirmado]);
 
   /* FIX U2: dismiss por id, no por cod — cada banner es independiente */
   const handleDismiss = useCallback((alertId) => {
@@ -410,7 +487,11 @@ export default function InboundAlertManager() {
     <>
     <div style={S.container} aria-live="polite">
       {alerts.map(a => {
-        const yaTomado = !!a.tomadoPor;
+        /* confirmado tiene PRIORIDAD sobre tomadoPor: si por carrera de eco WS
+           ambos campos coexistieran, gana el verde (mi claim triunfó). El caso
+           "tomado por otro" (409 real) nunca trae confirmado → gris intacto. */
+        const confirmado = !!a.confirmado;
+        const yaTomado = !confirmado && !!a.tomadoPor;
         const isBusy = taking === a.cod || scanFor?.id === a.id;
         /* Label por ETAPA:
            - etapa envasado → "Voy por él" (Luis o admin): despacho directo,
@@ -432,12 +513,19 @@ export default function InboundAlertManager() {
             style={{
               ...S.card,
               opacity: yaTomado ? 0.6 : 1,
-              borderColor: yaTomado ? 'var(--lp-text-tertiary)' : 'var(--lp-brand-600)',
+              borderColor: confirmado ? 'var(--lp-success-600)'
+                         : yaTomado ? 'var(--lp-text-tertiary)'
+                         : 'var(--lp-brand-600)',
+              /* Salida del confirmado: fade-out (0.35s) con delay 1.05s →
+                 termina a 1.4s, justo antes de la purga (1.45s en
+                 marcarConfirmado) — sin flash de reaparición. Reemplaza la
+                 animación de entrada del mismo nodo (key estable). */
+              ...(confirmado ? { animation: 'inbound-fade-out 0.35s ease-in 1.05s forwards' } : {}),
             }}
             role="alert"
           >
             <div style={S.header}>
-              <span style={{ ...S.icon, display: 'inline-flex', alignItems: 'center' }}>{yaTomado
+              <span style={{ ...S.icon, display: 'inline-flex', alignItems: 'center', ...(confirmado ? { color: 'var(--lp-success-600)' } : {}) }}>{(confirmado || yaTomado)
                 ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
                 : (rol === 'recolector'
                     ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
@@ -463,7 +551,18 @@ export default function InboundAlertManager() {
                 Envasado por {a.origenUsuario || '—'}
               </span>
             </div>
-            {yaTomado ? (
+            {confirmado ? (
+              /* Confirmación verde post-claim: palomita SVG (hereda el color
+                 success de S.confirm vía currentColor) + texto del avance. */
+              <div style={S.confirm}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                <span>
+                  {a.confirmado === 'recibido'
+                    ? 'Recibido en Terán — la card avanzó'
+                    : 'En camino — la card avanzó'}
+                </span>
+              </div>
+            ) : yaTomado ? (
               <div style={S.taken}>
                 Tomado por <strong>{a.tomadoPor}</strong>
               </div>
