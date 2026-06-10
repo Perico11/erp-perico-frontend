@@ -6,6 +6,8 @@ import {
   LABELS_ACCION_LOTE,
   ESTADO_LOTE_LABEL,
   ESTADO_LOTE_COLOR,
+  ESTADO_SUBLOTE_LABEL,
+  ESTADO_SUBLOTE_COLOR,
 } from '../lib/loteTransiciones';
 import PruebaBadge from './ui/PruebaBadge';
 import useConfirm from '../hooks/useConfirm';
@@ -181,6 +183,10 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
   const [busy, setBusy] = useState('');
   const [qcMode, setQcMode] = useState(null); /* 'aprobarQC' | 'rechazarQC' | null */
   const [scanRecepcion, setScanRecepcion] = useState(false); /* escáner QR de recepción Terán */
+  /* FIX jun 2026 (bug "Ver sublotes roto"): los sublotes se EXPANDEN aquí mismo
+     — antes navegaba a /stock-fabrica?lote= y con la regla en_almacen el lote
+     caía fuera del tab default → pantalla vacía. Inline = imposible de romper. */
+  const [verSubs, setVerSubs] = useState(false);
   const [confirm, ConfirmEl] = useConfirm();
 
   /* Resolver el lote asociado al pedido */
@@ -493,8 +499,8 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
               </button>
             )}
             {tieneSublotes && !ocultarVerSublotes && (
-              <button style={S.btn('ghost')} onClick={() => navigate('/stock-fabrica?lote=' + encodeURIComponent(lote.codigoLote || lote.codigo || lote.id))}>
-                Ver sublotes
+              <button style={S.btn('ghost')} onClick={() => setVerSubs(v => !v)}>
+                {verSubs ? 'Ocultar sublotes' : `Ver sublotes (${sublotesActivos.length})`}
               </button>
             )}
             {!acciones.length && !puedeEnvasar && !tieneSublotes && !puedeEnviarRecolectar && !puedeRecibirEnTeran && !puedeReenvasarTote && (
@@ -503,6 +509,29 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
               </span>
             )}
           </div>
+
+          {/* Sublotes EXPANDIDOS inline (jun 2026 — antes navegaba y se rompía) */}
+          {verSubs && tieneSublotes && !ocultarVerSublotes && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--lp-border-subtle)', display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {sublotesActivos.map(s => {
+                const c = ESTADO_SUBLOTE_COLOR[s.estado] || 'var(--lp-text-tertiary)';
+                const l = ESTADO_SUBLOTE_LABEL[s.estado] || s.estado || '—';
+                const qtyTxt = [s.qty != null ? `${s.qty} ${s.tipo || 'cub'}` : null, s.lit ? `${s.lit} L` : null].filter(Boolean).join(' · ');
+                return (
+                  <div key={s.cod} style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 11 }}>
+                    <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-text-secondary)' }}>{s.cod}</span>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 999, background: `color-mix(in srgb, ${c} 14%, transparent)`, color: c }}>
+                      <i style={{ width: 5, height: 5, borderRadius: 999, background: c }} />{l}
+                    </span>
+                    {qtyTxt && <span style={{ color: 'var(--lp-text-tertiary)' }}>{qtyTxt}</span>}
+                    <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>
+                      {(s.ub || 'fabrica') === 'teran' ? 'Terán' : 'Fábrica'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </>
       )}
 

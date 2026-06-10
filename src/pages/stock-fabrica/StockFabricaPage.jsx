@@ -1683,6 +1683,20 @@ export default function StockFabricaPage() {
   /* Compat: enFabrica sigue refiriéndose a la lista activa para el resto del código */
   const enFabrica = enFabricaActivos;
 
+  /* FIX jun 2026 (bug "Ver sublotes roto"): si llega ?lote= de un lote que NO
+     vive en el tab activo (p.ej. en_almacen → tab Transferidos), auto-cambiar
+     al tab correcto. Antes la búsqueda pre-llenada filtraba sobre "En Fábrica"
+     y el lote transferido no aparecía → pantalla vacía. */
+  useEffect(() => {
+    if (!highlightLote) return;
+    const l = allLotes.find(x => x && (x.codigo === highlightLote || x.codigoLote === highlightLote || x.id === highlightLote));
+    if (!l) return;
+    if (l.esPrueba) setActiveTab('pruebas');
+    else if (l.cancelado || l.estado === 'qc_hold' || l.estado === 'rechazado') setActiveTab('rechazados');
+    else if (['en_recoleccion', 'en_camino', 'en_almacen', 'reenvasado', 'entregado'].includes(l.estado)) setActiveTab('transferidos');
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [highlightLote, allLotes.length]);
+
   /* Lotes transferidos — también separamos prueba */
   const transferidosActivos = useMemo(() =>
     allLotes.filter(l => ['en_recoleccion', 'en_camino', 'en_almacen', 'reenvasado'].includes(l.estado) && !l.esPrueba),
