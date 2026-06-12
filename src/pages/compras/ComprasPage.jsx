@@ -1464,7 +1464,28 @@ function MRPTab({ mrpData, onCrearOC }) {
                       </div>
                     </td>
                     <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>
-                      {typeof consumo === 'number' ? consumo.toFixed(0) : consumo} kg
+                      {/* FIX jun 2026 (reporte owner): la Demanda mostraba el consumo SIN
+                          el margen dinámico por volatilidad, pero el Neto SÍ lo usa →
+                          la aritmética parecía rota (Disponible > Demanda y aun así
+                          "comprar X kg"). Ahora la columna muestra la demanda REAL del
+                          cálculo (consumo × margen) y abajo el desglose. */}
+                      {(() => {
+                        const margen = Number(it.margen_aplicado) || 1;
+                        const demandaReal = it.necesidad_periodo != null
+                          ? Number(it.necesidad_periodo)
+                          : (typeof consumo === 'number' ? consumo * margen : consumo);
+                        const conMargen = margen > 1.02 && typeof demandaReal === 'number';
+                        return (
+                          <>
+                            {typeof demandaReal === 'number' ? demandaReal.toFixed(0) : demandaReal} kg
+                            {conMargen && (
+                              <div style={{ fontSize: 10, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-sans)' }}>
+                                {typeof consumo === 'number' ? consumo.toFixed(0) : consumo} +{Math.round((margen - 1) * 100)}% volatilidad
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)' }}>
                       {typeof stock === 'number' ? stock.toFixed(0) : stock} kg
