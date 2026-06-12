@@ -299,7 +299,9 @@ const S = {
   }),
   sheetBox: (desk) => ({
     background: 'var(--lp-bg-base)', width: '100%',
-    maxWidth: desk ? 480 : 'none', maxHeight: desk ? '90vh' : '92vh',
+    maxWidth: desk ? 480 : 'none',
+    /* FIX jun 2026 v3: viewport VISIBLE real (teclado iOS) — ver useBodyScrollLock */
+    maxHeight: desk ? '90vh' : 'calc(var(--pp-vvh, 100dvh) - 40px)',
     overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', borderRadius: desk ? 16 : '26px 26px 0 0',
     padding: '20px 20px 26px', boxShadow: '0 8px 32px rgba(0,0,0,.22)',
     animation: 'lpSheetIn .3s cubic-bezier(.22,1,.36,1)',

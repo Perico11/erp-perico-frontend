@@ -364,8 +364,12 @@ const S = {
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
     width: '100%', maxWidth: 440,
-    /* Reservamos espacio para bottom-nav (~64px) y notch. */
-    maxHeight: 'calc(100vh - 80px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px))',
+    /* FIX jun 2026 v3 (scroll móvil): 100vh en teléfono es MÁS ALTO que lo
+       visible (barra del navegador/teclado) → el sheet "cabía" sin overflow,
+       no había nada que scrollear y el tope quedaba cortado. --pp-vvh = altura
+       visible REAL (visualViewport, la setea useBodyScrollLock; sigue al
+       teclado en iOS); fallback 100dvh. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 60px - env(safe-area-inset-bottom, 0px))',
     overflow: 'auto',
     boxShadow: '0 8px 32px rgba(0,0,0,.18)',
   },

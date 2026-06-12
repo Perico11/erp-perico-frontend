@@ -17,6 +17,18 @@ export default function useBodyScrollLock(active = true) {
     const html = document.documentElement;
     const body = document.body;
     const root = document.getElementById('root');
+
+    /* --pp-vvh = altura VISIBLE real (visualViewport sigue al teclado en iOS,
+       cosa que ni vh ni dvh hacen). Los sheets la usan en su maxHeight para
+       que al abrir el teclado el formulario SIEMPRE tenga overflow scrolleable
+       y nada quede inalcanzable detrás del teclado. */
+    const vv = window.visualViewport;
+    const setVVH = () => {
+      const h = (vv && vv.height) || window.innerHeight;
+      html.style.setProperty('--pp-vvh', h + 'px');
+    };
+    setVVH();
+    if (vv) vv.addEventListener('resize', setVVH);
     if (_locks === 0) {
       _saved = {
         rootTop: root ? root.scrollTop : 0,
@@ -33,6 +45,7 @@ export default function useBodyScrollLock(active = true) {
     _locks++;
     return () => {
       _locks--;
+      if (vv) vv.removeEventListener('resize', setVVH);
       if (_locks <= 0) {
         _locks = 0;
         if (!_saved) return;

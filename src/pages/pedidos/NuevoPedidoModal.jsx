@@ -44,8 +44,10 @@ const S = {
     borderRadius: isDesktop ? 18 : '24px 24px 0 0',
     width: '100%',
     maxWidth: isDesktop ? 440 : 'none',
-    maxHeight: '92vh', overflowY: 'auto',
-    /* FIX jun 2026: el scroll del sheet no se encadena al body (scroll bleed móvil) */
+    /* FIX jun 2026 v3: altura contra el viewport VISIBLE real (teclado/barra
+       del navegador incluidos) — con 92vh el sheet "cabía" sin overflow en
+       teléfono y no había nada que scrollear. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 40px)', overflowY: 'auto',
     overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch',
     padding: '22px 22px 30px',
     boxShadow: '0 12px 40px rgba(26,24,21,.2)',
