@@ -165,6 +165,18 @@ function DetalleModal({ mp, onClose }) {
             <tbody>
               <tr><td style={S.td}>Promedio últimos 3 meses</td><td style={S.tdNum}>{fmtN(data.promedio3m, 1)} kg</td></tr>
               <tr><td style={S.td}>Promedio 12 meses</td><td style={S.tdNum}>{fmtN(data.promedio12m, 1)} kg</td></tr>
+              {/* Pronóstico por MES (dueño jun 2026): dice de dónde sale la demanda
+                  del mes objetivo — mismo mes de años pasados, no un promedio ciego. */}
+              {data.demandaFuente && (
+                <tr style={{ background: 'var(--lp-info-50)' }}>
+                  <td style={S.td}>Demanda {data.mesObjetivo} ({
+                    data.demandaFuente === 'mismo-mes-produccion' ? 'mismo mes · producción real'
+                      : data.demandaFuente === 'mismo-mes-compras' ? 'mismo mes · compras históricas'
+                        : 'promedio reciente'
+                  })</td>
+                  <td style={S.tdNum}>{fmtN(data.demandaMensualProyectada, 0)} kg — {data.demandaDetalle}</td>
+                </tr>
+              )}
               <tr><td style={S.td}>Factor estacional aplicado</td><td style={S.tdNum}>×{data.factorEstacional}</td></tr>
               <tr><td style={S.td}>Lead time</td><td style={S.tdNum}>{data.leadTime.dias} d ({data.leadTime.fuente}, {data.leadTime.muestras} muestras)</td></tr>
               <tr><td style={S.td}>Coef. variación de demanda</td><td style={S.tdNum}>{(data.cv * 100).toFixed(0)}%</td></tr>
