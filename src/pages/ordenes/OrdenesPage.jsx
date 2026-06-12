@@ -9,6 +9,7 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import ProduccionFlow from '../produccion/ProduccionFlow';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import Fab from '../../components/ui/Fab';
 import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
@@ -420,10 +421,17 @@ const S = {
    24px en móvil (mockup .sheet / patrón del design system verde). */
 function useSheetStyles() {
   const isDesktop = useIsDesktop();
+  /* FIX jun 2026 (reporte dueño): en móvil el sheet no scrolleaba — el gesto se
+     fugaba al body de atrás. Lock del body mientras el sheet esté montado +
+     overscroll-behavior:contain para cortar el encadenamiento del scroll. */
+  useBodyScrollLock();
+  const scrollFix = { overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch' };
   return {
     isDesktop,
     overlay: isDesktop ? S.overlay : { ...S.overlay, alignItems: 'flex-end', padding: 0 },
-    modal: isDesktop ? S.modal : { ...S.modal, maxWidth: '100%', borderRadius: '24px 24px 0 0' },
+    modal: isDesktop
+      ? { ...S.modal, ...scrollFix }
+      : { ...S.modal, ...scrollFix, maxWidth: '100%', borderRadius: '24px 24px 0 0' },
   };
 }
 

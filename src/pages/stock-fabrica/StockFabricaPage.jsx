@@ -9,6 +9,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import QRModal from '../../components/QRModal';
 import useConfirm from '../../hooks/useConfirm';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { ESTADO_SUBLOTE_LABEL, ESTADO_SUBLOTE_COLOR, ESTADO_LOTE_LABEL } from '../../lib/loteTransiciones';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import { qrSvg, qrDataUrl } from '../../lib/qrGenerator';
@@ -299,7 +300,7 @@ const S = {
   sheetBox: (desk) => ({
     background: 'var(--lp-bg-base)', width: '100%',
     maxWidth: desk ? 480 : 'none', maxHeight: desk ? '90vh' : '92vh',
-    overflowY: 'auto', borderRadius: desk ? 16 : '26px 26px 0 0',
+    overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', borderRadius: desk ? 16 : '26px 26px 0 0',
     padding: '20px 20px 26px', boxShadow: '0 8px 32px rgba(0,0,0,.22)',
     animation: 'lpSheetIn .3s cubic-bezier(.22,1,.36,1)',
   }),
@@ -414,6 +415,7 @@ const PRESENTACIONES_META = [
 /* ENVASADO MODAL                                                     */
 /* ═══════════════════════════════════════════════════════════════════ */
 export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
+  useBodyScrollLock(); /* FIX jun 2026: sin scroll-bleed al body en móvil */
   /* REGLA DE NEGOCIO: TOTE indivisible.
      Un TOTE es un contenedor de transporte a granel. Si el lote se envasa en
      TOTE, va TODO el lote en uno o más TOTEs del MISMO tipo — nunca mezclado
@@ -900,6 +902,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
 /* litrosRestante del TOTE. Si el TOTE se vacía pasa a tote_vaciado.  */
 /* ═══════════════════════════════════════════════════════════════════ */
 export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, toteInicial }) {
+  useBodyScrollLock(); /* FIX jun 2026: sin scroll-bleed al body en móvil */
   /* toteInicial (jun 2026): preselecciona un TOTE específico — lo usa el buffer
      de Recepción Terán (que reemplazó su modal local por éste, censo dedup). */
   const sublotes = lote.sublotes || [];

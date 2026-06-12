@@ -3,6 +3,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import humanizeError from '../../utils/humanizeError';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -44,6 +45,8 @@ const S = {
     width: '100%',
     maxWidth: isDesktop ? 440 : 'none',
     maxHeight: '92vh', overflowY: 'auto',
+    /* FIX jun 2026: el scroll del sheet no se encadena al body (scroll bleed móvil) */
+    overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch',
     padding: '22px 22px 30px',
     boxShadow: '0 12px 40px rgba(26,24,21,.2)',
     transform: shown ? 'none' : 'translateY(24px)',
@@ -88,6 +91,7 @@ const S = {
 export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto = null }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
+  useBodyScrollLock(); /* el body no scrollea mientras el sheet está abierto */
   /* Si llega prefillProducto (desde Inventario → "Pedir reposición"), inicializa el campo */
   const [producto, setProducto] = useState(prefillProducto || '');
   const [cantidad, setCantidad] = useState('');

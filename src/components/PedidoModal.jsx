@@ -11,6 +11,7 @@
    No conoce nada de backend ni cola; eso lo maneja PedidoIncomingManager.
    ═══════════════════════════════════════════════════════════════════════ */
 import { useEffect, useRef } from 'react';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import PruebaBadge, { esPrueba as esPruebaItem } from './ui/PruebaBadge';
 
 /* ── Iconos (stroke 2, currentColor) ── */
@@ -130,6 +131,7 @@ const btn = {
 };
 
 export default function PedidoModal({ pedido, onResolve }) {
+  useBodyScrollLock(); /* FIX jun 2026: sin scroll-bleed al body en móvil */
   const acceptBtnRef = useRef(null);
   useEffect(() => { injectKeyframes(); }, []);
 
