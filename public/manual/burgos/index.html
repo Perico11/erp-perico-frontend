@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Manual — Burgos · Conteo físico | Pinturas El Perico</title>
+<link rel="icon" href="/logos/app-icon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --acc:#1D9E75; --accd:#178060; --acc50:#E6F5EE; --bg:#F6F7F4; --card:#FFFFFF;
+    --txt:#16241F; --mut:#5C7268; --hint:#8A988F; --line:rgba(20,36,31,.10);
+    --amber:#C98A2B; --amber50:#FAF3E4; --danger:#C8553B; --danger50:#FAEDE8;
+    --sans:'DM Sans',system-ui,sans-serif; --mono:'JetBrains Mono',monospace; }
+  *{ box-sizing:border-box; } body{ margin:0; background:var(--bg); color:var(--txt); font-family:var(--sans); line-height:1.55; }
+  .wrap{ max-width:860px; margin:0 auto; padding:0 20px 80px; }
+  header{ background:var(--card); border-bottom:1px solid var(--line); padding:26px 20px; margin-bottom:28px; }
+  header .inner{ max-width:860px; margin:0 auto; display:flex; align-items:center; gap:14px; }
+  header img{ width:46px; height:46px; }
+  h1{ font-size:21px; margin:0; letter-spacing:-.01em; } .sub{ font-size:13px; color:var(--mut); margin-top:2px; }
+  h2{ font-size:17px; margin:38px 0 10px; padding-top:10px; border-top:1px solid var(--line); letter-spacing:-.01em; }
+  h2 .n{ display:inline-flex; width:26px; height:26px; border-radius:8px; background:var(--acc); color:#fff; align-items:center; justify-content:center; font-size:13px; margin-right:9px; }
+  p,li{ font-size:14px; color:var(--txt); } .mut{ color:var(--mut); }
+  ol,ul{ padding-left:22px; } li{ margin-bottom:6px; }
+  .btn{ display:inline-block; padding:2px 11px; border-radius:9px; background:var(--acc); color:#fff; font-size:12.5px; font-weight:600; white-space:nowrap; }
+  .btn.ghost{ background:var(--card); color:var(--mut); border:1px solid var(--line); }
+  .badge{ display:inline-block; padding:1px 9px; border-radius:999px; font-size:11.5px; font-weight:600; }
+  .cod{ font-family:var(--mono); font-size:12.5px; color:var(--accd); font-weight:700; }
+  .tip,.warn,.danger-box{ border-radius:14px; padding:12px 15px; font-size:13.5px; margin:12px 0; }
+  .tip{ background:var(--acc50); } .warn{ background:var(--amber50); } .danger-box{ background:var(--danger50); }
+  .tip b,.warn b,.danger-box b{ display:block; margin-bottom:2px; }
+  .idx{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 20px; }
+  .idx a{ display:block; color:var(--accd); text-decoration:none; font-size:14px; font-weight:600; padding:5px 0; }
+  .flow{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px 16px; font-family:var(--mono); font-size:12px; color:var(--mut); overflow-x:auto; white-space:nowrap; margin:12px 0; }
+  .flow b{ color:var(--accd); }
+</style>
+</head>
+<body>
+<header><div class="inner">
+  <img src="/logos/logo-perico-green.svg" alt="" />
+  <div><h1>Manual de usuario — Burgos</h1><div class="sub">Conteo físico de inventario · ERP Pinturas El Perico · sistema.pinturaselperico.com</div></div>
+</div></header>
+<div class="wrap">
+
+<div class="idx">
+  <a href="#entrar">1. Entrar al sistema</a>
+  <a href="#calendario">2. Tu calendario de conteos</a>
+  <a href="#contar">3. Hacer un conteo físico</a>
+  <a href="#varianzas">4. Varianzas y aprobación</a>
+  <a href="#extras">5. Inventario y Reportes</a>
+</div>
+
+<h2 id="entrar"><span class="n">1</span>Entrar al sistema</h2>
+<ol>
+  <li>Abre <b>sistema.pinturaselperico.com</b>.</li>
+  <li>Usuario <span class="cod">Burgos</span> → <span class="btn">Continuar</span> → tu PIN de 4 dígitos.</li>
+</ol>
+<p>Tu Inicio muestra los <b>conteos vencidos</b> del calendario y tus pendientes. Tu menú: Inicio, Inventario (solo lectura), Conteo y Reportes.</p>
+
+<h2 id="calendario"><span class="n">2</span>Tu calendario de conteos</h2>
+<p>En <b>Conteo</b> ves las tarjetas <b>"Conteos pendientes"</b> y <b>"Sin contar nunca"</b>. El calendario te marca qué MPs/PT tocan esta semana — los vencidos salen en rojo. Los lunes te llega el recordatorio si traes pendientes.</p>
+
+<h2 id="contar"><span class="n">3</span>Hacer un conteo físico</h2>
+<div class="flow">Iniciar sesión de conteo → contar item por item → <b>Finalizar</b> → el admin <b>aprueba</b> → el inventario se ajusta</div>
+<ol>
+  <li>Toca <span class="btn">Iniciar conteo</span> y elige la categoría (MP, PT o Envases).</li>
+  <li>Por cada item, cuenta lo físico y captura la cantidad encontrada. El folio del conteo cubre exactamente lo que contaste.</li>
+  <li>Al terminar, toca <span class="btn">Finalizar</span> — el sistema compara contra el inventario teórico y calcula varianzas.</li>
+</ol>
+<div class="tip"><b>Tu trabajo es contar, no ajustar</b>Tú no editas el inventario directo: todo ajuste pasa por tu conteo y la aprobación del admin. Así cada movimiento queda firmado.</div>
+
+<h2 id="varianzas"><span class="n">4</span>Varianzas y aprobación</h2>
+<ul>
+  <li>Si la diferencia entre lo contado y el sistema es <b>mayor al 5%</b>, queda marcada <span class="badge" style="background:var(--amber50);color:var(--amber)">flagged</span> para revisión.</li>
+  <li>El <b>admin</b> recibe la notificación, revisa y aprueba indicando la <b>causa raíz</b> (obligatoria en varianzas marcadas).</li>
+  <li>Al aprobar, el inventario se ajusta por <b>diferencia</b> (no se pisa lo que se movió mientras contabas) y todos ven el stock nuevo al instante.</li>
+</ul>
+<div class="warn"><b>Si el conteo no se aprueba</b>El ajuste NO se aplica. Si ves que un conteo lleva días finalizado sin aprobarse, recuérdaselo a Emmanuel.</div>
+
+<h2 id="extras"><span class="n">5</span>Inventario y Reportes</h2>
+<p><b>Inventario</b> — consulta existencias, mínimos y la barra de nivel de stock (solo lectura para ti).</p>
+<p><b>Reportes</b> — cierre mensual con IRA (exactitud de inventario), Pareto de causas, rotación y stock muerto. Tu IRA por clase ABC sale del resultado de tus conteos.</p>
+
+<p class="mut" style="margin-top:40px">Manual actualizado al rediseño verde · junio 2026 · Si algo no coincide con tu pantalla, avisa a Emmanuel.</p>
+</div>
+</body>
+</html>

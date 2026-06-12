@@ -27,9 +27,11 @@ npm run build
 BUNDLE_LOCAL=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -1)
 echo "==> Bundle local: $BUNDLE_LOCAL"
 
-# 3) Deploy (assets se reemplazan completos para no acumular bundles viejos)
+# 3) Deploy COMPLETO de dist (assets, index, logos, manuales, manifest...).
+#    assets se borra primero para no acumular bundles viejos; el resto se
+#    sobreescribe encima (public/ de Vite: logos, manual/<rol>, manifest).
 ssh -o ConnectTimeout=15 "$VPS" "rm -rf $DIST_REMOTO/assets"
-scp -o ConnectTimeout=15 -r dist/assets dist/index.html "$VPS:$DIST_REMOTO/"
+scp -o ConnectTimeout=15 -r dist/* "$VPS:$DIST_REMOTO/"
 
 # 4) Verificacion: el index.html del VPS debe referenciar el mismo bundle
 BUNDLE_VPS=$(ssh -o ConnectTimeout=15 "$VPS" "grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' $DIST_REMOTO/index.html | head -1")

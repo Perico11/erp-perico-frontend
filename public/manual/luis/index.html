@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Manual — Luis · Recolección | Pinturas El Perico</title>
+<link rel="icon" href="/logos/app-icon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --acc:#1D9E75; --accd:#178060; --acc50:#E6F5EE; --bg:#F6F7F4; --card:#FFFFFF;
+    --txt:#16241F; --mut:#5C7268; --hint:#8A988F; --line:rgba(20,36,31,.10);
+    --amber:#C98A2B; --amber50:#FAF3E4; --danger:#C8553B; --danger50:#FAEDE8;
+    --sans:'DM Sans',system-ui,sans-serif; --mono:'JetBrains Mono',monospace; }
+  *{ box-sizing:border-box; } body{ margin:0; background:var(--bg); color:var(--txt); font-family:var(--sans); line-height:1.55; }
+  .wrap{ max-width:860px; margin:0 auto; padding:0 20px 80px; }
+  header{ background:var(--card); border-bottom:1px solid var(--line); padding:26px 20px; margin-bottom:28px; }
+  header .inner{ max-width:860px; margin:0 auto; display:flex; align-items:center; gap:14px; }
+  header img{ width:46px; height:46px; }
+  h1{ font-size:21px; margin:0; letter-spacing:-.01em; } .sub{ font-size:13px; color:var(--mut); margin-top:2px; }
+  h2{ font-size:17px; margin:38px 0 10px; padding-top:10px; border-top:1px solid var(--line); letter-spacing:-.01em; }
+  h2 .n{ display:inline-flex; width:26px; height:26px; border-radius:8px; background:var(--acc); color:#fff; align-items:center; justify-content:center; font-size:13px; margin-right:9px; }
+  p,li{ font-size:14px; color:var(--txt); } .mut{ color:var(--mut); }
+  ol,ul{ padding-left:22px; } li{ margin-bottom:6px; }
+  .btn{ display:inline-block; padding:2px 11px; border-radius:9px; background:var(--acc); color:#fff; font-size:12.5px; font-weight:600; white-space:nowrap; }
+  .badge{ display:inline-block; padding:1px 9px; border-radius:999px; font-size:11.5px; font-weight:600; }
+  .cod{ font-family:var(--mono); font-size:12.5px; color:var(--accd); font-weight:700; }
+  .tip,.warn,.danger-box{ border-radius:14px; padding:12px 15px; font-size:13.5px; margin:12px 0; }
+  .tip{ background:var(--acc50); } .warn{ background:var(--amber50); } .danger-box{ background:var(--danger50); }
+  .tip b,.warn b,.danger-box b{ display:block; margin-bottom:2px; }
+  .idx{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 20px; }
+  .idx a{ display:block; color:var(--accd); text-decoration:none; font-size:14px; font-weight:600; padding:5px 0; }
+  .flow{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px 16px; font-family:var(--mono); font-size:12px; color:var(--mut); overflow-x:auto; white-space:nowrap; margin:12px 0; }
+  .flow b{ color:var(--accd); }
+</style>
+</head>
+<body>
+<header><div class="inner">
+  <img src="/logos/logo-perico-green.svg" alt="" />
+  <div><h1>Manual de usuario — Luis</h1><div class="sub">Recolección · ERP Pinturas El Perico · sistema.pinturaselperico.com</div></div>
+</div></header>
+<div class="wrap">
+
+<div class="idx">
+  <a href="#entrar">1. Entrar al sistema</a>
+  <a href="#aviso">2. Te avisan que hay lote listo</a>
+  <a href="#recoger">3. Recoger en fábrica (escanear)</a>
+  <a href="#entregar">4. Llevar a Terán</a>
+</div>
+
+<h2 id="entrar"><span class="n">1</span>Entrar al sistema</h2>
+<ol>
+  <li>Abre <b>sistema.pinturaselperico.com</b> en tu celular.</li>
+  <li>Usuario <span class="cod">Luis Lara</span> → <span class="btn">Continuar</span> → tu PIN de 4 dígitos.</li>
+</ol>
+<p>Tu Inicio muestra los lotes <b>por recolectar</b> y, abajo, <b>Mi pipeline</b> con la ruta de cada lote que traes.</p>
+
+<h2 id="aviso"><span class="n">2</span>Te avisan que hay lote listo</h2>
+<div class="flow">Envasado → <b>Por recolectar (te avisan)</b> → <b>En camino (tú)</b> → Recibido en Terán</div>
+<p>Cuando Josué (o el técnico) marca un lote para recolección, te llega la notificación y aparece un <b>banner</b> con el lote. Toca <span class="btn">Voy por él</span> para apartarlo — los demás ven que tú lo llevas.</p>
+<div class="tip"><b>Quien escanea primero gana</b>Si dos personas ven el banner, el primero que acepta se lo queda; al otro se le oculta solo.</div>
+
+<h2 id="recoger"><span class="n">3</span>Recoger en fábrica (escanear)</h2>
+<ol>
+  <li>En fábrica, abre <b>Recolección</b> y toca <span class="btn">Escanear QR</span>.</li>
+  <li>Apunta la cámara al QR pegado en el envase (o teclea el código manual, ej. <span class="cod">LP-20260612-001-A</span>).</li>
+  <li>Al confirmar, el lote pasa a <span class="badge" style="background:var(--amber50);color:var(--amber)">En camino</span> — todos ven que va contigo.</li>
+</ol>
+<div class="warn"><b>Sello PRUEBA</b>Si la card trae el sello de prueba (matraz), es un ensayo del sistema: NO muevas producto físico.</div>
+
+<h2 id="entregar"><span class="n">4</span>Llevar a Terán</h2>
+<ol>
+  <li>Entrega el producto en Almacén Terán.</li>
+  <li><b>Josué escanea y confirma la recepción</b> — con eso el lote queda "Recibido en Terán" y tu parte termina.</li>
+  <li>En <b>Trazabilidad</b> puedes ver la ruta completa de cualquier lote que llevaste.</li>
+</ol>
+<div class="tip"><b>Un solo escaneo por viaje</b>Si llevas varios sublotes del mismo lote, el escaneo masivo los marca todos de una vez.</div>
+
+<p class="mut" style="margin-top:40px">Manual actualizado al rediseño verde · junio 2026 · Si algo no coincide con tu pantalla, avisa a Emmanuel.</p>
+</div>
+</body>
+</html>

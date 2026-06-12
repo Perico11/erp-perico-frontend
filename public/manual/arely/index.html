@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Manual — Arely · Compras | Pinturas El Perico</title>
+<link rel="icon" href="/logos/app-icon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --acc:#1D9E75; --accd:#178060; --acc50:#E6F5EE; --bg:#F6F7F4; --card:#FFFFFF;
+    --txt:#16241F; --mut:#5C7268; --hint:#8A988F; --line:rgba(20,36,31,.10);
+    --amber:#C98A2B; --amber50:#FAF3E4; --danger:#C8553B; --danger50:#FAEDE8;
+    --info:#3E7BB6; --info50:#ECF2F8;
+    --sans:'DM Sans',system-ui,sans-serif; --mono:'JetBrains Mono',monospace; }
+  *{ box-sizing:border-box; } body{ margin:0; background:var(--bg); color:var(--txt); font-family:var(--sans); line-height:1.55; }
+  .wrap{ max-width:860px; margin:0 auto; padding:0 20px 80px; }
+  header{ background:var(--card); border-bottom:1px solid var(--line); padding:26px 20px; margin-bottom:28px; }
+  header .inner{ max-width:860px; margin:0 auto; display:flex; align-items:center; gap:14px; }
+  header img{ width:46px; height:46px; }
+  h1{ font-size:21px; margin:0; letter-spacing:-.01em; } .sub{ font-size:13px; color:var(--mut); margin-top:2px; }
+  h2{ font-size:17px; margin:38px 0 10px; padding-top:10px; border-top:1px solid var(--line); letter-spacing:-.01em; }
+  h2 .n{ display:inline-flex; width:26px; height:26px; border-radius:8px; background:var(--acc); color:#fff; align-items:center; justify-content:center; font-size:13px; margin-right:9px; }
+  h3{ font-size:14.5px; margin:20px 0 6px; }
+  p,li{ font-size:14px; color:var(--txt); } .mut{ color:var(--mut); }
+  ol,ul{ padding-left:22px; } li{ margin-bottom:6px; }
+  .btn{ display:inline-block; padding:2px 11px; border-radius:9px; background:var(--acc); color:#fff; font-size:12.5px; font-weight:600; white-space:nowrap; }
+  .btn.ghost{ background:var(--card); color:var(--mut); border:1px solid var(--line); }
+  .btn.danger{ background:transparent; color:var(--danger); border:1px solid var(--danger); }
+  .badge{ display:inline-block; padding:1px 9px; border-radius:999px; font-size:11.5px; font-weight:600; }
+  .cod{ font-family:var(--mono); font-size:12.5px; color:var(--accd); font-weight:700; }
+  .tip,.warn,.danger-box{ border-radius:14px; padding:12px 15px; font-size:13.5px; margin:12px 0; }
+  .tip{ background:var(--acc50); } .warn{ background:var(--amber50); } .danger-box{ background:var(--danger50); }
+  .tip b,.warn b,.danger-box b{ display:block; margin-bottom:2px; }
+  .idx{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 20px; }
+  .idx a{ display:block; color:var(--accd); text-decoration:none; font-size:14px; font-weight:600; padding:5px 0; }
+  .flow{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px 16px; font-family:var(--mono); font-size:12px; color:var(--mut); overflow-x:auto; white-space:nowrap; margin:12px 0; }
+  .flow b{ color:var(--accd); }
+</style>
+</head>
+<body>
+<header><div class="inner">
+  <img src="/logos/logo-perico-green.svg" alt="" />
+  <div><h1>Manual de usuario — Arely</h1><div class="sub">Compras · ERP Pinturas El Perico · sistema.pinturaselperico.com</div></div>
+</div></header>
+<div class="wrap">
+
+<div class="idx">
+  <a href="#entrar">1. Entrar al sistema</a>
+  <a href="#compras">2. Compras — el ciclo de una OC</a>
+  <a href="#aprobar">3. Aprobar una OC (pago + comprobante)</a>
+  <a href="#recibir">4. Recibir la MP y registrar pagos</a>
+  <a href="#pronostico">5. Pronóstico — qué comprar y cuánto</a>
+  <a href="#devmp">6. Devoluciones a proveedor</a>
+  <a href="#extras">7. SAT/CFDI, Inventario y Reportes</a>
+</div>
+
+<h2 id="entrar"><span class="n">1</span>Entrar al sistema</h2>
+<ol>
+  <li>Abre <b>sistema.pinturaselperico.com</b>.</li>
+  <li>Usuario <span class="cod">Arely</span> → <span class="btn">Continuar</span> → tu PIN de 4 dígitos.</li>
+</ol>
+<p>Tu menú: <b>Compras</b> (ejecutar OCs), <b>Pronóstico</b> (la inteligencia), <b>Inventario</b>, <b>Devol. a proveedor</b>, <b>SAT/CFDI</b>, <b>POS Aliases</b> y <b>Reportes</b>.</p>
+
+<h2 id="compras"><span class="n">2</span>Compras — el ciclo de una OC</h2>
+<div class="flow"><b>Por aprobar</b> → Activa (En tránsito) → <b>Recibida</b> (entra al inventario)</div>
+<ul>
+  <li><b>Por aprobar</b> — OCs nuevas: las tuyas, las que genera el Pronóstico y las solicitudes de Enrique (sello <span class="badge" style="background:var(--amber50);color:var(--amber)">SOLICITUD</span>).</li>
+  <li><b>Activas</b> — aprobadas, esperando que llegue la MP. Aquí ves alertas de crédito <span class="badge" style="background:var(--amber50);color:var(--amber)">Por vencer</span> / <span class="badge" style="background:var(--danger50);color:var(--danger)">Vencida</span>.</li>
+  <li><b>Recibidas</b> — cerradas, ya en inventario.</li>
+</ul>
+<p>Para crear una OC manual: <span class="btn">+ Levantar OC</span> (proveedor → MP → kilos → presentación). El flete se calcula solo y puedes ajustarlo.</p>
+
+<h2 id="aprobar"><span class="n">3</span>Aprobar una OC (pago + comprobante)</h2>
+<ol>
+  <li>En la card toca <span class="btn">Aprobar OC</span>.</li>
+  <li>Elige la forma de pago: <b>Crédito 30 días</b> (el sistema te avisará antes del vencimiento) o <b>Contado</b>.</li>
+  <li>Adjunta el <b>comprobante obligatorio</b> (factura/remisión en crédito · comprobante de pago en contado) y la referencia.</li>
+  <li>Confirma — la OC pasa a Activas.</li>
+</ol>
+<div class="tip"><b>Después de aprobar también puedes</b><span class="btn ghost">Editar</span> (precio/flete cambió) o <span class="btn danger">Eliminar</span> con el admin (el proveedor canceló). El botón <span class="btn ghost">Comprobante</span> abre el PDF adjunto cuando lo necesites.</div>
+
+<h2 id="recibir"><span class="n">4</span>Recibir la MP y registrar pagos</h2>
+<ol>
+  <li>Cuando llega el material, toca <span class="btn">Recibir MP</span>: captura los kg recibidos por ítem, quién recibe, calidad OK o con observaciones y la firma.</li>
+  <li>Al confirmar, la MP <b>suma al inventario</b> y la OC pasa a Recibidas.</li>
+  <li>Si la OC fue a crédito, cuando pagues usa <span class="btn ghost">Registrar pago</span> con el comprobante de la transferencia — eso apaga las alertas de vencimiento.</li>
+</ol>
+
+<h2 id="pronostico"><span class="n">5</span>Pronóstico — qué comprar y cuánto</h2>
+<ul>
+  <li><b>Sugerencias</b> — el motor IA calcula la demanda proyectada con safety stock y te dice qué MP comprar, cuántos kg y el costo estimado. <span class="btn">Generar OC</span> crea la OC directo en Compras → Por aprobar.</li>
+  <li><b>MRP</b> — qué falta según la producción esperada; puedes generar todas las OCs de un golpe.</li>
+  <li><b>Tendencia / IA avanzada / Pedidos</b> — gráficas de consumo, forecast por temporada y predicción de pedidos.</li>
+</ul>
+<div class="warn"><b>Críticas primero</b>Las MP marcadas CRÍTICA están en cero o por agotarse — genera esas OCs hoy.</div>
+
+<h2 id="devmp"><span class="n">6</span>Devoluciones a proveedor</h2>
+<ol>
+  <li>En <b>Devol. a proveedor</b> toca <span class="btn">+ Nueva devolución</span>.</li>
+  <li>Elige la MP (autocompleta del inventario), cantidad, motivo y disposición (devolver o descartar). El stock se descuenta al crear.</li>
+  <li>Cuando el proveedor responda, cierra con <b>Nota de crédito</b> (folio) o <b>Reembolso</b> (referencia + comprobante).</li>
+</ol>
+
+<h2 id="extras"><span class="n">7</span>SAT/CFDI, Inventario y Reportes</h2>
+<h3>SAT / CFDI</h3>
+<p>Arrastra el XML de la factura — el sistema lo lee y lo cruza con la OC por monto. Prohibido duplicar UUID: si ya existe, te avisa.</p>
+<h3>Inventario</h3>
+<p>Sub-tab <b>Costos</b>: edita precios de MP (se recalculan las fórmulas que la usan). Puedes ajustar <b>mínimos</b> y administrar <b>Envases</b> (stock de cubetas, tapas por color, proveedores).</p>
+<h3>Reportes</h3>
+<p>Cierre mensual, histórico, análisis avanzado y la vista <b>Estratégico</b> (lead time real por proveedor, curva ABC, costo de stockouts).</p>
+
+<p class="mut" style="margin-top:40px">Manual actualizado al rediseño verde · junio 2026 · Si algo no coincide con tu pantalla, avisa a Emmanuel.</p>
+</div>
+</body>
+</html>

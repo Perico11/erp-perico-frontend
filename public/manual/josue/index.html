@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Manual — Josué · Almacén | Pinturas El Perico</title>
+<link rel="icon" href="/logos/app-icon.svg" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --acc:#1D9E75; --accd:#178060; --acc50:#E6F5EE; --bg:#F6F7F4; --card:#FFFFFF;
+    --txt:#16241F; --mut:#5C7268; --hint:#8A988F; --line:rgba(20,36,31,.10);
+    --amber:#C98A2B; --amber50:#FAF3E4; --danger:#C8553B; --danger50:#FAEDE8;
+    --info:#3E7BB6; --info50:#ECF2F8;
+    --sans:'DM Sans',system-ui,sans-serif; --mono:'JetBrains Mono',monospace; }
+  *{ box-sizing:border-box; } body{ margin:0; background:var(--bg); color:var(--txt); font-family:var(--sans); line-height:1.55; }
+  .wrap{ max-width:860px; margin:0 auto; padding:0 20px 80px; }
+  header{ background:var(--card); border-bottom:1px solid var(--line); padding:26px 20px; margin-bottom:28px; }
+  header .inner{ max-width:860px; margin:0 auto; display:flex; align-items:center; gap:14px; }
+  header img{ width:46px; height:46px; }
+  h1{ font-size:21px; margin:0; letter-spacing:-.01em; } .sub{ font-size:13px; color:var(--mut); margin-top:2px; }
+  h2{ font-size:17px; margin:38px 0 10px; padding-top:10px; border-top:1px solid var(--line); letter-spacing:-.01em; }
+  h2 .n{ display:inline-flex; width:26px; height:26px; border-radius:8px; background:var(--acc); color:#fff; align-items:center; justify-content:center; font-size:13px; margin-right:9px; }
+  h3{ font-size:14.5px; margin:20px 0 6px; }
+  p,li{ font-size:14px; color:var(--txt); } .mut{ color:var(--mut); }
+  ol,ul{ padding-left:22px; } li{ margin-bottom:6px; }
+  .btn{ display:inline-block; padding:2px 11px; border-radius:9px; background:var(--acc); color:#fff; font-size:12.5px; font-weight:600; white-space:nowrap; }
+  .btn.ghost{ background:var(--card); color:var(--mut); border:1px solid var(--line); }
+  .btn.danger{ background:transparent; color:var(--danger); border:1px solid var(--danger); }
+  .badge{ display:inline-block; padding:1px 9px; border-radius:999px; font-size:11.5px; font-weight:600; }
+  .cod{ font-family:var(--mono); font-size:12.5px; color:var(--accd); font-weight:700; }
+  .tip,.warn,.danger-box{ border-radius:14px; padding:12px 15px; font-size:13.5px; margin:12px 0; }
+  .tip{ background:var(--acc50); } .warn{ background:var(--amber50); } .danger-box{ background:var(--danger50); }
+  .tip b,.warn b,.danger-box b{ display:block; margin-bottom:2px; }
+  .idx{ background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px 20px; }
+  .idx a{ display:block; color:var(--accd); text-decoration:none; font-size:14px; font-weight:600; padding:5px 0; }
+  .flow{ background:var(--card); border:1px solid var(--line); border-radius:14px; padding:13px 16px; font-family:var(--mono); font-size:12px; color:var(--mut); overflow-x:auto; white-space:nowrap; margin:12px 0; }
+  .flow b{ color:var(--accd); }
+</style>
+</head>
+<body>
+<header><div class="inner">
+  <img src="/logos/logo-perico-green.svg" alt="" />
+  <div><h1>Manual de usuario — Josué</h1><div class="sub">Almacén Terán · ERP Pinturas El Perico · sistema.pinturaselperico.com</div></div>
+</div></header>
+<div class="wrap">
+
+<div class="idx">
+  <a href="#entrar">1. Entrar al sistema</a>
+  <a href="#pedido">2. Crear un pedido a fábrica</a>
+  <a href="#seguir">3. Seguir tu pedido (la ruta)</a>
+  <a href="#recolectar">4. Enviar a recolectar (avisar a Luis)</a>
+  <a href="#recibir">5. Recibir en Terán (escanear QR)</a>
+  <a href="#extras">6. Inventario, re-envasar tote y devoluciones</a>
+</div>
+
+<h2 id="entrar"><span class="n">1</span>Entrar al sistema</h2>
+<ol>
+  <li>Abre <b>sistema.pinturaselperico.com</b> en el celular.</li>
+  <li>Usuario <span class="cod">Almacén Perico</span> → <span class="btn">Continuar</span> → tu PIN de 4 dígitos.</li>
+</ol>
+<p>Tu Inicio muestra lo urgente arriba y tus pendientes: pedidos por preparar, lotes por recolectar y lo que viene en camino. Abajo, <b>Mi pipeline</b> con la ruta de cada lote activo.</p>
+
+<h2 id="pedido"><span class="n">2</span>Crear un pedido a fábrica</h2>
+<ol>
+  <li>En <b>Pedidos</b> toca <span class="btn">Nuevo pedido</span>.</li>
+  <li>Elige el producto, cantidad de cubetas y fecha requerida.</li>
+  <li>Al guardar, a Enrique le aparece el aviso al instante.</li>
+</ol>
+<div class="warn"><b>Checkbox PRUEBA</b>Solo para ensayos. Un pedido de prueba NO descuenta inventario real y lleva sello visible para todos.</div>
+
+<h2 id="seguir"><span class="n">3</span>Seguir tu pedido (la ruta)</h2>
+<div class="flow">Pedido → Aceptado → En producción → Terminado → QC → Envasando → Envasado → <b>Por recolectar</b> → En camino → <b>Recibido en Terán</b> → Entregado</div>
+<p>Cada pedido tiene su <b>ruta</b> con quién hizo cada paso y a qué hora. Tu parte: crear el pedido al inicio, enviar a recolectar cuando esté envasado, y recibirlo al final.</p>
+
+<h2 id="recolectar"><span class="n">4</span>Enviar a recolectar (avisar a Luis)</h2>
+<ol>
+  <li>Cuando el lote esté <span class="badge" style="background:var(--acc50);color:var(--accd)">Envasado</span>, en <b>Stock Fábrica</b> toca <span class="btn">Enviar a recolectar</span>.</li>
+  <li>Luis recibe la notificación al momento y pasa por él.</li>
+</ol>
+<div class="tip"><b>El camino correcto</b>El producto llega a Terán SOLO cuando tú lo recibes por escaneo (sección 5). No hay atajos: Envasado → Por recolectar → Luis lo lleva → tú lo recibes.</div>
+
+<h2 id="recibir"><span class="n">5</span>Recibir en Terán (escanear QR)</h2>
+<ol>
+  <li>Cuando Luis va en camino, te aparece el banner del lote entrante.</li>
+  <li>En <b>Recepción</b> toca <span class="btn">Escanear QR</span> y apunta al código del envase (o usa entrada manual).</li>
+  <li>Confirma la recepción — el lote pasa a <span class="badge" style="background:var(--acc50);color:var(--accd)">En almacén</span> y suma al stock de Terán.</li>
+</ol>
+<div class="warn"><b>Primero Luis, luego tú</b>No puedes recibir un lote que Luis aún no recogió — el sistema lo bloquea para mantener el orden del flujo.</div>
+
+<h2 id="extras"><span class="n">6</span>Inventario, re-envasar tote y devoluciones</h2>
+<h3>Re-envasar tote</h3>
+<p>Si llegó un <b>tote a granel</b>, con <span class="btn ghost">Re-envasar tote</span> lo conviertes en cubetas/galones. Los litros del tote se van descontando y cada sublote nuevo lleva su QR.</p>
+<h3>Anular un sublote</h3>
+<p>¿Capturaste mal (marca o tapa equivocada)? <span class="btn danger">Anular</span> en el sublote — los envases y tapas regresan al stock y queda el motivo registrado.</p>
+<h3>Inventario y PT por ubicación</h3>
+<p>En <b>Inventario → PT</b> puedes ver el producto terminado <b>Total / Fábrica / Terán</b>.</p>
+<h3>Devoluciones de cliente</h3>
+<p>Registra la devolución con cliente, producto y cantidad; Enrique decide la disposición y, si va a crédito, Arely emite la nota.</p>
+
+<p class="mut" style="margin-top:40px">Manual actualizado al rediseño verde · junio 2026 · Si algo no coincide con tu pantalla, avisa a Emmanuel.</p>
+</div>
+</body>
+</html>
