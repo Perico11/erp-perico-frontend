@@ -548,7 +548,7 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
                 minHeight: 44,
                 gridColumn: '1 / -1',
                 marginBottom: 4,
-                background: '#7C3AED', /* púrpura — color canónico del TOTE en toda la app */
+                background: 'var(--lp-qc-600)', /* púrpura — color canónico del TOTE en toda la app */
                 color: '#fff',
               }}
               onClick={() => onReenvasarInline

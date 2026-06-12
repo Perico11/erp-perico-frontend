@@ -27,7 +27,7 @@ const MP_CATEGORIES = {
   'Aditivos y Dispersantes':  { icon: 'AD', bg: '#DBEAFE',              fg: '#1E40AF' },
   'Solventes y Coalescentes': { icon: 'SV', bg: '#D1FAE5',              fg: '#065F46' },
   'Conservadores y Biocidas': { icon: 'CB', bg: '#FCE7F3',              fg: '#9D174D' },
-  'Efectos Especiales':       { icon: 'FX', bg: '#EDE9FE',              fg: '#5B21B6' },
+  'Efectos Especiales':       { icon: 'FX', bg: 'var(--lp-qc-50)',              fg: 'var(--lp-qc-700)' },
 };
 
 /* ── Inline styles (LP design system) ── */
@@ -583,7 +583,7 @@ function EnvasesTab({ envases, canEdit, onReload }) {
       ))}
       {Object.keys(tapas).length > 0 && (
         <div style={S.section}>
-          <div style={S.sectionHeader('#EDE9FE', '#5B21B6')}>
+          <div style={S.sectionHeader('var(--lp-qc-50)', 'var(--lp-qc-700)')}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
             Tapas
           </div>

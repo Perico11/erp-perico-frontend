@@ -78,7 +78,7 @@ function IconArrowDown({ size = 11 }) {
 }
 
 /* ── SVG: Line chart simple para series mensuales ──────────────────────── */
-function LineChart({ series, labels, color = '#7C3AED', height = 120, formatter = (v) => v, suffix = '' }) {
+function LineChart({ series, labels, color = 'var(--lp-qc-600)', height = 120, formatter = (v) => v, suffix = '' }) {
   const valid = series.map(v => v == null ? null : Number(v));
   const nums = valid.filter(v => v != null);
   if (nums.length < 2) {
@@ -235,7 +235,7 @@ export default function EstrategicoTab() {
 
             <div style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', marginBottom: 6 }}>Valor inventario MP (mensual)</div>
-              <LineChart series={anual.series.valor} labels={MESES_ES} color="#7C3AED"
+              <LineChart series={anual.series.valor} labels={MESES_ES} color="var(--lp-qc-600)"
                 formatter={v => '$' + Math.round(v / 1000) + 'k'} />
             </div>
 

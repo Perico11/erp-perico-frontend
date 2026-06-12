@@ -27,7 +27,7 @@ const TYPE_COLOR = {
   dual:  'var(--lp-success-700)',
   wait:  'var(--lp-warning-600)',
   eval:  'var(--lp-brand-700)',
-  qc:    '#7C3AED',
+  qc:    'var(--lp-qc-600)',
 };
 
 /* Label de categoría cuando el paso no trae mpCat (mockup .scat) */

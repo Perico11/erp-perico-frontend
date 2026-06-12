@@ -37,7 +37,7 @@ const IcoCheckCircle = (p) => <Ico {...p} size={p.size || 40} sw={1.7} d={['M22 
 const IcoChart   = (p) => <Ico {...p} size={p.size || 40} sw={1.6} d={['M3 3v18h18', 'M7 14l4-4 3 3 5-6']} />;
 
 /* QC accent — morado universal (no es color de marca, es estado QC) */
-const QC = '#7C3AED';
+const QC = 'var(--lp-qc-600)';
 
 /* CSS inyectado una vez — focus verde de inputs QC (mockup .qci:focus).
    Mismo selector que en ProduccionFlow; regla idempotente. */

@@ -64,7 +64,7 @@ const SUB_BTN = {
   escanearRecoger:      { label: 'Voy por él',          bg: 'var(--lp-brand-600)', Ico: IcoTruck, scan: false },
   escanearRecibirTeran: { label: 'Recibir',             bg: 'var(--lp-info-600)',  Ico: IcoQR,    scan: true },
   marcarRecoleccion:    { label: 'Listo para recolectar', bg: 'var(--lp-text-tertiary)', Ico: IcoTruck, scan: false },
-  reenvasarTote:        { label: 'Re-envasar TOTE',     bg: '#7C3AED',             Ico: IcoQR,    scan: false },
+  reenvasarTote:        { label: 'Re-envasar TOTE',     bg: 'var(--lp-qc-600)',             Ico: IcoQR,    scan: false },
 };
 
 /* ── Pipeline horizontal ──────────────────────────────────────────────── */

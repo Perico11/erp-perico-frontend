@@ -46,7 +46,7 @@ const fmt$ = n => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
 const fmtN = (n, d = 0) => n != null ? Number(n).toFixed(d) : '—';
 
 /* Sparkline SVG inline pequeño 12 meses */
-function Sparkline({ data, color = '#7C3AED' }) {
+function Sparkline({ data, color = 'var(--lp-qc-600)' }) {
   const valid = data.map(d => Number(d.consumo) || 0);
   const max = Math.max(...valid, 1);
   const W = 100, H = 22, pad = 1;
@@ -104,7 +104,7 @@ function DetalleModal({ mp, onClose }) {
         </div>
 
         <div style={S.kpiGrid}>
-          <div style={S.kpi('#7C3AED')}>
+          <div style={S.kpi('var(--lp-qc-600)')}>
             <div style={S.kpiLabel}>Stock actual</div>
             <div style={S.kpiVal}>{fmtN(data.stockActual, 1)} kg</div>
             <div style={S.kpiSub}>Mín: {data.minActual} kg</div>

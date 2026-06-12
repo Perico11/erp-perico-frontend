@@ -267,7 +267,7 @@ const S = {
       err:     { bg: 'var(--lp-danger-100)',  fg: 'var(--lp-danger-600)' },
       info:    { bg: 'var(--lp-brand-100)',   fg: 'var(--lp-brand-700)' },
       neutral: { bg: 'var(--lp-bg-sunken)',   fg: 'var(--lp-text-tertiary)' },
-      purple:  { bg: '#EDE9FE',               fg: '#7C3AED' },
+      purple:  { bg: 'var(--lp-qc-50)',               fg: 'var(--lp-qc-600)' },
     };
     const c = map[type] || map.neutral;
     return {

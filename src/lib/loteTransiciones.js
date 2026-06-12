@@ -107,7 +107,7 @@ export const ESTADO_LOTE_COLOR = {
   en_envasado:    '#06B6D4',
   envasado:       '#0EA5E9',
   en_proceso:     'var(--lp-warning-500)',
-  en_almacen:     '#7C3AED', /* púrpura TOTE — pendiente de reenvasado */
+  en_almacen:     'var(--lp-qc-600)', /* púrpura TOTE — pendiente de reenvasado */
   entregado:      'var(--lp-success-600)',
   cancelado:      'var(--lp-text-tertiary)',
 };
@@ -117,7 +117,7 @@ export const ESTADO_SUBLOTE_COLOR = {
   en_recoleccion:  'var(--lp-warning-600)',
   en_camino:       'var(--lp-warning-700)',
   en_stock_teran:  'var(--lp-success-600)',
-  tote_activo:     '#7C3AED',
+  tote_activo:     'var(--lp-qc-600)',
   tote_vaciado:    'var(--lp-text-tertiary)',
   cancelado:       'var(--lp-text-tertiary)',
 };

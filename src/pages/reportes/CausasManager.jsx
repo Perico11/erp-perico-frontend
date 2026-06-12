@@ -11,7 +11,7 @@ const TIPOS = [
   { v: 'operativa', label: 'Operativa', color: '#0F6E56' },
   { v: 'humana',    label: 'Humana',    color: '#D97706' },
   { v: 'seguridad', label: 'Seguridad', color: 'var(--lp-danger-600)' },
-  { v: 'datos',     label: 'Datos',     color: '#7C3AED' },
+  { v: 'datos',     label: 'Datos',     color: 'var(--lp-qc-600)' },
   { v: 'otro',      label: 'Otro',      color: 'var(--lp-text-tertiary)' },
 ];
 

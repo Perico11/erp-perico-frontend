@@ -570,7 +570,7 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
         {qtyTxt}
         {codLote && <> · <span style={S.codLoteInline}>{codLote}</span></>}
         {s.marca && <> · <span style={{ fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{s.marca}</span></>}
-        {s.esHijoDe && <> · <span style={{ color: '#7C3AED' }}>↳ tote {s.esHijoDe}</span></>}
+        {s.esHijoDe && <> · <span style={{ color: 'var(--lp-qc-600)' }}>↳ tote {s.esHijoDe}</span></>}
       </div>
 
       {/* ruta Fábrica → Terán (chip del mockup .route) */}

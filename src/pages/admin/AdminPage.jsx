@@ -319,10 +319,10 @@ const ICONS = {
    bg = tono pastel del color, fg = tono oscuro del mismo color para contraste.
    Stroke width 1.5 ya aplicado en los SVG. */
 const ADMIN_SECTIONS = [
-  { id: 'totp',           title: 'Google Authenticator',  desc: 'Configurar / regenerar el código de 6 dígitos que protege canónico y ajustes de stock.',     fg: '#7C3AED',                bg: '#F3EBFF' },
-  { id: 'canonico',       title: 'Inventario Canónico',   desc: 'Fuente de verdad inicial protegida por Google Authenticator. Solo admin.',                  fg: '#5A1EAF',                bg: '#EDE9FE' },
+  { id: 'totp',           title: 'Google Authenticator',  desc: 'Configurar / regenerar el código de 6 dígitos que protege canónico y ajustes de stock.',     fg: 'var(--lp-qc-600)',                bg: 'var(--lp-qc-50)' },
+  { id: 'canonico',       title: 'Inventario Canónico',   desc: 'Fuente de verdad inicial protegida por Google Authenticator. Solo admin.',                  fg: '#5A1EAF',                bg: 'var(--lp-qc-50)' },
   { id: 'usuarios',       title: 'Usuarios',              desc: 'Gestionar usuarios, PINs y permisos por rol.',                                              fg: '#2563EB',                bg: '#EFF5FF' },
-  { id: 'sesiones',       title: 'Sesiones',              desc: 'Ver sesiones activas y log de acceso con mapa GPS.',                                        fg: '#7C3AED',                bg: '#EDE9FE' },
+  { id: 'sesiones',       title: 'Sesiones',              desc: 'Ver sesiones activas y log de acceso con mapa GPS.',                                        fg: 'var(--lp-qc-600)',                bg: 'var(--lp-qc-50)' },
   { id: 'margenes',       title: 'Precios y Margenes PT', desc: 'Cargar precio de venta de cada producto terminado y ver margen calculado en vivo.',         fg: '#059669',                bg: '#ECFDF5' },
   { id: 'costos-aux',     title: 'Costos Auxiliares',     desc: 'Editar costo de envases por marca, tapas, mano de obra y merma — afecta el calculo de margen PT.', fg: '#D97706',                bg: '#FFFBEB' },
   { id: 'branding',       title: 'Apariencia / Branding', desc: 'Personalizar colores, fuente, tamaños, logos y nombre del sistema. Cambios en vivo.',       fg: '#DB2777',                bg: '#FDF2F8' },

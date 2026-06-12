@@ -19,7 +19,7 @@ const PRESETS = {
   info:     { bg: '#DBEAFE', fg: '#1E40AF' },
   warning:  { bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-600)' },
   neutral:  { bg: 'var(--lp-bg-subtle)', fg: 'var(--lp-text-secondary)' },
-  purple:   { bg: '#EDE9FE', fg: '#7C3AED' },
+  purple:   { bg: 'var(--lp-qc-50)', fg: 'var(--lp-qc-600)' },
 };
 
 export function PresetBadge({ preset = 'neutral', children, style }) {
