@@ -600,7 +600,17 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
             )}
             {!acciones.length && !puedeEnvasar && !tieneSublotes && !puedeEnviarRecolectar && !puedeRecibirEnTeran && !puedeReenvasarTote && (
               <span style={{ ...S.sublotesResumen, gridColumn: '1 / -1' }}>
-                Sin acciones disponibles para tu rol en este estado.
+                {/* FIX jun 2026: el mensaje genérico parecía botón faltante (reporte
+                    owner: "no avanza a envasado"). Ahora dice QUIÉN sigue. */}
+                {['producido', 'qc_aprobado', 'en_envasado'].includes(lote.estado)
+                  ? 'Esperando envasado — lo hace el técnico (o admin) desde aquí o en Stock Fábrica. Tu turno llega en "Enviar a recolectar".'
+                  : lote.estado === 'envasado' || lote.estado === 'en_proceso'
+                    ? 'Envasado listo — Almacén (o admin) lo manda con "Enviar a recolectar".'
+                    : lote.estado === 'en_recoleccion'
+                      ? 'Esperando a Luis — ya fue notificado para recoger el lote.'
+                      : lote.estado === 'en_camino'
+                        ? 'En camino — Almacén Terán lo recibe escaneando el QR.'
+                        : 'Sin acciones disponibles para tu rol en este estado.'}
               </span>
             )}
           </div>
