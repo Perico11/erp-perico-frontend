@@ -48,6 +48,7 @@ const IcoProducido  = () => <Svg d={['M21 16V8a2 2 0 0 0-1-1.7l-7-4a2 2 0 0 0-2 
 const IcoQC         = () => <Svg d={['M9 3h6a1 1 0 0 1 1 1v1h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1V4a1 1 0 0 1 1-1z', 'M9 13l2 2 4-4']} />;
 const IcoEnvasando  = () => <Svg d="M12 3s6 6.4 6 10.5a6 6 0 0 1-12 0C6 9.4 12 3 12 3z" />;
 const IcoEnvasado   = () => <Svg d={['M5 8h14l-1 11a2 2 0 0 1-2 1.8H8a2 2 0 0 1-2-1.8z', 'M9 8V6a3 3 0 0 1 6 0v2', 'M9.5 14l2 2 3.5-3.5']} />;
+const IcoRecolectar = () => <Svg d={['M4 21V4', 'M4 4c3-1.5 6 1.5 9 0s5-1 7 0v9c-2-1-4-1.5-7 0s-6 1.5-9 0']} />;
 const IcoCamino     = () => <Svg><path d="M1 4h13v10H1z" /><path d="M14 8h4l3 3v3h-7" /><circle cx="5.5" cy="17.5" r="2" /><circle cx="17.5" cy="17.5" r="2" /></Svg>;
 const IcoTeran      = () => <Svg d={['M3 21V9l9-5 9 5v12', 'M3 21h18M9 21v-6h6v6']} />;
 const IcoEntregado  = () => <Svg d={['M20 6 9 17l-5-5', 'M14 12l4-4']} />;
@@ -74,7 +75,11 @@ export const ETAPAS_PEDIDO = [
   { key: 'producido',     label: 'Terminado',             Icon: IcoProducido,  color: 'brand',  rol: 'Técnico' },
   { key: 'qc_aprobado',   label: 'QC aprobado',           Icon: IcoQC,         color: 'purple', rol: 'Técnico' },
   { key: 'en_envasado',   label: 'Envasando',             Icon: IcoEnvasando,  color: 'brand',  rol: 'Técnico' },
-  { key: 'envasado',      label: 'Listo para recolectar', Icon: IcoEnvasado,   color: 'brand',  rol: 'Técnico' },
+  { key: 'envasado',      label: 'Envasado',              Icon: IcoEnvasado,   color: 'brand',  rol: 'Técnico' },
+  /* FIX jun 2026: en_recoleccion es etapa PROPIA (antes se colapsaba en
+     'envasado' atribuida al Técnico). En el flujo real es Almacén quien
+     marca "Enviar a recolectar" y Luis queda notificado. */
+  { key: 'en_recoleccion', label: 'Por recolectar',       Icon: IcoRecolectar, color: 'amber',  rol: 'Almacén' },
   { key: 'en_camino',     label: 'En camino',             Icon: IcoCamino,     color: 'amber',  rol: 'Recolector' },
   { key: 'en_almacen',    label: 'Recibido en Terán',     Icon: IcoTeran,      color: 'info',   rol: 'Recolector' },
   { key: 'entregado',     label: 'Entregado',             Icon: IcoEntregado,  color: 'brandd', rol: 'Almacén' },
@@ -85,7 +90,6 @@ export const ETAPAS_PEDIDO = [
 export function idxEtapaLote(estado) {
   const alias = {
     qc_hold: 'qc_aprobado',
-    en_recoleccion: 'envasado',
     en_proceso: 'en_camino',
   };
   const k = alias[estado] || estado;
@@ -262,7 +266,8 @@ const HIST_KEYS = {
   producido:     ['producido'],
   qc_aprobado:   ['qc_aprobado', 'qc_hold'],
   en_envasado:   ['en_envasado'],
-  envasado:      ['envasado', 'en_recoleccion'],
+  envasado:      ['envasado'],
+  en_recoleccion: ['en_recoleccion'],
   en_camino:     ['en_camino', 'en_proceso'],
   en_almacen:    ['en_almacen', 'en_stock_teran'],
   entregado:     ['entregado'],
@@ -303,6 +308,10 @@ export function RutaPedidoRail({ lote, conHeader = true }) {
           const cc = holdAqui ? CK_COLOR.danger : CK_COLOR[et.color];
           const label = holdAqui ? 'QC retenido' : et.label;
           const { who, time } = infoEtapa(et.key);
+          /* QC es OPCIONAL en el flujo real (envasado acepta 'producido' directo).
+             Si la etapa quedó atrás sin evento en el historial, fue omitida —
+             se dice tal cual en lugar de atribuirla falsamente al Técnico. */
+          const qcOmitido = et.key === 'qc_aprobado' && st === 'done' && !who && !time && !holdAqui;
           const Icon = et.Icon;
           return (
             <div key={et.key} className={`cknode ${st}`} style={{ '--cc': cc }}>
@@ -317,6 +326,8 @@ export function RutaPedidoRail({ lote, conHeader = true }) {
                 </div>
                 {st === 'pending' ? (
                   <div className="cketa">Pendiente · {et.rol}</div>
+                ) : qcOmitido ? (
+                  <div className="cketa">Omitido — QC opcional</div>
                 ) : (
                   <div className="ckwho">
                     {who && <span className="ckav">{String(who).charAt(0).toUpperCase()}</span>}
