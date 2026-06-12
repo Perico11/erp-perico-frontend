@@ -171,6 +171,9 @@ function DetalleModal({ mp, onClose }) {
               <tr><td style={S.td}>Safety stock (95% nivel)</td><td style={S.tdNum}>{fmtN(data.safetyStock, 0)} kg</td></tr>
               <tr><td style={S.td}>Punto de reorden (ROP)</td><td style={S.tdNum}>{fmtN(data.rop, 0)} kg</td></tr>
               <tr><td style={S.td}>Stock proyectado</td><td style={S.tdNum}>{fmtN(data.stockProyectado, 0)} kg</td></tr>
+              {data.coberturaDias != null && (
+                <tr><td style={S.td}>Cobertura de la compra</td><td style={S.tdNum}>{data.coberturaDias} d (lead + 30d) + {data.margenPct ?? 10}% margen</td></tr>
+              )}
               <tr style={{ background: 'var(--lp-brand-50)' }}>
                 <td style={{ ...S.td, fontWeight: 700 }}>Cantidad sugerida</td>
                 <td style={{ ...S.tdNum, fontWeight: 700, color: 'var(--lp-brand-700)' }}>{fmtN(data.cantidadSugerida, 0)} kg · {fmt$(data.montoEstimado)}</td>
@@ -276,12 +279,15 @@ function BulkOCModal({ items, onConfirm, onClose, loading }) {
 const _MESES_ABR = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const _mesAbr = (periodo) => _MESES_ABR[Number((periodo || '').slice(-2)) - 1] || '';
 
-function BarsMini({ data, accent }) {
+function BarsMini({ data, accent, proyeccion }) {
   const rows = data || [];
   const vals = rows.map(d => Number(d.consumo) || 0);
   if (rows.length === 0) return null;
   const total = vals.reduce((s, v) => s + v, 0);
-  const max = Math.max(...vals, 1);
+  /* Proyección futura (jun 2026 — reporte dueño): barras punteadas DESPUÉS del
+     histórico, para que la card mire hacia adelante y no solo meses pasados. */
+  const proy = (proyeccion || []).map(p => Number(p.kg) || 0);
+  const max = Math.max(...vals, ...proy, 1);
   const brand = accent || 'var(--lp-brand-600)';
 
   /* Cabecera común: dice EXACTAMENTE qué se está graficando. */
@@ -320,11 +326,23 @@ function BarsMini({ data, accent }) {
               }} />
           );
         })}
+        {/* barras de PROYECCIÓN (futuro) — outline punteado, sin relleno sólido */}
+        {proy.map((v, i) => (
+          <div key={`p${i}`} title={`${_mesAbr((proyeccion[i] || {}).periodo)} (proyección): ${Math.round(v).toLocaleString('es-MX')} kg`}
+            style={{
+              flex: 1, minHeight: 2, borderRadius: 3, boxSizing: 'border-box',
+              height: v <= 0 ? '3%' : `${Math.max(12, (v / max) * 100)}%`,
+              background: `color-mix(in srgb, ${brand} 10%, transparent)`,
+              border: `1.5px dashed ${brand}`,
+            }} />
+        ))}
       </div>
       {/* Eje X: primer y último mes del rango + leyenda del mes destacado. */}
       <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5, color: 'var(--lp-text-tertiary)', marginTop: 5, fontFamily: 'var(--lp-font-mono)' }}>
         <span>{_mesAbr(rows[0]?.periodo)}</span>
-        <span style={{ color: 'var(--lp-text-secondary)', fontWeight: 600 }}>{_mesAbr(rows[rows.length - 1]?.periodo)} · más reciente</span>
+        <span style={{ color: 'var(--lp-text-secondary)', fontWeight: 600 }}>
+          {_mesAbr(rows[rows.length - 1]?.periodo)} · reciente{proy.length > 0 ? ` → proy. ${proy.length}m` : ''}
+        </span>
       </div>
     </div>
   );
@@ -509,7 +527,7 @@ export default function ForecastIATab() {
                   ))}
                 </div>
 
-                <BarsMini data={f.consumoHistorico} accent={col.accent} />
+                <BarsMini data={f.consumoHistorico} accent={col.accent} proyeccion={f.proyeccion} />
 
                 {(f.comprasTotal12m > 0 || f.ultimaCompra) && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', fontSize: 11, margin: '-2px 0 12px', paddingTop: 9, borderTop: '1px solid var(--lp-border-subtle)' }}>
