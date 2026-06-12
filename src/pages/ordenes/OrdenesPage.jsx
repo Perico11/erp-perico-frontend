@@ -487,6 +487,11 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
   const [fechaReq, setFechaReq] = useState('');
   const [notas, setNotas] = useState('');
   const [esPrueba, setEsPrueba] = useState(!!pedidoOrigen?.esPrueba);
+  /* Destino de la producción (SOLO órdenes internas, feature dueño jun 2026):
+     'fabrica' = se queda en stock fábrica (default — reposición normal).
+     'teran'   = emergencia: Josué no levantó pedido pero falta stock en Terán;
+                 al envasar, el MISMO Enrique puede mandarla a recolección. */
+  const [destino, setDestino] = useState('fabrica');
   const [lanzarAhora, setLanzarAhora] = useState(false);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -574,6 +579,7 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
         estado: 'pendiente',
         esPrueba,
         origen: 'interna', /* marca explícita: sin pedido fuente */
+        destino, /* 'fabrica' | 'teran' — a dónde va la producción al envasar */
         fechaCreacion: now.toISOString().substring(0, 10),
         fechaRequerida: fechaReq || '',
         notas: notas || '',
@@ -582,7 +588,8 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
           estado: 'pendiente',
           fecha: now.toISOString(),
           usuario: userName || '?',
-          nota: (esPrueba ? '[PRUEBA] ' : '') + '[INTERNA] Orden creada sin pedido fuente',
+          nota: (esPrueba ? '[PRUEBA] ' : '') + '[INTERNA] Orden creada sin pedido fuente'
+            + (destino === 'teran' ? ' — DESTINO TERÁN (emergencia)' : ' — se queda en stock fábrica'),
         }],
       };
       await api.upsertOrden(orden);
@@ -782,6 +789,36 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
             <option value="alta">Alta</option>
             <option value="urgente">Urgente</option>
           </select>
+
+          {/* Destino — SOLO órdenes internas (feature dueño jun 2026): emergencia
+              donde el técnico nota faltante en Terán sin pedido de Almacén. */}
+          {!tienePedido && (
+            <>
+              <label style={S.fieldLabel}>Destino de la producción</label>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                {[['fabrica', 'Se queda en stock fábrica'], ['teran', 'Transferir a Terán (emergencia)']].map(([k, l]) => (
+                  <button key={k} type="button" data-id={`ordenes.btn.destino-${k}`} data-rol="tecnico,admin"
+                    onClick={() => setDestino(k)}
+                    style={{
+                      flex: 1, minHeight: 44, padding: '0 12px', borderRadius: 10, cursor: 'pointer',
+                      fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600,
+                      border: destino === k ? 'none' : '1px solid var(--lp-border-default)',
+                      background: destino === k
+                        ? (k === 'teran' ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)')
+                        : 'var(--lp-bg-raised)',
+                      color: destino === k ? '#fff' : 'var(--lp-text-secondary)',
+                    }}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              {destino === 'teran' && (
+                <div style={{ fontSize: 11.5, color: 'var(--lp-warning-700)', background: 'var(--lp-warning-50)', borderRadius: 10, padding: '8px 11px', marginBottom: 10 }}>
+                  Emergencia: al terminar el envasado, tú mismo podrás mandarla a recolección (Luis la lleva a Terán) sin esperar a Almacén.
+                </div>
+              )}
+            </>
+          )}
 
           <label style={S.fieldLabel}>Fecha requerida</label>
           <input style={S.fieldInput} type="date" value={fechaReq} onChange={e => setFechaReq(e.target.value)} />

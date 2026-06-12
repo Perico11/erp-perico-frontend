@@ -332,9 +332,14 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
   /* FIX jun 2026 (auditoría #8): incluir 'en_proceso' — tras un despacho
      PARCIAL el roll-up deja el lote en_proceso y los sublotes 'envasado'
      restantes perdían el botón (quedaban huérfanos en esta card). */
+  /* FEATURE dueño (jun 2026): orden INTERNA con destino 'teran' = emergencia
+     (el técnico notó faltante en Terán sin pedido de Almacén). En ese caso el
+     TÉCNICO también puede mandar a recolección — no depende de Josué, que ni
+     sabe del faltante. Para todo lo demás sigue siendo almacen/admin. */
+  const destinoTeran = pedido?.destino === 'teran';
   const puedeEnviarRecolectar =
     (lote.estado === 'envasado' || lote.estado === 'en_proceso') &&
-    (userRol === 'almacen' || userRol === 'admin') &&
+    (userRol === 'almacen' || userRol === 'admin' || (userRol === 'tecnico' && destinoTeran)) &&
     sublotes.some(s => s.estado === 'envasado' && !s.esMerma);
 
   /* FIX jun 2026 (Sprint O4): atajos para Josué en la card del pedido.
@@ -476,6 +481,13 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
         <span style={S.loteCod}>{lote.codigoLote || lote.codigo || lote.id}</span>
         {lote.esPrueba && <PruebaBadge size="sm" />}
         <span style={S.estadoBadge(estColor)}>{estLabel}</span>
+        {/* Destino de orden interna (feature dueño jun 2026): visible para que
+            todos sepan si esta producción se queda o va a Terán de emergencia. */}
+        {pedido?.origen === 'interna' && pedido?.destino && (
+          <span style={S.estadoBadge(pedido.destino === 'teran' ? 'var(--lp-warning-600)' : 'var(--lp-text-tertiary)')}>
+            {pedido.destino === 'teran' ? '→ Terán (emergencia)' : 'Se queda en fábrica'}
+          </span>
+        )}
         {litTotal > 0 && pctEnvasado > 0 && (
           <span style={S.sublotesResumen}>· {pctEnvasado}% envasado ({litUsed.toFixed(0)}/{litTotal.toFixed(0)}L)</span>
         )}
