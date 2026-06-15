@@ -106,6 +106,12 @@ const api = {
       mp, ubicacion, qty, modo, nota,
       codigoAutorizacion: opts.codigoAutorizacion,
     }),
+  /* PT en Terán (pool manual, en cubetas). modo 'agregar'|'fijar' (fijar 0 = eliminar). */
+  setPTUbicacion: (producto, ubicacion, qty, modo, nota, opts = {}) =>
+    request('POST', '/api/inventario/pt/ubicacion', {
+      producto, ubicacion, qty, modo, nota,
+      codigoAutorizacion: opts.codigoAutorizacion,
+    }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
      Más seguro que el overwrite completo de POST /api/inventario que es solo admin. */
   /* Ajuste individual de MP (qty + min) con candado: necesita sesión de conteo

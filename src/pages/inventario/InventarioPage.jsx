@@ -1384,6 +1384,8 @@ export default function InventarioPage() {
   const [mpSubtab, setMpSubtab] = useState(searchParams.get('mp') || 'stock'); /* stock | fabrica | teran | costos | maestro */
   /* Sprint X (jun 2026, pedido dueño): modal "Agregar MP a almacén". { ubicacion } */
   const [agregarMpUbic, setAgregarMpUbic] = useState(null);
+  /* Sprint X: modal "Agregar PT a Terán" (pool manual en cubetas). */
+  const [agregarPtTeran, setAgregarPtTeran] = useState(false);
   /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
@@ -1674,6 +1676,27 @@ export default function InventarioPage() {
     );
     reloadMpUbi();
   }, [ajustarConCandado, reloadMpUbi]);
+
+  /* Sprint X: PT en Terán (pool manual). agregar/fijar via candado. Eliminar = fijar 0. */
+  const handleSavePTTeran = useCallback(async (producto, qty, modo, motivo) => {
+    await ajustarConCandado(
+      (codigo) => api.setPTUbicacion(producto, 'teran', qty, modo, motivo || `PT en Terán`,
+        codigo ? { codigoAutorizacion: codigo } : {}),
+      producto
+    );
+    reloadPtUbi();
+  }, [ajustarConCandado, reloadPtUbi]);
+
+  const handleEliminarPTTeran = useCallback(async (producto) => {
+    const ok = await confirm(`¿Quitar "${producto}" del almacén Terán? Esto solo elimina el registro manual de Terán; no afecta el stock total ni los lotes rastreados.`, {
+      title: 'Eliminar PT de Terán', confirmText: 'Eliminar', danger: true,
+    });
+    if (!ok) return;
+    await handleSavePTTeran(producto, 0, 'fijar', 'Eliminado de Terán');
+    setToastMsg(`${producto} quitado de Terán`);
+    reloadInv();
+    setTimeout(() => setToastMsg(''), 4000);
+  }, [confirm, handleSavePTTeran, reloadInv]);
 
   /* Ajuste inline PT — pasa por ajustarConCandado: backend exige sesión de conteo
      activa, código TOTP propio o código universal del admin. */
@@ -1998,6 +2021,9 @@ export default function InventarioPage() {
                 onQuery={setQuery}
                 canPedir={canPedirPT}
                 onPedir={handlePedirPT}
+                canEdit={canEditMP}
+                onAgregarTeran={() => setAgregarPtTeran(true)}
+                onEliminarTeran={handleEliminarPTTeran}
               />
             )}
           </>
@@ -2052,6 +2078,21 @@ export default function InventarioPage() {
             await handleSaveMPUbic(mp, agregarMpUbic.ubicacion, qty, 'agregar', `Alta de MP en ${agregarMpUbic.ubicacion}`);
             setAgregarMpUbic(null);
             setToastMsg(`${mp}: +${qty} kg en ${agregarMpUbic.ubicacion === 'fabrica' ? 'Fábrica' : 'Terán'}`);
+            reloadInv();
+            setTimeout(() => setToastMsg(''), 4000);
+          }}
+        />
+      )}
+
+      {/* ── Sprint X: Agregar PT a Terán (pool manual, cubetas) Modal ── */}
+      {agregarPtTeran && (
+        <AgregarPTTeranModal
+          ptList={ptItems.map(it => it.nombre)}
+          onClose={() => setAgregarPtTeran(false)}
+          onSubmit={async (producto, qty) => {
+            await handleSavePTTeran(producto, qty, 'agregar', 'Alta de PT en Terán');
+            setAgregarPtTeran(false);
+            setToastMsg(`${producto}: +${qty} cub en Terán`);
             reloadInv();
             setTimeout(() => setToastMsg(''), 4000);
           }}
@@ -2189,7 +2230,7 @@ export default function InventarioPage() {
    Datos vienen de /api/inventario/pt-por-ubicacion calculado server-side
    desde trazabilidad.json (fuente de verdad para ubicación física).
    ═══════════════════════════════════════════════════════════════════ */
-function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir }) {
+function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregarTeran, onEliminarTeran }) {
   const bucket = data?.[ubicacion] || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => {
@@ -2269,6 +2310,11 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
             fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
           }}
         />
+        {!esFabrica && canEdit && onAgregarTeran && (
+          <button onClick={onAgregarTeran} style={{ padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${acentColor}`, background: acentBg, color: acentColor, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', minWidth: 'max-content' }}>
+            + Agregar a Terán
+          </button>
+        )}
       </div>
 
       {productos.length === 0 ? (
@@ -2333,13 +2379,25 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
                       {todoResidual ? 'sin lote' : `+${Math.round(d.residual)} sin lote`}
                     </span>
                   )}
+                  {/* Sprint X: porción agregada a mano en Terán (eliminable) */}
+                  {!esFabrica && (Number(d.manual) || 0) > 0 && (
+                    <span
+                      title={`${Math.round(d.manual)} cub registradas a mano en Terán`}
+                      style={{
+                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
+                        background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)',
+                        border: '1px solid var(--lp-brand-600)',
+                        textTransform: 'uppercase', letterSpacing: '.04em',
+                      }}
+                    >+{Math.round(d.manual)} manual</span>
+                  )}
                 </span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)' }}>{Math.round(d.totalLitros || 0)}</span>
-                <span style={{ textAlign: 'right' }}>
+                <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   {canPedir && (
                     <button
                       onClick={() => onPedir(nombre)}
@@ -2355,6 +2413,21 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
                         fontFamily: 'var(--lp-font-sans)',
                       }}
                     >Pedir</button>
+                  )}
+                  {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
+                  {!esFabrica && canEdit && onEliminarTeran && (Number(d.manual) || 0) > 0 && (
+                    <button
+                      onClick={() => onEliminarTeran(nombre)}
+                      title={`Quitar de Terán (${Math.round(d.manual)} cub manual). No afecta lotes rastreados ni el stock total.`}
+                      style={{
+                        padding: '6px 10px', borderRadius: 6,
+                        border: '1px solid var(--lp-danger-600)',
+                        background: 'transparent',
+                        color: 'var(--lp-danger-600)',
+                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        fontFamily: 'var(--lp-font-sans)',
+                      }}
+                    >Eliminar</button>
                   )}
                 </span>
               </div>
@@ -2597,6 +2670,87 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
           <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
           <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
             {saving ? 'Guardando...' : `Agregar a ${esFabrica ? 'Fábrica' : 'Terán'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal "Agregar PT a Terán" (pool manual, en cubetas) — Sprint X ──
+   Permite registrar producto terminado físicamente en Terán que no llegó por el
+   flujo de lotes/QR. No afecta el stock total ni la producción. */
+function AgregarPTTeranModal({ ptList, onClose, onSubmit }) {
+  useBodyScrollLock();
+  const [prod, setProd] = useState('');
+  const [search, setSearch] = useState('');
+  const [cantidad, setCantidad] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+  const filtered = useMemo(() => {
+    if (!search) return ptList;
+    const q = search.toLowerCase();
+    return ptList.filter(m => m.toLowerCase().includes(q));
+  }, [ptList, search]);
+
+  const handleSubmit = async () => {
+    const elegido = prod || search.trim();
+    if (!elegido) return setError('Selecciona o escribe un producto');
+    const qty = parseFloat(cantidad);
+    if (!qty || qty <= 0) return setError('La cantidad debe ser mayor a 0');
+    setSaving(true); setError('');
+    try { await onSubmit(elegido, qty); }
+    catch (e) { setError(e?.data?.error || e?.message || 'No se pudo guardar'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.modal}>
+        <div style={S.modalHeader}>
+          <span style={S.modalTitle}>Agregar PT a Terán</span>
+          <button style={S.modalClose} onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        <div style={S.modalBody}>
+          <div style={{ padding: '8px 12px', background: 'var(--lp-brand-100)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
+            Registra producto terminado físicamente en <b>Terán</b> (en cubetas) que no llegó por el flujo de lotes/QR. No afecta el stock total ni la producción. Pedirá tu código de autorización.
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Producto *</label>
+            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar producto..."
+              value={prod || search} onChange={e => { setSearch(e.target.value); setProd(''); }} />
+            {search && !prod && filtered.length > 0 && (
+              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
+                {filtered.slice(0, 15).map(m => (
+                  <div key={m} onClick={() => { setProd(m); setSearch(''); }}
+                    style={{ padding: '8px 14px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-primary)', fontWeight: 500 }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-bg-sunken)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{m}</div>
+                ))}
+              </div>
+            )}
+            {prod && (
+              <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                {prod}
+                <span style={{ cursor: 'pointer', fontSize: 14 }} onClick={() => { setProd(''); setSearch(''); }}>✕</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Cantidad a agregar (cubetas) *</label>
+            <input type="number" inputMode="decimal" step="1" min="0" style={S.fieldInput}
+              placeholder="Ej: 12" value={cantidad} onChange={e => setCantidad(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }} />
+          </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>{error}</div>}
+        </div>
+        <div style={S.modalFooter}>
+          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
+          <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
+            {saving ? 'Guardando...' : 'Agregar a Terán'}
           </button>
         </div>
       </div>
