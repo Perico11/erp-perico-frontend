@@ -2383,7 +2383,6 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
    ═══════════════════════════════════════════════════════════════════ */
 function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, onFijar }) {
   const bucket = data?.[ubicacion] || {};
-  const meta = data?.meta || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => !query || nombre.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => a[0].localeCompare(b[0]));
@@ -2391,24 +2390,30 @@ function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, 
   const totalKg = productos.reduce((s, [, d]) => s + (Number(d.qty) || 0), 0);
   const bajoMin = productos.filter(([, d]) => (Number(d.min) || 0) > 0 && (Number(d.qty) || 0) <= (Number(d.min) || 0)).length;
   const conStock = productos.filter(([, d]) => (Number(d.qty) || 0) > 0).length;
-  /* ¿Hay MPs cuyo total no cuadra con la suma de almacenes? (producción descontó
-     el total entre conteos). Señal honesta para que Burgos reconcilie. */
-  const hayDescuadre = productos.some(([nombre]) => Math.abs(Number(meta[nombre]?.diff) || 0) > 0.5);
 
   const esFabrica = ubicacion === 'fabrica';
   const acentColor = esFabrica ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
   const acentBg    = esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)';
 
+  /* KPIs: Fábrica muestra "Bajo mínimo" (stock de producción / reorden);
+     Terán es un pool aparte → solo cuenta y kg. */
+  const kpis = esFabrica
+    ? [
+        { label: 'Materias primas', v: productos.length },
+        { label: 'Con existencia', v: conStock },
+        { label: 'Kg en fábrica', v: Math.round(totalKg).toLocaleString('es-MX') },
+        { label: 'Bajo mínimo', v: bajoMin },
+      ]
+    : [
+        { label: 'MP en Terán', v: productos.length },
+        { label: 'Kg en Terán', v: Math.round(totalKg).toLocaleString('es-MX') },
+      ];
+
   return (
     <>
       {/* Mini KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 14 }}>
-        {[
-          { label: 'Materias primas', v: productos.length },
-          { label: 'Con existencia', v: conStock },
-          { label: 'Kg en almacén', v: Math.round(totalKg).toLocaleString('es-MX') },
-          { label: 'Bajo mínimo', v: bajoMin },
-        ].map(k => (
+        {kpis.map(k => (
           <div key={k.label} style={{
             background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
             borderTop: `3px solid ${acentColor}`, borderRadius: 'var(--lp-radius-sm)',
@@ -2423,16 +2428,9 @@ function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, 
       {/* Nota explicativa */}
       <div style={{ padding: '10px 14px', background: acentBg, borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
         {esFabrica
-          ? 'Materia prima físicamente en planta de fábrica — la que Enrique usa para producir. Es el almacén por defecto: toda MP sin desglose se contabiliza aquí.'
-          : 'Materia prima físicamente en almacén Terán — buffer/excedente guardado allá. Agrégala o ajústala conforme la recibas o la cuentes.'}
-        {' '}El total de cada MP (pestaña Stock) es la suma de Fábrica + Terán.
+          ? 'Stock de PRODUCCIÓN: la materia prima que Enrique descuenta al fabricar. Es la misma que ves en la pestaña Stock. Forecast y MRP usan estas cantidades.'
+          : 'Almacén APARTE. La MP que guardes en Terán NO se usa para producir y NUNCA se descuenta por producción. Solo aparece aquí lo que tú agregues explícitamente.'}
       </div>
-
-      {hayDescuadre && (
-        <div style={{ padding: '8px 12px', background: 'var(--lp-warning-100)', border: '1px solid var(--lp-warning-600)', borderRadius: 8, fontSize: 11.5, color: 'var(--lp-warning-700)', marginBottom: 12, lineHeight: 1.5 }}>
-          Algunas MP tienen un total que no cuadra con Fábrica + Terán (producción descontó del total desde el último desglose). Reconcilia el almacén con "Ajustar" según tu conteo físico.
-        </div>
-      )}
 
       {/* Toolbar: buscador + Agregar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -2451,8 +2449,12 @@ function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, 
       </div>
 
       {productos.length === 0 ? (
-        <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--lp-text-tertiary)', fontSize: 14 }}>
-          {query ? `Sin resultados en ${esFabrica ? 'fábrica' : 'Terán'} para "${query}"` : `Sin materia prima en ${esFabrica ? 'fábrica' : 'Terán'}.`}
+        <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--lp-text-tertiary)', fontSize: 14, lineHeight: 1.6 }}>
+          {query
+            ? `Sin resultados en ${esFabrica ? 'fábrica' : 'Terán'} para "${query}"`
+            : esFabrica
+              ? 'Sin materia prima en fábrica.'
+              : 'Terán está vacío. Usa "+ Agregar MP a Terán" para registrar lo que guardes allá — no se descuenta por producción.'}
         </div>
       ) : (
         <div style={{ background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-md)', overflow: 'hidden' }}>
@@ -2464,7 +2466,7 @@ function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, 
           </div>
           {productos.map(([nombre, d]) => (
             <MPUbicRow key={nombre} mp={nombre} qty={Number(d.qty) || 0} min={Number(d.min) || 0}
-              canEdit={canEdit} onFijar={onFijar} acentColor={acentColor} />
+              esTeran={!esFabrica} canEdit={canEdit} onFijar={onFijar} acentColor={acentColor} />
           ))}
         </div>
       )}
@@ -2480,7 +2482,7 @@ function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, 
 
 /* Fila editable de MP por almacén: "Ajustar" abre un input inline; al guardar
    pasa por onFijar → handleSaveMPUbic → candado. */
-function MPUbicRow({ mp, qty, min, canEdit, onFijar, acentColor }) {
+function MPUbicRow({ mp, qty, min, esTeran, canEdit, onFijar, acentColor }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(String(qty));
   const [saving, setSaving] = useState(false);
@@ -2515,7 +2517,7 @@ function MPUbicRow({ mp, qty, min, canEdit, onFijar, acentColor }) {
             <button onClick={() => { setVal(String(qty)); setEditing(false); }} title="Cancelar" style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕</button>
           </span>
         ) : (
-          <button onClick={() => setEditing(true)} title="Fijar el stock de este almacén (resultado de conteo físico)" style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${acentColor}`, background: 'transparent', color: acentColor, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>Ajustar</button>
+          <button onClick={() => setEditing(true)} title={esTeran ? 'Fijar el stock de Terán (conteo físico) — no afecta producción' : 'Fijar el stock de producción en fábrica (conteo físico)'} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${acentColor}`, background: 'transparent', color: acentColor, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>Ajustar</button>
         ))}
       </span>
     </div>
