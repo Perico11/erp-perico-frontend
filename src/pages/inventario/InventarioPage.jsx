@@ -15,6 +15,7 @@ import PageTabs from '../../components/ui/PageTabs';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
 import CanonicoCard from './CanonicoCard';
 import useConfirm from '../../hooks/useConfirm';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import Fab from '../../components/ui/Fab';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
@@ -1380,7 +1381,9 @@ export default function InventarioPage() {
   /* Acción del rol inventario (Burgos): ir a Conteo físico (su flujo de ajuste). */
   const handleContar = () => navigate('/conteo');
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'mp');
-  const [mpSubtab, setMpSubtab] = useState(searchParams.get('mp') || 'stock'); /* stock | costos | maestro */
+  const [mpSubtab, setMpSubtab] = useState(searchParams.get('mp') || 'stock'); /* stock | fabrica | teran | costos | maestro */
+  /* Sprint X (jun 2026, pedido dueño): modal "Agregar MP a almacén". { ubicacion } */
+  const [agregarMpUbic, setAgregarMpUbic] = useState(null);
   /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
@@ -1412,6 +1415,8 @@ export default function InventarioPage() {
   const { data: envData, reload: reloadEnv } = useApiData(() => api.getEnvases(), [], 15000);
   /* W3: stock PT desglosado por ubicación física (desde trazabilidad) */
   const { data: ptUbiData, reload: reloadPtUbi } = useApiData(() => api.getPTPorUbicacion(), [], 15000);
+  /* Sprint X: stock MP desglosado por almacén (fábrica/Terán) — inv.mp[X].ubic */
+  const { data: mpUbiData, reload: reloadMpUbi } = useApiData(() => api.getMPPorUbicacion(), [], 15000);
   /* Cola de aprobación de ajustes (propuestas pendientes). */
   const { data: pendData, reload: reloadPendientes } = useApiData(() => api.getAjustesPendientes(), null, 25000);
   const pendientes = pendData?.pendientes || [];
@@ -1420,7 +1425,7 @@ export default function InventarioPage() {
      movimiento (recepción MP, ajuste por conteo, descuento por producción)
      tardaba hasta 8s en aparecer. Realtime cierra el gap. */
   useRealtimeSync({
-    onInventario:   () => { reloadInv(); reloadPtUbi(); reloadPendientes(); },
+    onInventario:   () => { reloadInv(); reloadPtUbi(); reloadMpUbi(); reloadPendientes(); },
     onEnvases:      () => reloadEnv(),
     onPrecios:      () => reloadInv(),
     onTrazabilidad: () => reloadPtUbi(), /* W3: sublotes mueven ubicación → refrescar tabla */
@@ -1659,6 +1664,17 @@ export default function InventarioPage() {
     );
   }, [ajustarConCandado]);
 
+  /* Sprint X: asignar/agregar MP a un almacén (fábrica|Terán). Pasa por el MISMO
+     candado que handleSaveMP (ajustarConCandado pide el código si el backend lo exige). */
+  const handleSaveMPUbic = useCallback(async (mp, ubicacion, qty, modo, motivo) => {
+    await ajustarConCandado(
+      (codigo) => api.setMPUbicacion(mp, ubicacion, qty, modo, motivo || `MP a ${ubicacion}`,
+        codigo ? { codigoAutorizacion: codigo } : {}),
+      mp
+    );
+    reloadMpUbi();
+  }, [ajustarConCandado, reloadMpUbi]);
+
   /* Ajuste inline PT — pasa por ajustarConCandado: backend exige sesión de conteo
      activa, código TOTP propio o código universal del admin. */
   const handleSavePT = useCallback(async (nombre, newQty, newMin, motivo) => {
@@ -1820,7 +1836,7 @@ export default function InventarioPage() {
         {!isDesktop && (
           <ActiveChips chips={[
             ...(activeFilter !== 'todos' ? [{ key: 'estado', label: activeFilter === 'sin' ? 'Crítico' : activeFilter === 'bajo' ? 'Bajo' : 'OK', clear: () => handleKpiClick(activeFilter) }] : []),
-            ...(activeTab === 'mp' && mpSubtab !== 'stock' ? [{ key: 'vista', label: mpSubtab === 'costos' ? 'Costos' : 'Maestro', clear: () => setMpSubtab('stock') }] : []),
+            ...(activeTab === 'mp' && mpSubtab !== 'stock' ? [{ key: 'vista', label: mpSubtab === 'costos' ? 'Costos' : mpSubtab === 'maestro' ? 'Maestro' : mpSubtab === 'fabrica' ? 'Fábrica' : 'Terán', clear: () => setMpSubtab('stock') }] : []),
             ...(activeTab === 'pt' && ptSubtab !== 'total' ? [{ key: 'almacen', label: ptSubtab === 'fabrica' ? 'Fábrica' : 'Terán', clear: () => setPtSubtab('total') }] : []),
           ]} />
         )}
@@ -1848,8 +1864,14 @@ export default function InventarioPage() {
           <>
             <div style={S.subRow}>
               <div style={S.pillGroup}>
-                {[{ id: 'stock', label: 'Stock' }, { id: 'costos', label: 'Costos' }, { id: 'maestro', label: 'Maestro' }].map(t => (
-                  <button key={t.id} type="button" data-id={`inventario.subtab.${t.id}`} data-rol="admin,compras,inventario,almacen,tecnico"
+                {[
+                  { id: 'stock', label: 'Stock', hint: 'Total de cada MP (suma de almacenes)' },
+                  { id: 'fabrica', label: 'Fábrica', hint: 'MP físicamente en planta' },
+                  { id: 'teran', label: 'Terán', hint: 'MP físicamente en almacén Terán' },
+                  { id: 'costos', label: 'Costos' },
+                  { id: 'maestro', label: 'Maestro' },
+                ].map(t => (
+                  <button key={t.id} type="button" title={t.hint} data-id={`inventario.subtab.${t.id}`} data-rol="admin,compras,inventario,almacen,tecnico"
                     style={S.chip(t.id === mpSubtab)} onClick={() => setMpSubtab(t.id)}>{t.label}</button>
                 ))}
               </div>
@@ -1874,6 +1896,17 @@ export default function InventarioPage() {
 
             {mpSubtab === 'costos' && <CostosMPPanel />}
             {mpSubtab === 'maestro' && <MaestroMPInline />}
+            {(mpSubtab === 'fabrica' || mpSubtab === 'teran') && (
+              <MPUbicacionView
+                ubicacion={mpSubtab}
+                data={mpUbiData}
+                query={query}
+                onQuery={setQuery}
+                canEdit={canEditMP}
+                onAgregar={() => setAgregarMpUbic({ ubicacion: mpSubtab })}
+                onFijar={(mp, nuevoQty) => handleSaveMPUbic(mp, mpSubtab, nuevoQty, 'fijar', `Conteo físico ${mpSubtab}`)}
+              />
+            )}
             {mpSubtab === 'stock' && (
               <>
             {/* Lista de stock MP — tabla (escritorio) / cards (móvil) */}
@@ -2003,6 +2036,22 @@ export default function InventarioPage() {
           onSuccess={(msg) => {
             setShowRecepcion(false);
             setToastMsg(msg);
+            reloadInv();
+            setTimeout(() => setToastMsg(''), 4000);
+          }}
+        />
+      )}
+
+      {/* ── Sprint X: Agregar MP a almacén (fábrica/Terán) Modal ── */}
+      {agregarMpUbic && (
+        <AgregarMPUbicacionModal
+          ubicacion={agregarMpUbic.ubicacion}
+          mpList={mpItems.map(it => it.mp)}
+          onClose={() => setAgregarMpUbic(null)}
+          onSubmit={async (mp, qty) => {
+            await handleSaveMPUbic(mp, agregarMpUbic.ubicacion, qty, 'agregar', `Alta de MP en ${agregarMpUbic.ubicacion}`);
+            setAgregarMpUbic(null);
+            setToastMsg(`${mp}: +${qty} kg en ${agregarMpUbic.ubicacion === 'fabrica' ? 'Fábrica' : 'Terán'}`);
             reloadInv();
             setTimeout(() => setToastMsg(''), 4000);
           }}
@@ -2323,5 +2372,232 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir })
         </div>
       )}
     </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Componente MPUbicacionView — Sprint X (jun 2026, pedido dueño)
+   Desglose de MATERIA PRIMA por almacén (fábrica o Terán). Datos de
+   /api/inventario/mp-por-ubicacion (inv.mp[X].ubic). Burgos ve qué MP
+   hay en cada almacén y puede AGREGAR o AJUSTAR (con candado).
+   ═══════════════════════════════════════════════════════════════════ */
+function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, onFijar }) {
+  const bucket = data?.[ubicacion] || {};
+  const meta = data?.meta || {};
+  const productos = Object.entries(bucket)
+    .filter(([nombre]) => !query || nombre.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => a[0].localeCompare(b[0]));
+
+  const totalKg = productos.reduce((s, [, d]) => s + (Number(d.qty) || 0), 0);
+  const bajoMin = productos.filter(([, d]) => (Number(d.min) || 0) > 0 && (Number(d.qty) || 0) <= (Number(d.min) || 0)).length;
+  const conStock = productos.filter(([, d]) => (Number(d.qty) || 0) > 0).length;
+  /* ¿Hay MPs cuyo total no cuadra con la suma de almacenes? (producción descontó
+     el total entre conteos). Señal honesta para que Burgos reconcilie. */
+  const hayDescuadre = productos.some(([nombre]) => Math.abs(Number(meta[nombre]?.diff) || 0) > 0.5);
+
+  const esFabrica = ubicacion === 'fabrica';
+  const acentColor = esFabrica ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
+  const acentBg    = esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)';
+
+  return (
+    <>
+      {/* Mini KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10, marginBottom: 14 }}>
+        {[
+          { label: 'Materias primas', v: productos.length },
+          { label: 'Con existencia', v: conStock },
+          { label: 'Kg en almacén', v: Math.round(totalKg).toLocaleString('es-MX') },
+          { label: 'Bajo mínimo', v: bajoMin },
+        ].map(k => (
+          <div key={k.label} style={{
+            background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
+            borderTop: `3px solid ${acentColor}`, borderRadius: 'var(--lp-radius-sm)',
+            padding: '12px 14px', textAlign: 'center',
+          }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-tertiary)', letterSpacing: '.05em' }}>{k.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 }}>{k.v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Nota explicativa */}
+      <div style={{ padding: '10px 14px', background: acentBg, borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 14, lineHeight: 1.5 }}>
+        {esFabrica
+          ? 'Materia prima físicamente en planta de fábrica — la que Enrique usa para producir. Es el almacén por defecto: toda MP sin desglose se contabiliza aquí.'
+          : 'Materia prima físicamente en almacén Terán — buffer/excedente guardado allá. Agrégala o ajústala conforme la recibas o la cuentes.'}
+        {' '}El total de cada MP (pestaña Stock) es la suma de Fábrica + Terán.
+      </div>
+
+      {hayDescuadre && (
+        <div style={{ padding: '8px 12px', background: 'var(--lp-warning-100)', border: '1px solid var(--lp-warning-600)', borderRadius: 8, fontSize: 11.5, color: 'var(--lp-warning-700)', marginBottom: 12, lineHeight: 1.5 }}>
+          Algunas MP tienen un total que no cuadra con Fábrica + Terán (producción descontó del total desde el último desglose). Reconcilia el almacén con "Ajustar" según tu conteo físico.
+        </div>
+      )}
+
+      {/* Toolbar: buscador + Agregar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <input
+          type="text"
+          placeholder={`Buscar MP en ${esFabrica ? 'fábrica' : 'Terán'}…`}
+          value={query}
+          onChange={e => onQuery(e.target.value)}
+          style={{ flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none' }}
+        />
+        {canEdit && (
+          <button onClick={onAgregar} style={{ padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${acentColor}`, background: acentBg, color: acentColor, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', minWidth: 'max-content' }}>
+            + Agregar MP a {esFabrica ? 'Fábrica' : 'Terán'}
+          </button>
+        )}
+      </div>
+
+      {productos.length === 0 ? (
+        <div style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--lp-text-tertiary)', fontSize: 14 }}>
+          {query ? `Sin resultados en ${esFabrica ? 'fábrica' : 'Terán'} para "${query}"` : `Sin materia prima en ${esFabrica ? 'fábrica' : 'Terán'}.`}
+        </div>
+      ) : (
+        <div style={{ background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-md)', overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 2fr) 110px 90px 120px', padding: '10px 14px', background: 'var(--lp-bg-sunken)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-tertiary)', letterSpacing: '.05em', borderBottom: '1px solid var(--lp-border-subtle)' }}>
+            <span>Materia prima</span>
+            <span style={{ textAlign: 'right' }}>Kg aquí</span>
+            <span style={{ textAlign: 'right' }}>Mínimo</span>
+            <span style={{ textAlign: 'right' }}>Acción</span>
+          </div>
+          {productos.map(([nombre, d]) => (
+            <MPUbicRow key={nombre} mp={nombre} qty={Number(d.qty) || 0} min={Number(d.min) || 0}
+              canEdit={canEdit} onFijar={onFijar} acentColor={acentColor} />
+          ))}
+        </div>
+      )}
+
+      {data?.timestamp && (
+        <div style={{ marginTop: 12, fontSize: 11, color: 'var(--lp-text-tertiary)', textAlign: 'right' }}>
+          Actualizado: {new Date(data.timestamp).toLocaleTimeString('es-MX')}
+        </div>
+      )}
+    </>
+  );
+}
+
+/* Fila editable de MP por almacén: "Ajustar" abre un input inline; al guardar
+   pasa por onFijar → handleSaveMPUbic → candado. */
+function MPUbicRow({ mp, qty, min, canEdit, onFijar, acentColor }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(qty));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { setVal(String(qty)); }, [qty]);
+  const low = min > 0 && qty <= min;
+
+  const guardar = async () => {
+    const n = parseFloat(val);
+    if (isNaN(n) || n < 0) return;
+    setSaving(true);
+    try { await onFijar(mp, n); setEditing(false); }
+    catch { /* el wrapper ya alertó / canceló */ }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 2fr) 110px 90px 120px', padding: '12px 14px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13, alignItems: 'center' }}>
+      <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{mp}</span>
+      {editing ? (
+        <input type="number" inputMode="decimal" step="0.1" min="0" value={val} autoFocus
+          onChange={e => setVal(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') { setVal(String(qty)); setEditing(false); } }}
+          style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', padding: '6px 8px', borderRadius: 6, border: `1.5px solid ${acentColor}`, fontSize: 13, width: '100%', outline: 'none' }} />
+      ) : (
+        <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: low ? 'var(--lp-danger-600)' : qty > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{qty.toLocaleString('es-MX')}</span>
+      )}
+      <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{min > 0 ? min.toLocaleString('es-MX') : '—'}</span>
+      <span style={{ textAlign: 'right' }}>
+        {canEdit && (editing ? (
+          <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+            <button onClick={guardar} disabled={saving} title="Guardar (candado)" style={{ padding: '5px 9px', borderRadius: 6, border: `1px solid ${acentColor}`, background: acentColor, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{saving ? '…' : '✓'}</button>
+            <button onClick={() => { setVal(String(qty)); setEditing(false); }} title="Cancelar" style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕</button>
+          </span>
+        ) : (
+          <button onClick={() => setEditing(true)} title="Fijar el stock de este almacén (resultado de conteo físico)" style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${acentColor}`, background: 'transparent', color: acentColor, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>Ajustar</button>
+        ))}
+      </span>
+    </div>
+  );
+}
+
+/* ── Modal "Agregar MP a almacén" (fábrica/Terán) — Sprint X ──
+   Suma una cantidad al almacén elegido (modo 'agregar'). El total de la MP sube. */
+function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
+  useBodyScrollLock();
+  const [mp, setMp] = useState('');
+  const [search, setSearch] = useState('');
+  const [cantidad, setCantidad] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+  const esFabrica = ubicacion === 'fabrica';
+  const filtered = useMemo(() => {
+    if (!search) return mpList;
+    const q = search.toLowerCase();
+    return mpList.filter(m => m.toLowerCase().includes(q));
+  }, [mpList, search]);
+
+  const handleSubmit = async () => {
+    if (!mp) return setError('Selecciona una materia prima');
+    const qty = parseFloat(cantidad);
+    if (!qty || qty <= 0) return setError('La cantidad debe ser mayor a 0');
+    setSaving(true); setError('');
+    try { await onSubmit(mp, qty); }
+    catch (e) { setError(e?.data?.error || e?.message || 'No se pudo guardar'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.modal}>
+        <div style={S.modalHeader}>
+          <span style={S.modalTitle}>Agregar MP a {esFabrica ? 'Fábrica' : 'Terán'}</span>
+          <button style={S.modalClose} onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        <div style={S.modalBody}>
+          <div style={{ padding: '8px 12px', background: esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
+            Suma esta cantidad al almacén <b>{esFabrica ? 'Fábrica' : 'Terán'}</b>. El total de la MP sube en consecuencia. Pedirá tu código de autorización.
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Materia Prima *</label>
+            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar MP..."
+              value={mp || search} onChange={e => { setSearch(e.target.value); setMp(''); }} />
+            {search && !mp && filtered.length > 0 && (
+              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
+                {filtered.slice(0, 15).map(m => (
+                  <div key={m} onClick={() => { setMp(m); setSearch(''); }}
+                    style={{ padding: '8px 14px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-primary)', fontWeight: 500 }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-bg-sunken)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{m}</div>
+                ))}
+              </div>
+            )}
+            {mp && (
+              <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                {mp}
+                <span style={{ cursor: 'pointer', fontSize: 14 }} onClick={() => { setMp(''); setSearch(''); }}>✕</span>
+              </div>
+            )}
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Cantidad a agregar (kg) *</label>
+            <input type="number" inputMode="decimal" step="0.1" min="0" style={S.fieldInput}
+              placeholder="Ej: 25.0" value={cantidad} onChange={e => setCantidad(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }} />
+          </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>{error}</div>}
+        </div>
+        <div style={S.modalFooter}>
+          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
+          <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
+            {saving ? 'Guardando...' : `Agregar a ${esFabrica ? 'Fábrica' : 'Terán'}`}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

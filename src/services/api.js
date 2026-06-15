@@ -98,6 +98,14 @@ const api = {
   /* ── Inventario ── */
   getInventario: () => request('GET', '/api/inventario'),
   getPTPorUbicacion: () => request('GET', '/api/inventario/pt-por-ubicacion'),
+  getMPPorUbicacion: () => request('GET', '/api/inventario/mp-por-ubicacion'),
+  /* Asignar/agregar existencia de una MP a un almacén (fábrica|teran) con candado.
+     modo: 'agregar' (suma al almacén, sube total) | 'fijar' (fija el valor del almacén). */
+  setMPUbicacion: (mp, ubicacion, qty, modo, nota, opts = {}) =>
+    request('POST', '/api/inventario/mp/ubicacion', {
+      mp, ubicacion, qty, modo, nota,
+      codigoAutorizacion: opts.codigoAutorizacion,
+    }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
      Más seguro que el overwrite completo de POST /api/inventario que es solo admin. */
   /* Ajuste individual de MP (qty + min) con candado: necesita sesión de conteo
