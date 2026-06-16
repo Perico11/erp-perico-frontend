@@ -1384,8 +1384,8 @@ export default function InventarioPage() {
   const [mpSubtab, setMpSubtab] = useState(searchParams.get('mp') || 'stock'); /* stock | fabrica | teran | costos | maestro */
   /* Sprint X (jun 2026, pedido dueño): modal "Agregar MP a almacén". { ubicacion } */
   const [agregarMpUbic, setAgregarMpUbic] = useState(null);
-  /* Sprint X: modal "Agregar PT a Terán" (pool manual en cubetas). */
-  const [agregarPtTeran, setAgregarPtTeran] = useState(false);
+  /* Sprint X: modal "Agregar PT a almacén" (fábrica = qty / Terán = pool manual). { ubicacion } */
+  const [agregarPtUbic, setAgregarPtUbic] = useState(null);
   /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
@@ -1677,10 +1677,11 @@ export default function InventarioPage() {
     reloadMpUbi();
   }, [ajustarConCandado, reloadMpUbi]);
 
-  /* Sprint X: PT en Terán (pool manual). agregar/fijar via candado. Eliminar = fijar 0. */
-  const handleSavePTTeran = useCallback(async (producto, qty, modo, motivo) => {
+  /* Sprint X: PT por almacén. Fábrica = qty (stock de producción); Terán = pool
+     manual aparte. agregar/fijar via candado. Eliminar (solo Terán) = fijar 0. */
+  const handleSavePTUbic = useCallback(async (producto, ubicacion, qty, modo, motivo) => {
     await ajustarConCandado(
-      (codigo) => api.setPTUbicacion(producto, 'teran', qty, modo, motivo || `PT en Terán`,
+      (codigo) => api.setPTUbicacion(producto, ubicacion, qty, modo, motivo || `PT en ${ubicacion}`,
         codigo ? { codigoAutorizacion: codigo } : {}),
       producto
     );
@@ -1692,11 +1693,11 @@ export default function InventarioPage() {
       title: 'Eliminar PT de Terán', confirmText: 'Eliminar', danger: true,
     });
     if (!ok) return;
-    await handleSavePTTeran(producto, 0, 'fijar', 'Eliminado de Terán');
+    await handleSavePTUbic(producto, 'teran', 0, 'fijar', 'Eliminado de Terán');
     setToastMsg(`${producto} quitado de Terán`);
     reloadInv();
     setTimeout(() => setToastMsg(''), 4000);
-  }, [confirm, handleSavePTTeran, reloadInv]);
+  }, [confirm, handleSavePTUbic, reloadInv]);
 
   /* Ajuste inline PT — pasa por ajustarConCandado: backend exige sesión de conteo
      activa, código TOTP propio o código universal del admin. */
@@ -2022,7 +2023,7 @@ export default function InventarioPage() {
                 canPedir={canPedirPT}
                 onPedir={handlePedirPT}
                 canEdit={canEditMP}
-                onAgregarTeran={() => setAgregarPtTeran(true)}
+                onAgregar={(ubic) => setAgregarPtUbic({ ubicacion: ubic })}
                 onEliminarTeran={handleEliminarPTTeran}
               />
             )}
@@ -2084,15 +2085,16 @@ export default function InventarioPage() {
         />
       )}
 
-      {/* ── Sprint X: Agregar PT a Terán (pool manual, cubetas) Modal ── */}
-      {agregarPtTeran && (
-        <AgregarPTTeranModal
+      {/* ── Sprint X: Agregar PT a almacén (fábrica = qty / Terán = pool manual) Modal ── */}
+      {agregarPtUbic && (
+        <AgregarPTUbicacionModal
+          ubicacion={agregarPtUbic.ubicacion}
           ptList={ptItems.map(it => it.nombre)}
-          onClose={() => setAgregarPtTeran(false)}
+          onClose={() => setAgregarPtUbic(null)}
           onSubmit={async (producto, qty) => {
-            await handleSavePTTeran(producto, qty, 'agregar', 'Alta de PT en Terán');
-            setAgregarPtTeran(false);
-            setToastMsg(`${producto}: +${qty} cub en Terán`);
+            await handleSavePTUbic(producto, agregarPtUbic.ubicacion, qty, 'agregar', `Alta de PT en ${agregarPtUbic.ubicacion}`);
+            setAgregarPtUbic(null);
+            setToastMsg(`${producto}: +${qty} cub en ${agregarPtUbic.ubicacion === 'fabrica' ? 'Fábrica' : 'Terán'}`);
             reloadInv();
             setTimeout(() => setToastMsg(''), 4000);
           }}
@@ -2230,7 +2232,7 @@ export default function InventarioPage() {
    Datos vienen de /api/inventario/pt-por-ubicacion calculado server-side
    desde trazabilidad.json (fuente de verdad para ubicación física).
    ═══════════════════════════════════════════════════════════════════ */
-function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregarTeran, onEliminarTeran }) {
+function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran }) {
   const bucket = data?.[ubicacion] || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => {
@@ -2310,9 +2312,9 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
             fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
           }}
         />
-        {!esFabrica && canEdit && onAgregarTeran && (
-          <button onClick={onAgregarTeran} style={{ padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${acentColor}`, background: acentBg, color: acentColor, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', minWidth: 'max-content' }}>
-            + Agregar a Terán
+        {canEdit && onAgregar && (
+          <button onClick={() => onAgregar(ubicacion)} style={{ padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${acentColor}`, background: acentBg, color: acentColor, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', minWidth: 'max-content' }}>
+            + Agregar a {esFabrica ? 'Fábrica' : 'Terán'}
           </button>
         )}
       </div>
@@ -2677,11 +2679,11 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
   );
 }
 
-/* ── Modal "Agregar PT a Terán" (pool manual, en cubetas) — Sprint X ──
-   Permite registrar producto terminado físicamente en Terán que no llegó por el
-   flujo de lotes/QR. No afecta el stock total ni la producción. */
-function AgregarPTTeranModal({ ptList, onClose, onSubmit }) {
+/* ── Modal "Agregar PT a almacén" (fábrica = stock de producción / Terán = pool
+   manual) — Sprint X. En cubetas, modo 'agregar'. ── */
+function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
   useBodyScrollLock();
+  const esFabrica = ubicacion === 'fabrica';
   const [prod, setProd] = useState('');
   const [search, setSearch] = useState('');
   const [cantidad, setCantidad] = useState('');
@@ -2711,12 +2713,14 @@ function AgregarPTTeranModal({ ptList, onClose, onSubmit }) {
     <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
-          <span style={S.modalTitle}>Agregar PT a Terán</span>
+          <span style={S.modalTitle}>Agregar PT a {esFabrica ? 'Fábrica' : 'Terán'}</span>
           <button style={S.modalClose} onClick={onClose} aria-label="Cerrar">✕</button>
         </div>
         <div style={S.modalBody}>
-          <div style={{ padding: '8px 12px', background: 'var(--lp-brand-100)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
-            Registra producto terminado físicamente en <b>Terán</b> (en cubetas) que no llegó por el flujo de lotes/QR. No afecta el stock total ni la producción. Pedirá tu código de autorización.
+          <div style={{ padding: '8px 12px', background: esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
+            {esFabrica
+              ? <>Suma cubetas al stock de <b>producción en fábrica</b> (qty). Es el stock que se vende y descuenta al fabricar. Pedirá tu código de autorización.</>
+              : <>Registra producto terminado físicamente en <b>Terán</b> (en cubetas) que no llegó por el flujo de lotes/QR. No afecta el stock total ni la producción. Pedirá tu código de autorización.</>}
           </div>
           <div>
             <label style={S.fieldLabel}>Producto *</label>
@@ -2750,7 +2754,7 @@ function AgregarPTTeranModal({ ptList, onClose, onSubmit }) {
         <div style={S.modalFooter}>
           <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
           <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Guardando...' : 'Agregar a Terán'}
+            {saving ? 'Guardando...' : `Agregar a ${esFabrica ? 'Fábrica' : 'Terán'}`}
           </button>
         </div>
       </div>
