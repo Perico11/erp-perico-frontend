@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 
 const S = {
@@ -233,12 +233,28 @@ export function SustituirMPModal({ mp, mpsDisponibles, onClose, onSaved }) {
 /* ────────── MP ACTIONS DROPDOWN ────────── */
 export function MPActionsMenu({ mp, mpsDisponibles, canEdit, onAction }) {
   const [open, setOpen] = useState(false);
+  /* FIX jun 2026: el desplegable era position:absolute y lo recortaba el
+     overflow:hidden de la tabla (más visible ahora con las secciones por
+     categoría). Se ancla con position:fixed a las coordenadas del botón para
+     que escape de cualquier contenedor con overflow. */
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
   if (!canEdit) return null;
 
+  const toggle = (e) => {
+    e.stopPropagation();
+    if (!open && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, right: Math.max(8, window.innerWidth - r.right) });
+    }
+    setOpen(!open);
+  };
+
   return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
+    <div style={{ display: 'inline-block' }}>
       <button
-        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        ref={btnRef}
+        onClick={toggle}
         style={{
           background: 'transparent', border: 'none',
           cursor: 'pointer', padding: '4px 8px',
@@ -248,18 +264,18 @@ export function MPActionsMenu({ mp, mpsDisponibles, canEdit, onAction }) {
         title="Acciones"
         aria-label={`Acciones para ${mp}`}
       >⋯</button>
-      {open && (
+      {open && pos && (
         <>
           <div
             style={{ position: 'fixed', inset: 0, zIndex: 9998 }}
             onClick={() => setOpen(false)}
           />
           <div style={{
-            position: 'absolute', right: 0, top: '100%', marginTop: 4,
+            position: 'fixed', top: pos.top, right: pos.right,
             background: 'var(--lp-bg-raised)',
             border: '1.5px solid var(--lp-border-subtle)',
             borderRadius: 'var(--lp-radius-sm)',
-            boxShadow: '0 4px 12px rgba(26,24,21,.08)',
+            boxShadow: '0 8px 24px rgba(26,24,21,.16)',
             zIndex: 9999, minWidth: 160,
           }}>
             <button
