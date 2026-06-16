@@ -197,14 +197,23 @@ const S = {
   successS: { fontSize: 14, color: 'var(--lp-text-secondary)' },
 };
 
+/* Recordar el último usuario en ESTE dispositivo (solo el nombre, NUNCA el PIN).
+   Al cerrarse la sesión, se vuelve a entrar poniendo solo el PIN. Pedido dueño
+   jun 2026. */
+const REMEMBER_KEY = 'pp_last_user';
+function _savedUser() {
+  try { return (localStorage.getItem(REMEMBER_KEY) || '').trim(); } catch { return ''; }
+}
+
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [nombre, setNombre] = useState('');
+  const [nombre, setNombre] = useState(() => _savedUser());
   const [pin, setPin] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [step, setStep] = useState('name');
+  /* Si ya hay un usuario recordado, saltar directo al PIN. */
+  const [step, setStep] = useState(() => (_savedUser() ? 'pin' : 'name'));
   const [logoOk, setLogoOk] = useState(true);
   const [shake, setShake] = useState(false);
   const [fieldFocused, setFieldFocused] = useState(false);
@@ -251,6 +260,9 @@ export default function LoginPage() {
     setError('');
     try {
       await login(nombre.trim(), pinVal);
+      /* Recordar el usuario en este dispositivo (solo el nombre) para que la
+         próxima vez solo pida el PIN. */
+      try { localStorage.setItem(REMEMBER_KEY, nombre.trim()); } catch {}
       /* Pantalla de éxito breve antes de entrar */
       setLoading(false);
       setStep('success');
@@ -302,7 +314,10 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, pin, loading]);
 
-  const goBack = () => { setStep('name'); setPin(''); setError(''); };
+  /* "Cambiar usuario": vuelve al paso nombre con el campo vacío para escribir
+     otro. NO borra el usuario recordado — eso se actualiza solo al entrar con
+     éxito con otro nombre (así, si solo querían ver, sigue recordado). */
+  const goBack = () => { setStep('name'); setPin(''); setError(''); setNombre(''); };
 
   /* ── Éxito: overlay full-screen ── */
   if (step === 'success') {
