@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import api from '../services/api';
 
 /* ════════════════════════════════════════════════════════════════════════
    AsistenteFlotante — botón flotante arrastrable que vive en TODAS las
@@ -144,19 +145,102 @@ export default function AsistenteFlotante() {
     });
   };
 
-  /* Responder a un mensaje del usuario: busca destinos y arma la respuesta. */
-  const responder = (texto) => {
+  const esAdmin = user?.rol === 'admin';
+  const pushBot = (msg) => setMensajes(m => [...m, typeof msg === 'string' ? { from: 'bot', text: msg } : { from: 'bot', ...msg }]);
+  const reemplazarUltimo = (texto) => setMensajes(m => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].from === 'bot') { c[i] = { from: 'bot', text: texto }; break; } return c; });
+
+  /* ── Acciones reales (comandos) ── */
+  async function _todosLosItems() {
+    const [invR, envR] = await Promise.all([api.getInventario().catch(() => null), api.getEnvases().catch(() => null)]);
+    const inv = invR?.data || invR || {};
+    const items = [];
+    Object.entries(inv.mp || {}).forEach(([k, v]) => items.push({ nombre: k, qty: +v.qty || 0, min: +v.min || 0, tipo: 'MP', u: 'kg' }));
+    Object.entries(inv.pt || {}).forEach(([k, v]) => items.push({ nombre: k, qty: +v.qty || 0, min: +v.min || 0, tipo: 'PT', u: 'cub' }));
+    const env = envR?.data || envR || {};
+    Object.values(env.categorias || {}).forEach(cat => Object.values(cat.subcategorias || {}).forEach(s => items.push({ nombre: s.nombre, qty: +s.stock || 0, min: +s.min || 0, tipo: 'Envase', u: 'pz' })));
+    Object.values(env.tapas || {}).forEach(t => items.push({ nombre: t.nombre, qty: +t.stock || 0, min: +t.min || 0, tipo: 'Tapa', u: 'pz' }));
+    return items;
+  }
+  function _mejorMatch(nombre, lista, getN) {
+    const q = _norm(nombre), qns = q.replace(/ /g, '');
+    let best = null, bs = -1;
+    lista.forEach(it => {
+      const n = _norm(getN(it)); const nns = n.replace(/ /g, '');
+      const sc = n === q ? 100 : n.includes(q) || q.includes(n) ? 60 : (nns.length >= 4 && _lev(qns, nns) <= 2 ? 35 : 0);
+      if (sc > bs) { bs = sc; best = it; }
+    });
+    return bs > 0 ? best : null;
+  }
+
+  async function accionStock(nombre) {
+    const items = await _todosLosItems();
+    const it = _mejorMatch(nombre, items, x => x.nombre);
+    if (!it) return `No encontré "${nombre}" en el inventario.`;
+    const est = it.qty <= 0 ? 'AGOTADO ⚠️' : (it.min > 0 && it.qty < it.min) ? 'BAJO' : 'OK';
+    return `${it.tipo} · ${it.nombre}: ${it.qty.toLocaleString('es-MX')} ${it.u} (mínimo ${it.min} ${it.u}) — ${est}.`;
+  }
+  async function accionAgregarMP(nombre, n) {
+    const r = await api.getInventario().catch(() => null);
+    const mp = (r?.data || r || {}).mp || {};
+    const it = _mejorMatch(nombre, Object.keys(mp).map(k => ({ k })), x => x.k);
+    if (!it) return `No encontré la materia prima "${nombre}". Créala en Inventario → MP.`;
+    await api.setMPUbicacion(it.k, 'fabrica', n, 'agregar', 'Agregado desde el asistente');
+    return `Listo: agregué ${n} kg de ${it.k} al stock de Fábrica.`;
+  }
+  async function accionPin(nombreUser, pin) {
+    const r = await api.getUsuarios().catch(() => null);
+    const arr = r?.data || r?.usuarios || (Array.isArray(r) ? r : []) || [];
+    const u = _mejorMatch(nombreUser, arr, x => x.nombre || '');
+    if (!u) return `No encontré al usuario "${nombreUser}".`;
+    await api.cambiarPin(u.id, pin);
+    return `Listo: el PIN de ${u.nombre} ahora es ${pin}. Sus otras sesiones se cerraron.`;
+  }
+
+  /* Detecta un comando en el texto. */
+  function detectar(t) {
+    const s = _norm(t); let m;
+    if ((m = s.match(/pin\s+(?:de|del)\s+(.+?)\s+(?:a|en|por|:)?\s*(\d{4})\b/)) || (m = s.match(/(?:cambia\w*|nuevo pin)\s+(?:el pin\s+)?(?:de|a)\s+(.+?)\s+(\d{4})/))) {
+      return { tipo: 'pin', admin: true, user: m[1].trim(), pin: m[2], desc: `cambiar el PIN de “${m[1].trim()}” a ${m[2]}` };
+    }
+    if ((m = s.match(/(?:agrega\w*|sube\w*|suma\w*|a[nñ]ade\w*)\s+(\d+(?:\.\d+)?)\s*(?:kg|kilos)?\s+(?:de\s+|al\s+|a\s+)?(.+?)(?:\s+(?:a|en)\s+(?:la\s+)?fabrica)?\s*$/))) {
+      return { tipo: 'agregarMP', admin: true, nombre: m[2].trim(), n: parseFloat(m[1]), desc: `agregar ${m[1]} kg de “${m[2].trim()}” al stock de Fábrica` };
+    }
+    if ((m = s.match(/(?:stock|existencia|inventario|cuant[oa]\s+(?:hay|tengo|queda))\s+(?:de\s+|del\s+)?(.+)/))) {
+      return { tipo: 'stock', admin: false, nombre: m[1].trim() };
+    }
+    return null;
+  }
+
+  async function ejecutar(acc) {
+    pushBot('Un momento…');
+    let r;
+    try {
+      if (acc.tipo === 'pin') r = await accionPin(acc.user, acc.pin);
+      else if (acc.tipo === 'agregarMP') r = await accionAgregarMP(acc.nombre, acc.n);
+      else r = 'Acción no reconocida.';
+    } catch (e) { r = 'No se pudo: ' + (e?.data?.error || e?.message || 'error'); }
+    reemplazarUltimo(r);
+  }
+
+  /* Responder a un mensaje del usuario. */
+  const responder = async (texto) => {
     const t = (texto || '').trim();
     if (!t) return;
+    setQ('');
+    setMensajes(m => [...m, { from: 'user', text: t }]);
+    const acc = detectar(t);
+    if (acc) {
+      if (acc.admin && !esAdmin) { pushBot('Esa acción solo la puede hacer un administrador.'); return; }
+      if (acc.tipo === 'stock') { pushBot('Buscando…'); const r = await accionStock(acc.nombre); reemplazarUltimo(r); return; }
+      pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
+      return;
+    }
+    /* Navegación (fallback) */
     const res = visibles.map(e => ({ e, s: _score(t, e) })).filter(r => r.s > 0)
       .sort((a, b) => b.s - a.s).slice(0, 5).map(r => r.e);
-    setMensajes(m => [...m,
-      { from: 'user', text: t },
-      res.length
-        ? { from: 'bot', text: res.length === 1 ? 'Te llevo aquí:' : 'Encontré esto — toca a dónde quieres ir:', results: res }
-        : { from: 'bot', text: 'No encontré esa pantalla. Prueba con otra palabra — por ejemplo: “compras”, “agregar envase”, “conteo”, “trazabilidad”.' },
-    ]);
-    setQ('');
+    pushBot(res.length
+      ? { text: res.length === 1 ? 'Te llevo aquí:' : 'Encontré esto — toca a dónde quieres ir:', results: res }
+      : { text: 'No te entendí. Puedo: consultar stock (“stock de X”), agregar stock a una MP, cambiar un PIN, o llevarte a una pantalla (“compras”, “conteo”…).' });
   };
 
   const ir = (entry) => {
@@ -216,6 +300,18 @@ export default function AsistenteFlotante() {
                           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--lp-brand-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
                         </button>
                       ))}
+                    </div>
+                  )}
+                  {m.confirm && (
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                      <button style={S.confirmYes}
+                        onClick={() => { const acc = m.confirm; setMensajes(ms => ms.map((x, j) => j === i ? { from: 'bot', text: x.text.replace(' ¿Confirmo?', '') + ' ✓' } : x)); ejecutar(acc); }}>
+                        Sí, hazlo
+                      </button>
+                      <button style={S.confirmNo}
+                        onClick={() => setMensajes(ms => ms.map((x, j) => j === i ? { from: 'bot', text: 'Cancelado.' } : x))}>
+                        Cancelar
+                      </button>
                     </div>
                   )}
                 </div>
@@ -284,6 +380,8 @@ const S = {
     flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: 'none', cursor: 'pointer',
     background: 'var(--lp-brand-600)', display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
+  confirmYes: { padding: '8px 16px', borderRadius: 10, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' },
+  confirmNo: { padding: '8px 16px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
   item: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
     width: '100%', textAlign: 'left', padding: '11px 12px', borderRadius: 12,
