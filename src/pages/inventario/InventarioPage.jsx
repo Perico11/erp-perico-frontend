@@ -2683,6 +2683,7 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [confirmNueva, setConfirmNueva] = useState(null); /* { nombre, similares } */
+  const [confirmadoNuevo, setConfirmadoNuevo] = useState(''); /* nombre ya confirmado como nuevo */
   const inputRef = useRef(null);
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
 
@@ -2701,13 +2702,21 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
   /* Al pedir crear: si hay nombres parecidos, confirmar; si no, crear directo. */
   const pedirCrear = (nombre) => {
     const sim = nombresSimilares(nombre, mpList);
-    if (sim.length === 0) { setMp(nombre); setSearch(''); }
+    if (sim.length === 0) { setMp(nombre); setSearch(''); setConfirmadoNuevo(nombre); }
     else setConfirmNueva({ nombre, similares: sim });
   };
 
   const handleSubmit = async () => {
     const elegido = (mp || search.trim());
     if (!elegido) return setError('Escribe o selecciona una materia prima');
+    /* Red de seguridad: aunque entren por el botón Agregar sin pasar por
+       "+ Crear nueva", si es una MP NUEVA con nombres parecidos y no se ha
+       confirmado, preguntar antes de crear (pedido dueño). */
+    const existe = mpList.some(m => m.toLowerCase() === elegido.toLowerCase());
+    if (!existe && elegido !== confirmadoNuevo) {
+      const sim = nombresSimilares(elegido, mpList);
+      if (sim.length > 0) { setConfirmNueva({ nombre: elegido, similares: sim }); return; }
+    }
     const qty = parseFloat(cantidad);
     if (!qty || qty <= 0) return setError('La cantidad debe ser mayor a 0');
     setSaving(true); setError('');
@@ -2752,8 +2761,8 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
             {confirmNueva && (
               <ConfirmNuevaBox
                 nombre={confirmNueva.nombre} similares={confirmNueva.similares} tipo="mp"
-                onUsarExistente={(s) => { setMp(s); setSearch(''); setConfirmNueva(null); }}
-                onEsNueva={() => { setMp(confirmNueva.nombre); setSearch(''); setConfirmNueva(null); }}
+                onUsarExistente={(s) => { setMp(s); setSearch(''); setConfirmadoNuevo(''); setConfirmNueva(null); }}
+                onEsNueva={() => { setMp(confirmNueva.nombre); setConfirmadoNuevo(confirmNueva.nombre); setSearch(''); setConfirmNueva(null); }}
                 onCancelar={() => setConfirmNueva(null)}
               />
             )}
@@ -2794,6 +2803,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [confirmNueva, setConfirmNueva] = useState(null);
+  const [confirmadoNuevo, setConfirmadoNuevo] = useState('');
   const inputRef = useRef(null);
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
 
@@ -2809,13 +2819,18 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
 
   const pedirCrear = (nombre) => {
     const sim = nombresSimilares(nombre, ptList);
-    if (sim.length === 0) { setProd(nombre); setSearch(''); }
+    if (sim.length === 0) { setProd(nombre); setSearch(''); setConfirmadoNuevo(nombre); }
     else setConfirmNueva({ nombre, similares: sim });
   };
 
   const handleSubmit = async () => {
     const elegido = prod || search.trim();
     if (!elegido) return setError('Selecciona o escribe un producto');
+    const existe = ptList.some(m => m.toLowerCase() === elegido.toLowerCase());
+    if (!existe && elegido !== confirmadoNuevo) {
+      const sim = nombresSimilares(elegido, ptList);
+      if (sim.length > 0) { setConfirmNueva({ nombre: elegido, similares: sim }); return; }
+    }
     const qty = parseFloat(cantidad);
     if (!qty || qty <= 0) return setError('La cantidad debe ser mayor a 0');
     setSaving(true); setError('');
@@ -2862,8 +2877,8 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
             {confirmNueva && (
               <ConfirmNuevaBox
                 nombre={confirmNueva.nombre} similares={confirmNueva.similares} tipo="pt"
-                onUsarExistente={(s) => { setProd(s); setSearch(''); setConfirmNueva(null); }}
-                onEsNueva={() => { setProd(confirmNueva.nombre); setSearch(''); setConfirmNueva(null); }}
+                onUsarExistente={(s) => { setProd(s); setSearch(''); setConfirmadoNuevo(''); setConfirmNueva(null); }}
+                onEsNueva={() => { setProd(confirmNueva.nombre); setConfirmadoNuevo(confirmNueva.nombre); setSearch(''); setConfirmNueva(null); }}
                 onCancelar={() => setConfirmNueva(null)}
               />
             )}
