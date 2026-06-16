@@ -2617,13 +2617,19 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
     const q = search.toLowerCase();
     return mpList.filter(m => m.toLowerCase().includes(q));
   }, [mpList, search]);
+  /* ¿El texto escrito NO coincide con ninguna MP existente? → ofrecer crearla. */
+  const qTrim = search.trim();
+  const hayExacta = !!qTrim && mpList.some(m => m.toLowerCase() === qTrim.toLowerCase());
+  const puedeCrear = !!qTrim && !hayExacta;
+  const mpEsNueva = !!mp && !mpList.some(m => m.toLowerCase() === mp.toLowerCase());
 
   const handleSubmit = async () => {
-    if (!mp) return setError('Selecciona una materia prima');
+    const elegido = (mp || search.trim());
+    if (!elegido) return setError('Escribe o selecciona una materia prima');
     const qty = parseFloat(cantidad);
     if (!qty || qty <= 0) return setError('La cantidad debe ser mayor a 0');
     setSaving(true); setError('');
-    try { await onSubmit(mp, qty); }
+    try { await onSubmit(elegido, qty); }
     catch (e) { setError(e?.data?.error || e?.message || 'No se pudo guardar'); }
     finally { setSaving(false); }
   };
@@ -2637,25 +2643,33 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
         </div>
         <div style={S.modalBody}>
           <div style={{ padding: '8px 12px', background: esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
-            Suma esta cantidad al almacén <b>{esFabrica ? 'Fábrica' : 'Terán'}</b>. El total de la MP sube en consecuencia. No pide código (solo suma stock).
+            Suma esta cantidad al almacén <b>{esFabrica ? 'Fábrica' : 'Terán'}</b>. El total de la MP sube en consecuencia. Si la materia prima no existe, escríbela y la das de alta. No pide código (solo suma stock).
           </div>
           <div>
             <label style={S.fieldLabel}>Materia Prima *</label>
-            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar MP..."
+            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar o escribir nueva MP..."
               value={mp || search} onChange={e => { setSearch(e.target.value); setMp(''); }} />
-            {search && !mp && filtered.length > 0 && (
-              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
-                {filtered.slice(0, 15).map(m => (
+            {search && !mp && (filtered.length > 0 || puedeCrear) && (
+              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
+                {filtered.slice(0, 12).map(m => (
                   <div key={m} onClick={() => { setMp(m); setSearch(''); }}
                     style={{ padding: '8px 14px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-primary)', fontWeight: 500 }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-bg-sunken)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{m}</div>
                 ))}
+                {puedeCrear && (
+                  <div onClick={() => { setMp(qTrim); setSearch(''); }}
+                    style={{ padding: '9px 14px', fontSize: 12.5, cursor: 'pointer', color: 'var(--lp-brand-700)', fontWeight: 700, background: 'var(--lp-brand-50)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-brand-100)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'var(--lp-brand-50)'}>
+                    + Crear nueva materia prima: “{qTrim}”
+                  </div>
+                )}
               </div>
             )}
             {mp && (
-              <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                {mp}
+              <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: mpEsNueva ? 'var(--lp-success-100)' : 'var(--lp-brand-100)', color: mpEsNueva ? 'var(--lp-success-700)' : 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                {mpEsNueva ? `Nueva: ${mp}` : mp}
                 <span style={{ cursor: 'pointer', fontSize: 14 }} onClick={() => { setMp(''); setSearch(''); }}>✕</span>
               </div>
             )}
@@ -2697,6 +2711,10 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
     const q = search.toLowerCase();
     return ptList.filter(m => m.toLowerCase().includes(q));
   }, [ptList, search]);
+  const qTrim = search.trim();
+  const hayExacta = !!qTrim && ptList.some(m => m.toLowerCase() === qTrim.toLowerCase());
+  const puedeCrear = !!qTrim && !hayExacta;
+  const prodEsNuevo = !!prod && !ptList.some(m => m.toLowerCase() === prod.toLowerCase());
 
   const handleSubmit = async () => {
     const elegido = prod || search.trim();
@@ -2724,21 +2742,29 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
           </div>
           <div>
             <label style={S.fieldLabel}>Producto *</label>
-            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar producto..."
+            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar o escribir nuevo producto..."
               value={prod || search} onChange={e => { setSearch(e.target.value); setProd(''); }} />
-            {search && !prod && filtered.length > 0 && (
-              <div style={{ maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
-                {filtered.slice(0, 15).map(m => (
+            {search && !prod && (filtered.length > 0 || puedeCrear) && (
+              <div style={{ maxHeight: 180, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
+                {filtered.slice(0, 12).map(m => (
                   <div key={m} onClick={() => { setProd(m); setSearch(''); }}
                     style={{ padding: '8px 14px', fontSize: 12, cursor: 'pointer', borderBottom: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-primary)', fontWeight: 500 }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-bg-sunken)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{m}</div>
                 ))}
+                {puedeCrear && (
+                  <div onClick={() => { setProd(qTrim); setSearch(''); }}
+                    style={{ padding: '9px 14px', fontSize: 12.5, cursor: 'pointer', color: 'var(--lp-brand-700)', fontWeight: 700, background: 'var(--lp-brand-50)' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-brand-100)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'var(--lp-brand-50)'}>
+                    + Crear nuevo producto: “{qTrim}”
+                  </div>
+                )}
               </div>
             )}
             {prod && (
-              <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-                {prod}
+              <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: prodEsNuevo ? 'var(--lp-success-100)' : 'var(--lp-brand-100)', color: prodEsNuevo ? 'var(--lp-success-700)' : 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+                {prodEsNuevo ? `Nuevo: ${prod}` : prod}
                 <span style={{ cursor: 'pointer', fontSize: 14 }} onClick={() => { setProd(''); setSearch(''); }}>✕</span>
               </div>
             )}
