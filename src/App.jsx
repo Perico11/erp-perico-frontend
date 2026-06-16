@@ -5,6 +5,7 @@ import { ToastProvider } from './components/ui/Toast';
 import { PedidosNotifProvider } from './context/PedidosNotifContext';
 import AppLayout from './components/layout/AppLayout';
 import VersionChecker from './components/VersionChecker';
+import PushPrompt from './components/PushPrompt';
 import ErrorBoundary from './components/ErrorBoundary';
 
 /* Login y Dashboard cargan inmediatos (críticos para arranque) */
@@ -126,6 +127,8 @@ export default function App() {
           <PedidosNotifProvider>
           {/* Avisa cuando hay un deploy nuevo (evita pantalla blanca por caché vieja) */}
           <VersionChecker />
+          {/* Ofrece activar notificaciones del teléfono al iniciar sesión (Web Push) */}
+          <PushPrompt />
           <Routes>
             {/* Login */}
             <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />

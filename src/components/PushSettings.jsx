@@ -8,6 +8,7 @@ import {
   rolPuedeRecibir,
   setCurrentRol,
 } from '../utils/pushNotifications';
+import { subscribeToPush, unsubscribeFromPush, sendTestPush, pushSupported } from '../utils/webPush';
 import { useAuth } from '../context/AuthContext';
 
 const S = {
@@ -123,22 +124,29 @@ export default function PushSettings({ embedded = false }) {
     if (r === 'granted') {
       const next = setPushSettings({ enabled: true });
       setSettings(next);
+      /* Suscribir a Web Push real → notificaciones en el teléfono aunque la app
+         esté cerrada. Va dentro del mismo gesto del click. */
+      try { await subscribeToPush(); } catch {}
     }
     /* Avisar a contenedores (header colapsable de NotificacionesPage) que
        el estado del permiso cambió, para refrescar su badge. */
     try { window.dispatchEvent(new Event('pp-push-permission')); } catch {}
   };
 
-  const probar = () => {
-    /* Sin `tipo`: la prueba no se gatea por rol ni por toggle de evento —
-       cualquier usuario puede verificar que su dispositivo recibe push. */
-    const result = showPush({
-      title: 'Notificación de prueba',
-      body: 'Si ves esto, las notificaciones están funcionando',
-      tag: 'test-' + Date.now(),
-    });
-    if (!result) {
-      alert('No se pudo mostrar. Revisa que el permiso esté concedido y "Solo en segundo plano" desactivado para probar con la pestaña visible.');
+  const probar = async () => {
+    /* Prueba real de fondo: el SERVIDOR manda el push (lo que el usuario verá
+       con la app cerrada). Si falla, cae al push local de primer plano. */
+    let ok = false;
+    try { ok = await sendTestPush(); } catch {}
+    if (!ok) {
+      const result = showPush({
+        title: 'Notificación de prueba',
+        body: 'Si ves esto, las notificaciones están funcionando',
+        tag: 'test-' + Date.now(),
+      });
+      if (!result) {
+        alert('No se pudo mostrar. Revisa que el permiso esté concedido y, en iPhone, que la app esté instalada en la pantalla de inicio.');
+      }
     }
   };
 

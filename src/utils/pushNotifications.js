@@ -254,6 +254,10 @@ export function getCurrentRol() { return _getCurrentRol(); }
 export function showPush({ tipo, title, body, tag, onClick, rol, skipRolGate }) {
   if (!('Notification' in window)) return null;
   if (Notification.permission !== 'granted') return null;
+  /* Si el Web Push real está activo en este dispositivo, el servidor manda las
+     notificaciones (funcionan con la app cerrada). Suprimimos el push de primer
+     plano para no mostrar la misma notificación dos veces. */
+  try { if (sessionStorage.getItem('pp_webpush_active') === '1') return null; } catch {}
 
   const settings = getPushSettings();
   if (!settings.enabled) return null;

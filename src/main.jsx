@@ -26,33 +26,37 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>,
 )
 
-/* === Service Worker: CLEANUP MODE (sin registrar nuevo SW) ===
-   ⚠️  BUG ANTERIOR: registrábamos sw.js en cada load → SW se activaba
-       → SW hacía client.navigate() para recargar → al recargar volvíamos
-       a registrar sw.js → loop infinito de refresh.
+/* === Service Worker: SOLO push-sw.js (Web Push), limpiando el viejo sw.js ===
+   Historial: el viejo sw.js (kill-switch/caché) hacía client.navigate() → loop
+   infinito de reloads. Por eso se mató. AHORA registramos un SW NUEVO y
+   distinto, push-sw.js, que SOLO maneja notificaciones push: no cachea, no
+   intercepta fetch, no recarga en bucle. Sirve para que el teléfono reciba
+   notificaciones con la app cerrada (jun 2026, pedido dueño).
 
-   ARREGLO: NO registramos ningún SW nuevo. Solo desregistramos los SW
-   que pudieron quedar instalados de deploys anteriores, y limpiamos
-   sus caches. Esta operación es idempotente y silenciosa (sin reload).
-
-   Si un usuario tiene un SW viejo activo del deploy previo, este código
-   lo elimina UNA vez y queda limpio para siempre. La página actual sigue
-   funcionando con su SW viejo hasta el siguiente reload manual, después
-   del cual ya no habrá SW. */
+   - Desregistramos cualquier SW que NO sea push-sw.js (mata el sw.js maldito
+     que pudiera quedar de deploys viejos).
+   - Limpiamos caches (push-sw no usa cache).
+   - Registramos push-sw.js. La suscripción real ocurre después, cuando el
+     usuario concede permiso (utils/webPush.js). */
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    /* Desregistrar TODOS los SW de nuestro origen */
     navigator.serviceWorker.getRegistrations().then((regs) => {
       regs.forEach((reg) => {
-        reg.unregister().catch(() => {});
+        const sw = reg.active || reg.waiting || reg.installing;
+        const url = sw ? sw.scriptURL : '';
+        if (!url || url.indexOf('/push-sw.js') === -1) {
+          reg.unregister().catch(() => {}); /* viejo sw.js → fuera */
+        }
       });
     }).catch(() => {});
 
-    /* Limpiar TODOS los caches del navegador para nuestro origen */
     if ('caches' in window) {
       caches.keys().then((keys) => {
         keys.forEach((k) => caches.delete(k).catch(() => {}));
       }).catch(() => {});
     }
+
+    /* Registrar el SW de push (idempotente; no toca el render ni recarga). */
+    navigator.serviceWorker.register('/push-sw.js', { scope: '/' }).catch(() => {});
   });
 }
