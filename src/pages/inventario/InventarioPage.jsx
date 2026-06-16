@@ -527,9 +527,10 @@ function MPRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
-function PTRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
+function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad }) {
   const { nombre, inv, pct } = item;
   const qty = inv.qty || 0;
+  const u = item.unidad || unidad || 'cub'; /* envases = 'pz', PT = 'cub' */
   const sev = sevOf(qty, pct);
   const clickable = canEdit || canContar;
   return (
@@ -542,8 +543,8 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
       </div>
       <div style={S.sevBar}><div style={S.sevFill(barPctOf(qty, inv.min || 0), sev.color)} /></div>
       <div style={S.mNums}>
-        <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</span>
-        <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} cub</span>
+        <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {u}</span>
+        <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} {u}</span>
         {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
@@ -760,12 +761,13 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const skuChanged = esPT && skuEdit.trim() !== String(item.sku || '');
   const metaChanged = nombreChanged || skuChanged;
 
+  const esEnv = item.tipo === 'env';
   const minValido = !canEditMin || (min !== '' && !isNaN(minNum) && minNum >= 0);
   const qtyValida = qty !== '' && !isNaN(qtyNum) && qtyNum >= 0;
-  /* El motivo solo es obligatorio cuando se mueve STOCK; un cambio de
-     nombre/SKU solo (catálogo) se guarda sin motivo ni candado. */
+  /* El motivo solo es obligatorio cuando se mueve STOCK (MP/PT con candado).
+     Envases no usan candado → no exigen motivo. */
   const puedeGuardar = stockChanged
-    ? (motivo.trim().length >= 3 && qtyValida && minValido)
+    ? ((esEnv || motivo.trim().length >= 3) && qtyValida && minValido)
     : (metaChanged && qtyValida && minValido);
 
   const handleSave = async () => {
@@ -827,9 +829,11 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
               value={min} onChange={e => setMin(e.target.value)} />
           </>
         )}
+        {!esEnv && (<>
         <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste{stockChanged ? '' : ' (solo si mueves stock)'}</label>
         <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, merma, corrección"
           value={motivo} onChange={e => setMotivo(e.target.value)} />
+        </>)}
         {modoPropuesta && stockChanged && (
           <div style={{ marginTop: 12, padding: '9px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 12, color: 'var(--lp-warning-700)' }}>
             El cambio de <strong>stock</strong> quedará <strong>pendiente</strong> hasta que el admin lo apruebe.
@@ -1417,6 +1421,7 @@ export default function InventarioPage() {
   const { query, debouncedQuery, setQuery } = useSearch(200);
   const [showRecepcion, setShowRecepcion] = useState(false);
   const [showAgregarPT, setShowAgregarPT] = useState(false);
+  const [showAgregarEnv, setShowAgregarEnv] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
   const [confirm, ConfirmEl] = useConfirm();
   const [eliminarMP, setEliminarMP] = useState(null);
@@ -1606,6 +1611,56 @@ export default function InventarioPage() {
     return { groups, uncategorized };
   }, [filteredMP]);
 
+  /* ── Build Envases items (aplana categorías→subcategorías + tapas) en el mismo
+     shape que MP/PT para reusar InvTable/PTRow/AjusteSheet. Sprint Y jun 2026. ── */
+  const ENV_GRUPOS = ['Litro', 'Galón', 'Cubeta', 'Otros', 'Tapas'];
+  const envItems = useMemo(() => {
+    if (activeTab !== 'env') return [];
+    const data = envData?.data || envData || {};
+    const cats = data.categorias || {};
+    const tapas = data.tapas || {};
+    const out = [];
+    Object.entries(cats).forEach(([catName, cat]) => {
+      Object.entries(cat.subcategorias || {}).forEach(([subKey, sub]) => {
+        const qty = Number(sub.stock) || 0, min = Number(sub.min) || 0;
+        out.push({
+          nombre: sub.nombre || subKey, inv: { qty, min },
+          pct: min > 0 ? Math.round((qty / min) * 100) : 999,
+          grupo: catName, unidad: sub.unidad || 'pz', marca: sub.marca || null,
+          _env: { tipo: 'envase', catKey: catName, subKey },
+        });
+      });
+    });
+    Object.entries(tapas).forEach(([tapaKey, tapa]) => {
+      const qty = Number(tapa.stock) || 0, min = Number(tapa.min) || 0;
+      out.push({
+        nombre: tapa.nombre || tapaKey, inv: { qty, min },
+        pct: min > 0 ? Math.round((qty / min) * 100) : 999,
+        grupo: 'Tapas', unidad: 'pz', color: tapa.color || null,
+        _env: { tipo: 'tapa', tapaKey },
+      });
+    });
+    return out.sort((a, b) => a.nombre.localeCompare(b.nombre));
+  }, [activeTab, envData]);
+
+  const filteredEnv = useMemo(() => {
+    let items = filterFn(envItems, it => it.inv.qty || 0, it => it.pct);
+    if (debouncedQuery) {
+      const q = debouncedQuery.toLowerCase();
+      items = items.filter(it => it.nombre.toLowerCase().includes(q) || (it.marca || '').toLowerCase().includes(q));
+    }
+    return items;
+  }, [envItems, debouncedQuery, filterFn]);
+
+  /* Agrupa por categoría de envase (Litro, Galón, Cubeta, Otros, Tapas) — paridad
+     con la división por categoría de MP. */
+  const envGrouped = useMemo(() => {
+    const groups = {};
+    filteredEnv.forEach(it => { (groups[it.grupo] = groups[it.grupo] || []).push(it); });
+    const orden = [...ENV_GRUPOS.filter(g => groups[g]), ...Object.keys(groups).filter(g => !ENV_GRUPOS.includes(g))];
+    return orden.map(g => ({ cat: g, items: groups[g] }));
+  }, [filteredEnv]);
+
   /* ── KPI computation ── */
   const mpKpi = useMemo(() => {
     const total = mpItems.length;
@@ -1745,6 +1800,25 @@ export default function InventarioPage() {
   const handleAdjustPT = useCallback((item) => {
     setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '' });
   }, []);
+  /* Envases (Sprint Y jun 2026): mismo sheet "Ajustar existencia" que MP/PT.
+     Sin candado ni propuesta — guarda directo a /api/envases/stock|tapa/stock. */
+  const handleAdjustEnv = useCallback((item) => {
+    setAjusteItem({ tipo: 'env', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: item.unidad || 'pz', _env: item._env });
+  }, []);
+  const handleSaveEnv = useCallback(async (ref, qty, min) => {
+    try {
+      if (ref.tipo === 'tapa') {
+        await api.post('/api/envases/tapa/stock', { key: ref.tapaKey, stock: Number(qty) || 0, min: Number(min) || 0 });
+      } else {
+        await api.post('/api/envases/stock', { categoria: ref.catKey, subcategoria: ref.subKey, subKey: ref.subKey, stock: Number(qty) || 0, min: Number(min) || 0 });
+      }
+      reloadEnv();
+      setToastMsg('Envase actualizado'); setTimeout(() => setToastMsg(''), 3000);
+    } catch (e) {
+      alert('No se pudo guardar: ' + (e?.data?.error || e?.message || 'error'));
+      throw e;
+    }
+  }, [reloadEnv]);
   /* El guardado del sheet pasa por handleSaveMP/PT → ajustarConCandado (candado intacto).
      extras (solo PT): {stockChanged, metaChanged, nuevoNombre?, sku?} — el catálogo
      (nombre/SKU) se aplica PRIMERO y directo vía pt-meta (sin candado: no es stock);
@@ -1753,6 +1827,11 @@ export default function InventarioPage() {
      recrearía el PT con el nombre anterior). */
   const handleAjusteSave = useCallback(async (newQty, motivo, newMin, extras = {}) => {
     if (!ajusteItem) return;
+    /* Envases: guardado directo (sin candado ni propuesta). */
+    if (ajusteItem.tipo === 'env') {
+      await handleSaveEnv(ajusteItem._env, newQty, newMin != null ? newMin : ajusteItem.min);
+      return;
+    }
     let nombreEfectivo = ajusteItem.nombre;
     if (ajusteItem.tipo === 'pt' && extras.metaChanged) {
       try {
@@ -1784,7 +1863,7 @@ export default function InventarioPage() {
     }
     if (ajusteItem.tipo === 'mp') await handleSaveMP(nombreEfectivo, newQty, minFinal, motivo);
     else await handleSavePT(nombreEfectivo, newQty, minFinal, motivo);
-  }, [ajusteItem, esProponente, handleSaveMP, handleSavePT, reloadPendientes, reloadInv]);
+  }, [ajusteItem, esProponente, handleSaveMP, handleSavePT, handleSaveEnv, reloadPendientes, reloadInv]);
 
   /* ── KPI click handler ── */
   const handleKpiClick = (filter) => {
@@ -1865,7 +1944,7 @@ export default function InventarioPage() {
             </div>
             {/* Paquete MOCKUP 8: en escritorio los chips siguen inline; en
                 móvil se decluttera — UN botón de filtros abre la hoja. */}
-            {((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total')) && isDesktop && (
+            {((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total') || activeTab === 'env') && isDesktop && (
               <div style={{ marginLeft: 'auto' }}>
                 <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
               </div>
@@ -1891,9 +1970,8 @@ export default function InventarioPage() {
 
         {/* KPIs + banda de atención (escritorio, mockup propuesta A) */}
         {isDesktop && ((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total') || activeTab === 'env') && (() => {
-          const kpiItems = activeTab === 'mp' ? mpItems : activeTab === 'pt' ? ptItems : [];
-          const unidad = activeTab === 'mp' ? 'kg' : 'cub';
-          if (activeTab === 'env') return null; /* envases tienen su propio tab con catálogo */
+          const kpiItems = activeTab === 'mp' ? mpItems : activeTab === 'pt' ? ptItems : envItems;
+          const unidad = activeTab === 'mp' ? 'kg' : activeTab === 'pt' ? 'cub' : 'pz';
           const criticos = kpiItems.filter(i => (i.inv.qty || 0) <= 0);
           return (
             <>
@@ -2074,13 +2152,44 @@ export default function InventarioPage() {
           </>
         )}
 
-        {/* ════════ TAB: ENVASES ════════ */}
+        {/* ════════ TAB: ENVASES (misma estructura que MP/PT — Sprint Y) ════════ */}
         {activeTab === 'env' && (
-          <EnvasesTab
-            envases={envData?.data || envData}
-            canEdit={canEditEnvases}
-            onReload={reloadEnv}
-          />
+          <>
+            <div style={S.subRow}>
+              <div style={{ flex: 1 }} />
+              <div style={S.actionsCluster(isDesktop)}>
+                {canEditEnvases && isDesktop && (
+                  <button style={S.btnAdd} onClick={() => setShowAgregarEnv(true)} title="Agregar una presentación de envase nueva">+ Agregar envase</button>
+                )}
+              </div>
+            </div>
+            {filteredEnv.length === 0 ? (
+              <div style={S.empty}>
+                {debouncedQuery ? `Sin resultados para "${debouncedQuery}"` : activeFilter !== 'todos' ? 'Sin envases en este filtro' : 'Sin envases registrados'}
+              </div>
+            ) : (
+              <div style={S.countLbl}>{filteredEnv.length} de {envItems.length} envases</div>
+            )}
+            {filteredEnv.length > 0 && envGrouped.map(sec => (
+              <div key={sec.cat} style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0 8px' }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' }}>{sec.cat}</span>
+                  <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>· {sec.items.length}</span>
+                </div>
+                {isDesktop ? (
+                  <InvTable items={sec.items} tipo="pt" unidad="pz" canEdit={canEditEnvases}
+                    onAdjust={handleAdjustEnv} canPedir={false} query={debouncedQuery} />
+                ) : (
+                  <div>
+                    {sec.items.map(item => (
+                      <PTRow key={item._env.tipo + '-' + (item._env.subKey || item._env.tapaKey)}
+                        item={item} canEdit={canEditEnvases} onAdjust={handleAdjustEnv} query={debouncedQuery} />
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </>
         )}
       </div>
 
@@ -2094,6 +2203,20 @@ export default function InventarioPage() {
           onSaved={() => {
             setToastMsg('Inventario PT actualizado');
             reloadInv();
+            setTimeout(() => setToastMsg(''), 4000);
+          }}
+        />
+      )}
+
+      {/* ── Agregar Envase (presentación nueva) Modal — Sprint Y ── */}
+      {showAgregarEnv && (
+        <AgregarEnvaseModal
+          categorias={Object.keys((envData?.data || envData || {}).categorias || {})}
+          onClose={() => setShowAgregarEnv(false)}
+          onSaved={(msg) => {
+            setShowAgregarEnv(false);
+            setToastMsg(msg || 'Envase agregado');
+            reloadEnv();
             setTimeout(() => setToastMsg(''), 4000);
           }}
         />
@@ -2220,8 +2343,8 @@ export default function InventarioPage() {
         <AjusteSheet
           item={ajusteItem}
           isDesktop={isDesktop}
-          canEditMin={canEditMinimos}
-          modoPropuesta={esProponente}
+          canEditMin={ajusteItem.tipo === 'env' ? true : canEditMinimos}
+          modoPropuesta={ajusteItem.tipo === 'env' ? false : esProponente}
           onClose={() => setAjusteItem(null)}
           onSave={handleAjusteSave}
           onPedir={ajusteItem.tipo === 'pt' && canPedirPT && (ajusteItem.qty <= 0 || (ajusteItem.min > 0 && ajusteItem.qty <= ajusteItem.min))
@@ -2945,6 +3068,89 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
           <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
           <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
             {saving ? 'Guardando...' : `Agregar a ${esFabrica ? 'Fábrica' : 'Terán'}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Modal "Agregar envase" (presentación nueva) — Sprint Y jun 2026.
+   Crea una subcategoría en /api/envases/subcategoria y, si hay stock inicial,
+   lo fija con /api/envases/stock. Ventana emergente igual que MP/PT. ── */
+function AgregarEnvaseModal({ categorias, onClose, onSaved }) {
+  useBodyScrollLock();
+  const [categoria, setCategoria] = useState(categorias[0] || '');
+  const [nombre, setNombre] = useState('');
+  const [marca, setMarca] = useState('');
+  const [min, setMin] = useState('');
+  const [stock, setStock] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+  const handleSubmit = async () => {
+    const nom = nombre.trim();
+    if (!categoria) return setError('Selecciona una categoría');
+    if (!nom) return setError('Escribe el nombre del envase');
+    setSaving(true); setError('');
+    try {
+      const id = nom.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || ('env-' + nom.length);
+      await api.post('/api/envases/subcategoria', { categoria, id, nombre: nom, marca: marca.trim() || undefined, min: Number(min) || 0 });
+      const stk = Number(stock) || 0;
+      if (stk > 0 || Number(min) > 0) {
+        await api.post('/api/envases/stock', { categoria, subcategoria: id, subKey: id, stock: stk, min: Number(min) || 0 });
+      }
+      onSaved(`${nom} agregado a ${categoria}`);
+    } catch (e) {
+      setError(e?.data?.error || e?.message || 'No se pudo agregar');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.modal}>
+        <div style={S.modalHeader}>
+          <span style={S.modalTitle}>Agregar envase</span>
+          <button style={S.modalClose} onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        <div style={S.modalBody}>
+          <div>
+            <label style={S.fieldLabel}>Categoría *</label>
+            <select style={S.fieldInput} value={categoria} onChange={e => setCategoria(e.target.value)}>
+              {categorias.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Nombre / presentación *</label>
+            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Ej. 19L Estándar" maxLength={120}
+              value={nombre} onChange={e => setNombre(e.target.value)} />
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Marca (opcional)</label>
+            <input type="text" style={S.fieldInput} placeholder="Ej. Premium" maxLength={80}
+              value={marca} onChange={e => setMarca(e.target.value)} />
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={S.fieldLabel}>Existencia inicial (pz)</label>
+              <input type="number" inputMode="decimal" min="0" style={S.fieldInput} placeholder="0"
+                value={stock} onChange={e => setStock(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.fieldLabel}>Mínimo (pz)</label>
+              <input type="number" inputMode="decimal" min="0" style={S.fieldInput} placeholder="0"
+                value={min} onChange={e => setMin(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }} />
+            </div>
+          </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>{error}</div>}
+        </div>
+        <div style={S.modalFooter}>
+          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
+          <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
+            {saving ? 'Guardando...' : 'Agregar envase'}
           </button>
         </div>
       </div>
