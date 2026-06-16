@@ -96,6 +96,17 @@ const S = {
     flex: 1, fontWeight: 600, color: 'var(--lp-text-primary)',
     overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
   },
+  /* Fila de envases/tapas: contenido empacado a la IZQUIERDA (el nombre no se
+     come todo el ancho), valores en columnas alineadas, espacio libre a la
+     derecha. jun 2026 — pedido dueño ("recargado a la derecha"). */
+  envRow: {
+    display: 'flex', alignItems: 'center', gap: 14, padding: '11px 14px',
+    borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13, flexWrap: 'wrap',
+  },
+  envName: {
+    flex: '0 1 220px', minWidth: 130, fontWeight: 600, color: 'var(--lp-text-primary)',
+    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+  },
   rowQty: (color) => ({
     fontWeight: 700, fontFamily: 'var(--lp-font-mono)', fontSize: 14,
     color: color || 'var(--lp-text-primary)', minWidth: 50, textAlign: 'right',
@@ -654,12 +665,13 @@ function EnvaseRow({ subKey, sub, catKey, canEdit, onSave }) {
   const handleSave = async () => {
     setSaving(true);
     try { await onSave(catKey, subKey, parseInt(editStock) || 0, parseInt(editMin) || 0); setEditing(false); }
-    catch (e) { console.error(e); } finally { setSaving(false); }
+    catch (e) { alert('No se pudo guardar: ' + (e?.data?.error || e?.message || 'error')); }
+    finally { setSaving(false); }
   };
 
   return (
-    <div style={{ ...S.row, flexWrap: 'wrap' }}>
-      <div style={S.rowName}>
+    <div style={S.envRow}>
+      <div style={S.envName}>
         {sub.nombre || subKey}
         {sub.marca && <div style={S.provSub}>{sub.marca}</div>}
       </div>
@@ -689,12 +701,13 @@ function TapaRow({ tapaKey, tapa, canEdit, onSave }) {
   const handleSave = async () => {
     setSaving(true);
     try { await onSave(tapaKey, parseInt(editStock) || 0, parseInt(editMin) || 0); setEditing(false); }
-    catch (e) { console.error(e); } finally { setSaving(false); }
+    catch (e) { alert('No se pudo guardar: ' + (e?.data?.error || e?.message || 'error')); }
+    finally { setSaving(false); }
   };
 
   return (
-    <div style={{ ...S.row, flexWrap: 'wrap' }}>
-      <div style={{ ...S.rowName, display: 'flex', alignItems: 'center', gap: 8 }}>
+    <div style={S.envRow}>
+      <div style={{ ...S.envName, display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ width: 14, height: 14, borderRadius: '50%', background: tapa.color || '#ccc', flexShrink: 0, border: '1px solid var(--lp-border-subtle)' }} />
         {tapa.nombre || tapaKey}
       </div>
@@ -1446,7 +1459,10 @@ export default function InventarioPage() {
 
   /* Permissions */
   const canEditMP = can('editarInventario');
-  const canEditEnvases = can('editarEnvases') || can('editarInventario');
+  /* Alineado con el backend (POST /api/envases/stock|tapa/stock): admin / compras
+     / inventario. Antes mostraba el botón a técnico (editarInventario) que luego
+     recibía 403 al guardar. */
+  const canEditEnvases = ['admin', 'compras', 'inventario'].includes(user?.rol);
   /* §8 (handoff verde): eliminar/sustituir MP es exclusivo del permiso `eliminarMP`
      (admin por defecto) — NO de cualquiera con editarInventario. */
   const canDeleteMP = can('eliminarMP');
