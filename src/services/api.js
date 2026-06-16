@@ -29,12 +29,12 @@ function buildUrl(path) {
    login tan seguido, lo respaldamos en localStorage con un vencimiento: si
    reabres DENTRO de la ventana, la sesión se restaura sin pedir nada; si ya
    pasó, se limpia → vuelves a entrar con tu PIN (el usuario ya queda recordado).
-   La ventana es por ROL: el técnico (Enrique) la usa prolongadamente → 12 h;
+   La ventana es por ROL: el técnico (Enrique) la usa prolongadamente → 2 h;
    los demás → 30 min. Mientras la app está abierta, touchSession() desliza el
    vencimiento, así nunca se cierra en pleno uso. */
 const TOKEN_KEY = 'pp_token';
 const PERSIST_KEY = 'pp_session';
-export const SESSION_WINDOWS = { tecnico: 12 * 60 * 60 * 1000, default: 30 * 60 * 1000 };
+export const SESSION_WINDOWS = { tecnico: 2 * 60 * 60 * 1000, default: 30 * 60 * 1000 };
 export function windowForRole(rol) { return SESSION_WINDOWS[rol] || SESSION_WINDOWS.default; }
 
 function _readPersist() {
