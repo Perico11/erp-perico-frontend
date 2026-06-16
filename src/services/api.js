@@ -181,6 +181,8 @@ const api = {
   urlImportInv: () => API_BASE + '/api/importar/inventario',
   /* Importar existencias de PRODUCTO TERMINADO (flujo 2 pasos: preview → confirmar). */
   urlImportInvPT: () => API_BASE + '/api/importar/inventario-pt',
+  /* Importar existencias/mínimos de ENVASES (aplica directo, sin preview). */
+  urlImportEnvases: () => API_BASE + '/api/importar/envases',
   /* Paso 2 de la importación: aplica los cambios del preview (por importId). */
   confirmarImport: (importId) => request('POST', '/api/importar/confirmar', { importId }),
 

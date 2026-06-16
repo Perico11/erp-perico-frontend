@@ -2161,6 +2161,21 @@ export default function InventarioPage() {
                 {canEditEnvases && isDesktop && (
                   <button style={S.btnAdd} onClick={() => setShowAgregarEnv(true)} title="Agregar una presentación de envase nueva">+ Agregar envase</button>
                 )}
+                {isDesktop && (
+                  <ImportExportPrint
+                    exportUrl={() => api.urlExportInv('envases', activeFilter)}
+                    printUrl={() => api.urlPrintInv('envases', activeFilter)}
+                    importEndpoint={canEditEnvases ? api.urlImportEnvases() : null}
+                    onImported={(data) => {
+                      reloadEnv();
+                      const n = (data && data.aplicados) || 0;
+                      const errs = (data && data.errores && data.errores.length) || 0;
+                      setToastMsg(`Importados ${n} envase(s)` + (errs ? ` · ${errs} con error` : ''));
+                      setTimeout(() => setToastMsg(''), 5000);
+                    }}
+                    permisos={{ import: canEditEnvases }}
+                  />
+                )}
               </div>
             </div>
             {filteredEnv.length === 0 ? (
