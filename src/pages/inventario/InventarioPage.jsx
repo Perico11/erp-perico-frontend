@@ -598,6 +598,47 @@ function EnvasesTab({ envases, canEdit, onReload }) {
   );
 }
 
+/* Existencia + Mínimo VISIBLES + botón Ajustar — paridad con MP/PT (jun 2026,
+   pedido dueño: Envases no mostraba el mínimo ni un botón claro de ajuste). */
+const _lblMini = { fontSize: 9.5, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em', fontWeight: 700, lineHeight: 1.2 };
+function StockMinView({ qty, min, unidad, qtyColor, badgeType, badgeText, canEdit, onAjustar }) {
+  return (
+    <>
+      <div style={{ textAlign: 'right', minWidth: 60 }}>
+        <div style={_lblMini}>Exist.</div>
+        <div style={S.rowQty(qtyColor)}>{qty}<span style={{ fontSize: 10, color: 'var(--lp-text-tertiary)', fontWeight: 400, marginLeft: 3 }}>{unidad}</span></div>
+      </div>
+      <div style={{ textAlign: 'right', minWidth: 44 }}>
+        <div style={_lblMini}>Mín.</div>
+        <div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 13, fontWeight: 600, color: min > 0 ? 'var(--lp-text-secondary)' : 'var(--lp-text-tertiary)' }}>{min > 0 ? min : '—'}</div>
+      </div>
+      <span style={S.badge(badgeType)}>{badgeText}</span>
+      {canEdit && (
+        <button onClick={onAjustar} title="Ajustar existencia y mínimo"
+          style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--lp-brand-600)', background: 'transparent', color: 'var(--lp-brand-700)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap' }}>
+          Ajustar
+        </button>
+      )}
+    </>
+  );
+}
+function StockMinEdit({ editStock, setEditStock, editMin, setEditMin, saving, onSave, onCancel }) {
+  return (
+    <>
+      <label style={{ ..._lblMini, display: 'inline-block' }}>Exist.
+        <input type="number" inputMode="decimal" min="0" style={{ ...S.editInput, display: 'block', marginTop: 2 }} value={editStock}
+          onChange={e => setEditStock(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onSave(); }} autoFocus />
+      </label>
+      <label style={{ ..._lblMini, display: 'inline-block' }}>Mín.
+        <input type="number" inputMode="decimal" min="0" style={{ ...S.editInput, width: 55, display: 'block', marginTop: 2 }} value={editMin}
+          onChange={e => setEditMin(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onSave(); }} />
+      </label>
+      <button style={S.saveBtn} onClick={onSave} disabled={saving}>{saving ? '...' : '✓'}</button>
+      <button style={{ ...S.saveBtn, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' }} onClick={onCancel}>✕</button>
+    </>
+  );
+}
+
 function EnvaseRow({ subKey, sub, catKey, canEdit, onSave }) {
   const [editing, setEditing] = useState(false);
   const [editStock, setEditStock] = useState(sub.stock || 0);
@@ -609,39 +650,25 @@ function EnvaseRow({ subKey, sub, catKey, canEdit, onSave }) {
   const badgeText = qty <= 0 ? 'Agotado' : (min > 0 && qty < min) ? 'Bajo' : 'OK';
   const qtyColor = badgeType === 'err' ? 'var(--lp-danger-600)' : badgeType === 'warn' ? 'var(--lp-warning-600)' : 'var(--lp-text-primary)';
 
+  const startEdit = () => { setEditStock(qty); setEditMin(min); setEditing(true); };
   const handleSave = async () => {
     setSaving(true);
-    try {
-      await onSave(catKey, subKey, parseInt(editStock) || 0, parseInt(editMin) || 0);
-      setEditing(false);
-    } catch (e) { console.error(e); }
-    finally { setSaving(false); }
+    try { await onSave(catKey, subKey, parseInt(editStock) || 0, parseInt(editMin) || 0); setEditing(false); }
+    catch (e) { console.error(e); } finally { setSaving(false); }
   };
 
   return (
-    <div style={S.row}>
+    <div style={{ ...S.row, flexWrap: 'wrap' }}>
       <div style={S.rowName}>
         {sub.nombre || subKey}
         {sub.marca && <div style={S.provSub}>{sub.marca}</div>}
       </div>
       {editing ? (
-        <>
-          <input type="number" inputMode="decimal" min="0" style={S.editInput} value={editStock}
-            onChange={e => setEditStock(e.target.value)} autoFocus />
-          <input type="number" inputMode="decimal" min="0" style={{ ...S.editInput, width: 55 }} value={editMin}
-            onChange={e => setEditMin(e.target.value)} title="Mínimo" />
-          <button style={S.saveBtn} onClick={handleSave} disabled={saving}>{saving ? '...' : '✓'}</button>
-          <button style={{ ...S.saveBtn, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' }}
-            onClick={() => setEditing(false)}>✕</button>
-        </>
+        <StockMinEdit editStock={editStock} setEditStock={setEditStock} editMin={editMin} setEditMin={setEditMin}
+          saving={saving} onSave={handleSave} onCancel={() => setEditing(false)} />
       ) : (
-        <>
-          <div style={{ ...S.rowQty(qtyColor), ...(canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}) }}
-            onClick={() => { if (canEdit) { setEditStock(qty); setEditMin(min); setEditing(true); } }}
-            title={canEdit ? 'Click para editar' : ''}>{qty}</div>
-          <div style={S.rowUnit}>{sub.unidad || 'pz'}</div>
-          <span style={S.badge(badgeType)}>{badgeText}</span>
-        </>
+        <StockMinView qty={qty} min={min} unidad={sub.unidad || 'pz'} qtyColor={qtyColor}
+          badgeType={badgeType} badgeText={badgeText} canEdit={canEdit} onAjustar={startEdit} />
       )}
     </div>
   );
@@ -655,47 +682,28 @@ function TapaRow({ tapaKey, tapa, canEdit, onSave }) {
   const qty = tapa.stock || 0;
   const min = tapa.min || 0;
   const badgeType = qty <= 0 ? 'err' : (min > 0 && qty < min) ? 'warn' : 'ok';
+  const badgeText = qty <= 0 ? 'Agotado' : (min > 0 && qty < min) ? 'Bajo' : 'OK';
+  const qtyColor = badgeType === 'err' ? 'var(--lp-danger-600)' : badgeType === 'warn' ? 'var(--lp-warning-600)' : 'var(--lp-text-primary)';
 
+  const startEdit = () => { setEditStock(qty); setEditMin(min); setEditing(true); };
   const handleSave = async () => {
     setSaving(true);
-    try {
-      await onSave(tapaKey, parseInt(editStock) || 0, parseInt(editMin) || 0);
-      setEditing(false);
-    } catch (e) { console.error(e); }
-    finally { setSaving(false); }
+    try { await onSave(tapaKey, parseInt(editStock) || 0, parseInt(editMin) || 0); setEditing(false); }
+    catch (e) { console.error(e); } finally { setSaving(false); }
   };
 
   return (
-    <div style={S.row}>
+    <div style={{ ...S.row, flexWrap: 'wrap' }}>
       <div style={{ ...S.rowName, display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span style={{
-          width: 14, height: 14, borderRadius: '50%',
-          background: tapa.color || '#ccc', flexShrink: 0,
-          border: '1px solid var(--lp-border-subtle)',
-        }} />
+        <span style={{ width: 14, height: 14, borderRadius: '50%', background: tapa.color || '#ccc', flexShrink: 0, border: '1px solid var(--lp-border-subtle)' }} />
         {tapa.nombre || tapaKey}
       </div>
       {editing ? (
-        <>
-          <input type="number" inputMode="decimal" min="0" style={S.editInput} value={editStock}
-            onChange={e => setEditStock(e.target.value)} autoFocus />
-          <input type="number" inputMode="decimal" min="0" style={{ ...S.editInput, width: 55 }} value={editMin}
-            onChange={e => setEditMin(e.target.value)} title="Mínimo" />
-          <button style={S.saveBtn} onClick={handleSave} disabled={saving}>{saving ? '...' : '✓'}</button>
-          <button style={{ ...S.saveBtn, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' }}
-            onClick={() => setEditing(false)}>✕</button>
-        </>
+        <StockMinEdit editStock={editStock} setEditStock={setEditStock} editMin={editMin} setEditMin={setEditMin}
+          saving={saving} onSave={handleSave} onCancel={() => setEditing(false)} />
       ) : (
-        <>
-          <div style={{ ...S.rowQty(badgeType === 'err' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)'),
-            ...(canEdit ? { cursor: 'pointer', textDecoration: 'underline dotted' } : {}) }}
-            onClick={() => { if (canEdit) { setEditStock(qty); setEditMin(min); setEditing(true); } }}
-            title={canEdit ? 'Click para editar' : ''}>{qty}</div>
-          <div style={S.rowUnit}>pz</div>
-          <span style={S.badge(badgeType)}>
-            {qty <= 0 ? 'Agotado' : (min > 0 && qty < min) ? 'Bajo' : 'OK'}
-          </span>
-        </>
+        <StockMinView qty={qty} min={min} unidad="pz" qtyColor={qtyColor}
+          badgeType={badgeType} badgeText={badgeText} canEdit={canEdit} onAjustar={startEdit} />
       )}
     </div>
   );
