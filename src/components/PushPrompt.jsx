@@ -47,7 +47,10 @@ export default function PushPrompt() {
       const r = await requestPushPermission();
       if (r === 'granted') {
         setPushSettings({ enabled: true });
-        await subscribeToPush().catch(() => {});
+        const sub = await subscribeToPush();
+        if (!sub.ok) alert('No se pudieron activar las notificaciones:\n\n' + (sub.error || ''));
+      } else if (r === 'denied') {
+        alert('Bloqueaste las notificaciones. Para activarlas, permite "Notificaciones" para este sitio en los ajustes del navegador.');
       }
     } catch {}
     setBusy(false);

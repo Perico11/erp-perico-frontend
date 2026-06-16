@@ -126,7 +126,8 @@ export default function PushSettings({ embedded = false }) {
       setSettings(next);
       /* Suscribir a Web Push real → notificaciones en el teléfono aunque la app
          esté cerrada. Va dentro del mismo gesto del click. */
-      try { await subscribeToPush(); } catch {}
+      const sub = await subscribeToPush();
+      if (!sub.ok) alert('Permiso concedido, pero no se pudo suscribir el dispositivo:\n\n' + (sub.error || ''));
     }
     /* Avisar a contenedores (header colapsable de NotificacionesPage) que
        el estado del permiso cambió, para refrescar su badge. */
@@ -134,19 +135,27 @@ export default function PushSettings({ embedded = false }) {
   };
 
   const probar = async () => {
-    /* Prueba real de fondo: el SERVIDOR manda el push (lo que el usuario verá
-       con la app cerrada). Si falla, cae al push local de primer plano. */
-    let ok = false;
-    try { ok = await sendTestPush(); } catch {}
-    if (!ok) {
-      const result = showPush({
-        title: 'Notificación de prueba',
-        body: 'Si ves esto, las notificaciones están funcionando',
-        tag: 'test-' + Date.now(),
-      });
-      if (!result) {
-        alert('No se pudo mostrar. Revisa que el permiso esté concedido y, en iPhone, que la app esté instalada en la pantalla de inicio.');
-      }
+    /* Flujo robusto: 1) permiso, 2) ASEGURAR que el dispositivo esté suscrito
+       (sin esto el server manda el push a 0 dispositivos y no aparece nada),
+       3) enviar el push real del servidor y reportar a cuántos llegó. */
+    if (!pushSupported()) { alert('Este navegador no soporta notificaciones push.'); return; }
+
+    if (getPushPermission() !== 'granted') {
+      const r = await requestPushPermission();
+      setPerm(r);
+      if (r !== 'granted') { alert('Primero debes permitir las notificaciones.'); return; }
+      setPushSettings({ enabled: true });
+      setSettings(getPushSettings());
+    }
+
+    const sub = await subscribeToPush();
+    if (!sub.ok) { alert('No se pudo activar en este dispositivo:\n\n' + (sub.error || '')); return; }
+
+    const res = await sendTestPush();
+    if (res.enviadas > 0) {
+      alert(`Notificación enviada a ${res.enviadas} dispositivo(s). Debe aparecer en la barra de tu teléfono — prueba bloqueando la pantalla.`);
+    } else {
+      alert('El dispositivo quedó suscrito, pero el envío no encontró destino. Cierra y vuelve a abrir la app, luego intenta de nuevo.');
     }
   };
 
