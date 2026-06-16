@@ -24,18 +24,66 @@ function buildUrl(path) {
   return API_BASE + path;
 }
 
-let _token = sessionStorage.getItem('pp_token') || '';
+/* ── Sesión persistente con ventana de inactividad (jun 2026, pedido dueño) ──
+   El token vive en sessionStorage (se borra al cerrar la PWA). Para no pedir
+   login tan seguido, lo respaldamos en localStorage con un vencimiento: si
+   reabres DENTRO de la ventana, la sesión se restaura sin pedir nada; si ya
+   pasó, se limpia → vuelves a entrar con tu PIN (el usuario ya queda recordado).
+   La ventana es por ROL: el técnico (Enrique) la usa prolongadamente → 12 h;
+   los demás → 30 min. Mientras la app está abierta, touchSession() desliza el
+   vencimiento, así nunca se cierra en pleno uso. */
+const TOKEN_KEY = 'pp_token';
+const PERSIST_KEY = 'pp_session';
+export const SESSION_WINDOWS = { tecnico: 12 * 60 * 60 * 1000, default: 30 * 60 * 1000 };
+export function windowForRole(rol) { return SESSION_WINDOWS[rol] || SESSION_WINDOWS.default; }
 
-export function setToken(t) {
-  _token = t;
-  sessionStorage.setItem('pp_token', t);
+function _readPersist() {
+  try { return JSON.parse(localStorage.getItem(PERSIST_KEY) || 'null'); } catch { return null; }
+}
+function _writePersist(p) {
+  try { localStorage.setItem(PERSIST_KEY, JSON.stringify(p)); } catch {}
+}
+/* Restaura el token al cargar el módulo (antes de que React u otros lo lean). */
+function _restoreToken() {
+  try {
+    const live = sessionStorage.getItem(TOKEN_KEY) || '';
+    if (live) return live;                       /* sesión viva (app abierta) */
+    const p = _readPersist();
+    if (p && p.token && p.until && Date.now() <= p.until) {
+      try { sessionStorage.setItem(TOKEN_KEY, p.token); } catch {} /* reabrió a tiempo */
+      return p.token;
+    }
+    if (p) { try { localStorage.removeItem(PERSIST_KEY); } catch {} } /* venció → limpiar */
+    return '';
+  } catch { return ''; }
+}
+let _token = _restoreToken();
+
+export function setToken(t, windowMs) {
+  _token = t || '';
+  if (t) {
+    try { sessionStorage.setItem(TOKEN_KEY, t); } catch {}
+    const win = windowMs || (_readPersist() && _readPersist().window) || SESSION_WINDOWS.default;
+    _writePersist({ token: t, window: win, until: Date.now() + win });
+  } else {
+    try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  }
 }
 
 export function getToken() { return _token; }
 
 export function clearToken() {
   _token = '';
-  sessionStorage.removeItem('pp_token');
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch {}
+  try { localStorage.removeItem(PERSIST_KEY); } catch {}
+}
+
+/* Desliza el vencimiento hacia adelante mientras la app está en uso. */
+export function touchSession() {
+  const p = _readPersist();
+  if (!p || !p.token) return;
+  p.until = Date.now() + (p.window || SESSION_WINDOWS.default);
+  _writePersist(p);
 }
 
 async function request(method, path, body) {

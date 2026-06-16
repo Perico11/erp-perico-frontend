@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import api, { setToken, clearToken, getToken } from '../services/api';
+import api, { setToken, clearToken, getToken, windowForRole, touchSession } from '../services/api';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 
 const AuthContext = createContext(null);
@@ -105,6 +105,7 @@ export function AuthProvider({ children }) {
       .then(res => {
         if (res.ok && res.user) {
           setUser(res.user);
+          touchSession(); /* sesión restaurada dentro de la ventana → deslizarla */
           recargarPermisos();
         } else clearToken();
       })
@@ -112,10 +113,23 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, [recargarPermisos]);
 
+  /* Mantener viva la sesión mientras la app está abierta: desliza la ventana de
+     inactividad. Si vuelves del segundo plano dentro de la ventana, sigue válida;
+     si venció estando cerrada, getToken ya devolvió '' y verás el login (solo PIN). */
+  useEffect(() => {
+    if (!user) return undefined;
+    touchSession();
+    const onVis = () => { if (document.visibilityState === 'visible') touchSession(); };
+    document.addEventListener('visibilitychange', onVis);
+    const id = setInterval(() => { if (document.visibilityState === 'visible') touchSession(); }, 120000);
+    return () => { document.removeEventListener('visibilitychange', onVis); clearInterval(id); };
+  }, [user]);
+
   const login = useCallback(async (nombre, pin) => {
     const res = await api.login(nombre, pin);
     if (res.ok && res.token) {
-      setToken(res.token);
+      /* Ventana de sesión por rol: técnico (Enrique) 12 h, resto 30 min. */
+      setToken(res.token, windowForRole(res.user?.rol));
       setUser(res.user);
       recargarPermisos();
       return res;
