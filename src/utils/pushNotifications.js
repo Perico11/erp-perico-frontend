@@ -236,10 +236,37 @@ function _getCurrentRol() {
    dispatchPushFromEvent sin depender de AuthContext (ciclo de imports). */
 export function getCurrentRol() { return _getCurrentRol(); }
 
+/* Área + color semántico por tipo de push → alimenta el banner in-app
+   (NotificacionPushBanner del mockup). El área se muestra capitalizada bajo el
+   título; el color tiñe esa etiqueta. */
+export const TIPO_AREA = {
+  stockCritico:        { area: 'Inventario', color: 'var(--lp-danger-600)' },
+  ocVencida:           { area: 'Compras',    color: 'var(--lp-brand-600)' },
+  ocNueva:             { area: 'Compras',    color: 'var(--lp-brand-600)' },
+  ocEditada:           { area: 'Compras',    color: 'var(--lp-brand-600)' },
+  ocRecibida:          { area: 'Compras',    color: 'var(--lp-success-600)' },
+  devolucion:          { area: 'Devoluciones', color: 'var(--lp-warning-600)' },
+  devolucionReembolso: { area: 'Devoluciones', color: 'var(--lp-warning-600)' },
+  devolucionCerrada:   { area: 'Devoluciones', color: 'var(--lp-success-600)' },
+  loteEnCamino:        { area: 'Trazabilidad', color: 'var(--lp-brand-600)' },
+  loteListo:           { area: 'Producción', color: 'var(--lp-success-600)' },
+  subloteRecibido:     { area: 'Producción', color: 'var(--lp-success-600)' },
+  pedidoNuevo:         { area: 'Pedidos',    color: 'var(--lp-brand-600)' },
+  qcHold:              { area: 'Calidad',    color: 'var(--lp-danger-600)' },
+  conteoVarianza:      { area: 'Conteo',     color: 'var(--lp-warning-600)' },
+  conteoAprobado:      { area: 'Conteo',     color: 'var(--lp-success-600)' },
+  pinCambiado:         { area: 'Cuenta',     color: 'var(--lp-brand-600)' },
+};
+
 /**
  * Mostrar notificación push.
  * Respeta settings: enabled, soloEnSegundoPlano, filtro por tipo de evento
  * y GATE POR ROL (pipeline del usuario).
+ *
+ * PRIMER PLANO (jun 2026): si la pestaña está visible se emite el banner
+ * in-app estilo iOS (evento `pp-push-received` → PushBannerHost) en lugar de la
+ * notificación del SO, que no se vería. La notificación nativa queda para
+ * segundo plano (o para el caso en que el usuario desactivó soloEnSegundoPlano).
  *
  * @param {Object} opts
  * @param {string} opts.tipo  — clave del setting (stockCritico, ocVencida, etc.)
@@ -271,7 +298,18 @@ export function showPush({ tipo, title, body, tag, onClick, rol, skipRolGate }) 
     if (!rolPuedeRecibir(tipo, rolEfectivo)) return null;
   }
 
-  if (settings.soloEnSegundoPlano && document.visibilityState === 'visible') return null;
+  /* Primer plano → banner in-app (mockup), no notificación del SO. */
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+    try {
+      const meta = TIPO_AREA[tipo] || {};
+      window.dispatchEvent(new CustomEvent('pp-push-received', {
+        detail: { titulo: title, mensaje: body, area: meta.area || '', color: meta.color, onClick },
+      }));
+    } catch { /* sin DOM/CustomEvent — ignora */ }
+    /* Por defecto no duplicamos con el SO. Si el usuario pidió notificación del
+       SO también en primer plano (soloEnSegundoPlano:false), cae al nativo. */
+    if (settings.soloEnSegundoPlano) return null;
+  }
 
   try {
     const notif = new Notification(title, {

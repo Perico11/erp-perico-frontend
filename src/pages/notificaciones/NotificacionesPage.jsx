@@ -7,6 +7,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import PushSettings from '../../components/PushSettings';
 import { getPushPermission } from '../../utils/pushNotifications';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import NotificacionCard from './NotificacionCard';
 
 const S = {
   wrap: { padding: '0 20px 100px' },
@@ -296,48 +297,12 @@ export default function NotificacionesPage() {
         ) : notifs.length === 0 ? (
           <div style={S.loading}>Sin alertas para los filtros actuales — todo en orden</div>
         ) : (
-          notifs.map(n => {
-            const sb = SEV_BADGE[n.severidad] || SEV_BADGE.baja;
-            const ab = AREA_BADGE[n.area] || { bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-secondary)' };
-            /* Prioriza la ruta propia de la notif (ej: devolucion_mp_pendiente →
-               /devoluciones-mp) sobre el mapa por área — igual que handleCardClick.
-               Antes solo miraba AREA_ROUTE[area] → notifs con ruta propia (o área
-               sin entrada en el mapa) quedaban no-clickeables o mal ruteadas. */
-            const ruta = n.ruta || AREA_ROUTE[n.area];
-            const clickeable = !!ruta;
-            return (
-              <div
-                key={n.id}
-                role={clickeable ? 'button' : undefined}
-                tabIndex={clickeable ? 0 : undefined}
-                onClick={clickeable ? () => handleCardClick(n) : undefined}
-                onKeyDown={clickeable ? (e) => { if (e.key === 'Enter') handleCardClick(n); } : undefined}
-                style={{
-                  ...S.card(n.severidad),
-                  cursor: clickeable ? 'pointer' : 'default',
-                  transition: 'transform .12s ease, box-shadow .12s ease',
-                }}
-                onMouseEnter={clickeable ? (e) => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,.06)'; } : undefined}
-                onMouseLeave={clickeable ? (e) => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = ''; } : undefined}
-                title={clickeable ? 'Click para ir a ' + ruta : undefined}
-              >
-                <div style={S.cardHeader}>
-                  <span style={S.badge(sb.bg, sb.fg)}>{sb.label}</span>
-                  <span style={S.badge(ab.bg, ab.fg)}>{n.area || 'general'}</span>
-                  <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginLeft: 'auto' }}>
-                    {(n.fecha || '').slice(0, 10)}
-                  </span>
-                  {clickeable && (
-                    <span style={{ fontSize: 14, color: 'var(--lp-text-tertiary)', marginLeft: 4 }} aria-hidden="true">→</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{humanizar(n.titulo)}</div>
-                <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
-                  {humanizar(n.mensaje)}
-                </div>
-              </div>
-            );
-          })
+          /* Card del mockup jun 2026 (NotificacionCard): ícono-app del perico +
+             título + tiempo relativo + área con color semántico. La ruta de
+             click la resuelve handleCardClick (ruta propia → mapa por área). */
+          notifs.map(n => (
+            <NotificacionCard key={n.id} notif={n} onClick={handleCardClick} humanizar={humanizar} />
+          ))
         )}
       </div>
     </div>

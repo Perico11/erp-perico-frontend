@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 /* ════════════════════════════════════════════════════════════════════════
    AsistenteFlotante — botón flotante arrastrable que vive en TODAS las
@@ -102,6 +103,28 @@ function _score(query, entry) {
   return s;
 }
 
+/* Sugerencias rápidas por rol (chips tappables bajo el saludo). `fill:true` =
+   solo rellena el input (frase incompleta, p.ej. "stock de …"); sin fill = se
+   envía directo. Filtra por rol para no ofrecer acciones que el usuario no hace. */
+const SUGERENCIAS = {
+  admin:      [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Stock de…', q: 'stock de ', fill: true }, { t: 'Aprobar OC', q: 'aprobar oc' }, { t: 'Conteo', q: 'conteo' }],
+  compras:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Aprobar OC', q: 'aprobar oc' }, { t: 'Pronóstico', q: 'pronostico' }, { t: 'Recibir MP', q: 'recibir mp' }],
+  tecnico:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Nueva orden', q: 'nueva orden' }, { t: 'Calidad (QC)', q: 'calidad qc' }, { t: 'Stock de…', q: 'stock de ', fill: true }],
+  almacen:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Nuevo pedido', q: 'nuevo pedido' }, { t: 'Recibir en Terán', q: 'escanear teran' }, { t: 'Recolección', q: 'recoleccion' }],
+  inventario: [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Iniciar conteo', q: 'nueva sesion conteo' }, { t: 'Stock de…', q: 'stock de ', fill: true }, { t: 'Agregar MP', q: 'agregar materia prima' }],
+  recolector: [{ t: 'Recolección', q: 'recoleccion' }, { t: 'Trazabilidad', q: 'trazabilidad' }],
+};
+
+/* Humaniza títulos técnicos de notificaciones para los "pendientes" del bot
+   (versión ligera del humanizar() de NotificacionesPage). */
+function _humanTitulo(s) {
+  return String(s || '')
+    .replace(/\b([a-z_]+)\.json\b/gi, (_, w) => w)
+    .replace(/\b([a-z]+)(_[a-z]+)+\b/g, m => m.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '))
+    .replace(/:\s+/g, ' — ')
+    .trim();
+}
+
 const POS_KEY = 'pp_asistente_pos';
 
 export default function AsistenteFlotante() {
@@ -131,6 +154,26 @@ export default function AsistenteFlotante() {
   }, [open]);
   /* Auto-scroll al último mensaje. */
   useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [mensajes, open]);
+
+  /* Mientras el panel está abierto: bloquea el scroll del fondo (mismo fix que
+     los modales — el scroller real es #root) y publica --pp-vvh para que el
+     teclado del móvil no tape el input. */
+  useBodyScrollLock(open);
+
+  /* Si la ventana cambia de tamaño (rotación, redimensionar), re-encaja el FAB
+     dentro de la pantalla y lo vuelve a pegar al borde más cercano — si no, una
+     posición guardada podría quedar fuera de vista. */
+  useEffect(() => {
+    const onResize = () => setPos(p => {
+      if (!p) return p;
+      const size = 54, pad = 8;
+      const x = (p.x + size / 2 < window.innerWidth / 2) ? pad : window.innerWidth - size - pad;
+      const y = Math.min(window.innerHeight - size - pad, Math.max(pad, p.y));
+      return { x, y };
+    });
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   /* Destinos visibles para el rol actual */
   const visibles = useMemo(() => {
@@ -172,7 +215,7 @@ export default function AsistenteFlotante() {
 
   const esAdmin = user?.rol === 'admin';
   const pushBot = (msg) => setMensajes(m => [...m, typeof msg === 'string' ? { from: 'bot', text: msg } : { from: 'bot', ...msg }]);
-  const reemplazarUltimo = (texto) => setMensajes(m => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].from === 'bot') { c[i] = { from: 'bot', text: texto }; break; } return c; });
+  const reemplazarUltimo = (payload) => setMensajes(m => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].from === 'bot') { c[i] = typeof payload === 'string' ? { from: 'bot', text: payload } : { from: 'bot', ...payload }; break; } return c; });
 
   /* ── Acciones reales (comandos) ── */
   async function _todosLosItems() {
@@ -200,8 +243,8 @@ export default function AsistenteFlotante() {
   async function accionStock(nombre) {
     const items = await _todosLosItems();
     const it = _mejorMatch(nombre, items, x => x.nombre);
-    if (!it) return `No encontré "${nombre}" en el inventario.`;
-    const est = it.qty <= 0 ? 'AGOTADO ⚠️' : (it.min > 0 && it.qty < it.min) ? 'BAJO' : 'OK';
+    if (!it) return null; /* sin match → el caller cae a navegación */
+    const est = it.qty <= 0 ? 'AGOTADO' : (it.min > 0 && it.qty < it.min) ? 'BAJO' : 'OK';
     return `${it.tipo} · ${it.nombre}: ${it.qty.toLocaleString('es-MX')} ${it.u} (mínimo ${it.min} ${it.u}) — ${est}.`;
   }
   async function accionAgregarMP(nombre, n) {
@@ -219,6 +262,20 @@ export default function AsistenteFlotante() {
     if (!u) return `No encontré al usuario "${nombreUser}".`;
     await api.cambiarPin(u.id, pin);
     return `Listo: el PIN de ${u.nombre} ahora es ${pin}. Sus otras sesiones se cerraron.`;
+  }
+  /* Pendientes del usuario: lee /api/notificaciones (ya filtrado por rol en el
+     server) y los resume. Solo lectura — sin confirmación. */
+  async function accionPendientes() {
+    const r = await api.getNotificaciones().catch(() => null);
+    const arr = Array.isArray(r) ? r : (r?.data || r?.notificaciones || []);
+    if (!arr.length) return { text: 'No tienes pendientes — todo en orden.' };
+    const crit = arr.filter(n => n.severidad === 'critica').length;
+    const top = arr.slice(0, 4).map(n => '• ' + _humanTitulo(n.titulo)).join('\n');
+    const cab = `Tienes ${arr.length} alerta${arr.length === 1 ? '' : 's'}${crit ? ` (${crit} crítica${crit === 1 ? '' : 's'})` : ''}:`;
+    return {
+      text: `${cab}\n${top}${arr.length > 4 ? `\n…y ${arr.length - 4} más` : ''}`,
+      results: [{ label: 'Ver todas las alertas', sub: 'Ir a Notificaciones', ruta: '/notificaciones' }],
+    };
   }
 
   /* Detecta un comando en el texto. */
@@ -253,19 +310,37 @@ export default function AsistenteFlotante() {
     if (!t) return;
     setQ('');
     setMensajes(m => [...m, { from: 'user', text: t }]);
+    /* Pendientes/alertas — lectura directa (sin confirmación), antes de todo. */
+    if (/\b(pendientes?|mis\s+alertas|que\s+tengo|que\s+hay\s+pendiente|tareas?)\b/.test(_norm(t))) {
+      pushBot('Revisando tus pendientes…');
+      reemplazarUltimo(await accionPendientes());
+      return;
+    }
+    const navResultados = (txt) => visibles.map(e => ({ e, s: _score(txt, e) })).filter(r => r.s > 0)
+      .sort((a, b) => b.s - a.s).slice(0, 5).map(r => r.e);
+
     const acc = detectar(t);
     if (acc) {
       if (acc.admin && !esAdmin) { pushBot('Esa acción solo la puede hacer un administrador.'); return; }
-      if (acc.tipo === 'stock') { pushBot('Buscando…'); const r = await accionStock(acc.nombre); reemplazarUltimo(r); return; }
+      if (acc.tipo === 'stock') {
+        pushBot('Buscando…');
+        const r = await accionStock(acc.nombre);
+        if (r) { reemplazarUltimo(r); return; }
+        /* No es un item de inventario → quizá quería una pantalla ("stock fábrica") */
+        const res = navResultados(t);
+        reemplazarUltimo(res.length
+          ? { text: 'Encontré esto — toca a dónde quieres ir:', results: res }
+          : { text: `No encontré "${acc.nombre}" en el inventario ni una pantalla con ese nombre.` });
+        return;
+      }
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
       return;
     }
     /* Navegación (fallback) */
-    const res = visibles.map(e => ({ e, s: _score(t, e) })).filter(r => r.s > 0)
-      .sort((a, b) => b.s - a.s).slice(0, 5).map(r => r.e);
+    const res = navResultados(t);
     pushBot(res.length
       ? { text: res.length === 1 ? 'Te llevo aquí:' : 'Encontré esto — toca a dónde quieres ir:', results: res }
-      : { text: 'No te entendí. Puedo: consultar stock (“stock de X”), agregar stock a una MP, cambiar un PIN, o llevarte a una pantalla (“compras”, “conteo”…).' });
+      : { text: 'No te entendí. Puedo: consultar stock (“stock de X”), agregar stock a una MP, cambiar un PIN, ver tus pendientes, o llevarte a una pantalla (“compras”, “conteo”…).' });
   };
 
   const ir = (entry) => {
@@ -288,6 +363,15 @@ export default function AsistenteFlotante() {
         clearInterval(poll);
       }
     }, 250);
+  };
+
+  /* Chips de arranque por rol: tappar = enviar (o rellenar si la frase está
+     incompleta, p.ej. "stock de …"). Se muestran solo con el saludo, para no
+     estorbar una vez que hay conversación. */
+  const sugerencias = SUGERENCIAS[user.rol] || [{ t: 'Mis pendientes', q: 'pendientes' }];
+  const usarSugerencia = (s) => {
+    if (s.fill) { setQ(s.q); setTimeout(() => inputRef.current?.focus(), 0); }
+    else responder(s.q);
   };
 
   const fabStyle = pos
@@ -321,7 +405,7 @@ export default function AsistenteFlotante() {
               <button style={S.close} onClick={() => setOpen(false)} aria-label="Cerrar">✕</button>
             </div>
             {/* Conversación */}
-            <div style={S.list} ref={listRef}>
+            <div style={S.list} ref={listRef} aria-live="polite">
               {mensajes.map((m, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.from === 'user' ? 'flex-end' : 'flex-start' }}>
                   <div style={m.from === 'user' ? S.bubbleUser : S.bubbleBot}>{m.text}</div>
@@ -353,13 +437,24 @@ export default function AsistenteFlotante() {
                 </div>
               ))}
             </div>
+            {/* Chips de arranque (solo con el saludo) */}
+            {mensajes.length <= 1 && sugerencias.length > 0 && (
+              <div style={S.chipsRow}>
+                {sugerencias.map((s, i) => (
+                  <button key={i} type="button" style={S.chip} onClick={() => usarSugerencia(s)}>{s.t}</button>
+                ))}
+              </div>
+            )}
             {/* Entrada */}
             <div style={S.inputRow}>
               <input
                 ref={inputRef}
                 style={S.input}
-                placeholder="Escribe aquí… ej: aprobar OC, agregar envase"
+                placeholder="Escribe aquí… ej: pendientes, aprobar OC"
                 value={q}
+                autoComplete="off"
+                autoCorrect="off"
+                enterKeyHint="send"
                 onChange={e => setQ(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') responder(q); }}
               />
@@ -383,14 +478,18 @@ const S = {
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
   overlay: {
-    position: 'fixed', inset: 0, zIndex: 1401, background: 'rgba(10,16,14,.35)',
+    /* Alto = viewport VISIBLE (--pp-vvh sigue al teclado en iOS), no el layout
+       completo → el panel bottom-aligned queda SIEMPRE por encima del teclado. */
+    position: 'fixed', top: 0, left: 0, right: 0, height: 'var(--pp-vvh, 100dvh)',
+    zIndex: 1401, background: 'rgba(10,16,14,.35)',
     display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
     padding: 'calc(12px + env(safe-area-inset-bottom,0px)) 12px 12px', fontFamily: 'var(--lp-font-sans)',
   },
   panel: {
     width: '100%', maxWidth: 460, background: 'var(--lp-bg-raised)',
     border: '1.5px solid var(--lp-border-subtle)', borderRadius: 18, padding: 14,
-    boxShadow: '0 14px 44px rgba(20,36,31,.22)', maxHeight: 'min(70vh, 560px)',
+    boxShadow: '0 14px 44px rgba(20,36,31,.22)',
+    maxHeight: 'min(560px, calc(var(--pp-vvh, 100dvh) - 24px))',
     display: 'flex', flexDirection: 'column',
   },
   head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
@@ -401,6 +500,15 @@ const S = {
     alignSelf: 'flex-start', maxWidth: '88%', background: 'var(--lp-bg-base)',
     border: '1px solid var(--lp-border-subtle)', borderRadius: '14px 14px 14px 4px',
     padding: '9px 12px', fontSize: 13.5, lineHeight: 1.45, color: 'var(--lp-text-primary)',
+    whiteSpace: 'pre-line',
+  },
+  chipsRow: { display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2, paddingLeft: 2 },
+  chip: {
+    padding: '7px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 12.5, fontWeight: 600, color: 'var(--lp-brand-700)',
+    background: 'color-mix(in srgb, var(--lp-brand-600) 9%, transparent)',
+    border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)',
+    minHeight: 36,
   },
   bubbleUser: {
     alignSelf: 'flex-end', maxWidth: '88%', background: 'var(--lp-brand-600)', color: '#fff',

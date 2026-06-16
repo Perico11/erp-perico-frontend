@@ -6,6 +6,7 @@ import { PedidosNotifProvider } from './context/PedidosNotifContext';
 import AppLayout from './components/layout/AppLayout';
 import VersionChecker from './components/VersionChecker';
 import PushPrompt from './components/PushPrompt';
+import PushBannerHost from './components/PushBannerHost';
 import AsistenteFlotante from './components/AsistenteFlotante';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -130,6 +131,8 @@ export default function App() {
           <VersionChecker />
           {/* Ofrece activar notificaciones del teléfono al iniciar sesión (Web Push) */}
           <PushPrompt />
+          {/* Banner in-app estilo iOS cuando llega un evento con la app abierta */}
+          <PushBannerHost />
           {/* Asistente flotante: vive en todas las pantallas, busca y navega */}
           <AsistenteFlotante />
           <Routes>
