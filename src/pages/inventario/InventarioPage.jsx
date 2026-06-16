@@ -2599,6 +2599,80 @@ function MPUbicRow({ mp, qty, min, esTeran, canEdit, onFijar, acentColor }) {
   );
 }
 
+/* ── Detección de nombres parecidos (anti-typo, jun 2026, pedido dueño) ──
+   Al dar de alta MP/PT nuevos, si hay nombres similares en el catálogo se le
+   pregunta al usuario si es realmente nueva o se refiere a una existente mal
+   escrita. Normaliza (minúsculas, sin acentos ni puntuación) y combina
+   igualdad-normalizada + distancia de edición + subcadena. */
+function _normNombre(s) {
+  return String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, ' ').trim().replace(/\s+/g, ' ');
+}
+function _lev(a, b) {
+  const m = a.length, n = b.length;
+  if (!m) return n; if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+function nombresSimilares(nombre, lista, max = 5) {
+  const n = _normNombre(nombre);
+  if (!n) return [];
+  const nns = n.replace(/ /g, '');
+  const out = [];
+  for (const item of (lista || [])) {
+    const e = _normNombre(item);
+    if (!e || item === nombre) continue; /* idéntico exacto ya existe, no es "parecido" */
+    const ens = e.replace(/ /g, '');
+    let score = null;
+    if (e === n) score = 0;                                         /* misma palabra, distinto formato */
+    else {
+      const dist = _lev(nns, ens);
+      const thr = Math.max(2, Math.floor(Math.max(nns.length, ens.length) * 0.2));
+      if (dist <= thr) score = dist;
+      else if (nns.length >= 4 && (ens.includes(nns) || nns.includes(ens))) score = thr + 1;
+    }
+    if (score != null) out.push({ item, score });
+  }
+  return out.sort((a, b) => a.score - b.score).slice(0, max).map(x => x.item);
+}
+
+/* Bloque de confirmación inline "¿es nueva o una existente parecida?" */
+function ConfirmNuevaBox({ nombre, similares, tipo, onUsarExistente, onEsNueva, onCancelar }) {
+  return (
+    <div style={{ marginTop: 6, border: '1.5px solid var(--lp-warning-600)', background: 'var(--lp-warning-100)', borderRadius: 10, padding: 12 }}>
+      <div style={{ fontSize: 12.5, color: 'var(--lp-text-primary)', fontWeight: 600, lineHeight: 1.5 }}>
+        Hay {tipo === 'mp' ? 'materias primas' : 'productos'} con nombre parecido a “{nombre}”. ¿Es {tipo === 'mp' ? 'una MP nueva' : 'un producto nuevo'} o te refieres a una de estas?
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+        {similares.map(s => (
+          <button key={s} type="button" onClick={() => onUsarExistente(s)}
+            style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>
+            {s}
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+        <button type="button" onClick={onEsNueva}
+          style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>
+          Sí, es {tipo === 'mp' ? 'nueva' : 'nuevo'}
+        </button>
+        <button type="button" onClick={onCancelar}
+          style={{ padding: '8px 16px', borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Modal "Agregar MP a almacén" (fábrica/Terán) — Sprint X ──
    Suma una cantidad al almacén elegido (modo 'agregar'). El total de la MP sube. */
 function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
@@ -2608,6 +2682,7 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
   const [cantidad, setCantidad] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [confirmNueva, setConfirmNueva] = useState(null); /* { nombre, similares } */
   const inputRef = useRef(null);
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
 
@@ -2622,6 +2697,13 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
   const hayExacta = !!qTrim && mpList.some(m => m.toLowerCase() === qTrim.toLowerCase());
   const puedeCrear = !!qTrim && !hayExacta;
   const mpEsNueva = !!mp && !mpList.some(m => m.toLowerCase() === mp.toLowerCase());
+
+  /* Al pedir crear: si hay nombres parecidos, confirmar; si no, crear directo. */
+  const pedirCrear = (nombre) => {
+    const sim = nombresSimilares(nombre, mpList);
+    if (sim.length === 0) { setMp(nombre); setSearch(''); }
+    else setConfirmNueva({ nombre, similares: sim });
+  };
 
   const handleSubmit = async () => {
     const elegido = (mp || search.trim());
@@ -2649,7 +2731,7 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
             <label style={S.fieldLabel}>Materia Prima *</label>
             <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar o escribir nueva MP..."
               value={mp || search} onChange={e => { setSearch(e.target.value); setMp(''); }} />
-            {search && !mp && (filtered.length > 0 || puedeCrear) && (
+            {search && !mp && !confirmNueva && (filtered.length > 0 || puedeCrear) && (
               <div style={{ maxHeight: 180, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
                 {filtered.slice(0, 12).map(m => (
                   <div key={m} onClick={() => { setMp(m); setSearch(''); }}
@@ -2658,7 +2740,7 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{m}</div>
                 ))}
                 {puedeCrear && (
-                  <div onClick={() => { setMp(qTrim); setSearch(''); }}
+                  <div onClick={() => pedirCrear(qTrim)}
                     style={{ padding: '9px 14px', fontSize: 12.5, cursor: 'pointer', color: 'var(--lp-brand-700)', fontWeight: 700, background: 'var(--lp-brand-50)' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-brand-100)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'var(--lp-brand-50)'}>
@@ -2666,6 +2748,14 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
                   </div>
                 )}
               </div>
+            )}
+            {confirmNueva && (
+              <ConfirmNuevaBox
+                nombre={confirmNueva.nombre} similares={confirmNueva.similares} tipo="mp"
+                onUsarExistente={(s) => { setMp(s); setSearch(''); setConfirmNueva(null); }}
+                onEsNueva={() => { setMp(confirmNueva.nombre); setSearch(''); setConfirmNueva(null); }}
+                onCancelar={() => setConfirmNueva(null)}
+              />
             )}
             {mp && (
               <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: mpEsNueva ? 'var(--lp-success-100)' : 'var(--lp-brand-100)', color: mpEsNueva ? 'var(--lp-success-700)' : 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
@@ -2703,6 +2793,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
   const [cantidad, setCantidad] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [confirmNueva, setConfirmNueva] = useState(null);
   const inputRef = useRef(null);
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
 
@@ -2715,6 +2806,12 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
   const hayExacta = !!qTrim && ptList.some(m => m.toLowerCase() === qTrim.toLowerCase());
   const puedeCrear = !!qTrim && !hayExacta;
   const prodEsNuevo = !!prod && !ptList.some(m => m.toLowerCase() === prod.toLowerCase());
+
+  const pedirCrear = (nombre) => {
+    const sim = nombresSimilares(nombre, ptList);
+    if (sim.length === 0) { setProd(nombre); setSearch(''); }
+    else setConfirmNueva({ nombre, similares: sim });
+  };
 
   const handleSubmit = async () => {
     const elegido = prod || search.trim();
@@ -2744,7 +2841,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
             <label style={S.fieldLabel}>Producto *</label>
             <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Buscar o escribir nuevo producto..."
               value={prod || search} onChange={e => { setSearch(e.target.value); setProd(''); }} />
-            {search && !prod && (filtered.length > 0 || puedeCrear) && (
+            {search && !prod && !confirmNueva && (filtered.length > 0 || puedeCrear) && (
               <div style={{ maxHeight: 180, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)' }}>
                 {filtered.slice(0, 12).map(m => (
                   <div key={m} onClick={() => { setProd(m); setSearch(''); }}
@@ -2753,7 +2850,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
                     onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>{m}</div>
                 ))}
                 {puedeCrear && (
-                  <div onClick={() => { setProd(qTrim); setSearch(''); }}
+                  <div onClick={() => pedirCrear(qTrim)}
                     style={{ padding: '9px 14px', fontSize: 12.5, cursor: 'pointer', color: 'var(--lp-brand-700)', fontWeight: 700, background: 'var(--lp-brand-50)' }}
                     onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-brand-100)'}
                     onMouseLeave={e => e.currentTarget.style.background = 'var(--lp-brand-50)'}>
@@ -2761,6 +2858,14 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
                   </div>
                 )}
               </div>
+            )}
+            {confirmNueva && (
+              <ConfirmNuevaBox
+                nombre={confirmNueva.nombre} similares={confirmNueva.similares} tipo="pt"
+                onUsarExistente={(s) => { setProd(s); setSearch(''); setConfirmNueva(null); }}
+                onEsNueva={() => { setProd(confirmNueva.nombre); setSearch(''); setConfirmNueva(null); }}
+                onCancelar={() => setConfirmNueva(null)}
+              />
             )}
             {prod && (
               <div style={{ marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12, fontWeight: 600, background: prodEsNuevo ? 'var(--lp-success-100)' : 'var(--lp-brand-100)', color: prodEsNuevo ? 'var(--lp-success-700)' : 'var(--lp-brand-700)', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
