@@ -738,15 +738,19 @@ function EstadoBadge({ qty, pct }) {
 
 /* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
    Conserva el candado: el onSave del padre pasa por ajustarConCandado. */
-function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
+function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = false, puedeRenombrarMP = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
-  /* Catálogo PT (pedido owner jun 2026): nombre editable + SKU. Solo para PT —
-     el rename de MP tiene su propio flujo (/api/mp/renombrar, propaga a todos
-     los JSON). Estos campos NO tocan stock: se guardan directo (sin candado ni
-     propuesta) vía /api/inventario/pt-meta, con auditoría. */
+  /* Catálogo editable: nombre (PT y MP) + SKU (solo PT). Estos campos NO tocan
+     stock: se guardan directo con auditoría.
+       · PT  → /api/inventario/pt-meta (nombre + SKU; admin/inventario).
+       · MP  → /api/mp/renombrar (rename CANÓNICO, propaga a inventario,
+               maestro_mp, fórmulas, compras, costos y proveedores). Solo admin
+               (alto impacto), por eso se gatea con `puedeRenombrarMP`. */
   const esPT = item.tipo === 'pt';
+  const esMP = item.tipo === 'mp';
+  const mostrarNombre = esPT || (esMP && puedeRenombrarMP);
   const [nombreEdit, setNombreEdit] = useState(item.nombre || '');
   const [skuEdit, setSkuEdit] = useState(item.sku || '');
   const [saving, setSaving] = useState(false);
@@ -757,7 +761,7 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const minNum = parseFloat(min);
   const stockChanged = (qty !== '' && !isNaN(qtyNum) && qtyNum !== (item.qty ?? 0))
     || (canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
-  const nombreChanged = esPT && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
+  const nombreChanged = mostrarNombre && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
   const skuChanged = esPT && skuEdit.trim() !== String(item.sku || '');
   const metaChanged = nombreChanged || skuChanged;
 
@@ -801,25 +805,38 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
           <div style={S.bigK}>Existencia actual</div>
           <div style={S.bigV}>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</div>
         </div>
-        {/* Catálogo PT: nombre + SKU (pedido owner). Aplican directo con
-            auditoría — no son stock. El backend bloquea renombrar PTs ligados
-            a fórmula (la existencia se partiría) y SKUs duplicados. */}
-        {esPT && (
+        {/* Catálogo: nombre (PT y MP) + SKU (solo PT). Aplican directo con
+            auditoría — no son stock.
+              · PT: el backend bloquea renombrar PTs ligados a fórmula (la
+                existencia se partiría) y SKUs duplicados.
+              · MP: el rename es CANÓNICO (un solo nombre en todos los JSON) y
+                solo lo ve el admin (mostrarNombre lo gatea). */}
+        {mostrarNombre && (
           <>
-            <label style={S.flbl}>Nombre del producto</label>
+            <label style={S.flbl}>{esPT ? 'Nombre del producto' : 'Nombre de la materia prima'}</label>
             <input style={S.finTxt} type="text" maxLength={200}
               value={nombreEdit} onChange={e => setNombreEdit(e.target.value)} />
-            <label style={{ ...S.flbl, marginTop: 12 }}>SKU</label>
-            <input style={S.finTxt} type="text" maxLength={64} placeholder="Ej. PT-BM4-CUB"
-              value={skuEdit} onChange={e => setSkuEdit(e.target.value)} />
-            {metaChanged && (
+            {esPT && (
+              <>
+                <label style={{ ...S.flbl, marginTop: 12 }}>SKU</label>
+                <input style={S.finTxt} type="text" maxLength={64} placeholder="Ej. PT-BM4-CUB"
+                  value={skuEdit} onChange={e => setSkuEdit(e.target.value)} />
+              </>
+            )}
+            {nombreChanged && esMP && (
+              <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+                Al renombrar, el nombre nuevo se aplica en todo el sistema (inventario,
+                fórmulas, compras y costos). No requiere código.
+              </div>
+            )}
+            {metaChanged && esPT && (
               <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
                 Nombre/SKU se guardan al instante con auditoría (no requieren código).
               </div>
             )}
           </>
         )}
-        <label style={{ ...S.flbl, marginTop: esPT ? 12 : 0 }}>Nueva cantidad</label>
+        <label style={{ ...S.flbl, marginTop: mostrarNombre ? 12 : 0 }}>Nueva cantidad</label>
         <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
           value={qty} onChange={e => setQty(e.target.value)} />
         {canEditMin && (
@@ -937,7 +954,8 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                     </button>
                   )}
                   {canEdit && (
-                    <button type="button" style={S.btnGhost} onClick={() => onAdjust(it)}>Ajustar</button>
+                    <button type="button" data-id="inventario.btn.ajustar" data-rol="admin,tecnico,almacen,compras"
+                      style={S.btnGhost} onClick={() => onAdjust(it)}>Ajustar</button>
                   )}
                   {/* Burgos (rol inventario): su acción es CONTAR (conteo físico), no editar.
                       Lleva a /conteo. Solo cuando no puede editar directo (evita duplicar para admin). */}
@@ -1849,6 +1867,25 @@ export default function InventarioPage() {
         return;
       }
     }
+    /* Rename CANÓNICO de MP (solo admin): propaga el nombre a inventario,
+       maestro_mp, fórmulas, compras, costos y proveedores. Se aplica ANTES del
+       ajuste de stock para que el ajuste apunte al nombre ya renombrado. */
+    if (ajusteItem.tipo === 'mp' && extras.metaChanged && extras.nuevoNombre) {
+      try {
+        await api.renombrarMP(ajusteItem.nombre, extras.nuevoNombre);
+        nombreEfectivo = extras.nuevoNombre;
+      } catch (e) {
+        const msg = e?.data?.error || e?.message || 'No se pudo renombrar la materia prima';
+        alert(msg);
+        throw e; /* mantener el sheet abierto para corregir */
+      }
+      if (!extras.stockChanged) {
+        setToastMsg('Materia prima renombrada en todo el sistema');
+        setTimeout(() => setToastMsg(''), 4000);
+        reloadInv();
+        return;
+      }
+    }
     const minFinal = newMin != null ? newMin : ajusteItem.min;
     /* Proponente (Burgos/no-admin): NO aplica — crea una propuesta pendiente de aprobación. */
     if (esProponente) {
@@ -2360,6 +2397,7 @@ export default function InventarioPage() {
           isDesktop={isDesktop}
           canEditMin={ajusteItem.tipo === 'env' ? true : canEditMinimos}
           modoPropuesta={ajusteItem.tipo === 'env' ? false : esProponente}
+          puedeRenombrarMP={esAdmin}
           onClose={() => setAjusteItem(null)}
           onSave={handleAjusteSave}
           onPedir={ajusteItem.tipo === 'pt' && canPedirPT && (ajusteItem.qty <= 0 || (ajusteItem.min > 0 && ajusteItem.qty <= ajusteItem.min))

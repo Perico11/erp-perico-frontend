@@ -259,6 +259,13 @@ const api = {
   ptMeta: (producto, { sku, nuevoNombre } = {}) =>
     request('POST', '/api/inventario/pt-meta', { producto, sku, nuevoNombre }),
 
+  /* Renombrar una materia prima de forma CANÓNICA: el backend propaga el
+     nombre nuevo a inventario, maestro_mp, fórmulas, compras, costos y
+     proveedores (un solo nombre canónico). Solo admin — operación de alto
+     impacto (toca todos los JSON). No toca stock ni exige candado. */
+  renombrarMP: (nombreViejo, nombreNuevo) =>
+    request('POST', '/api/mp/renombrar', { nombreViejo, nombreNuevo }),
+
   /* ── Estado TOTP del usuario actual (read-only, no genera secret) ── */
   getTOTPStatus: () => request('GET', '/api/totp/status'),
 
