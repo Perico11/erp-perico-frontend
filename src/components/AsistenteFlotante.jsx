@@ -84,6 +84,9 @@ export default function AsistenteFlotante() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState('');
+  /* Chat (jun 2026): historial de mensajes. Saludo inicial al abrir. */
+  const [mensajes, setMensajes] = useState([]);
+  const listRef = useRef(null);
   const [pos, setPos] = useState(() => {
     try { const p = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); if (p && typeof p.x === 'number') return p; } catch {}
     return null; /* null = posición por defecto (abajo-derecha) */
@@ -92,17 +95,22 @@ export default function AsistenteFlotante() {
   const inputRef = useRef(null);
 
   useEffect(() => { if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 80); }, [open]);
+  /* Saludo al abrir por primera vez. */
+  useEffect(() => {
+    if (open && mensajes.length === 0) {
+      const nom = user?.nombre ? ', ' + String(user.nombre).split(' ')[0] : '';
+      setMensajes([{ from: 'bot', text: `¡Hola${nom}! ¿Cómo te ayudo? Escríbeme qué quieres hacer o a dónde ir.` }]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  /* Auto-scroll al último mensaje. */
+  useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [mensajes, open]);
 
   /* Destinos visibles para el rol actual */
   const visibles = useMemo(() => {
     const rol = user?.rol;
     return INDICE.filter(e => !e.roles || !rol || e.roles.split(',').includes(rol));
   }, [user]);
-
-  const resultados = useMemo(() => {
-    if (!q.trim()) return visibles.slice(0, 8);
-    return visibles.map(e => ({ e, s: _score(q, e) })).filter(r => r.s > 0).sort((a, b) => b.s - a.s).slice(0, 8).map(r => r.e);
-  }, [q, visibles]);
 
   if (!user) return null; /* solo con sesión */
 
@@ -134,6 +142,21 @@ export default function AsistenteFlotante() {
       try { localStorage.setItem(POS_KEY, JSON.stringify(snapped)); } catch {}
       return snapped;
     });
+  };
+
+  /* Responder a un mensaje del usuario: busca destinos y arma la respuesta. */
+  const responder = (texto) => {
+    const t = (texto || '').trim();
+    if (!t) return;
+    const res = visibles.map(e => ({ e, s: _score(t, e) })).filter(r => r.s > 0)
+      .sort((a, b) => b.s - a.s).slice(0, 5).map(r => r.e);
+    setMensajes(m => [...m,
+      { from: 'user', text: t },
+      res.length
+        ? { from: 'bot', text: res.length === 1 ? 'Te llevo aquí:' : 'Encontré esto — toca a dónde quieres ir:', results: res }
+        : { from: 'bot', text: 'No encontré esa pantalla. Prueba con otra palabra — por ejemplo: “compras”, “agregar envase”, “conteo”, “trazabilidad”.' },
+    ]);
+    setQ('');
   };
 
   const ir = (entry) => {
@@ -177,27 +200,40 @@ export default function AsistenteFlotante() {
               </div>
               <button style={S.close} onClick={() => setOpen(false)} aria-label="Cerrar">✕</button>
             </div>
-            <input
-              ref={inputRef}
-              style={S.input}
-              placeholder="¿Qué buscas? Ej: aprobar OC, agregar envase, conteo…"
-              value={q}
-              onChange={e => setQ(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter' && resultados[0]) ir(resultados[0]); }}
-            />
-            <div style={S.hint}>{q.trim() ? `${resultados.length} resultado(s)` : 'Sugerencias — toca para ir'}</div>
-            <div style={S.list}>
-              {resultados.length === 0 ? (
-                <div style={S.empty}>No encontré esa pantalla. Prueba con otra palabra.</div>
-              ) : resultados.map((e, i) => (
-                <button key={e.ruta + i} style={S.item} onClick={() => ir(e)}>
-                  <div>
-                    <div style={S.itemLabel}>{e.label}</div>
-                    <div style={S.itemSub}>{e.sub}</div>
-                  </div>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--lp-text-tertiary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
-                </button>
+            {/* Conversación */}
+            <div style={S.list} ref={listRef}>
+              {mensajes.map((m, i) => (
+                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.from === 'user' ? 'flex-end' : 'flex-start' }}>
+                  <div style={m.from === 'user' ? S.bubbleUser : S.bubbleBot}>{m.text}</div>
+                  {m.results && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, width: '100%' }}>
+                      {m.results.map((e, j) => (
+                        <button key={e.ruta + j} style={S.item} onClick={() => ir(e)}>
+                          <div>
+                            <div style={S.itemLabel}>{e.label}</div>
+                            <div style={S.itemSub}>{e.sub}</div>
+                          </div>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--lp-brand-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
+            </div>
+            {/* Entrada */}
+            <div style={S.inputRow}>
+              <input
+                ref={inputRef}
+                style={S.input}
+                placeholder="Escribe aquí… ej: aprobar OC, agregar envase"
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') responder(q); }}
+              />
+              <button style={S.send} onClick={() => responder(q)} disabled={!q.trim()} aria-label="Enviar">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg>
+              </button>
             </div>
           </div>
         </div>
@@ -228,14 +264,26 @@ const S = {
   head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
   headTitle: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 800, color: 'var(--lp-text-primary)' },
   close: { background: 'transparent', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--lp-text-tertiary)' },
+  list: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 2px', minHeight: 120 },
+  bubbleBot: {
+    alignSelf: 'flex-start', maxWidth: '88%', background: 'var(--lp-bg-base)',
+    border: '1px solid var(--lp-border-subtle)', borderRadius: '14px 14px 14px 4px',
+    padding: '9px 12px', fontSize: 13.5, lineHeight: 1.45, color: 'var(--lp-text-primary)',
+  },
+  bubbleUser: {
+    alignSelf: 'flex-end', maxWidth: '88%', background: 'var(--lp-brand-600)', color: '#fff',
+    borderRadius: '14px 14px 4px 14px', padding: '9px 12px', fontSize: 13.5, lineHeight: 1.45,
+  },
+  inputRow: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 },
   input: {
-    width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
+    flex: 1, boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
     border: '1.5px solid var(--lp-border-subtle)', fontSize: 14, fontFamily: 'inherit',
     background: 'var(--lp-bg-base)', outline: 'none', color: 'var(--lp-text-primary)',
   },
-  hint: { fontSize: 11, color: 'var(--lp-text-tertiary)', margin: '8px 2px 6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em' },
-  list: { overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 },
-  empty: { padding: '18px 8px', textAlign: 'center', fontSize: 13, color: 'var(--lp-text-tertiary)' },
+  send: {
+    flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: 'none', cursor: 'pointer',
+    background: 'var(--lp-brand-600)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
   item: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
     width: '100%', textAlign: 'left', padding: '11px 12px', borderRadius: 12,
