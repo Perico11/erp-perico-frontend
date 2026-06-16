@@ -1941,17 +1941,37 @@ export default function InventarioPage() {
             ) : (
               <div style={S.countLbl}>{filteredMP.length} de {mpItems.length} materias primas</div>
             )}
-            {filteredMP.length > 0 && (isDesktop ? (
-              <InvTable items={filteredMP} tipo="mp" unidad="kg" canEdit={canEditMP} canDelete={canDeleteMP}
-                canContar={canContar} onContar={handleContar}
-                mpsDisponibles={mpsDisponibles} onAdjust={handleAdjustMP} onAction={handleMPAction} query={debouncedQuery} />
-            ) : (
-              <div>
-                {filteredMP.map(item => (
-                  <MPRow key={item.mp} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustMP} onContar={handleContar} query={debouncedQuery} />
-                ))}
-              </div>
-            ))}
+            {/* DIVISIÓN POR CATEGORÍA (restaurada jun 2026 — se perdió en el rediseño
+                AG3): MP agrupadas por categoría química del maestro, cada sección con
+                su encabezado. Datos de item.maestro.categoria (fuente: maestro_mp.json). */}
+            {filteredMP.length > 0 && (() => {
+              const secciones = [
+                ...Object.keys(MP_CATEGORIES)
+                  .filter(c => mpGrouped.groups[c] && mpGrouped.groups[c].length)
+                  .map(c => ({ cat: c, items: mpGrouped.groups[c], meta: MP_CATEGORIES[c] })),
+                ...(mpGrouped.uncategorized.length ? [{ cat: 'Sin Categoría', items: mpGrouped.uncategorized, meta: null }] : []),
+              ];
+              return secciones.map(sec => (
+                <div key={sec.cat} style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0 8px' }}>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 7, fontSize: 10, fontWeight: 800, letterSpacing: '.02em', background: sec.meta ? sec.meta.bg : 'var(--lp-bg-sunken)', color: sec.meta ? sec.meta.fg : 'var(--lp-text-tertiary)' }}>{sec.meta ? sec.meta.icon : '—'}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' }}>{sec.cat}</span>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>· {sec.items.length}</span>
+                  </div>
+                  {isDesktop ? (
+                    <InvTable items={sec.items} tipo="mp" unidad="kg" canEdit={canEditMP} canDelete={canDeleteMP}
+                      canContar={canContar} onContar={handleContar}
+                      mpsDisponibles={mpsDisponibles} onAdjust={handleAdjustMP} onAction={handleMPAction} query={debouncedQuery} />
+                  ) : (
+                    <div>
+                      {sec.items.map(item => (
+                        <MPRow key={item.mp} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustMP} onContar={handleContar} query={debouncedQuery} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ));
+            })()}
               </>
             )}
           </>
