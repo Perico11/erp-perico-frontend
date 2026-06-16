@@ -50,6 +50,30 @@ const INDICE = [
 
   { label: 'Administración / Usuarios', sub: 'Usuarios, permisos, branding', ruta: '/admin', roles: 'admin', keywords: 'admin administracion usuarios permisos roles pin branding sesiones margenes' },
   { label: 'Seguridad', sub: 'Auditoría y candado', ruta: '/seguridad', roles: 'admin,tecnico,inventario,almacen', keywords: 'seguridad auditoria candado totp codigo' },
+
+  /* ── Botones específicos: navega Y resalta el botón exacto (dataId) ── */
+  { label: 'Botón: Aprobar OC', sub: 'Compras → en la tarjeta de la OC', ruta: '/compras', roles: 'admin,compras', dataId: 'compras.btn.aprobar-oc', keywords: 'aprobar oc orden de compra autorizar boton' },
+  { label: 'Botón: Registrar pago de OC', sub: 'Compras → tarjeta de OC', ruta: '/compras', roles: 'admin,compras', dataId: 'compras.btn.registrar-pago', keywords: 'registrar pago pagar oc abono comprobante' },
+  { label: 'Botón: Recibir MP de una OC', sub: 'Compras → tarjeta de OC', ruta: '/compras', roles: 'admin,compras', dataId: 'compras.btn.recibir-mp', keywords: 'recibir mp materia prima oc entrada' },
+  { label: 'Botón: Nueva OC / levantar', sub: 'Compras → crear orden de compra', ruta: '/compras', roles: 'admin,compras', dataId: 'compras.btn.levantar-oc', keywords: 'nueva oc levantar crear orden de compra' },
+  { label: 'Botón: Recepción MP', sub: 'Inventario → MP → + Recepción MP', ruta: '/inventario?tab=mp', roles: 'admin,compras,almacen', dataId: 'inventario.btn.recepcion-mp', keywords: 'recepcion mp recibir materia prima entrada' },
+  { label: 'Botón: Pedir reposición de PT', sub: 'Inventario → PT → Pedir', ruta: '/inventario?tab=pt', roles: 'admin,almacen,tecnico', dataId: 'inventario.btn.pedir-pt', keywords: 'pedir reposicion pt producto reabastecer' },
+  { label: 'Botón: Generar OC desde MRP', sub: 'Inventario → generar OC', ruta: '/inventario?tab=mp', roles: 'admin,compras', dataId: 'inventario.btn.generar-oc', keywords: 'generar oc mrp orden compra' },
+  { label: 'Botón: Nueva orden', sub: 'Órdenes → + Nueva orden', ruta: '/ordenes', roles: 'admin,tecnico', dataId: 'ordenes.btn.nueva', keywords: 'nueva orden crear produccion boton' },
+  { label: 'Botón: Nueva solicitud de OC', sub: 'Órdenes → solicitar MP', ruta: '/ordenes', roles: 'admin,tecnico', dataId: 'ordenes.btn.nueva-solicitud-oc', keywords: 'solicitud oc solicitar materia prima compras' },
+  { label: 'Botón: Iniciar producción', sub: 'Órdenes → iniciar', ruta: '/ordenes', roles: 'admin,tecnico', dataId: 'ordenes.btn.iniciar-produccion', keywords: 'iniciar producir lanzar produccion orden' },
+  { label: 'Botón: Aprobar QC', sub: 'Órdenes → liberar calidad', ruta: '/ordenes', roles: 'admin,tecnico', dataId: 'ordenes.btn.aprobar-qc', keywords: 'aprobar qc calidad liberar lote' },
+  { label: 'Botón: Nuevo pedido', sub: 'Pedidos → + Nuevo pedido', ruta: '/pedidos', roles: 'admin,almacen,tecnico', dataId: 'pedidos.btn.nuevo', keywords: 'nuevo pedido crear almacen solicitar' },
+  { label: 'Botón: Aceptar y producir', sub: 'Pedidos → aceptar', ruta: '/pedidos', roles: 'admin,tecnico', dataId: 'pedidos.btn.aceptar-producir', keywords: 'aceptar producir pedido enrique' },
+  { label: 'Botón: Nueva sesión de conteo', sub: 'Conteo → nueva sesión', ruta: '/conteo', roles: 'admin,inventario', dataId: 'conteo.btn.nueva-sesion', keywords: 'nueva sesion conteo iniciar contar burgos' },
+  { label: 'Botón: Contar (conteo)', sub: 'Conteo → registrar conteo', ruta: '/conteo', roles: 'admin,inventario', dataId: 'conteo.btn.contar', keywords: 'contar conteo fisico registrar' },
+  { label: 'Botón: Nueva devolución', sub: 'Devoluciones → + Nueva', ruta: '/devoluciones', roles: 'admin,compras,almacen,tecnico', dataId: 'devoluciones.btn.nueva', keywords: 'nueva devolucion crear cliente' },
+  { label: 'Botón: Subir XML (SAT)', sub: 'SAT → subir factura', ruta: '/sat', roles: 'admin,compras', dataId: 'sat.btn.subir-xml', keywords: 'subir xml factura sat cfdi cargar' },
+  { label: 'Botón: Escanear QR en Terán', sub: 'Recepción → escanear', ruta: '/almacen', roles: 'admin,almacen', dataId: 'recepcion.btn.escanear', keywords: 'escanear qr recibir teran almacen josue' },
+  { label: 'Botón: Escanear QR (trazabilidad)', sub: 'Trazabilidad → escanear', ruta: '/trazabilidad', roles: 'admin,tecnico,almacen,recolector,inventario,compras', dataId: 'traza.btn.escanear-qr', keywords: 'escanear qr lote trazabilidad rastrear' },
+  { label: 'Botón: Generar OC (Pronóstico)', sub: 'Pronóstico → sugerencias → generar', ruta: '/pronostico', roles: 'admin,compras', dataId: 'forecast.btn.agregar-oc', keywords: 'generar oc pronostico sugerencia agregar a la orden' },
+  { label: 'Botón: Exportar reporte', sub: 'Reportes → exportar', ruta: '/reportes', roles: 'admin,inventario,compras', dataId: 'reportes.btn.exportar', keywords: 'exportar reporte excel descargar' },
+  { label: 'Botón: Atender pendiente (Inicio)', sub: 'Inicio → botón del hero', ruta: '/', dataId: 'inicio.btn.atender-hero', keywords: 'atender pendiente hero inicio revisar' },
 ];
 
 /* ── Búsqueda tolerante a errores ── */
@@ -246,12 +270,23 @@ export default function AsistenteFlotante() {
   const ir = (entry) => {
     setOpen(false); setQ('');
     navigate(entry.ruta);
-    if (entry.dataId) {
-      setTimeout(() => {
-        const t = document.querySelector(`[data-id="${entry.dataId}"]`);
-        if (t) { t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.add('pp-asistente-pulse'); setTimeout(() => t.classList.remove('pp-asistente-pulse'), 2200); }
-      }, 700);
-    }
+    if (!entry.dataId) return;
+    /* La página carga en diferido y el botón puede tardar en montar (o estar
+       dentro de una pestaña). Sondeamos hasta ~5s hasta encontrarlo y lo
+       resaltamos. Si nunca aparece (p.ej. no hay tarjetas), al menos navegó. */
+    let tries = 0;
+    const poll = setInterval(() => {
+      tries++;
+      const t = document.querySelector(`[data-id="${entry.dataId}"]`);
+      if (t) {
+        clearInterval(poll);
+        t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        t.classList.add('pp-asistente-pulse');
+        setTimeout(() => t.classList.remove('pp-asistente-pulse'), 2600);
+      } else if (tries >= 20) {
+        clearInterval(poll);
+      }
+    }, 250);
   };
 
   const fabStyle = pos
