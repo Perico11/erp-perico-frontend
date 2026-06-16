@@ -2637,7 +2637,7 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
         </div>
         <div style={S.modalBody}>
           <div style={{ padding: '8px 12px', background: esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
-            Suma esta cantidad al almacén <b>{esFabrica ? 'Fábrica' : 'Terán'}</b>. El total de la MP sube en consecuencia. Pedirá tu código de autorización.
+            Suma esta cantidad al almacén <b>{esFabrica ? 'Fábrica' : 'Terán'}</b>. El total de la MP sube en consecuencia. No pide código (solo suma stock).
           </div>
           <div>
             <label style={S.fieldLabel}>Materia Prima *</label>
@@ -2719,8 +2719,8 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
         <div style={S.modalBody}>
           <div style={{ padding: '8px 12px', background: esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
             {esFabrica
-              ? <>Suma cubetas al stock de <b>producción en fábrica</b> (qty). Es el stock que se vende y descuenta al fabricar. Pedirá tu código de autorización.</>
-              : <>Registra producto terminado físicamente en <b>Terán</b> (en cubetas) que no llegó por el flujo de lotes/QR. No afecta el stock total ni la producción. Pedirá tu código de autorización.</>}
+              ? <>Suma cubetas al stock de <b>producción en fábrica</b> (qty). Es el stock que se vende y descuenta al fabricar. No pide código (solo suma stock).</>
+              : <>Registra producto terminado físicamente en <b>Terán</b> (en cubetas) que no llegó por el flujo de lotes/QR. No afecta el stock total ni la producción. No pide código (solo suma stock).</>}
           </div>
           <div>
             <label style={S.fieldLabel}>Producto *</label>
