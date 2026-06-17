@@ -142,7 +142,9 @@ export default function App() {
             {/* App protegida */}
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route index element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
-              <Route path="formulas"       element={<RoleRoute roles={['admin','tecnico','compras']}><ErrorBoundary><FormulasPage /></ErrorBoundary></RoleRoute>} />
+              {/* Fórmulas: Enrique (tecnico) excluido — ve la fórmula solo al producir.
+                  La pestaña ya se oculta en Sidebar/BottomNav; aquí se cierra el acceso por URL directa. */}
+              <Route path="formulas"       element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><FormulasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="inventario"     element={<RoleRoute roles={['admin','tecnico','compras','almacen','inventario']}><ErrorBoundary><InventarioPage /></ErrorBoundary></RoleRoute>} />
               <Route path="ordenes"        element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><OrdenesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pedidos"        element={<RoleRoute roles={['admin','almacen','tecnico']}><ErrorBoundary><PedidosPage /></ErrorBoundary></RoleRoute>} />

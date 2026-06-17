@@ -36,7 +36,12 @@ const icons = {
    a Dashboard sin explicación). El filtro final es: can(perm) AND (roles.length===0 OR roles.includes(rol)). */
 const NAV_ITEMS = [
   { key: 'dashboard',    label: 'Inicio',       path: '/',              icon: icons.dashboard,    perm: 'dashboard' },
-  { key: 'formulas',     label: 'Fórmulas',     path: '/formulas',      icon: icons.formulas,     perm: 'formulas' },
+  /* Candado dueño (jun 2026): Enrique (tecnico) NO tiene la pestaña Fórmulas.
+     Ve la fórmula SOLO al producir (la carga vía API dentro de /produccion). El
+     permiso `formulas` sigue activo para él (producción lo necesita), por eso se
+     oculta la pestaña con `roles` y no quitando el permiso. compras ya queda
+     fuera por perm (formulas:false). */
+  { key: 'formulas',     label: 'Fórmulas',     path: '/formulas',      icon: icons.formulas,     perm: 'formulas',    roles: ['admin','compras'] },
   { key: 'inventario',   label: 'Inventario',   path: '/inventario',    icon: icons.inventario,   perm: 'inventario' },
   { key: 'pedidos',      label: 'Pedidos',      path: '/pedidos',       icon: icons.pedidos,      perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
   /* "Flujo" retirado del menú (jun 2026, censo duplicados — decisión owner):

@@ -123,7 +123,10 @@ const SECCIONES = [
   {
     titulo: 'Otros',
     items: [
-      { path: '/formulas',       label: 'Fórmulas',      icon: ICONS.formulas, perm: 'formulas' },
+      /* Enrique (tecnico) NO ve la pestaña Fórmulas — solo la fórmula al producir
+         (carga vía API en /produccion). Se oculta con `roles`, no quitando el
+         permiso (producción lo necesita). compras ya queda fuera por perm. */
+      { path: '/formulas',       label: 'Fórmulas',      icon: ICONS.formulas, perm: 'formulas', roles: ['admin','compras'] },
       { path: '/laboratorio',    label: 'Laboratorio',   icon: ICONS.lab,      perm: 'laboratorio' },
       { path: '/notificaciones', label: 'Notificaciones',icon: ICONS.notif,    perm: 'dashboard' },
       { path: '/admin',          label: 'Admin',         icon: ICONS.admin,    perm: 'admin' },
