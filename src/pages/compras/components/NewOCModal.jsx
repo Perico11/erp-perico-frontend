@@ -290,16 +290,32 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
       alert('Selecciona proveedor');
       return;
     }
-    if (items.length === 0) {
-      alert('Agrega al menos un item');
-      return;
+    /* Si no se pulsó "+ Agregar al pedido", incluir la MP que está cargada en el
+       formulario — un solo insumo no debería exigir el paso extra de "agregar".
+       (Notas es OPCIONAL: nunca bloquea; lo que bloqueaba era items vacío.) */
+    let itemsFinal = items;
+    if (itemsFinal.length === 0) {
+      const formularioValido = mp && Number(kg) > 0 && presentacion
+        && !(presentacion === 'otro' && !presentacionOtro);
+      if (formularioValido) {
+        itemsFinal = [{
+          mp,
+          kg: Number(kg),
+          presentacion,
+          presentacionOtro: presentacion === 'otro' ? presentacionOtro : null,
+          kg_recibidos: null,
+        }];
+      } else {
+        alert('Agrega al menos un item');
+        return;
+      }
     }
 
     setCreating(true);
     try {
       const res = await api.post('/api/compras/oc', {
         proveedor,
-        items,
+        items: itemsFinal,
         prioridad,
         notas,
         fleteEstimadoMxn: Number(fleteEstimado) || 0,
@@ -307,6 +323,7 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
 
       if (res.ok) {
         onCreated();
+        if (onClose) onClose(); /* garantizar cierre del modal en éxito */
       } else {
         alert(`Error: ${res.error || 'desconocido'}`);
       }
@@ -555,9 +572,12 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
               style={S.input}
               value={fleteEstimado}
               onChange={e => {
-                const val = Number(e.target.value) || 0;
-                setFleteEstimado(val.toFixed(2));
-                setFleteOverride(val !== sugeridoFlete);
+                /* Mantener el texto crudo mientras se escribe (NO toFixed por
+                   tecla — eso reescribía a "0.00" y hacía imposible teclear).
+                   Se parsea a número solo al levantar la OC. */
+                const raw = e.target.value;
+                setFleteEstimado(raw);
+                setFleteOverride(Number(raw) !== sugeridoFlete);
               }}
               min="0"
               step="any"
@@ -604,7 +624,9 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           <button
             style={{ ...S.btn, ...S.btnPrimary }}
             onClick={handleCreate}
-            disabled={creating || items.length === 0}
+            /* Habilitado si hay items O un insumo válido en el formulario.
+               Notas NO entra aquí (es opcional, nunca bloquea). */
+            disabled={creating || (items.length === 0 && !(mp && Number(kg) > 0 && presentacion))}
           >
             {creating ? 'Creando...' : 'Levantar OC'}
           </button>
