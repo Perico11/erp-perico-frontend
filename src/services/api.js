@@ -227,6 +227,10 @@ const api = {
   urlExportCycleCount: (sesionId) => API_BASE + '/api/cycle-count/' + encodeURIComponent(sesionId) + '/export-xlsx' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
   urlPrintCycleCount: (sesionId) => API_BASE + '/api/cycle-count/' + encodeURIComponent(sesionId) + '/hoja-impresion' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
   getMaestroMP: () => request('GET', '/api/maestro-mp'),
+  /* Editar el PRECIO BASE (sin flete) de una MP desde el catálogo de compras.
+     Propaga a costos_mp.json + maestro y, vía paso 1, al costo de fórmulas/PT. */
+  setPrecioBaseMP: (mp, precioBase) =>
+    request('POST', '/api/mp/precio-base', { mp, precioBase }),
   /* OCs / Solicitudes de compra MP.
      FIX jun 2026: getOrdenesCompra ahora lee del archivo canónico que Arely
      usa (/api/compras/oc → compras_oc.json) en lugar del archivo paralelo

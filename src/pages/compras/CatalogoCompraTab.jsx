@@ -15,6 +15,52 @@ const fmt$ = n => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
 const fmtN = (n, d = 0) => (n != null && !isNaN(n)) ? Number(n).toFixed(d) : '—';
 const tint = c => `color-mix(in srgb, ${c} 14%, transparent)`;
 
+/* Celda "Precio base/kg" editable inline (admin/compras). Click → input →
+   guarda vía /api/mp/precio-base → propaga a costos de fórmulas y PT. El flete
+   ($5/kg) NO está aquí: vive como línea "Envío" en el costo de PT. */
+function PrecioBaseCell({ f, canEdit, onSaved }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState('');
+  const [saving, setSaving] = useState(false);
+  const base = Number(f.costoBase) || 0;
+
+  const start = () => { if (!canEdit || saving) return; setVal(base ? String(base) : ''); setEditing(true); };
+  const save = async () => {
+    const n = parseFloat(val);
+    if (isNaN(n) || n < 0 || n === base) { setEditing(false); return; }
+    setSaving(true);
+    try { await api.setPrecioBaseMP(f.mp, n); onSaved && onSaved(); }
+    catch (e) { alert('No se pudo guardar el precio: ' + (e?.data?.error || e.message || 'error')); }
+    finally { setSaving(false); setEditing(false); }
+  };
+
+  return (
+    <div>
+      {editing ? (
+        <input
+          autoFocus type="number" step="0.01" min="0" inputMode="decimal"
+          value={val} disabled={saving}
+          onChange={e => setVal(e.target.value)}
+          onBlur={save}
+          onKeyDown={e => { if (e.key === 'Enter') save(); else if (e.key === 'Escape') setEditing(false); }}
+          style={{ width: 86, fontSize: 14, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', padding: '2px 6px', border: '1.5px solid var(--lp-brand-600)', borderRadius: 6, outline: 'none' }}
+        />
+      ) : (
+        <div
+          onClick={start}
+          title={canEdit ? 'Click para editar el precio base' : undefined}
+          style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', cursor: canEdit ? 'pointer' : 'default', borderBottom: canEdit ? '1px dashed color-mix(in srgb, var(--lp-brand-600) 50%, transparent)' : 'none', display: 'inline-block', lineHeight: 1.3 }}
+        >
+          {base > 0 ? `$${fmtN(base, 2)}` : '—'}
+        </div>
+      )}
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', marginTop: 2 }}>
+        Precio base/kg{canEdit ? ' ✎' : ''}
+      </div>
+    </div>
+  );
+}
+
 const STATUS = {
   critico: { label: 'Crítico', c: 'var(--lp-danger-600)' },
   medio:   { label: 'Medio',   c: 'var(--lp-warning-600)' },
@@ -251,17 +297,17 @@ export default function CatalogoCompraTab({ isDesktop = false, onCreated }) {
                   </span>
                 </div>
 
-                <div style={{ display: 'flex', gap: 20, margin: '12px 0 14px' }}>
+                <div style={{ display: 'flex', gap: 20, margin: '12px 0 14px', flexWrap: 'wrap' }}>
                   {[
                     { v: `${fmtN(f.stockActual, 0)} kg`, l: 'Stock', danger: sinStock },
                     { v: `${fmtN(f.minActual, 0)} kg`, l: 'Mínimo' },
-                    { v: Number(f.costoKg) > 0 ? `$${fmtN(f.costoKg, 2)}` : '—', l: 'Precio/kg' },
                   ].map((s, i) => (
                     <div key={i}>
                       <div style={{ fontSize: 14, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: s.danger ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>{s.v}</div>
                       <div style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', marginTop: 2 }}>{s.l}</div>
                     </div>
                   ))}
+                  <PrecioBaseCell f={f} canEdit={puedeCrear} onSaved={cargar} />
                 </div>
 
                 {puedeCrear && (
