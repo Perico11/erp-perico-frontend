@@ -7,6 +7,7 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import ProduccionFlow from '../produccion/ProduccionFlow';
+import RecibirOCModal from '../compras/components/RecibirOCModal';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
@@ -1881,6 +1882,9 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
 
   /* Permisos */
   const canSolicitar = rol === 'admin' || rol === 'tecnico' || rol === 'compras';
+  /* Recibir MP: admin y técnico (espeja el backend /api/compras/oc/recibir =
+     "Solo Enrique o Admin"). El botón vive DENTRO del card de OC activa, abajo. */
+  const canRecibir = rol === 'admin' || rol === 'tecnico';
 
   return (
     <>
@@ -1951,7 +1955,7 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'repeat(auto-fill, minmax(360px, 1fr))' : '1fr', gap: 12 }}>
-          {filtered.map(oc => <OCCard key={oc.id} oc={oc} />)}
+          {filtered.map(oc => <OCCard key={oc.id} oc={oc} canRecibir={canRecibir} onRefresh={reload} />)}
         </div>
       )}
 
@@ -1970,9 +1974,33 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
   );
 }
 
-function OCCard({ oc }) {
+function OCCard({ oc, canRecibir = false, onRefresh }) {
+  const [showRecibir, setShowRecibir] = useState(false);
   const estado = OC_ESTADO_BADGE[oc.estado] || { cls: 'neutral', label: oc.estado || '-' };
   const solid = OC_CLS_SOLID[estado.cls] || OC_CLS_SOLID.neutral;
+
+  /* "Recibir MP" vive aquí dentro (pedido dueño): se puede recibir una OC
+     APROBADA con destino Fábrica aunque no esté pagada (crédito). Se excluye
+     Terán (la recibe Josué) y lo ya recibido/eliminado. */
+  const destinoFabrica = (oc.almacenDestino || 'Fabrica') !== 'Teran';
+  const recibible = canRecibir && !!oc.aprobada && destinoFabrica
+    && oc.estado !== 'recibida' && oc.estado !== 'eliminada' && !oc.eliminada;
+
+  /* Hint de crédito (e5): días para vencer / vencido — informativo. */
+  const creditoSinPagar = oc.pago === 'credito' && !oc.pagada;
+  let credito = null;
+  if (creditoSinPagar && oc.fechaVencimiento) {
+    const v = new Date(String(oc.fechaVencimiento).slice(0, 10) + 'T00:00:00');
+    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const d = Math.round((v - hoy) / 86400000);
+    if (!isNaN(d)) {
+      credito = d < 0
+        ? { txt: `Crédito vencido hace ${Math.abs(d)}d`, bg: 'var(--lp-danger-100)', fg: 'var(--lp-danger-700)' }
+        : d <= 5
+          ? { txt: `Crédito vence en ${d}d`, bg: 'var(--lp-warning-100)', fg: 'var(--lp-warning-700)' }
+          : { txt: `Crédito · vence ${String(oc.fechaVencimiento).slice(0, 10)}`, bg: 'var(--lp-brand-100)', fg: 'var(--lp-brand-700)' };
+    }
+  }
   const prioTint = oc.prioridad && oc.prioridad !== 'normal' ? OC_PRIO_TINT[oc.prioridad] : null;
   const fecha = oc.fechaCreacion ? new Date(oc.fechaCreacion).toLocaleString('es-MX', {
     day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit',
@@ -2023,6 +2051,46 @@ function OCCard({ oc }) {
         }}>
           "{oc.notas}"
         </div>
+      )}
+
+      {/* Footer: hint de crédito + botón "Recibir MP" (Enrique/admin). El botón
+          no depende del pago: se recibe a crédito sin liquidar. */}
+      {(recibible || credito) && (
+        <div style={{
+          marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--lp-border-subtle)',
+          display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        }}>
+          {credito && (
+            <span style={{
+              display: 'inline-flex', padding: '3px 9px', fontSize: 10.5, fontWeight: 700,
+              borderRadius: 6, background: credito.bg, color: credito.fg,
+            }}>{credito.txt}</span>
+          )}
+          {recibible && (
+            <button
+              type="button"
+              data-id="ordenes.btn.recibir-mp"
+              data-rol="admin,tecnico"
+              onClick={() => setShowRecibir(true)}
+              title="Recibir la materia prima de esta OC en Fábrica"
+              style={{
+                marginLeft: 'auto', minHeight: 40, padding: '9px 16px', borderRadius: 10,
+                border: 'none', background: 'var(--lp-brand-600)', color: '#fff',
+                fontFamily: 'var(--lp-font-sans)', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              Recibir MP
+            </button>
+          )}
+        </div>
+      )}
+
+      {showRecibir && (
+        <RecibirOCModal
+          oc={oc}
+          onClose={() => setShowRecibir(false)}
+          onSaved={() => { setShowRecibir(false); onRefresh && onRefresh(); }}
+        />
       )}
     </div>
   );

@@ -152,7 +152,6 @@ const RUTA_ROLES = {
   '/trazabilidad':    ['admin', 'tecnico', 'almacen', 'compras', 'recolector', 'inventario'],
   '/conteo':          ['admin', 'inventario'],
   '/almacen':         ['admin', 'almacen'],
-  '/recepcion-mp':    ['admin', 'tecnico'],
   '/devoluciones':    ['admin', 'compras', 'almacen', 'tecnico'],
   '/devoluciones-mp': ['admin', 'compras'],
 };
@@ -488,9 +487,9 @@ export function dispatchPushFromEvent(evento, payload, navigate, rolUsuario) {
           title: 'OC actualizada',
           body: `${payload.codigo || 'OC'} · ${payload.editadoPor || payload.aprobadoPor || 'compras'}`,
           tag: 'oc-edit-' + (payload.ocId || Date.now()),
-          /* L7: técnico va a /recepcion-mp (ahí recibe la MP de su OC aprobada),
+          /* L7: técnico va a /ordenes (tab «OC Materia prima» → recibe ahí),
              compras/admin a /compras. */
-          onClick: () => navigate && navigate(rutaParaRol(rol === 'tecnico' ? '/recepcion-mp' : '/compras', rol)),
+          onClick: () => navigate && navigate(rutaParaRol(rol === 'tecnico' ? '/ordenes' : '/compras', rol)),
         });
       } else if (ev === 'recibida') {
         showPush({

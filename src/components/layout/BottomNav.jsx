@@ -87,9 +87,6 @@ const SECCIONES = [
       /* "Flujo" retirado (jun 2026): Pedidos absorbe el ciclo completo. */
       { path: '/pedidos',                 label: 'Pedidos',       icon: ICONS.pedidos,       perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
       { path: '/ordenes',                 label: 'Órdenes',       icon: ICONS.ordenes,       perm: 'ordenes',     roles: ['admin','tecnico'] },
-      /* Recepción de MP en Fábrica (Enrique): recibe las OCs aprobadas destino
-         Fábrica. perm recibirMP; roles excluye compras (Arely recibe en Compras). */
-      { path: '/recepcion-mp',            label: 'Recepción MP',  icon: ICONS.recepcion,     perm: 'recibirMP',   roles: ['admin','tecnico'] },
       { path: '/produccion',              label: 'Lanzar lote',   icon: ICONS.produccionSub, perm: 'produccion' },
       { path: '/produccion?tab=calidad',  label: 'Calidad QC',    icon: ICONS.lab,           perm: 'produccion' },
       { path: '/stock-fabrica',           label: 'Stock fábrica', icon: ICONS.stockFabrica,  perm: 'stockFabrica' },
