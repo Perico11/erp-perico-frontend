@@ -26,6 +26,7 @@ const AdminPage           = lazy(() => import('./pages/admin/AdminPage'));
 const StockFabricaPage    = lazy(() => import('./pages/stock-fabrica/StockFabricaPage'));
 const CycleCountPage      = lazy(() => import('./pages/cycle-count/CycleCountPage'));
 const AlmacenRecepcionPage = lazy(() => import('./pages/almacen-recepcion/AlmacenRecepcionPage'));
+const RecepcionMPPage     = lazy(() => import('./pages/recepcion-mp/RecepcionMPPage'));
 const FlujoPage           = lazy(() => import('./pages/flujo/FlujoPage'));
 const NotificacionesPage  = lazy(() => import('./pages/notificaciones/NotificacionesPage'));
 const DevolucionesPage    = lazy(() => import('./pages/devoluciones/DevolucionesPage'));
@@ -159,6 +160,9 @@ export default function App() {
               <Route path="trazabilidad"   element={<RoleRoute roles={['admin','tecnico','almacen','compras','recolector','inventario']}><ErrorBoundary><TrazabilidadPage /></ErrorBoundary></RoleRoute>} />
               <Route path="conteo"         element={<RoleRoute roles={['admin','inventario']}><ErrorBoundary><CycleCountPage /></ErrorBoundary></RoleRoute>} />
               <Route path="almacen"        element={<RoleRoute roles={['admin','almacen']}><ErrorBoundary><AlmacenRecepcionPage /></ErrorBoundary></RoleRoute>} />
+              {/* Recepción de MP en Fábrica (Enrique/técnico): recibe las OCs aprobadas
+                  destino Fábrica. El botón "Recibir MP" vivía solo en Compras (admin+compras). */}
+              <Route path="recepcion-mp"   element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><RecepcionMPPage /></ErrorBoundary></RoleRoute>} />
               <Route path="notificaciones" element={<Suspense fallback={<PageLoader />}><ErrorBoundary><NotificacionesPage /></ErrorBoundary></Suspense>} />
               <Route path="laboratorio"    element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><LaboratorioPage /></ErrorBoundary></RoleRoute>} />
               <Route path="devoluciones"   element={<RoleRoute roles={['admin','compras','almacen','tecnico']}><ErrorBoundary><DevolucionesPage /></ErrorBoundary></RoleRoute>} />

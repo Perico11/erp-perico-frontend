@@ -50,6 +50,10 @@ const NAV_ITEMS = [
   /* Órdenes: solo admin/tecnico — la tab "Almacén Terán" (lo único de Josué
      aquí) se eliminó por duplicar Pedidos. */
   { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico'] },
+  /* Recepción de MP en Fábrica (Enrique): recibe las OCs aprobadas con destino
+     Fábrica. perm recibirMP (lo tiene tecnico+admin); roles excluye a compras
+     (Arely recibe desde su propia pantalla de Compras). */
+  { key: 'recepcionMp',  label: 'Recepción MP', path: '/recepcion-mp',  icon: icons.recepcion,    perm: 'recibirMP',   roles: ['admin','tecnico'] },
   { key: 'produccion',   label: 'Producción',   path: '/produccion',    icon: icons.produccion,   perm: 'produccion' },
   { key: 'stockFabrica', label: 'Stock Fábrica',path: '/stock-fabrica', icon: icons.stockFabrica, perm: 'stockFabrica' },
   { key: 'recoleccion',  label: 'Recolección',  path: '/recoleccion',   icon: icons.recoleccion,  perm: 'recoleccion' },
