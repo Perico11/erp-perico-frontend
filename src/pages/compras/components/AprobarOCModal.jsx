@@ -7,8 +7,8 @@ import api from '../../../services/api';
    (obligatorio en AMBOS). Para crédito se calcula el vencimiento a 30 días. */
 
 const S = {
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', overflow: 'auto', padding: 0 },
-  sheet: { background: 'var(--lp-bg-base)', borderRadius: '24px 24px 0 0', padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: '92vh', overflowY: 'auto' },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 },
+  sheet: { background: 'var(--lp-bg-base)', borderRadius: 20, padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: '92vh', overflowY: 'auto' },
   h: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
   s: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 12 },
   sum: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 14px', marginBottom: 6 },

@@ -54,6 +54,8 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
   const [fechaEntrega, setFechaEntrega] = useState(oc.fechaEntregaEstimada || '');
   const [almacen, setAlmacen] = useState(oc.almacenDestino || '');
   const [transportista, setTransportista] = useState(oc.transportista || '');
+  const [paqueteria, setPaqueteria] = useState(oc.paqueteria || '');
+  const [numGuia, setNumGuia] = useState(oc.numGuia || '');
   const [fleteOverride, setFleteOverride] = useState(
     oc.fleteEstimadoMxn != null ? String(oc.fleteEstimadoMxn) : ''
   );
@@ -83,6 +85,8 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
         fechaEntregaEstimada: fechaEntrega || null,
         almacenDestino: almacen || null,
         transportista: transportista || null,
+        paqueteria: paqueteria || null,
+        numGuia: numGuia || null,
       };
       if (fleteOverride !== '' && !isNaN(Number(fleteOverride))) {
         payload.fleteEstimadoMxn = Number(fleteOverride);
@@ -148,6 +152,17 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
           <div>
             <label style={S.label}>Transportista</label>
             <input style={S.input} value={transportista} onChange={(e) => setTransportista(e.target.value)} placeholder="Empresa / nombre..." />
+          </div>
+        </div>
+
+        <div style={S.grid2}>
+          <div>
+            <label style={S.label}>Paquetería</label>
+            <input style={S.input} value={paqueteria} onChange={(e) => setPaqueteria(e.target.value)} placeholder="Estafeta, DHL, propia..." />
+          </div>
+          <div>
+            <label style={S.label}>Número de guía</label>
+            <input style={S.input} value={numGuia} onChange={(e) => setNumGuia(e.target.value)} placeholder="Ej. 7705 1234 5678" />
           </div>
         </div>
 
