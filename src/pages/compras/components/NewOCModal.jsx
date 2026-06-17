@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import api from '../../../services/api';
 import useIsDesktop from '../../../hooks/useIsDesktop';
+import { presEnvases } from '../presentaciones';
 
 const PRESENTACIONES = [
   { v: 'cubeta_20', lbl: 'CUBETA / 20 kg' },
@@ -541,10 +542,11 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
             </div>
             {items.map((it, idx) => {
               const presLabel = PRESENTACIONES.find(p => p.v === it.presentacion)?.lbl || it.presentacion;
+              const envInfo = presEnvases(it.presentacion, it.kg); /* ej: "40 sacos" */
               return (
                 <div key={idx} style={S.itemRow}>
                   <span>
-                    <strong>{it.mp}</strong> · {it.kg} kg · {it.presentacion === 'otro' && it.presentacionOtro ? `Otro: ${it.presentacionOtro}` : presLabel}
+                    <strong>{it.mp}</strong> · {it.kg} kg · {it.presentacion === 'otro' && it.presentacionOtro ? `Otro: ${it.presentacionOtro}` : presLabel}{envInfo ? ` · ${envInfo}` : ''}
                   </span>
                   <button
                     style={{ ...S.btn, ...S.btnRemove }}
