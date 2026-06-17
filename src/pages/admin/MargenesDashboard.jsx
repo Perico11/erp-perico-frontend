@@ -244,6 +244,10 @@ function BreakdownRow({ producto: p }) {
         <div style={ss.section}>
           <div style={ss.title}>2. Costos auxiliares (cubeta 19L)</div>
           <div style={ss.row}>
+            <span>Envío {`($5/kg · ${p.kgEnvio || 0} kg sin agua)`}</span>
+            <span>{fmt(p.costoEnvio || 0)}</span>
+          </div>
+          <div style={ss.row}>
             <span>Envase {p.marca && p.marca !== 'DEFAULT' ? `(${p.marca})` : ''}</span>
             <span>{fmt(p.costoEnvase)}</span>
           </div>
@@ -265,7 +269,7 @@ function BreakdownRow({ producto: p }) {
           </div>
           <div style={ss.total}>
             <span>Σ Auxiliares</span>
-            <span>{fmt((p.costoEnvase || 0) + (p.costoTapa || 0) + (p.costoManoObra || 0) + (p.costoMerma || 0))}</span>
+            <span>{fmt((p.costoEnvio || 0) + (p.costoEnvase || 0) + (p.costoTapa || 0) + (p.costoManoObra || 0) + (p.costoMerma || 0))}</span>
           </div>
         </div>
 
@@ -611,7 +615,7 @@ export default function MargenesDashboard() {
                         {!p.completo && <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-700)')} title={p.mpsSinCosto.join(', ')}>{p.mpsSinCosto.length} MP s/costo</span>}
                       </div>
                       <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontWeight: 400, marginTop: 2 }}>
-                        MP {fmt$(p.costoMP)} · Env {fmt$(p.costoEnvase)} · Tapa {fmt$(p.costoTapa || 0)} · MO {fmt$(p.costoManoObra)} · Merma {fmt$(p.costoMerma)}
+                        MP {fmt$(p.costoMP)} · Envío {fmt$(p.costoEnvio || 0)} · Envase {fmt$(p.costoEnvase)} · Tapa {fmt$(p.costoTapa || 0)} · MO {fmt$(p.costoManoObra)} · Merma {fmt$(p.costoMerma)}
                       </div>
                     </td>
                     <td style={{ ...S.td, textAlign: 'right', fontWeight: 700 }}>{fmt$(costoActivo)}</td>
