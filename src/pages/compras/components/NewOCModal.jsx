@@ -140,10 +140,15 @@ const S = {
     flex: 'initial',
   },
   btnRemove: {
+    /* flex:'0 0 auto' anula el flex:1 de S.btn — si no, el botón × se estiraba
+       a lo ancho y aparecía como una barra roja tapando la fila del item. */
+    flex: '0 0 auto',
     background: 'var(--lp-danger-100)',
     color: 'var(--lp-danger-700)',
-    padding: '3px 8px',
-    fontSize: 10,
+    padding: '3px 9px',
+    fontSize: 13,
+    lineHeight: 1,
+    borderRadius: 6,
   },
   btnAdd: {
     background: 'var(--lp-success-100)',
