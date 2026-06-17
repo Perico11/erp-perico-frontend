@@ -7,6 +7,8 @@
    La versión generada por el servidor (/api/compras/oc/:id/print) sigue
    disponible con el enlace "Abrir versión del servidor" (acción conservada). */
 
+import { presEnvases } from '../presentaciones';
+
 const BRAND_INK = '#0F6E56';
 const INK = '#16241F';
 const MUT = '#6b6560';
@@ -124,9 +126,10 @@ export default function PrintOCOverlay({ oc, onClose }) {
               <tr><td>Materia prima</td><td className="r">—</td><td className="r">—</td></tr>
             ) : items.map((it, i) => {
               const importe = (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0);
+              const env = presEnvases(it.presentacion, it.kg); /* ej "40 sacos" */
               return (
                 <tr key={i}>
-                  <td>{it.mp || 'MP'}{it.presentacionOtro ? ` · ${it.presentacionOtro}` : (it.presentacion && it.presentacion !== 'otro' ? ` · ${String(it.presentacion).replace('_', ' ')}` : '')}</td>
+                  <td>{it.mp || 'MP'}{it.presentacionOtro ? ` · ${it.presentacionOtro}` : (it.presentacion && it.presentacion !== 'otro' ? ` · ${String(it.presentacion).replace('_', ' ')}` : '')}{env ? ` · ${env}` : ''}</td>
                   <td className="r">{fmtKg(it.kg)}</td>
                   <td className="r">{fmt$(importe) || '—'}</td>
                 </tr>

@@ -5,6 +5,7 @@ import RecibirOCModal from './RecibirOCModal';
 import EliminarOCModal from './EliminarOCModal';
 import AprobarOCModal from './AprobarOCModal';
 import RegistrarPagoModal from './RegistrarPagoModal';
+import { presEnvases } from '../presentaciones';
 
 /* AC (jun 2026): días para vencer un crédito (negativo = vencido) */
 function _diasVence(fechaVencimientoISO) {
@@ -238,7 +239,7 @@ export default function OCCard({ oc, onRefresh }) {
                 <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
                   {it.presentacion === 'otro' && it.presentacionOtro
                     ? `Otro: ${it.presentacionOtro}`
-                    : getPresLabel(it.presentacion)}
+                    : `${getPresLabel(it.presentacion)}${presEnvases(it.presentacion, it.kg) ? ` · ${presEnvases(it.presentacion, it.kg)}` : ''}`}
                 </div>
               )}
             </div>
