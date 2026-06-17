@@ -24,17 +24,8 @@ const S = {
   metricLabel: { fontSize: 11, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 4, fontWeight: 600 },
   toolbar: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 10, marginBottom: 14 },
   toolbarScroll: { width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch', paddingBottom: 2 },
-  card: (sev) => ({
-    background: sev === 'critica' ? 'var(--lp-danger-50)' : sev === 'media' ? 'var(--lp-warning-50)' : 'var(--lp-bg-raised)',
-    border: '1.5px solid ' + (sev === 'critica' ? 'var(--lp-danger-500)' : sev === 'media' ? 'var(--lp-warning-500)' : 'var(--lp-border-subtle)'),
-    borderRadius: 'var(--lp-radius-sm)', padding: 14, marginBottom: 8,
-  }),
-  cardHeader: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6, flexWrap: 'wrap' },
-  badge: (bg, fg) => ({
-    display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700,
-    borderRadius: 4, background: bg, color: fg,
-    textTransform: 'uppercase', letterSpacing: '.04em',
-  }),
+  /* Las cards de alerta las renderiza ahora NotificacionCard (diseño mockup);
+     los estilos inline de card/header/badge se retiraron al migrar. */
   loading: { textAlign: 'center', padding: '40px 0', fontSize: 13, color: 'var(--lp-text-tertiary)' },
   /* Card colapsable de push (decisión owner jun 2026: push para TODOS los roles) */
   pushCard: {
@@ -70,18 +61,6 @@ const PUSH_PERM_LABEL = {
   denied: 'Bloqueadas',
   unsupported: 'No soportado',
   default: 'Sin activar',
-};
-
-const SEV_BADGE = {
-  critica: { bg: 'var(--lp-danger-600)', fg: '#fff', label: 'crítica' },
-  media: { bg: 'var(--lp-warning-600)', fg: '#fff', label: 'media' },
-  baja: { bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-secondary)', label: 'baja' },
-};
-const AREA_BADGE = {
-  inventario: { bg: 'var(--lp-success-50)', fg: 'var(--lp-success-700)' },
-  compras:    { bg: 'var(--lp-info-50)',    fg: 'var(--lp-info-600)' },
-  costos:     { bg: 'var(--lp-warning-50)', fg: 'var(--lp-warning-700)' },
-  produccion: { bg: 'var(--lp-brand-50)', fg: 'var(--lp-brand-700)' },
 };
 
 /* Mapa de área → ruta destino al click. Hace que las cards sean clickeables y
