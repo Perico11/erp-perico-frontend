@@ -140,13 +140,18 @@ const S = {
     flex: 'initial',
   },
   btnRemove: {
-    /* flex:'0 0 auto' anula el flex:1 de S.btn — si no, el botón × se estiraba
-       a lo ancho y aparecía como una barra roja tapando la fila del item. */
+    /* Botón × de tamaño FIJO (cuadrito 22px): anula el flex:1 + padding '12px'
+       de S.btn que lo estiraban como barra roja. Solo la × centrada. */
     flex: '0 0 auto',
+    width: 22,
+    height: 22,
+    padding: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     background: 'var(--lp-danger-100)',
     color: 'var(--lp-danger-700)',
-    padding: '3px 9px',
-    fontSize: 13,
+    fontSize: 14,
     lineHeight: 1,
     borderRadius: 6,
   },
