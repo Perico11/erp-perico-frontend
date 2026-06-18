@@ -387,8 +387,14 @@ export default function AsistenteFlotante() {
         const r = await api.asistenteChat(t, historial, destinos);
         if (r && r.accion && r.accion.tipo === 'navegar') {
           const dest = INDICE[r.accion.destino_id];
-          reemplazarUltimo(r.text || (dest ? `Te llevo a ${dest.label}.` : 'Listo.'));
-          if (dest) setTimeout(() => ir(dest, !!r.accion.abrir), 600); /* abrir = despliega el formulario */
+          if (r.accion.ejecutar) {
+            /* COMANDO → lo llevamos/abrimos directo. */
+            reemplazarUltimo(r.text || (dest ? `Te llevo a ${dest.label}.` : 'Listo.'));
+            if (dest) setTimeout(() => ir(dest, !!r.accion.abrir), 600); /* abrir = despliega el formulario */
+          } else {
+            /* PREGUNTA → respondemos y OFRECEMOS el botón (el usuario decide). */
+            reemplazarUltimo({ text: r.text || '¿Te llevo?', results: dest ? [{ ...dest, _abrir: !!r.accion.abrir }] : [] });
+          }
           return;
         }
         reemplazarUltimo(r && r.text ? r.text : 'No pude responder.');
@@ -497,7 +503,7 @@ export default function AsistenteFlotante() {
                   {m.results && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, width: '100%' }}>
                       {m.results.map((e, j) => (
-                        <button key={e.ruta + j} style={S.item} onClick={() => ir(e)}>
+                        <button key={e.ruta + j} style={S.item} onClick={() => ir(e, e._abrir)}>
                           <div>
                             <div style={S.itemLabel}>{e.label}</div>
                             <div style={S.itemSub}>{e.sub}</div>
