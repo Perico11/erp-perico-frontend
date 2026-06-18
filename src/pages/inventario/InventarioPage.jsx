@@ -1429,6 +1429,8 @@ export default function InventarioPage() {
   const [agregarMpUbic, setAgregarMpUbic] = useState(null);
   /* Sprint X: modal "Agregar PT a almacén" (fábrica = qty / Terán = pool manual). { ubicacion } */
   const [agregarPtUbic, setAgregarPtUbic] = useState(null);
+  /* Parte B (jun 2026): transferencia manual PT Fábrica→Terán. { producto } */
+  const [transferirPt, setTransferirPt] = useState(null);
   /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
@@ -1482,6 +1484,8 @@ export default function InventarioPage() {
 
   /* Permissions */
   const canEditMP = can('editarInventario');
+  /* Transferir PT a Terán: Josué (almacen) + admin + inventario (espeja el backend). */
+  const canTransferirPT = !!user && ['admin', 'almacen', 'inventario'].includes(user.rol);
   /* Alineado con el backend (POST /api/envases/stock|tapa/stock): admin / compras
      / inventario. Antes mostraba el botón a técnico (editarInventario) que luego
      recibía 403 al guardar. */
@@ -2184,6 +2188,7 @@ export default function InventarioPage() {
                 canEdit={canEditMP}
                 onAgregar={(ubic) => setAgregarPtUbic({ ubicacion: ubic })}
                 onEliminarTeran={handleEliminarPTTeran}
+                onTransferir={canTransferirPT ? (producto) => setTransferirPt({ producto }) : undefined}
               />
             )}
           </>
@@ -2320,6 +2325,22 @@ export default function InventarioPage() {
         />
       )}
 
+      {/* ── Parte B: Transferir PT Fábrica → Terán (Josué) ── */}
+      {transferirPt && (
+        <TransferirPTTeranModal
+          producto={transferirPt.producto}
+          isDesktop={isDesktop}
+          onClose={() => setTransferirPt(null)}
+          onDone={(r) => {
+            setTransferirPt(null);
+            setToastMsg(`${r.producto}: ${r.transferido} cub → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
+            reloadInv();
+            reloadPtUbi();
+            setTimeout(() => setToastMsg(''), 4500);
+          }}
+        />
+      )}
+
       {/* ── Paquete MOCKUP 8: FAB de acciones + hojas móviles ── */}
       {(activeTab === 'mp' || activeTab === 'pt') && (
         <Fab label="Acciones de inventario" dataId="inventario.fab.acciones"
@@ -2452,7 +2473,47 @@ export default function InventarioPage() {
    Datos vienen de /api/inventario/pt-por-ubicacion calculado server-side
    desde trazabilidad.json (fuente de verdad para ubicación física).
    ═══════════════════════════════════════════════════════════════════ */
-function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran }) {
+/* Parte B (jun 2026, pedido dueño): modal de transferencia PT Fábrica→Terán.
+   Mueve cubetas de inv.pt[X].qty a inv.pt[X].teran (no cambia el total). */
+function TransferirPTTeranModal({ producto, isDesktop, onClose, onDone }) {
+  const [cant, setCant] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const inputRef = useRef(null);
+  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 120); return () => clearTimeout(t); }, []);
+  const n = parseInt(cant, 10);
+  const valido = !isNaN(n) && n > 0;
+  const submit = async () => {
+    if (!valido || saving) return;
+    setSaving(true); setErr('');
+    try { const r = await api.transferirPTaTeran(producto, n); onDone(r); }
+    catch (e) { setErr(e?.data?.error || e.message || 'No se pudo transferir'); setSaving(false); }
+  };
+  return (
+    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shH}>Transferir a Terán</div>
+        <div style={S.shS}>{producto}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
+          Mueve cubetas del stock de <strong>Fábrica</strong> al de <strong>Terán</strong>. No cambia el total — solo dónde está el producto.
+        </div>
+        <label style={S.flbl}>Cubetas a transferir</label>
+        <input ref={inputRef} style={S.finQty} type="number" inputMode="numeric" step="1" min="1"
+          value={cant} onChange={e => setCant(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
+          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
+            {saving ? 'Transfiriendo…' : 'Transferir a Terán'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir }) {
   const bucket = data?.[ubicacion] || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => {
@@ -2635,6 +2696,20 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
                         fontFamily: 'var(--lp-font-sans)',
                       }}
                     >Pedir</button>
+                  )}
+                  {/* Parte B (jun 2026): Josué transfiere PT de Fábrica → Terán (mueve inv.pt qty→teran). */}
+                  {esFabrica && onTransferir && (
+                    <button
+                      onClick={() => onTransferir(nombre)}
+                      title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
+                      style={{
+                        padding: '6px 10px', borderRadius: 6,
+                        border: '1px solid var(--lp-brand-600)',
+                        background: 'transparent', color: 'var(--lp-brand-700)',
+                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        fontFamily: 'var(--lp-font-sans)',
+                      }}
+                    >→ Terán</button>
                   )}
                   {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
                   {!esFabrica && canEdit && onEliminarTeran && (Number(d.manual) || 0) > 0 && (

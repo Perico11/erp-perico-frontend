@@ -160,6 +160,10 @@ const api = {
       producto, ubicacion, qty, modo, nota,
       codigoAutorizacion: opts.codigoAutorizacion,
     }),
+  /* Transferencia manual de PT Fábrica→Terán (Josué): mueve N cubetas de
+     inv.pt[X].qty a inv.pt[X].teran (no cambia el total). */
+  transferirPTaTeran: (producto, cantidad, nota) =>
+    request('POST', '/api/inventario/pt/transferir-teran', { producto, cantidad, nota }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
      Más seguro que el overwrite completo de POST /api/inventario que es solo admin. */
   /* Ajuste individual de MP (qty + min) con candado: necesita sesión de conteo
