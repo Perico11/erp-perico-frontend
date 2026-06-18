@@ -1536,6 +1536,15 @@ export default function InventarioPage() {
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
   const [activeFilter, setActiveFilter] = useState(searchParams.get('filter') || 'todos');
+  /* Sync URL → estado: si navegas a /inventario?tab=pt&pt=fabrica (p.ej. desde el
+     asistente) estando YA en Inventario, react-router NO remonta y el useState
+     inicial no se vuelve a leer; este efecto aplica la pestaña y sub-pestaña del
+     query. Setear al mismo valor es no-op (no provoca loop). */
+  useEffect(() => {
+    const tab = searchParams.get('tab'); if (tab) setActiveTab(tab);
+    const mp = searchParams.get('mp'); if (mp) setMpSubtab(mp);
+    const pt = searchParams.get('pt'); if (pt) setPtSubtab(pt);
+  }, [searchParams]);
   /* Paquete MOCKUP 8 — hojas móviles "Vista y filtros" (mfilt) y "Acciones" (FAB) */
   const [vSheetOpen, setVSheetOpen] = useState(false);
   const [aSheetOpen, setASheetOpen] = useState(false);

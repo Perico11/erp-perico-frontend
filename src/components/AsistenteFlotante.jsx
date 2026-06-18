@@ -23,7 +23,11 @@ const INDICE = [
 
   { label: 'Inventario · Materia Prima', sub: 'Stock de MP por categoría', ruta: '/inventario?tab=mp', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario materia prima mp stock existencia quimicos resinas cargas pigmentos' },
   { label: 'Agregar materia prima', sub: 'Inventario → MP → Fábrica/Terán → Agregar', ruta: '/inventario?tab=mp', roles: 'admin,inventario,tecnico', keywords: 'agregar alta nueva materia prima mp recepcion dar de alta' },
-  { label: 'Inventario · Producto Terminado', sub: 'Stock de PT (Total/Fábrica/Terán)', ruta: '/inventario?tab=pt', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario producto terminado pt cubetas pintura stock fabrica teran' },
+  { label: 'Inventario · Producto Terminado', sub: 'Stock de PT (Total/Fábrica/Terán)', ruta: '/inventario?tab=pt', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario producto terminado pt cubetas pintura stock' },
+  { label: 'Inventario PT · Fábrica', sub: 'PT físicamente en fábrica', ruta: '/inventario?tab=pt&pt=fabrica', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario producto terminado pt en fabrica stock de fabrica que hay en fabrica totes cubetas' },
+  { label: 'Inventario PT · Terán', sub: 'PT en almacén Terán', ruta: '/inventario?tab=pt&pt=teran', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario producto terminado pt en teran almacen teran stock de teran' },
+  { label: 'Inventario MP · Fábrica', sub: 'Materia prima en fábrica', ruta: '/inventario?tab=mp&mp=fabrica', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario materia prima mp en fabrica stock de fabrica' },
+  { label: 'Inventario MP · Terán', sub: 'Materia prima en almacén Terán', ruta: '/inventario?tab=mp&mp=teran', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario materia prima mp en teran almacen teran stock de teran' },
   { label: 'Agregar producto terminado', sub: 'Inventario → PT → Agregar PT', ruta: '/inventario?tab=pt', roles: 'admin,inventario', keywords: 'agregar pt producto terminado nuevo dar de alta' },
   { label: 'Inventario · Envases', sub: 'Envases, tapas, importar/exportar', ruta: '/inventario?tab=env', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'envases tapas botes cubetas presentaciones importar exportar imprimir' },
   { label: 'Ajustar mínimos de stock', sub: 'En cada fila: botón Ajustar', ruta: '/inventario', roles: 'admin,inventario', keywords: 'ajustar minimo minimos existencia stock corregir conteo' },
@@ -370,6 +374,32 @@ export default function AsistenteFlotante() {
     const navResultados = (txt) => visibles.map(e => ({ e, s: _score(txt, e) })).filter(r => r.s > 0)
       .sort((a, b) => b.s - a.s).slice(0, 5).map(r => r.e);
 
+    /* Pregunta a la IA (Claude) con el catálogo completo (con roles); maneja
+       navegar/abrir/texto. Asume que ya hay un mensaje "pensando" del bot (lo
+       reemplaza). Si la IA falla, cae al matcher offline. */
+    const responderIA = async () => {
+      try {
+        const historial = mensajes
+          .filter(x => x && (x.from === 'user' || x.from === 'bot') && x.text)
+          .slice(-8)
+          .map(x => ({ role: x.from === 'user' ? 'user' : 'assistant', content: x.text }));
+        const destinos = INDICE.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId, abrible: !!e.dataId && ABRIBLES.has(e.dataId), roles: e.roles || '' }));
+        const r = await api.asistenteChat(t, historial, destinos);
+        if (r && r.accion && r.accion.tipo === 'navegar') {
+          const dest = INDICE[r.accion.destino_id];
+          reemplazarUltimo(r.text || (dest ? `Te llevo a ${dest.label}.` : 'Listo.'));
+          if (dest) setTimeout(() => ir(dest, !!r.accion.abrir), 600); /* abrir = despliega el formulario */
+          return;
+        }
+        reemplazarUltimo(r && r.text ? r.text : 'No pude responder.');
+      } catch (e) {
+        const res = navResultados(t);
+        reemplazarUltimo(res.length
+          ? { text: 'Encontré esto — toca a dónde quieres ir:', results: res }
+          : 'No pude responder: ' + (e?.data?.error || e?.message || 'error de conexión'));
+      }
+    };
+
     const acc = detectar(t);
     if (acc) {
       if (acc.admin && !esAdmin) { pushBot('Esa acción solo la puede hacer un administrador.'); return; }
@@ -377,11 +407,8 @@ export default function AsistenteFlotante() {
         pushBot('Buscando…');
         const r = await accionStock(acc.nombre);
         if (r) { reemplazarUltimo(r); return; }
-        /* No es un item de inventario → quizá quería una pantalla ("stock fábrica") */
-        const res = navResultados(t);
-        reemplazarUltimo(res.length
-          ? { text: 'Encontré esto — toca a dónde quieres ir:', results: res }
-          : { text: `No encontré "${acc.nombre}" en el inventario ni una pantalla con ese nombre.` });
+        /* No es un producto (ej. "inventario de fábrica") → que la IA navegue/conteste. */
+        await responderIA();
         return;
       }
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
@@ -395,32 +422,8 @@ export default function AsistenteFlotante() {
       setTimeout(() => ir(matches[0].e), 350);
       return;
     }
-    /* IA (Claude) con herramientas: le pasamos el catálogo de destinos navegables
-       (ya filtrado por rol). Claude puede contestar O navegar+resaltar un botón. */
     pushBot('Pensando…');
-    try {
-      const historial = mensajes
-        .filter(x => x && (x.from === 'user' || x.from === 'bot') && x.text)
-        .slice(-8)
-        .map(x => ({ role: x.from === 'user' ? 'user' : 'assistant', content: x.text }));
-      /* Catálogo COMPLETO con roles → la IA sabe qué NO puede el usuario y a quién
-         mandar. La validación de permiso la hace el backend; aquí solo navegamos. */
-      const destinos = INDICE.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId, abrible: !!e.dataId && ABRIBLES.has(e.dataId), roles: e.roles || '' }));
-      const r = await api.asistenteChat(t, historial, destinos);
-      if (r && r.accion && r.accion.tipo === 'navegar') {
-        const dest = INDICE[r.accion.destino_id];
-        reemplazarUltimo(r.text || (dest ? `Te llevo a ${dest.label}.` : 'Listo.'));
-        if (dest) setTimeout(() => ir(dest, !!r.accion.abrir), 600); /* abrir = despliega el formulario */
-        return;
-      }
-      reemplazarUltimo(r && r.text ? r.text : 'No pude responder.');
-    } catch (e) {
-      /* Sin IA (key no configurada o error) → caemos al matcher offline. */
-      const res = navResultados(t);
-      reemplazarUltimo(res.length
-        ? { text: 'Encontré esto — toca a dónde quieres ir:', results: res }
-        : 'No pude responder: ' + (e?.data?.error || e?.message || 'error de conexión'));
-    }
+    await responderIA();
   };
 
   const ir = (entry, abrir = false) => {
