@@ -78,6 +78,21 @@ const INDICE = [
   { label: 'Botón: Atender pendiente (Inicio)', sub: 'Inicio → botón del hero', ruta: '/', dataId: 'inicio.btn.atender-hero', keywords: 'atender pendiente hero inicio revisar' },
 ];
 
+/* Botones que abren un FORMULARIO/modal seguro → el bot puede "abrirlos" directo
+   (como si el usuario diera click). Se EXCLUYEN los que ejecutan/comprometen algo
+   (iniciar producción, aprobar QC, aceptar y producir, etc.): esos solo se resaltan. */
+const ABRIBLES = new Set([
+  'compras.btn.levantar-oc',        /* Nueva OC */
+  'inventario.btn.recepcion-mp',    /* Recepción MP */
+  'inventario.btn.ajustar',         /* Ajustar existencia */
+  'ordenes.btn.nueva',              /* Nueva orden */
+  'ordenes.btn.nueva-solicitud-oc', /* Solicitud de OC */
+  'pedidos.btn.nuevo',              /* Nuevo pedido */
+  'conteo.btn.nueva-sesion',        /* Nueva sesión de conteo */
+  'devoluciones.btn.nueva',         /* Nueva devolución */
+  'sat.btn.subir-xml',              /* Subir XML */
+]);
+
 /* ── Búsqueda tolerante a errores ── */
 function _norm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -352,12 +367,14 @@ export default function AsistenteFlotante() {
         .filter(x => x && (x.from === 'user' || x.from === 'bot') && x.text)
         .slice(-8)
         .map(x => ({ role: x.from === 'user' ? 'user' : 'assistant', content: x.text }));
-      const destinos = visibles.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId }));
+      /* Catálogo COMPLETO con roles → la IA sabe qué NO puede el usuario y a quién
+         mandar. La validación de permiso la hace el backend; aquí solo navegamos. */
+      const destinos = INDICE.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId, abrible: !!e.dataId && ABRIBLES.has(e.dataId), roles: e.roles || '' }));
       const r = await api.asistenteChat(t, historial, destinos);
       if (r && r.accion && r.accion.tipo === 'navegar') {
-        const dest = visibles[r.accion.destino_id];
+        const dest = INDICE[r.accion.destino_id];
         reemplazarUltimo(r.text || (dest ? `Te llevo a ${dest.label}.` : 'Listo.'));
-        if (dest) setTimeout(() => ir(dest), 600); /* deja leer el mensaje antes de navegar */
+        if (dest) setTimeout(() => ir(dest, !!r.accion.abrir), 600); /* abrir = despliega el formulario */
         return;
       }
       reemplazarUltimo(r && r.text ? r.text : 'No pude responder.');
@@ -370,7 +387,7 @@ export default function AsistenteFlotante() {
     }
   };
 
-  const ir = (entry) => {
+  const ir = (entry, abrir = false) => {
     setOpen(false); setQ('');
     navigate(entry.ruta);
     if (!entry.dataId) return;
@@ -386,6 +403,8 @@ export default function AsistenteFlotante() {
         t.scrollIntoView({ behavior: 'smooth', block: 'center' });
         t.classList.add('pp-asistente-pulse');
         setTimeout(() => t.classList.remove('pp-asistente-pulse'), 2600);
+        /* abrir = el bot abre el formulario directo (solo botones marcados abribles). */
+        if (abrir && ABRIBLES.has(entry.dataId)) setTimeout(() => { try { t.click(); } catch (_) {} }, 450);
       } else if (tries >= 20) {
         clearInterval(poll);
       }
