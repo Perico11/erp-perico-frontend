@@ -2687,14 +2687,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
                       title={esFabrica
                         ? 'Pedir producción para reponer en fábrica'
                         : 'Pedir reposición a fábrica'}
-                      style={{
-                        padding: '6px 10px', borderRadius: 6,
-                        border: `1px solid ${acentColor}`,
-                        background: 'transparent',
-                        color: acentColor,
-                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        fontFamily: 'var(--lp-font-sans)',
-                      }}
+                      style={{ ...S.btnGhost, color: acentColor, borderColor: `color-mix(in srgb, ${acentColor} 45%, transparent)` }}
                     >Pedir</button>
                   )}
                   {/* Parte B (jun 2026): Josué transfiere PT de Fábrica → Terán (mueve inv.pt qty→teran). */}
@@ -2702,13 +2695,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
                     <button
                       onClick={() => onTransferir(nombre)}
                       title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
-                      style={{
-                        padding: '6px 10px', borderRadius: 6,
-                        border: '1px solid var(--lp-brand-600)',
-                        background: 'transparent', color: 'var(--lp-brand-700)',
-                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        fontFamily: 'var(--lp-font-sans)',
-                      }}
+                      style={{ ...S.btnGhost, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
                     >→ Terán</button>
                   )}
                   {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
@@ -2716,14 +2703,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
                     <button
                       onClick={() => onEliminarTeran(nombre)}
                       title={`Quitar de Terán (${Math.round(d.manual)} cub manual). No afecta lotes rastreados ni el stock total.`}
-                      style={{
-                        padding: '6px 10px', borderRadius: 6,
-                        border: '1px solid var(--lp-danger-600)',
-                        background: 'transparent',
-                        color: 'var(--lp-danger-600)',
-                        fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        fontFamily: 'var(--lp-font-sans)',
-                      }}
+                      style={{ ...S.btnGhost, color: 'var(--lp-danger-600)', borderColor: 'color-mix(in srgb, var(--lp-danger-600) 45%, transparent)' }}
                     >Eliminar</button>
                   )}
                 </span>
