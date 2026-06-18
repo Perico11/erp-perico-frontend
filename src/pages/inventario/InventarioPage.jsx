@@ -527,6 +527,28 @@ function MPRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
+/* Forma física del PT: granel (en TOTE, sin envasar) vs envasado (en cubeta).
+   Es solo metadato visual — NO toca el conteo (qty sigue en cubetas-equivalente).
+   1 TOTE ≈ 52 cubetas (conversión de operación). Lo edita el admin/almacén en
+   "Ajustar"; cuando se envasa un tote, se cambia a "envasado". */
+const CUB_POR_TOTE = 52;
+function PTFormaBadge({ forma, qty }) {
+  if (forma !== 'granel' && forma !== 'envasado') return null;
+  const esGranel = forma === 'granel';
+  const totes = esGranel ? Math.max(1, Math.round((Number(qty) || 0) / CUB_POR_TOTE)) : 0;
+  const c = esGranel ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
+  const txt = esGranel ? `Granel · ${totes} tote${totes !== 1 ? 's' : ''}` : 'Envasado';
+  return (
+    <span title={esGranel ? `A granel, sin envasar (1 tote ≈ ${CUB_POR_TOTE} cubetas)` : 'Envasado en cubetas'}
+      style={{ display: 'inline-flex', alignItems: 'center', height: 18, padding: '0 7px', borderRadius: 999,
+        fontSize: 10.5, fontWeight: 600, fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+        color: c, background: `color-mix(in srgb, ${c} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${c} 30%, transparent)` }}>
+      {txt}
+    </span>
+  );
+}
+
 function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad }) {
   const { nombre, inv, pct } = item;
   const qty = inv.qty || 0;
@@ -546,6 +568,7 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad }) 
         <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {u}</span>
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} {u}</span>
         {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
+        {!item._env && inv.forma && <PTFormaBadge forma={inv.forma} qty={qty} />}
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
     </div>
@@ -753,6 +776,8 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const mostrarNombre = esPT || (esMP && puedeRenombrarMP);
   const [nombreEdit, setNombreEdit] = useState(item.nombre || '');
   const [skuEdit, setSkuEdit] = useState(item.sku || '');
+  /* Forma física (solo PT): granel (tote, sin envasar) | envasado (cubeta). Metadato. */
+  const [formaEdit, setFormaEdit] = useState(item.forma || '');
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
   useEffect(() => { const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 120); return () => clearTimeout(t); }, []);
@@ -763,7 +788,8 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
     || (canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
   const nombreChanged = mostrarNombre && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
   const skuChanged = esPT && skuEdit.trim() !== String(item.sku || '');
-  const metaChanged = nombreChanged || skuChanged;
+  const formaChanged = esPT && (formaEdit || '') !== (item.forma || '');
+  const metaChanged = nombreChanged || skuChanged || formaChanged;
 
   const esEnv = item.tipo === 'env';
   const minValido = !canEditMin || (min !== '' && !isNaN(minNum) && minNum >= 0);
@@ -789,6 +815,7 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
           metaChanged,
           nuevoNombre: nombreChanged ? nombreEdit.trim() : undefined,
           sku: skuChanged ? skuEdit.trim() : undefined,
+          forma: formaChanged ? (formaEdit || '') : undefined,
         }
       );
       onClose();
@@ -821,6 +848,24 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
                 <label style={{ ...S.flbl, marginTop: 12 }}>SKU</label>
                 <input style={S.finTxt} type="text" maxLength={64} placeholder="Ej. PT-BM4-CUB"
                   value={skuEdit} onChange={e => setSkuEdit(e.target.value)} />
+                {/* Forma física: granel (tote, sin envasar) vs envasado (cubeta).
+                    Solo marca cómo está almacenado — no cambia la existencia. */}
+                <label style={{ ...S.flbl, marginTop: 12 }}>Forma física</label>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[['granel', 'Granel (tote)'], ['envasado', 'Envasado (cubeta)']].map(([k, l]) => {
+                    const on = formaEdit === k;
+                    return (
+                      <button key={k} type="button" onClick={() => setFormaEdit(on ? '' : k)}
+                        style={{ flex: 1, height: 38, borderRadius: 10, cursor: 'pointer',
+                          fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 600 : 500,
+                          border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+                          background: on ? 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)' : 'var(--lp-bg-raised)',
+                          color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)' }}>
+                        {l}
+                      </button>
+                    );
+                  })}
+                </div>
               </>
             )}
             {nombreChanged && esMP && (
@@ -932,6 +977,11 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {prov && <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· {prov}</span>}
                   {tipo === 'pt' && it.inv.sku && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline', fontFamily: 'var(--lp-font-mono)' }}>· {it.inv.sku}</span>
+                  )}
+                  {tipo === 'pt' && it.inv.forma && (
+                    <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
+                      <PTFormaBadge forma={it.inv.forma} qty={qty} />
+                    </span>
                   )}
                 </td>
                 <td style={S.td}>
@@ -1820,7 +1870,7 @@ export default function InventarioPage() {
     setAjusteItem({ tipo: 'mp', nombre: item.mp, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'kg' });
   }, []);
   const handleAdjustPT = useCallback((item) => {
-    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '' });
+    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '', forma: item.inv.forma || '' });
   }, []);
   /* Envases (Sprint Y jun 2026): mismo sheet "Ajustar existencia" que MP/PT.
      Sin candado ni propuesta — guarda directo a /api/envases/stock|tapa/stock. */
@@ -1857,7 +1907,7 @@ export default function InventarioPage() {
     let nombreEfectivo = ajusteItem.nombre;
     if (ajusteItem.tipo === 'pt' && extras.metaChanged) {
       try {
-        const r = await api.ptMeta(ajusteItem.nombre, { sku: extras.sku, nuevoNombre: extras.nuevoNombre });
+        const r = await api.ptMeta(ajusteItem.nombre, { sku: extras.sku, nuevoNombre: extras.nuevoNombre, forma: extras.forma });
         if (r?.producto) nombreEfectivo = r.producto;
       } catch (e) {
         const msg = e?.data?.error || e?.message || 'No se pudo actualizar nombre/SKU';

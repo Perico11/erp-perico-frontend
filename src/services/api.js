@@ -264,8 +264,8 @@ const api = {
   /* Metadatos de catálogo de un PT (nombre / SKU) — no toca stock, no exige
      candado. El backend bloquea renombrar PTs ligados a fórmula y SKUs
      duplicados (decisión owner jun 2026: Burgos edita nombre + SKU). */
-  ptMeta: (producto, { sku, nuevoNombre } = {}) =>
-    request('POST', '/api/inventario/pt-meta', { producto, sku, nuevoNombre }),
+  ptMeta: (producto, { sku, nuevoNombre, forma } = {}) =>
+    request('POST', '/api/inventario/pt-meta', { producto, sku, nuevoNombre, forma }),
 
   /* Renombrar una materia prima de forma CANÓNICA: el backend propaga el
      nombre nuevo a inventario, maestro_mp, fórmulas, compras, costos y
