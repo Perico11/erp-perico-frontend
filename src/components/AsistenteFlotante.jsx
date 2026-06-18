@@ -336,11 +336,24 @@ export default function AsistenteFlotante() {
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
       return;
     }
-    /* Navegación (fallback) */
+    /* Navegación: si hay pantallas que calzan, las ofrecemos. */
     const res = navResultados(t);
-    pushBot(res.length
-      ? { text: res.length === 1 ? 'Te llevo aquí:' : 'Encontré esto — toca a dónde quieres ir:', results: res }
-      : { text: 'No te entendí. Puedo: consultar stock (“stock de X”), agregar stock a una MP, cambiar un PIN, ver tus pendientes, o llevarte a una pantalla (“compras”, “conteo”…).' });
+    if (res.length) {
+      pushBot({ text: res.length === 1 ? 'Te llevo aquí:' : 'Encontré esto — toca a dónde quieres ir:', results: res });
+      return;
+    }
+    /* Nada calzó como atajo ni como pantalla → IA (Claude) con contexto del ERP. */
+    pushBot('Pensando…');
+    try {
+      const historial = mensajes
+        .filter(x => x && (x.from === 'user' || x.from === 'bot') && x.text)
+        .slice(-8)
+        .map(x => ({ role: x.from === 'user' ? 'user' : 'assistant', content: x.text }));
+      const r = await api.asistenteChat(t, historial);
+      reemplazarUltimo(r && r.text ? r.text : 'No pude responder.');
+    } catch (e) {
+      reemplazarUltimo('No pude responder: ' + (e?.data?.error || e?.message || 'error de conexión'));
+    }
   };
 
   const ir = (entry) => {
