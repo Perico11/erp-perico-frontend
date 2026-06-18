@@ -521,7 +521,7 @@ export default function AsistenteFlotante() {
                   {m.results && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, width: '100%' }}>
                       {m.results.map((e, j) => (
-                        <button key={e.ruta + j} style={S.item} onClick={() => ir(e, e._abrir)}>
+                        <button key={e.ruta + j} style={S.item} onClick={() => ir(e, true)}>
                           <div>
                             <div style={S.itemLabel}>{e.label}</div>
                             <div style={S.itemSub}>{e.sub}</div>
