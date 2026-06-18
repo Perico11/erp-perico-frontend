@@ -142,6 +142,42 @@ function _humanTitulo(s) {
 
 const POS_KEY = 'pp_asistente_pos';
 
+/* Render ligero del texto del bot: **negrita**, viñetas (-, •, 1.) y saltos de
+   línea. Solo texto + <strong> (sin HTML peligroso). Evita que se vean los
+   asteriscos/guiones en crudo y mantiene las respuestas legibles. */
+function _inline(s) {
+  const out = [];
+  const re = /\*\*([^*]+)\*\*/g;
+  let last = 0, m;
+  while ((m = re.exec(s))) {
+    if (m.index > last) out.push(s.slice(last, m.index));
+    out.push(<strong key={out.length}>{m[1]}</strong>);
+    last = re.lastIndex;
+  }
+  if (last < s.length) out.push(s.slice(last));
+  return out;
+}
+function BotText({ text }) {
+  const lineas = String(text || '').split('\n');
+  return (
+    <>
+      {lineas.map((ln, i) => {
+        const t = ln.replace(/\s+$/, '');
+        if (!t.trim()) return <div key={i} style={{ height: 5 }} />;
+        const mb = t.match(/^\s*([-•*]|\d+\.)\s+/);
+        const marca = mb ? (/\d/.test(mb[1]) ? mb[1] : '•') : null;
+        const cuerpo = mb ? t.slice(mb[0].length) : t;
+        return marca
+          ? (<div key={i} style={{ display: 'flex', gap: 6, paddingLeft: 2, margin: '1px 0' }}>
+              <span style={{ color: 'var(--lp-brand-600)', flex: '0 0 auto' }}>{marca}</span>
+              <span>{_inline(cuerpo)}</span>
+            </div>)
+          : (<div key={i} style={{ margin: '1px 0' }}>{_inline(cuerpo)}</div>);
+      })}
+    </>
+  );
+}
+
 export default function AsistenteFlotante() {
   let auth = null; try { auth = useAuth(); } catch { /* sin provider */ }
   const user = auth?.user || null;
@@ -454,7 +490,7 @@ export default function AsistenteFlotante() {
             <div style={S.list} ref={listRef} aria-live="polite">
               {mensajes.map((m, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.from === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={m.from === 'user' ? S.bubbleUser : S.bubbleBot}>{m.text}</div>
+                  <div style={m.from === 'user' ? S.bubbleUser : S.bubbleBot}>{m.from === 'user' ? m.text : <BotText text={m.text} />}</div>
                   {m.results && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, width: '100%' }}>
                       {m.results.map((e, j) => (
