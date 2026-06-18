@@ -269,8 +269,8 @@ const api = {
 
   /* Asistente con IA (Claude). El bot flotante manda el texto libre del usuario
      y el backend reenvía a la Messages API con la key del servidor. */
-  asistenteChat: (mensaje, historial = []) =>
-    request('POST', '/api/asistente/chat', { mensaje, historial }),
+  asistenteChat: (mensaje, historial = [], destinos = []) =>
+    request('POST', '/api/asistente/chat', { mensaje, historial, destinos }),
 
   /* Renombrar una materia prima de forma CANÓNICA: el backend propaga el
      nombre nuevo a inventario, maestro_mp, fórmulas, compras, costos y

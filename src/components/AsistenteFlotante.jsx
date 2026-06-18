@@ -336,23 +336,37 @@ export default function AsistenteFlotante() {
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
       return;
     }
-    /* Navegación: si hay pantallas que calzan, las ofrecemos. */
-    const res = navResultados(t);
-    if (res.length) {
-      pushBot({ text: res.length === 1 ? 'Te llevo aquí:' : 'Encontré esto — toca a dónde quieres ir:', results: res });
+    /* Navegación de ALTA confianza (match exacto de frase, p.ej. "compras") →
+       vamos directo sin gastar IA. Lo ambiguo lo decide Claude. */
+    const matches = visibles.map(e => ({ e, s: _score(t, e) })).filter(r => r.s > 0).sort((a, b) => b.s - a.s);
+    if (matches.length && matches[0].s >= 100 && (matches.length === 1 || matches[0].s > matches[1].s + 20)) {
+      pushBot(`Te llevo a ${matches[0].e.label}.`);
+      setTimeout(() => ir(matches[0].e), 350);
       return;
     }
-    /* Nada calzó como atajo ni como pantalla → IA (Claude) con contexto del ERP. */
+    /* IA (Claude) con herramientas: le pasamos el catálogo de destinos navegables
+       (ya filtrado por rol). Claude puede contestar O navegar+resaltar un botón. */
     pushBot('Pensando…');
     try {
       const historial = mensajes
         .filter(x => x && (x.from === 'user' || x.from === 'bot') && x.text)
         .slice(-8)
         .map(x => ({ role: x.from === 'user' ? 'user' : 'assistant', content: x.text }));
-      const r = await api.asistenteChat(t, historial);
+      const destinos = visibles.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId }));
+      const r = await api.asistenteChat(t, historial, destinos);
+      if (r && r.accion && r.accion.tipo === 'navegar') {
+        const dest = visibles[r.accion.destino_id];
+        reemplazarUltimo(r.text || (dest ? `Te llevo a ${dest.label}.` : 'Listo.'));
+        if (dest) setTimeout(() => ir(dest), 600); /* deja leer el mensaje antes de navegar */
+        return;
+      }
       reemplazarUltimo(r && r.text ? r.text : 'No pude responder.');
     } catch (e) {
-      reemplazarUltimo('No pude responder: ' + (e?.data?.error || e?.message || 'error de conexión'));
+      /* Sin IA (key no configurada o error) → caemos al matcher offline. */
+      const res = navResultados(t);
+      reemplazarUltimo(res.length
+        ? { text: 'Encontré esto — toca a dónde quieres ir:', results: res }
+        : 'No pude responder: ' + (e?.data?.error || e?.message || 'error de conexión'));
     }
   };
 
