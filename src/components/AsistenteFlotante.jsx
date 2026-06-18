@@ -97,6 +97,24 @@ const ABRIBLES = new Set([
   'sat.btn.subir-xml',              /* Subir XML */
 ]);
 
+/* Permiso GRANULAR real que gatea cada acción (el mismo que evalúa el ERP con
+   permisos_roles.json). Si el rol "ve" la pantalla pero NO tiene el permiso, el bot
+   lo marca como NO permitido (ej. almacén ve Inventario pero no puede Ajustar). Las
+   acciones que NO están aquí se gatean solo por rol (acceso a pantalla). Se mapea por
+   data-id (botón) o por label (acciones sin botón). El backend resuelve permitido/
+   quién-puede contra la matriz real. */
+const PERM_GATE = {
+  'inventario.btn.ajustar': 'editarInventario',
+  'inventario.btn.recepcion-mp': 'recibirMP',
+  'conteo.btn.nueva-sesion': 'conteoFisico',
+  'conteo.btn.contar': 'conteoFisico',
+  'Agregar materia prima': 'editarInventario',
+  'Agregar producto terminado': 'editarInventario',
+  'Ajustar mínimos de stock': 'editarMinimos',
+  'Conteo físico (cycle count)': 'conteoFisico',
+};
+const _permDe = (e) => (e.dataId && PERM_GATE[e.dataId]) || PERM_GATE[e.label] || '';
+
 /* ── Búsqueda tolerante a errores ── */
 function _norm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -383,7 +401,7 @@ export default function AsistenteFlotante() {
           .filter(x => x && (x.from === 'user' || x.from === 'bot') && x.text)
           .slice(-8)
           .map(x => ({ role: x.from === 'user' ? 'user' : 'assistant', content: x.text }));
-        const destinos = INDICE.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId, abrible: !!e.dataId && ABRIBLES.has(e.dataId), roles: e.roles || '' }));
+        const destinos = INDICE.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId, abrible: !!e.dataId && ABRIBLES.has(e.dataId), roles: e.roles || '', perm: _permDe(e) }));
         const r = await api.asistenteChat(t, historial, destinos);
         if (r && r.accion && r.accion.tipo === 'navegar') {
           const dest = INDICE[r.accion.destino_id];
