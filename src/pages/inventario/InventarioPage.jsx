@@ -2625,13 +2625,14 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
 
   /* Totales agregados */
   const totales = productos.reduce((acc, [, d]) => {
+    acc.tote   += d.tote   || 0;
     acc.cubeta += d.cubeta || 0;
     acc.galon  += d.galon  || 0;
     acc.litro  += d.litro  || 0;
-    acc.tote   += d.tote   || 0;
+    acc.atm    += d.atm    || 0;
     acc.litros += d.totalLitros || 0;
     return acc;
-  }, { cubeta: 0, galon: 0, litro: 0, tote: 0, litros: 0 });
+  }, { tote: 0, cubeta: 0, galon: 0, litro: 0, atm: 0, litros: 0 });
 
   const esFabrica = ubicacion === 'fabrica';
   const acentColor = esFabrica ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
@@ -2646,10 +2647,11 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
       }}>
         {[
           { label: 'Productos',  v: productos.length },
+          { label: 'TOTEs',      v: totales.tote },
           { label: 'Cubetas',    v: totales.cubeta },
           { label: 'Galones',    v: totales.galon },
           { label: 'Litros',     v: totales.litro },
-          { label: 'TOTEs',      v: totales.tote },
+          { label: 'ATM',        v: totales.atm },
           { label: 'Litros tot', v: Math.round(totales.litros) },
         ].map(k => (
           <div key={k.label} style={{
@@ -2719,7 +2721,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
           {/* Header de tabla */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 100px 110px',
+            gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 70px 100px 110px',
             padding: '10px 14px',
             background: 'var(--lp-bg-sunken)',
             fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
@@ -2727,10 +2729,11 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
             borderBottom: '1px solid var(--lp-border-subtle)',
           }}>
             <span>Producto</span>
+            <span style={{ textAlign: 'right' }}>TOTE</span>
             <span style={{ textAlign: 'right' }}>Cub</span>
             <span style={{ textAlign: 'right' }}>Gal</span>
             <span style={{ textAlign: 'right' }}>Lt</span>
-            <span style={{ textAlign: 'right' }}>TOTE</span>
+            <span style={{ textAlign: 'right' }}>ATM</span>
             <span style={{ textAlign: 'right' }}>Litros</span>
             <span style={{ textAlign: 'right' }}>Acción</span>
           </div>
@@ -2741,7 +2744,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
             return (
               <div key={nombre} style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 100px 110px',
+                gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 70px 100px 110px',
                 padding: '12px 14px',
                 borderBottom: '1px solid var(--lp-border-subtle)',
                 fontSize: 13, alignItems: 'center',
@@ -2776,11 +2779,12 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
                     >+{Math.round(d.manual)} manual</span>
                   )}
                 </span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-secondary)' }}>{Math.round(d.totalLitros || 0)}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.atm || 0)    > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.atm    || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{Math.round(d.totalLitros || 0)}</span>
                 <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   {canPedir && (
                     <button
