@@ -527,24 +527,44 @@ function MPRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
-/* Forma física del PT: granel (en TOTE, sin envasar) vs envasado (en cubeta).
-   Es solo metadato visual — NO toca el conteo (qty sigue en cubetas-equivalente).
-   1 TOTE ≈ 52 cubetas (conversión de operación). Lo edita el admin/almacén en
-   "Ajustar"; cuando se envasa un tote, se cambia a "envasado". */
-const CUB_POR_TOTE = 52;
-function PTFormaBadge({ forma, qty }) {
-  if (forma !== 'granel' && forma !== 'envasado') return null;
-  const esGranel = forma === 'granel';
-  const totes = esGranel ? Math.max(1, Math.round((Number(qty) || 0) / CUB_POR_TOTE)) : 0;
-  const c = esGranel ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
-  const txt = esGranel ? `Granel · ${totes} tote${totes !== 1 ? 's' : ''}` : 'Envasado';
+/* Medidas en que se captura el PT. La CUBETA (19 L) es la unidad base de
+   contabilidad; el cubeta-equivalente (para costo/forecast/mínimos) se deriva de
+   los ml de cada medida (volúmenes del catálogo de envases + tote = 52 cubetas).
+   Agregar una medida nueva = una línea más aquí. */
+const CUBETA_ML = 19000;
+const PT_MEDIDAS = [
+  { key: 'tote',          label: 'Tote',              ml: 988000, sing: 'tote',       plur: 'totes' },
+  { key: 'cubeta',        label: 'Cubeta',            ml: 19000,  sing: 'cubeta',     plur: 'cubetas' },
+  { key: 'galon',         label: 'Galón',             ml: 3785,   sing: 'galón',      plur: 'galones' },
+  { key: 'litro',         label: 'Litro',             ml: 946,    sing: 'litro',      plur: 'litros' },
+  { key: 'atomizador750', label: 'Atomizador 750 ml', ml: 750,    sing: 'atomizador', plur: 'atomizadores' },
+];
+const ptMedidaDef = (key) => PT_MEDIDAS.find(m => m.key === key) || null;
+const cubetasPorMedida = (key) => { const m = ptMedidaDef(key); return m ? m.ml / CUBETA_ML : 1; };
+/* cantidad en una medida → cubetas-equivalente (base). Ej. tote × 2 = 104. */
+const medidaACubetas = (key, cant) => Math.round((Number(cant) || 0) * cubetasPorMedida(key) * 1000) / 1000;
+/* etiqueta legible: (tote, 2) → "2 totes" · (cubeta, 1) → "1 cubeta" */
+const etiquetaMedida = (key, cant) => {
+  const m = ptMedidaDef(key); if (!m) return '';
+  const n = Number(cant) || 0;
+  const palabra = n === 1 ? m.sing : m.plur;
+  return `${n.toLocaleString('es-MX')} ${palabra}${key === 'atomizador750' ? ' 750 ml' : ''}`;
+};
+
+/* Badge con la MEDIDA real del PT (ej. "2 totes", "327 cubetas"). Tote (granel,
+   sin envasar) en ámbar; el resto (envasado) en verde. El cubeta-equivalente va
+   en el tooltip — el conteo base sigue en cubetas. */
+function PTMedidaBadge({ medida, medidaQty, qty }) {
+  const m = ptMedidaDef(medida);
+  if (!m) return null;
+  const c = medida === 'tote' ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
   return (
-    <span title={esGranel ? `A granel, sin envasar (1 tote ≈ ${CUB_POR_TOTE} cubetas)` : 'Envasado en cubetas'}
+    <span title={`= ${(Number(qty) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 })} cubetas-equivalente`}
       style={{ display: 'inline-flex', alignItems: 'center', height: 18, padding: '0 7px', borderRadius: 999,
         fontSize: 10.5, fontWeight: 600, fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
         color: c, background: `color-mix(in srgb, ${c} 12%, transparent)`,
         border: `1px solid color-mix(in srgb, ${c} 30%, transparent)` }}>
-      {txt}
+      {etiquetaMedida(medida, medidaQty)}
     </span>
   );
 }
@@ -568,7 +588,7 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad }) 
         <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {u}</span>
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} {u}</span>
         {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
-        {!item._env && inv.forma && <PTFormaBadge forma={inv.forma} qty={qty} />}
+        {!item._env && inv.medida && <PTMedidaBadge medida={inv.medida} medidaQty={inv.medidaQty} qty={qty} />}
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
     </div>
@@ -776,24 +796,35 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const mostrarNombre = esPT || (esMP && puedeRenombrarMP);
   const [nombreEdit, setNombreEdit] = useState(item.nombre || '');
   const [skuEdit, setSkuEdit] = useState(item.sku || '');
-  /* Forma física (solo PT): granel (tote, sin envasar) | envasado (cubeta). Metadato. */
-  const [formaEdit, setFormaEdit] = useState(item.forma || '');
+  /* PT: medida en que se captura (tote/cubeta/galón/litro/atomizador) + cantidad
+     en esa medida. La existencia base en cubetas se DERIVA de medida × cantidad. */
+  const [medidaEdit, setMedidaEdit] = useState(item.medida || (item.tipo === 'pt' ? 'cubeta' : ''));
+  const [cantMedida, setCantMedida] = useState(String(item.medidaQty != null ? item.medidaQty : (item.qty ?? 0)));
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
   useEffect(() => { const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 120); return () => clearTimeout(t); }, []);
 
-  const qtyNum = parseFloat(qty);
+  const qtyNum = parseFloat(qty);                  /* MP/Env: cantidad directa */
+  const cantMedidaNum = parseFloat(cantMedida);    /* PT: cantidad en la medida */
   const minNum = parseFloat(min);
-  const stockChanged = (qty !== '' && !isNaN(qtyNum) && qtyNum !== (item.qty ?? 0))
+  const esEnv = item.tipo === 'env';
+  /* PT: la existencia base (cubetas) se DERIVA de medida × cantidad. */
+  const qtyEfectiva = esPT
+    ? medidaACubetas(medidaEdit, isNaN(cantMedidaNum) ? 0 : cantMedidaNum)
+    : qtyNum;
+  const qtyValida = esPT
+    ? (cantMedida !== '' && !isNaN(cantMedidaNum) && cantMedidaNum >= 0 && !!medidaEdit)
+    : (qty !== '' && !isNaN(qtyNum) && qtyNum >= 0);
+  const stockChanged = (qtyValida && qtyEfectiva !== (item.qty ?? 0))
     || (canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
   const nombreChanged = mostrarNombre && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
   const skuChanged = esPT && skuEdit.trim() !== String(item.sku || '');
-  const formaChanged = esPT && (formaEdit || '') !== (item.forma || '');
-  const metaChanged = nombreChanged || skuChanged || formaChanged;
+  /* medida cambió: distinta medida, o distinta cantidad-en-medida vs lo guardado. */
+  const medidaChanged = esPT && (medidaEdit !== (item.medida || 'cubeta')
+    || (!isNaN(cantMedidaNum) && cantMedidaNum !== (item.medidaQty != null ? item.medidaQty : (item.qty ?? 0))));
+  const metaChanged = nombreChanged || skuChanged || medidaChanged;
 
-  const esEnv = item.tipo === 'env';
   const minValido = !canEditMin || (min !== '' && !isNaN(minNum) && minNum >= 0);
-  const qtyValida = qty !== '' && !isNaN(qtyNum) && qtyNum >= 0;
   /* El motivo solo es obligatorio cuando se mueve STOCK (MP/PT con candado).
      Envases no usan candado → no exigen motivo. */
   const puedeGuardar = stockChanged
@@ -807,7 +838,7 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
       /* 3er arg = nuevo mínimo (solo si el rol puede editarlo; si no, se conserva el actual).
          4to arg = metadatos de catálogo (solo PT) + flags de qué cambió. */
       await onSave(
-        qtyValida ? qtyNum : (item.qty ?? 0),
+        qtyValida ? qtyEfectiva : (item.qty ?? 0),
         motivo.trim(),
         canEditMin ? minNum : (item.min ?? 0),
         {
@@ -815,7 +846,8 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
           metaChanged,
           nuevoNombre: nombreChanged ? nombreEdit.trim() : undefined,
           sku: skuChanged ? skuEdit.trim() : undefined,
-          forma: formaChanged ? (formaEdit || '') : undefined,
+          medida: (esPT && medidaChanged) ? (medidaEdit || '') : undefined,
+          medidaQty: (esPT && medidaChanged) ? (isNaN(cantMedidaNum) ? 0 : cantMedidaNum) : undefined,
         }
       );
       onClose();
@@ -830,7 +862,11 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
         <div style={S.shS}>{item.nombre}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
         <div style={S.bigsis}>
           <div style={S.bigK}>Existencia actual</div>
-          <div style={S.bigV}>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</div>
+          <div style={S.bigV}>
+            {esPT && item.medida
+              ? <>{etiquetaMedida(item.medida, item.medidaQty)} <span style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 500 }}>· {(item.qty ?? 0).toLocaleString('es-MX')} cub</span></>
+              : <>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</>}
+          </div>
         </div>
         {/* Catálogo: nombre (PT y MP) + SKU (solo PT). Aplican directo con
             auditoría — no son stock.
@@ -848,24 +884,6 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
                 <label style={{ ...S.flbl, marginTop: 12 }}>SKU</label>
                 <input style={S.finTxt} type="text" maxLength={64} placeholder="Ej. PT-BM4-CUB"
                   value={skuEdit} onChange={e => setSkuEdit(e.target.value)} />
-                {/* Forma física: granel (tote, sin envasar) vs envasado (cubeta).
-                    Solo marca cómo está almacenado — no cambia la existencia. */}
-                <label style={{ ...S.flbl, marginTop: 12 }}>Forma física</label>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {[['granel', 'Granel (tote)'], ['envasado', 'Envasado (cubeta)']].map(([k, l]) => {
-                    const on = formaEdit === k;
-                    return (
-                      <button key={k} type="button" onClick={() => setFormaEdit(on ? '' : k)}
-                        style={{ flex: 1, height: 38, borderRadius: 10, cursor: 'pointer',
-                          fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 600 : 500,
-                          border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
-                          background: on ? 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)' : 'var(--lp-bg-raised)',
-                          color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)' }}>
-                        {l}
-                      </button>
-                    );
-                  })}
-                </div>
               </>
             )}
             {nombreChanged && esMP && (
@@ -881,9 +899,42 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
             )}
           </>
         )}
-        <label style={{ ...S.flbl, marginTop: mostrarNombre ? 12 : 0 }}>Nueva cantidad</label>
-        <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
-          value={qty} onChange={e => setQty(e.target.value)} />
+        {esPT ? (
+          <>
+            {/* Medida en que está el producto (como en envases) + cantidad en esa
+                medida. La existencia en cubetas se calcula sola. */}
+            <label style={{ ...S.flbl, marginTop: 12 }}>Medida</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {PT_MEDIDAS.map(m => {
+                const on = medidaEdit === m.key;
+                return (
+                  <button key={m.key} type="button" onClick={() => setMedidaEdit(m.key)}
+                    style={{ height: 36, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
+                      fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 600 : 500,
+                      border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+                      background: on ? 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)' : 'var(--lp-bg-raised)',
+                      color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap' }}>
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+            <label style={{ ...S.flbl, marginTop: 12 }}>Cantidad ({ptMedidaDef(medidaEdit)?.label || 'unidades'})</label>
+            <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
+              value={cantMedida} onChange={e => setCantMedida(e.target.value)} />
+            {medidaEdit !== 'cubeta' && qtyValida && (
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+                = <strong>{qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })}</strong> cubetas-equivalente
+              </div>
+            )}
+          </>
+        ) : (
+          <>
+            <label style={{ ...S.flbl, marginTop: mostrarNombre ? 12 : 0 }}>Nueva cantidad</label>
+            <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
+              value={qty} onChange={e => setQty(e.target.value)} />
+          </>
+        )}
         {canEditMin && (
           <>
             <label style={{ ...S.flbl, marginTop: 12 }}>Mínimo ({item.unidad})</label>
@@ -978,9 +1029,9 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {tipo === 'pt' && it.inv.sku && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline', fontFamily: 'var(--lp-font-mono)' }}>· {it.inv.sku}</span>
                   )}
-                  {tipo === 'pt' && it.inv.forma && (
+                  {tipo === 'pt' && it.inv.medida && (
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
-                      <PTFormaBadge forma={it.inv.forma} qty={qty} />
+                      <PTMedidaBadge medida={it.inv.medida} medidaQty={it.inv.medidaQty} qty={qty} />
                     </span>
                   )}
                 </td>
@@ -1870,7 +1921,7 @@ export default function InventarioPage() {
     setAjusteItem({ tipo: 'mp', nombre: item.mp, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'kg' });
   }, []);
   const handleAdjustPT = useCallback((item) => {
-    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '', forma: item.inv.forma || '' });
+    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '', medida: item.inv.medida || '', medidaQty: item.inv.medidaQty != null ? item.inv.medidaQty : null });
   }, []);
   /* Envases (Sprint Y jun 2026): mismo sheet "Ajustar existencia" que MP/PT.
      Sin candado ni propuesta — guarda directo a /api/envases/stock|tapa/stock. */
@@ -1907,7 +1958,7 @@ export default function InventarioPage() {
     let nombreEfectivo = ajusteItem.nombre;
     if (ajusteItem.tipo === 'pt' && extras.metaChanged) {
       try {
-        const r = await api.ptMeta(ajusteItem.nombre, { sku: extras.sku, nuevoNombre: extras.nuevoNombre, forma: extras.forma });
+        const r = await api.ptMeta(ajusteItem.nombre, { sku: extras.sku, nuevoNombre: extras.nuevoNombre, medida: extras.medida, medidaQty: extras.medidaQty });
         if (r?.producto) nombreEfectivo = r.producto;
       } catch (e) {
         const msg = e?.data?.error || e?.message || 'No se pudo actualizar nombre/SKU';
