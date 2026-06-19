@@ -1,3 +1,5 @@
+import { getToken } from '../../../services/api';
+
 /* ComprobantesOCModal — detalle de una OC recibida (jun 2026).
    Reemplaza el botón "Comprobante" que solo abría un PDF (y a veces nada):
    ahora muestra en un solo lugar QUIÉN recibió + su FIRMA, el PDF de la
@@ -38,8 +40,13 @@ function fechaFmt(iso) {
 
 export default function ComprobantesOCModal({ oc, onClose }) {
   if (!oc) return null;
-  const facturaUrl = oc.comprobantePdf ? `/api/compras/oc/comprobante/${oc.id}` : null;
-  const pagoUrl = oc.comprobantePagoPdf ? `/api/compras/oc/comprobante/${oc.id}_pago` : null;
+  /* ?token=: el endpoint es GET con auth por header x-session-token, pero
+     window.open NO manda headers → el server acepta el token por query SOLO en
+     GET (mismo patrón que export-xlsx / hojas de impresión). Sin esto el PDF
+     respondía "Sesión requerida". */
+  const tk = encodeURIComponent(getToken() || '');
+  const facturaUrl = oc.comprobantePdf ? `/api/compras/oc/comprobante/${oc.id}?token=${tk}` : null;
+  const pagoUrl = oc.comprobantePagoPdf ? `/api/compras/oc/comprobante/${oc.id}_pago?token=${tk}` : null;
   const recep = oc.recibidoPor || oc.firmaRecepcion;
   const qc = oc.qcRecepcion;
 
