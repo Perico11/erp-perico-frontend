@@ -24,3 +24,18 @@ export const etiquetaMedida = (key, cant) => {
   const palabra = n === 1 ? m.sing : m.plur;
   return `${n.toLocaleString('es-MX')} ${palabra}${key === 'atomizador750' ? ' 750 ml' : ''}`;
 };
+
+/* Etiqueta de cantidad para vistas DOWNSTREAM de PT (tarjeta de pedido, órdenes,
+   producción). Cuando el registro trae una `medida` REAL distinta de cubeta,
+   devuelve la medida legible con el cubeta-equivalente como contexto
+   ("2 totes · 104 cub", "100 atomizadores 750 ml · 4 cub"). Si no hay medida,
+   es cubeta, o falta la cantidad en esa medida, devuelve null para que la vista
+   conserve su texto de cubetas de siempre (compat). Mismo criterio visual que
+   el badge PTMedidaBadge de Inventario. `cubetas` = cubeta-equivalente
+   (campo `cantidad`/`qty` del registro). */
+export const etiquetaMedidaReal = (key, medidaQty, cubetas) => {
+  const m = ptMedidaDef(key);
+  if (!m || key === 'cubeta' || medidaQty == null) return null;
+  const cub = Number(cubetas) || 0;
+  return `${etiquetaMedida(key, medidaQty)} · ${cub.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub`;
+};

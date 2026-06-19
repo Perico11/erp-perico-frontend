@@ -8,6 +8,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
+import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
 /* DECISIÓN OWNER jun 2026: al terminar la producción, la card del lote NO se
@@ -574,6 +575,8 @@ export default function ProduccionPage() {
       codigo: o.codigo,
       formula: o.formula || o.producto,
       cantidad: o.cantidad,
+      medida: o.medida,
+      medidaQty: o.medidaQty,
       esPrueba: !!o.esPrueba,
       prioridad: o.prioridad,
       estado: o.estado,
@@ -589,6 +592,8 @@ export default function ProduccionPage() {
       codigo: p.id,
       formula: p.producto,
       cantidad: p.cantidad,
+      medida: p.medida,
+      medidaQty: p.medidaQty,
       esPrueba: !!p.esPrueba,
       prioridad: p.prioridad || 'normal',
       estado: p.estado,
@@ -789,7 +794,7 @@ export default function ProduccionPage() {
                                 </div>
                               )}
                             </td>
-                            <td style={{ ...S.td, ...S.tdR, ...S.tdMono }}>{it.cantidad} cub</td>
+                            <td style={{ ...S.td, ...S.tdR, ...S.tdMono }}>{etiquetaMedidaReal(it.medida, it.medidaQty, it.cantidad) || `${it.cantidad} cub`}</td>
                             <td style={S.td}><EstadoBadge color={est.color} label={est.label} /></td>
                             <td style={{ ...S.td, ...S.tdR }}>{renderProdAction(it, false)}</td>
                           </tr>
@@ -820,7 +825,8 @@ export default function ProduccionPage() {
                       </div>
                       <div style={S.cardTitle}>{it.formula}</div>
                       <div style={S.cardMeta}>
-                        <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{it.cantidad}</span> cubetas
+                        {etiquetaMedidaReal(it.medida, it.medidaQty, it.cantidad)
+                          || <><span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{it.cantidad}</span> cubetas</>}
                         {it.fechaCreacion && ` · ${it.fechaCreacion}`}
                         {it.notas && ` · ${it.notas}`}
                       </div>

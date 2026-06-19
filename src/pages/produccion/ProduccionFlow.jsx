@@ -9,6 +9,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import api from '../../services/api';
+import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 import SecureView from '../../components/SecureView';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 /* Checkpoint A (handoff Claude Design jun 2026): riel horizontal con icono
@@ -726,7 +727,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           <div style={{ ...S.meta, display: 'inline-flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             {/* El "✓ guardado" del autosave ahora vive en la píldora del paso
                 activo (CkPill), como en el mockup — no se duplica aquí. */}
-            <span>{tipo === 'pedido' ? 'Pedido' : 'Orden'} {item.codigo} · {item.cantidad} cubetas</span>
+            <span>{tipo === 'pedido' ? 'Pedido' : 'Orden'} {item.codigo} · {etiquetaMedidaReal(item.medida, item.medidaQty, item.cantidad) || `${item.cantidad} cubetas`}</span>
           </div>
         </div>
         <button style={S.btn('ghost')} onClick={onClose}>Cerrar</button>

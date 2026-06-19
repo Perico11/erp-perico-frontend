@@ -14,6 +14,7 @@ import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import Fab from '../../components/ui/Fab';
 import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
+import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 
 /* ── Iconos line (sin emojis) — verde Claude Design ──────────────────────
    Reskin jun 2026: todos los glyph emoji (✕ ✓ → 🧪 ✅ 📋 📦 ●) reemplazados
@@ -654,7 +655,9 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
                 color: 'var(--lp-text-primary)', fontWeight: 600,
                 display: 'flex', alignItems: 'center', marginBottom: 12,
               }}>
-                {pedidoOrigen.cantidad} {pedidoOrigen.litPerUnit ? `× ${pedidoOrigen.litPerUnit}L` : 'cubetas'}
+                {etiquetaMedidaReal(pedidoOrigen.medida, pedidoOrigen.medidaQty, pedidoOrigen.cantidad) || (
+                  <>{pedidoOrigen.cantidad} {pedidoOrigen.litPerUnit ? `× ${pedidoOrigen.litPerUnit}L` : 'cubetas'}</>
+                )}
               </div>
               {pedidoOrigen.esPrueba && (
                 <div style={{
@@ -944,7 +947,7 @@ function OrdenCard({ orden, canManage, canDelete, onChangeStatus, onDelete, onPr
       </div>
       <div style={S.otitle}>{o.formula || o.producto}</div>
       <div style={S.ometa}>
-        {o.cantidad} cubetas{o.litPerUnit && Number(o.litPerUnit) !== 19 ? ` × ${o.litPerUnit}L` : ''} ·{' '}
+        {etiquetaMedidaReal(o.medida, o.medidaQty, o.cantidad) || `${o.cantidad} cubetas`}{o.litPerUnit && Number(o.litPerUnit) !== 19 ? ` × ${o.litPerUnit}L` : ''} ·{' '}
         {o.pedidoId ? (
           <>
             desde pedido{' '}
@@ -1755,6 +1758,8 @@ export default function OrdenesPage() {
                 codigo: prodFlowItem.codigo,
                 formula: prodFlowItem.formula,
                 cantidad: prodFlowItem.cantidad,
+                medida: prodFlowItem.medida,
+                medidaQty: prodFlowItem.medidaQty,
                 esPrueba: prodFlowItem.esPrueba,
                 fechaInicioProduccion: prodFlowItem.fechaInicioProduccion,
                 /* FIX jun 2026 (censo Pre#4): sin esto el lote nacía sin pedidoId

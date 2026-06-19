@@ -21,6 +21,7 @@ import {
   ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
   ESTADO_PEDIDO_COLOR as ESTADO_COLOR,
 } from '../../lib/estados';
+import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 
 /* ═══════════════════════════════════════════════════════════════════════
    PedidosPage — reskin "Claude Design" verde (jun 2026).
@@ -904,7 +905,7 @@ export default function PedidosPage() {
                 <div style={S.pedidoBody}>
                   <div style={S.pedidoTitle}>{p.producto}</div>
                   <div style={S.pedidoMeta}>
-                    <span style={S.cantidad}>{p.cantidad} cubetas</span>
+                    <span style={S.cantidad}>{etiquetaMedidaReal(p.medida, p.medidaQty, p.cantidad) || `${p.cantidad} cubetas`}</span>
                     {p.solicitante && <> · solicitó <strong>{p.solicitante}</strong></>}
                     {p.fecha && <span title={new Date(p.fecha).toLocaleString('es-MX')}> · {fmtRel(p.fecha)}</span>}
                     {p.lote && <> · Lote <code style={{ fontFamily: 'var(--lp-font-mono)' }}>{p.lote}</code></>}
