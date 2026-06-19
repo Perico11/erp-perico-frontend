@@ -417,10 +417,11 @@ export default function AsistenteFlotante() {
         }
         reemplazarUltimo(r && r.text ? r.text : 'No pude responder.');
       } catch (e) {
+        const motivo = e?.data?.error || e?.message || 'error de conexión';
         const res = navResultados(t);
         reemplazarUltimo(res.length
-          ? { text: 'Encontré esto — toca a dónde quieres ir:', results: res }
-          : 'No pude responder: ' + (e?.data?.error || e?.message || 'error de conexión'));
+          ? { text: 'La IA no está disponible ahorita (' + motivo + '). Mientras, te dejo accesos directos:', results: res }
+          : 'No pude responder: ' + motivo);
       }
     };
 
