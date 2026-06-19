@@ -863,6 +863,7 @@ export default function ProduccionPage() {
                         onError={(msg) => showToast('Error: ' + msg)}
                         onEnvasarInline={(l) => setEnvasarModal(l)}
                         onReenvasarInline={(tote, l) => setReenvasarModal(l)}
+                        onPrintQR={(s, l) => setPrintQR({ lote: l, sublotes: [s], tipo: s.tipo, q: s.qty, isTote: s.claseSublote === 'tote' || s.tipo === 'tote' || s.fase === 1 })}
                       />
                     </div>
                   ))}

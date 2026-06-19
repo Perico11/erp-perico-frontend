@@ -187,7 +187,7 @@ function QCInline({ lote, accion, userName, onSuccess, onCancel }) {
   );
 }
 
-export default function PedidoLoteActions({ pedido, lotes, userRol, userName, onSuccess, onError, onEnvasarInline, onReenvasarInline, ocultarVerSublotes }) {
+export default function PedidoLoteActions({ pedido, lotes, userRol, userName, onSuccess, onError, onEnvasarInline, onReenvasarInline, onPrintQR, ocultarVerSublotes }) {
   /* onEnvasarInline(lote) / onReenvasarInline(tote, lote): si se pasan (pantalla
      /flujo), los botones Envasar / Re-envasar abren el modal EN SITIO en vez de
      navegar a otra pestaña. Sin ellos, conservan el navigate (PedidosPage etc.).
@@ -644,6 +644,17 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
                     <span style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>
                       {(s.ub || 'fabrica') === 'teran' ? 'Terán' : 'Fábrica'}
                     </span>
+                    {/* Reimprimir QR del sublote: el modal post-envasado es de un
+                        solo uso; aquí queda disponible SIEMPRE desde la card. */}
+                    {onPrintQR && (s.qrPayload || s.cod) && (
+                      <button type="button" data-id="lote.btn.imprimir-qr"
+                        onClick={() => onPrintQR(s, lote)}
+                        title="Imprimir / reimprimir etiqueta QR de este sublote"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 9px', borderRadius: 8, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                        QR
+                      </button>
+                    )}
                   </div>
                 );
               })}
