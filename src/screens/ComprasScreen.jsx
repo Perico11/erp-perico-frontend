@@ -110,6 +110,9 @@ export default function ComprasScreen({
                   {/* #3 badge solicitud del técnico */}
                   {o.solicitud && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: tint(C.amber), color: C.amber, letterSpacing: '.03em' }}>SOLICITUD</span>}
                   <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(e.c), color: e.c }}>{e.l}</span>
+                  {/* "En inventario": la MP ya entró al stock. Antes era un botón gris al
+                      pie de la card; ahora es STATUS (no acción), junto a Recibida/Crédito. */}
+                  {o.estado === 'recibida' && !o.eliminada && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><Ico d={I_CHECK} s={12} /> En inventario</span>}
                   {/* Estatus de PAGO junto al estado: identifica crédito/pagada/contado
                       (p.ej. "Recibida · Crédito" = recibida pero falta pagar). */}
                   {o.pago === 'credito' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.amber), color: C.amber }}>Crédito</span>}
@@ -145,9 +148,9 @@ export default function ComprasScreen({
                     {can('eliminarOC') && <button data-id="compras.btn.eliminar-oc" data-rol="admin" title="Cancelar OC (solo admin)" onClick={() => onEliminarOC?.(o.cod)} style={btn('danger')}>Eliminar</button>}
                   </>}
                   {o.estado === 'recibida' && <>
-                    {o.eliminada
-                      ? <span style={{ ...btn('done'), color: C.danger }}>Eliminada</span>
-                      : <span style={btn('done')}><Ico d={I_CHECK} s={16} /> En inventario</span>}
+                    {/* "En inventario" se movió a badge de status arriba; aquí solo queda
+                        la marca de eliminada (caso de auditoría). */}
+                    {o.eliminada && <span style={{ ...btn('done'), color: C.danger }}>Eliminada</span>}
                     {/* Crédito sin pagar: Arely DEBE poder registrar el pago aunque Enrique
                         ya recibió la MP (el pago es posterior a la recepción). Antes este
                         botón solo vivía en 'activa' → al recibir desaparecía. */}
