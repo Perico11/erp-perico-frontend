@@ -3185,6 +3185,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
   const [prod, setProd] = useState('');
   const [search, setSearch] = useState('');
   const [cantidad, setCantidad] = useState('');
+  const [medida, setMedida] = useState('cubeta'); /* tote/cubeta/galón/litro/atomizador */
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [confirmNueva, setConfirmNueva] = useState(null);
@@ -3216,10 +3217,15 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
       const sim = nombresSimilares(elegido, ptList);
       if (sim.length > 0) { setConfirmNueva({ nombre: elegido, similares: sim }); return; }
     }
-    const qty = parseFloat(cantidad);
-    if (!qty || qty <= 0) return setError('La cantidad debe ser mayor a 0');
+    const cantNum = parseFloat(cantidad);
+    if (!cantNum || cantNum <= 0) return setError('La cantidad debe ser mayor a 0');
+    const qty = medidaACubetas(medida, cantNum); /* cubeta-equivalente para el stock base */
     setSaving(true); setError('');
-    try { await onSubmit(elegido, qty); }
+    try {
+      await onSubmit(elegido, qty);
+      /* Guarda la medida real (ej. "2 totes") como metadato — no rompe si falla. */
+      try { await api.ptMeta(elegido, { medida, medidaQty: cantNum }); } catch (_) {}
+    }
     catch (e) { setError(e?.data?.error || e?.message || 'No se pudo guardar'); }
     finally { setSaving(false); }
   };
@@ -3275,10 +3281,31 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
             )}
           </div>
           <div>
-            <label style={S.fieldLabel}>Cantidad a agregar (cubetas) *</label>
+            <label style={S.fieldLabel}>Medida *</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {PT_MEDIDAS.map(m => {
+                const on = medida === m.key;
+                return (
+                  <button key={m.key} type="button" onClick={() => setMedida(m.key)}
+                    style={{ height: 34, padding: '0 11px', borderRadius: 999, cursor: 'pointer',
+                      fontFamily: 'var(--lp-font-sans)', fontSize: 12, fontWeight: on ? 600 : 500,
+                      border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+                      background: on ? 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)' : 'var(--lp-bg-raised)',
+                      color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap' }}>
+                    {m.label}
+                  </button>
+                );
+              })}
+            </div>
+            <label style={S.fieldLabel}>Cantidad ({ptMedidaDef(medida)?.label || 'unidades'}) *</label>
             <input type="number" inputMode="decimal" step="1" min="0" style={S.fieldInput}
               placeholder="Ej: 12" value={cantidad} onChange={e => setCantidad(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }} />
+            {medida !== 'cubeta' && cantidad && parseFloat(cantidad) > 0 && (
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+                = <strong>{medidaACubetas(medida, parseFloat(cantidad)).toLocaleString('es-MX', { maximumFractionDigits: 1 })}</strong> cubetas-equivalente
+              </div>
+            )}
           </div>
           {error && <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>{error}</div>}
         </div>
