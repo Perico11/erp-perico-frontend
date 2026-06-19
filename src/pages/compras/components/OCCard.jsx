@@ -163,6 +163,13 @@ export default function OCCard({ oc, onRefresh }) {
     return (oc.items || []).reduce((s, it) => s + (Number(it.kg_recibidos) || 0), 0);
   }, [oc.items]);
 
+  /* Producto = precio base × kg. precioUnitario lo enriquece el server desde el
+     costoBase del maestro; antes la card mostraba SOLO el flete. */
+  const productoMxn = useMemo(() => {
+    return (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
+  }, [oc.items]);
+  const sinFacturaReal = !(Number(oc.totalFacturaConIva) > 0);
+
   const stripeColor = oc.estado === 'recibida' || oc.estado === 'completada'
     ? S.stripeRecibida
     : oc.eliminada || oc.estado === 'eliminada'
@@ -270,11 +277,27 @@ export default function OCCard({ oc, onRefresh }) {
               {totalKg} kg {totalRecibido > 0 && `(${totalRecibido} recibidos)`}
             </span>
           </div>
+          {productoMxn > 0 && sinFacturaReal && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--lp-text-secondary)', marginBottom: 4 }}>
+              <span>Producto (precio base × kg):</span>
+              <span style={{ fontFamily: 'var(--lp-font-mono)' }}>
+                ${fmt(productoMxn)}
+              </span>
+            </div>
+          )}
           {oc.fleteEstimadoMxn > 0 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--lp-text-secondary)' }}>
               <span>Flete:</span>
               <span style={{ fontFamily: 'var(--lp-font-mono)' }}>
                 ${fmt(oc.fleteEstimadoMxn)}
+              </span>
+            </div>
+          )}
+          {productoMxn > 0 && sinFacturaReal && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, color: 'var(--lp-text-primary)', marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--lp-border-subtle)' }}>
+              <span>Total estimado:</span>
+              <span style={{ fontFamily: 'var(--lp-font-mono)' }}>
+                ${fmt(productoMxn + (Number(oc.fleteEstimadoMxn) || 0))}
               </span>
             </div>
           )}

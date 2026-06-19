@@ -174,6 +174,21 @@ function _ocMonto(oc) {
   return null;
 }
 
+/* Desglose para la card: PRODUCTO (precio base × kg — `precioUnitario` lo
+   enriquece el server desde el costoBase del maestro) y FLETE por separado.
+   Arely veía SOLO el flete; ahora se muestran ambos + total. Con factura real
+   registrada, manda el total (no desglosamos). */
+function _ocProducto(oc) {
+  if (Number(oc.totalFacturaConIva) > 0) return null;
+  const prod = (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
+  return prod > 0 ? fmtMoney(prod) : null;
+}
+function _ocFleteFmt(oc) {
+  if (Number(oc.totalFacturaConIva) > 0) return null;
+  const f = Number(oc.fleteEstimadoMxn) || 0;
+  return f > 0 ? fmtMoney(f) : null;
+}
+
 function _ocKgTotal(oc) {
   return (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0), 0);
 }
@@ -378,6 +393,8 @@ function OCDeskRow({ oc, onRefresh, can }) {
   const a = useOCActions(oc, onRefresh, can);
   const ev = _ocEstadoVisual(oc, a);
   const monto = _ocMonto(oc);
+  const producto = _ocProducto(oc);
+  const flete = _ocFleteFmt(oc);
   const kg = _ocKgTotal(oc);
   return (
     <>
@@ -393,6 +410,11 @@ function OCDeskRow({ oc, onRefresh, can }) {
         <td style={S.td}>{oc.proveedor || '—'}</td>
         <td style={{ ...S.td, textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>
           {monto || <span style={{ color: 'var(--lp-text-disabled)' }}>—</span>}
+          {producto && (
+            <div style={{ fontSize: 10, fontWeight: 500, color: 'var(--lp-text-tertiary)', marginTop: 2, whiteSpace: 'nowrap' }}>
+              prod {producto}{flete ? ` + flete ${flete}` : ''}
+            </div>
+          )}
         </td>
         <td style={{ ...S.td, fontSize: 11, color: 'var(--lp-text-secondary)' }}>{_ocPagoLabel(oc)}</td>
         <td style={S.td}>
@@ -412,6 +434,8 @@ function OCMobileCard({ oc, onRefresh, can }) {
   const a = useOCActions(oc, onRefresh, can);
   const ev = _ocEstadoVisual(oc, a);
   const monto = _ocMonto(oc);
+  const producto = _ocProducto(oc);
+  const flete = _ocFleteFmt(oc);
   const stripe = ev.color;
   return (
     <div data-id="compras.card.oc"
@@ -432,9 +456,15 @@ function OCMobileCard({ oc, onRefresh, can }) {
         {_ocMPLabel(oc)}
       </div>
       <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3 }}>
-        {oc.proveedor || 'Proveedor'}{monto ? ` · ` : ''}
-        {monto && <span style={{ fontFamily: 'var(--lp-font-mono)' }}>{monto}</span>}
+        {oc.proveedor || 'Proveedor'}
       </div>
+      {(producto || flete || monto) && (
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginTop: 6, fontSize: 12, fontFamily: 'var(--lp-font-mono)' }}>
+          {producto && <span style={{ color: 'var(--lp-text-tertiary)' }}>Producto <b style={{ color: 'var(--lp-text-secondary)', fontWeight: 700 }}>{producto}</b></span>}
+          {flete && <span style={{ color: 'var(--lp-text-tertiary)' }}>Flete <b style={{ color: 'var(--lp-text-secondary)', fontWeight: 700 }}>{flete}</b></span>}
+          {monto && <span style={{ color: 'var(--lp-text-tertiary)' }}>Total <b style={{ color: 'var(--lp-text-primary)', fontWeight: 700 }}>{monto}</b></span>}
+        </div>
+      )}
       <div style={{ marginTop: 8 }}>
         <OCCreditAlert a={a} oc={oc} />
       </div>
