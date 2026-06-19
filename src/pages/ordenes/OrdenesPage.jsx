@@ -1337,7 +1337,10 @@ export default function OrdenesPage() {
 
   /* Producir: muestra NDA. Bypass: Emmanuel (id='admin') arranca directo. */
   const handleProducir = useCallback((orden) => {
-    if (user && user.id === 'admin') {
+    /* NDA: admin (propietario) o vigencia de 7 días ya aceptada → arranca
+       directo. Evita re-consentir el NDA al producir desde la card cuando ya se
+       aceptó al aceptar el pedido (misma key 'produccion'). */
+    if ((user && user.id === 'admin') || ndaYaAceptado(user, 'produccion')) {
       arrancarOrden(orden);
       return;
     }

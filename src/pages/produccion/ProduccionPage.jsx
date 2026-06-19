@@ -8,7 +8,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
-import NDAModal from '../../components/NDAModal';
+import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
 /* DECISIÓN OWNER jun 2026: al terminar la producción, la card del lote NO se
    va de esta pantalla — permanece aquí (QC → envasado) hasta envasarse por
@@ -455,7 +455,10 @@ export default function ProduccionPage() {
   /* Emmanuel (id='admin') es el propietario de las fórmulas — bypass del NDA.
      Para cualquier otro usuario se muestra el modal NDA antes de arrancar. */
   const handleStartProduccion = useCallback((it) => {
-    if (user && user.id === 'admin') {
+    /* NDA: admin (propietario) o vigencia de 7 días ya aceptada → sin modal.
+       Antes solo admin se exceptuaba, forzando re-consentir aquí aunque el
+       técnico ya hubiera aceptado en Pedidos/Órdenes (misma key 'produccion'). */
+    if ((user && user.id === 'admin') || ndaYaAceptado(user, 'produccion')) {
       /* Bypass NDA: ejecutar la lógica de arranque directamente */
       (async () => {
         if (it._tipo === 'pedido' && it.estado === 'aceptado') {

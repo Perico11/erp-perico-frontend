@@ -9,7 +9,7 @@ import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import HelpHint from '../../components/HelpHint';
 import Cronometro from '../../components/Cronometro';
-import NDAModal from '../../components/NDAModal';
+import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
 import PedidoLoteActions from '../../components/PedidoLoteActions';
 import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
@@ -727,11 +727,16 @@ export default function PedidosPage() {
     } finally {
       setBusyId('');
     }
-    if (user && user.id === 'admin') {
+    /* NDA: el propietario (admin) o quien YA aceptó dentro de la vigencia de 7
+       días arranca directo — sin re-mostrar el aviso. Antes solo se exceptuaba
+       a admin, así que el técnico re-consentía el NDA en CADA pantalla/acción
+       (Pedidos → Producción → Órdenes) aunque lo hubiera aceptado segundos
+       antes. Misma key 'produccion' que el resto del pipeline. */
+    if ((user && user.id === 'admin') || ndaYaAceptado(user, 'produccion')) {
       arrancarProduccion(p);
       return;
     }
-    setPendingProd(p);  /* dispara el modal NDA */
+    setPendingProd(p);  /* dispara el modal NDA (solo si no hay vigencia vigente) */
   };
 
   /* Callback cuando el usuario acepta el NDA.
