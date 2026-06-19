@@ -110,6 +110,11 @@ export default function ComprasScreen({
                   {/* #3 badge solicitud del técnico */}
                   {o.solicitud && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: tint(C.amber), color: C.amber, letterSpacing: '.03em' }}>SOLICITUD</span>}
                   <span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(e.c), color: e.c }}>{e.l}</span>
+                  {/* Estatus de PAGO junto al estado: identifica crédito/pagada/contado
+                      (p.ej. "Recibida · Crédito" = recibida pero falta pagar). */}
+                  {o.pago === 'credito' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.amber), color: C.amber }}>Crédito</span>}
+                  {o.pago === 'credito-pagado' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.ok), color: C.ok }}>Pagada</span>}
+                  {o.pago === 'contado' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.ok), color: C.ok }}>Contado</span>}
                 </div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>{o.mp}</div>
                 {o.qty && <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{o.qty}</div>}
@@ -143,7 +148,11 @@ export default function ComprasScreen({
                     {o.eliminada
                       ? <span style={{ ...btn('done'), color: C.danger }}>Eliminada</span>
                       : <span style={btn('done')}><Ico d={I_CHECK} s={16} /> En inventario</span>}
-                    {o.comp && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver comprobante adjunto" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
+                    {/* Crédito sin pagar: Arely DEBE poder registrar el pago aunque Enrique
+                        ya recibió la MP (el pago es posterior a la recepción). Antes este
+                        botón solo vivía en 'activa' → al recibir desaparecía. */}
+                    {!o.eliminada && o.pago === 'credito' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} title="Registrar el pago del crédito (sube comprobante)" onClick={() => onRegistrarPago?.(o.cod)} style={btn('primary')}>Registrar pago</button>}
+                    {!o.eliminada && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver recepción, firma, factura y pago" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
                     {!o.eliminada && can('compras') && <button data-id="compras.btn.imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
                   </>}
                 </div>

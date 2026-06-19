@@ -47,6 +47,7 @@ export default function AprobarOCModal({ oc, onClose, onSaved }) {
   const [fileName, setFileName] = useState('');
   const [fileB64, setFileB64] = useState('');
   const [ref, setRef] = useState('');
+  const [dias, setDias] = useState(30); /* días de crédito — editable (no siempre 30) */
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -68,7 +69,7 @@ export default function AprobarOCModal({ oc, onClose, onSaved }) {
     if (!puede) { setErr('Adjunta el comprobante y captura la referencia.'); return; }
     setSaving(true);
     try {
-      await api.aprobarOC({ id: oc.id, pago, referencia: ref.trim(), comprobantePdfBase64: fileB64, comprobanteNombre: fileName });
+      await api.aprobarOC({ id: oc.id, pago, referencia: ref.trim(), comprobantePdfBase64: fileB64, comprobanteNombre: fileName, diasCredito: pago === 'credito' ? Math.max(1, parseInt(dias) || 30) : undefined });
       onSaved && onSaved();
       onClose && onClose();
     } catch (e) {
@@ -91,15 +92,20 @@ export default function AprobarOCModal({ oc, onClose, onSaved }) {
 
         <label style={S.lbl}>Forma de pago</label>
         <div style={S.seg}>
-          <button style={S.segb(pago === 'credito')} onClick={() => { setPago('credito'); }}>Crédito 30 días</button>
+          <button style={S.segb(pago === 'credito')} onClick={() => { setPago('credito'); }}>Crédito</button>
           <button style={S.segb(pago === 'contado')} onClick={() => { setPago('contado'); }}>Contado</button>
         </div>
 
         {!esContado && (
-          <div style={S.vene}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
-            <span>Vence en <strong>30 días</strong>. El sistema avisa cuando esté por vencer y si se pasa la fecha de pago.</span>
-          </div>
+          <>
+            <label style={S.lbl}>Días de crédito</label>
+            <input style={S.input} type="number" min="1" max="365" inputMode="numeric"
+              value={dias} onChange={(e) => setDias(e.target.value)} placeholder="Ej. 30, 45, 60…" />
+            <div style={S.vene}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
+              <span>Vence en <strong>{Math.max(1, parseInt(dias) || 30)} días</strong>. El sistema avisa cuando esté por vencer y si se pasa la fecha de pago.</span>
+            </div>
+          </>
         )}
 
         <label style={S.lbl}>{esContado ? 'Comprobante de pago' : 'Comprobante de compra (factura / remisión)'} · obligatorio</label>

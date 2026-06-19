@@ -25,6 +25,7 @@ import RegistrarPagoModal from './components/RegistrarPagoModal';
 import EditOCModal from './components/EditOCModal';
 import RecibirOCModal from './components/RecibirOCModal';
 import EliminarOCModal from './components/EliminarOCModal';
+import ComprobantesOCModal from './components/ComprobantesOCModal';
 /* Mockup integracion/Compras.html: documento de OC imprimible con partidas */
 import PrintOCOverlay from './components/PrintOCOverlay';
 import ComprasScreen from '../../screens/ComprasScreen';
@@ -564,7 +565,7 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onRecibirMP={(cod) => openModal(cod, 'recibir')}
         onRegistrarPago={(cod) => openModal(cod, 'pago')}
         onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) setPrintOC(oc); }}
-        onVerComprobante={(cod) => { const oc = findOC(cod); if (oc) window.open(`/api/compras/oc/comprobante/${oc.id}`, '_blank'); }}
+        onVerComprobante={(cod) => openModal(cod, 'comprobante')}
       />
 
       {/* FAB móvil (paquete MOCKUP 8) — misma acción que "Levantar OC" */}
@@ -580,6 +581,7 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       {active?.type === 'editar'   && <EditOCModal       oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'recibir'  && <RecibirOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'eliminar' && <EliminarOCModal   oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
+      {active?.type === 'comprobante' && <ComprobantesOCModal oc={active.oc} onClose={closeModal} />}
 
       {showNew && (
         <NewOCModal
