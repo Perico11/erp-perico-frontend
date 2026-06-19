@@ -5,6 +5,7 @@ import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import humanizeError from '../../utils/humanizeError';
+import { PT_MEDIDAS, ptMedidaDef, medidaACubetas } from '../../utils/ptMedidas';
 
 /* ═══════════════════════════════════════════════════════════════════════
    NuevoPedidoModal — reskin mockup Pedidos.html (jun 2026).
@@ -97,6 +98,7 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
   /* Si llega prefillProducto (desde Inventario → "Pedir reposición"), inicializa el campo */
   const [producto, setProducto] = useState(prefillProducto || '');
   const [cantidad, setCantidad] = useState('');
+  const [medida, setMedida] = useState('cubeta'); /* tote/cubeta/galón/litro/atomizador */
   const [solicitante, setSolicitante] = useState('');
   const [esPrueba, setEsPrueba] = useState(false);
   const [formulas, setFormulas] = useState([]);
@@ -141,8 +143,9 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
 
   const handleSave = async () => {
     if (!producto.trim()) return setErr('Selecciona el producto');
-    const cant = parseInt(cantidad);
-    if (!cant || cant < 1) return setErr('Cantidad debe ser un número mayor a 0');
+    const cantMed = parseInt(cantidad);
+    if (!cantMed || cantMed < 1) return setErr('Cantidad debe ser un número mayor a 0');
+    const cant = Math.round(medidaACubetas(medida, cantMed)); /* cubeta-equivalente para producción */
     if (!solicitante.trim()) return setErr('Indica el solicitante');
 
     /* Sprint G-4: useConfirm en lugar de window.confirm nativo.
@@ -164,6 +167,8 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         id,
         producto: producto.trim(),
         cantidad: cant,
+        medida,
+        medidaQty: cantMed,
         solicitante: solicitante.trim(),
         esPrueba,
         estado: 'pendiente',
@@ -214,7 +219,23 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
           {formulas.map((f, i) => <option key={i} value={f.nombre || f} />)}
         </datalist>
 
-        <label style={S.label} htmlFor="np-qty">Cantidad (cubetas) *</label>
+        <label style={S.label}>Medida *</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+          {PT_MEDIDAS.map((m) => {
+            const on = medida === m.key;
+            return (
+              <button key={m.key} type="button" onClick={() => setMedida(m.key)}
+                style={{ height: 34, padding: '0 11px', borderRadius: 999, cursor: 'pointer',
+                  fontFamily: 'var(--lp-font-sans)', fontSize: 12, fontWeight: on ? 600 : 500,
+                  border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+                  background: on ? 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)' : 'var(--lp-bg-raised)',
+                  color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap' }}>
+                {m.label}
+              </button>
+            );
+          })}
+        </div>
+        <label style={S.label} htmlFor="np-qty">Cantidad ({ptMedidaDef(medida)?.label || 'unidades'}) *</label>
         <input
           id="np-qty"
           className="np-finput"
@@ -226,6 +247,11 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
           onChange={(e) => setCantidad(e.target.value)}
           placeholder="52"
         />
+        {medida !== 'cubeta' && cantidad && parseInt(cantidad) > 0 && (
+          <div style={{ marginTop: -4, marginBottom: 6, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+            = <strong>{Math.round(medidaACubetas(medida, parseInt(cantidad)))}</strong> cubetas-equivalente
+          </div>
+        )}
 
         <label style={S.label} htmlFor="np-sol">Solicitante *</label>
         <input

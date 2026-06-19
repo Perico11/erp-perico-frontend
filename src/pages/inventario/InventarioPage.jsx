@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { PT_MEDIDAS, ptMedidaDef, medidaACubetas, etiquetaMedida } from '../../utils/ptMedidas';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
@@ -527,29 +528,8 @@ function MPRow({ item, canEdit, canContar, onAdjust, onContar, query }) {
 }
 
 /* ── PT Row component (with optional editing + CTA "Pedir reposición") ── */
-/* Medidas en que se captura el PT. La CUBETA (19 L) es la unidad base de
-   contabilidad; el cubeta-equivalente (para costo/forecast/mínimos) se deriva de
-   los ml de cada medida (volúmenes del catálogo de envases + tote = 52 cubetas).
-   Agregar una medida nueva = una línea más aquí. */
-const CUBETA_ML = 19000;
-const PT_MEDIDAS = [
-  { key: 'tote',          label: 'Tote',              ml: 988000, sing: 'tote',       plur: 'totes' },
-  { key: 'cubeta',        label: 'Cubeta',            ml: 19000,  sing: 'cubeta',     plur: 'cubetas' },
-  { key: 'galon',         label: 'Galón',             ml: 3785,   sing: 'galón',      plur: 'galones' },
-  { key: 'litro',         label: 'Litro',             ml: 946,    sing: 'litro',      plur: 'litros' },
-  { key: 'atomizador750', label: 'Atomizador 750 ml', ml: 750,    sing: 'atomizador', plur: 'atomizadores' },
-];
-const ptMedidaDef = (key) => PT_MEDIDAS.find(m => m.key === key) || null;
-const cubetasPorMedida = (key) => { const m = ptMedidaDef(key); return m ? m.ml / CUBETA_ML : 1; };
-/* cantidad en una medida → cubetas-equivalente (base). Ej. tote × 2 = 104. */
-const medidaACubetas = (key, cant) => Math.round((Number(cant) || 0) * cubetasPorMedida(key) * 1000) / 1000;
-/* etiqueta legible: (tote, 2) → "2 totes" · (cubeta, 1) → "1 cubeta" */
-const etiquetaMedida = (key, cant) => {
-  const m = ptMedidaDef(key); if (!m) return '';
-  const n = Number(cant) || 0;
-  const palabra = n === 1 ? m.sing : m.plur;
-  return `${n.toLocaleString('es-MX')} ${palabra}${key === 'atomizador750' ? ' 750 ml' : ''}`;
-};
+/* PT_MEDIDAS / ptMedidaDef / medidaACubetas / etiquetaMedida → módulo compartido
+   ../../utils/ptMedidas (también lo usa Pedidos). */
 
 /* Badge con la MEDIDA real del PT (ej. "2 totes", "327 cubetas"). Tote (granel,
    sin envasar) en ámbar; el resto (envasado) en verde. El cubeta-equivalente va
