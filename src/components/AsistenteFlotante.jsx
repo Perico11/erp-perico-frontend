@@ -491,8 +491,17 @@ export default function AsistenteFlotante() {
         t.scrollIntoView({ behavior: 'smooth', block: 'center' });
         t.classList.add('pp-asistente-pulse');
         setTimeout(() => t.classList.remove('pp-asistente-pulse'), 2600);
-        /* abrir = el bot abre el formulario directo (solo botones marcados abribles). */
-        if (abrir && ABRIBLES.has(entry.dataId)) setTimeout(() => { try { t.click(); } catch (_) {} }, 450);
+        /* abrir = el bot abre el formulario directo (solo botones marcados abribles).
+           RE-CONSULTAMOS el elemento al momento del click: la página pudo re-renderizar
+           en estos ms y dejar `t` desconectado del DOM (un .click() sobre un elemento
+           muerto no dispara nada). Buscamos el botón vivo y clicamos el clickable real. */
+        if (abrir && ABRIBLES.has(entry.dataId)) setTimeout(() => {
+          try {
+            const vivo = document.querySelector(`[data-id="${entry.dataId}"]`) || t;
+            const clickable = vivo.closest('button, a, [role="button"]') || vivo.querySelector('button, a, [role="button"]') || vivo;
+            clickable.click();
+          } catch (_) {}
+        }, 550);
       } else if (tries >= 20) {
         clearInterval(poll);
       }
