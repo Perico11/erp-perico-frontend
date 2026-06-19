@@ -287,6 +287,9 @@ export default function AsistenteFlotante() {
   };
 
   const esAdmin = user?.rol === 'admin';
+  /* Permiso granular real (mismo can() del ERP) — para que el cerebro offline
+     gatee acciones sin depender de la IA. */
+  const can = (p) => !!(auth && typeof auth.can === 'function' && auth.can(p));
   const pushBot = (msg) => setMensajes(m => [...m, typeof msg === 'string' ? { from: 'bot', text: msg } : { from: 'bot', ...msg }]);
   const reemplazarUltimo = (payload) => setMensajes(m => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].from === 'bot') { c[i] = typeof payload === 'string' ? { from: 'bot', text: payload } : { from: 'bot', ...payload }; break; } return c; });
 
@@ -439,14 +442,35 @@ export default function AsistenteFlotante() {
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
       return;
     }
-    /* Navegación de ALTA confianza (match exacto de frase, p.ej. "compras") →
-       vamos directo sin gastar IA. Lo ambiguo lo decide Claude. */
-    const matches = visibles.map(e => ({ e, s: _score(t, e) })).filter(r => r.s > 0).sort((a, b) => b.s - a.s);
-    if (matches.length && matches[0].s >= 100 && (matches.length === 1 || matches[0].s > matches[1].s + 20)) {
-      pushBot(`Te llevo a ${matches[0].e.label}.`);
-      setTimeout(() => ir(matches[0].e), 350);
+    /* CEREBRO OFFLINE (gratis, sin IA): si hay un match CLARO resuelve solo —
+       sin permiso → lo dice + alternativas; pregunta → pasos + botón; navegar/
+       crear → va directo (y abre el formulario si aplica). Lo ambiguo o
+       conversacional cae a la IA (que entiende frase libre y da más detalle). */
+    const off = visibles.map(e => ({ e, s: _score(t, e) })).filter(r => r.s > 0).sort((a, b) => b.s - a.s);
+    const top = off[0];
+    if (top && top.s >= 55 && (off.length === 1 || top.s > (off[1] ? off[1].s : 0) + 10)) {
+      const e = top.e;
+      const limpio = e.label.replace(/^Botón:\s*/, '');
+      const perm = _permDe(e);
+      if (perm && !can(perm)) {
+        const alt = off.filter(r => r.e !== e && (!_permDe(r.e) || can(_permDe(r.e)))).slice(0, 3).map(r => r.e);
+        pushBot(alt.length
+          ? { text: `No tienes permiso para "${limpio}". Lo que sí puedes:`, results: alt }
+          : `No tienes permiso para "${limpio}".`);
+        return;
+      }
+      const norm = _norm(t);
+      const esPregunta = /\?\s*$/.test(t) || /\b(como|cuales|cual|donde|que pasos|para que|se puede|puedo|necesito saber)\b/.test(norm);
+      if (esPregunta) {
+        pushBot({ text: e.sub ? `Para eso ve a: ${e.sub}` : 'Aquí lo haces:', results: [e] });
+      } else {
+        const abrir = /\b(abre|abreme|crear|nuevo|nueva|registrar|levantar|hazme|quiero)\b/.test(norm);
+        pushBot(`Listo, te llevo a ${limpio}.`);
+        setTimeout(() => ir(e, abrir), 350);
+      }
       return;
     }
+    /* Nada claro offline → IA (frase libre, datos en vivo, conversación). */
     pushBot('Pensando…');
     await responderIA();
   };
