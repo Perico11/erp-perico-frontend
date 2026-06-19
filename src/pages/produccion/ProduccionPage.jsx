@@ -14,7 +14,7 @@ import PageTabs from '../../components/ui/PageTabs';
    va de esta pantalla — permanece aquí (QC → envasado) hasta envasarse por
    completo; después sigue su ciclo en Pedidos. Card canónica + modal inline. */
 import PedidoLoteActions from '../../components/PedidoLoteActions';
-import { EnvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
+import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /* ICONOS — line SVG (sin emojis). Diseño verde Claude Design.         */
@@ -489,6 +489,10 @@ export default function ProduccionPage() {
   const { data: envData } = useApiData(() => api.getEnvases(), null, 30000);
   const envases = envData?.data || envData || null;
   const [envasarModal, setEnvasarModal] = useState(null); /* lote */
+  /* Reenvasar TOTE → presentaciones finales. Enrique reenvasa en fábrica; su
+     única entrada era Stock Fábrica (ahora oculta al técnico), así que se trae
+     el modal canónico aquí inline (igual que FlujoPage). */
+  const [reenvasarModal, setReenvasarModal] = useState(null); /* lote con TOTE activo */
   const [printQR, setPrintQR] = useState(null);
 
   /* Realtime: refrescar todas las fuentes ante cambios */
@@ -858,6 +862,7 @@ export default function ProduccionPage() {
                         onSuccess={(msg) => { showToast(msg || 'Listo'); reloadTraz(); reloadPed(); reloadOrd(); }}
                         onError={(msg) => showToast('Error: ' + msg)}
                         onEnvasarInline={(l) => setEnvasarModal(l)}
+                        onReenvasarInline={(tote, l) => setReenvasarModal(l)}
                       />
                     </div>
                   ))}
@@ -1092,6 +1097,21 @@ export default function ProduccionPage() {
           onSuccess={(payload) => {
             setEnvasarModal(null); reloadTraz(); reloadPed(); reloadOrd();
             showToast(`Envasado: ${payload?.q ?? ''} ${payload?.tipo || ''}`.trim());
+            const s = payload?.sublotes?.[0];
+            if (s?.qrPayload || s?.cod) setPrintQR(payload);
+          }}
+        />
+      )}
+      {/* ── Reenvasado inline: TOTE → presentaciones finales (mismo modal
+            canónico de Stock Fábrica). Sin esto el botón "Reenvasar" de
+            PedidoLoteActions caía a navigate('/stock-fabrica'), oculto al técnico. ── */}
+      {reenvasarModal && (
+        <ReenvasadoModal
+          lote={reenvasarModal} envases={envases} userName={userName}
+          onClose={() => setReenvasarModal(null)}
+          onSuccess={(payload) => {
+            setReenvasarModal(null); reloadTraz(); reloadPed(); reloadOrd();
+            showToast(`Re-envasado: ${payload?.q ?? ''} ${payload?.tipo || ''}`.trim());
             const s = payload?.sublotes?.[0];
             if (s?.qrPayload || s?.cod) setPrintQR(payload);
           }}
