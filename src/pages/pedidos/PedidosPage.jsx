@@ -698,7 +698,11 @@ export default function PedidosPage() {
       const r = await api.aceptarYProducir(p.id, { lanzarProduccion: true, ndaAceptado: true });
       if (!r?.ok) throw new Error(r?.error || 'No se pudo iniciar producción');
       reload();
-      navigate('/produccion');
+      /* ?continuar=<id>: aterrizar en Producción con el WIZARD del lote ya
+         abierto, en vez de soltar a Enrique en la lista a buscar el card que
+         "saltó" de sub-pestaña al cambiar de estado. ProduccionPage matchea por
+         id o pedidoId y abre prodModal directo. */
+      navigate('/produccion?continuar=' + encodeURIComponent(p.id));
     } catch (e) {
       setErr(e?.data?.error || e.message);
     } finally {

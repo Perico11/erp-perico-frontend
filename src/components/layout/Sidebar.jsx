@@ -51,7 +51,12 @@ const NAV_ITEMS = [
      aquí) se eliminó por duplicar Pedidos. */
   { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico'] },
   { key: 'produccion',   label: 'Producción',   path: '/produccion',    icon: icons.produccion,   perm: 'produccion' },
-  { key: 'stockFabrica', label: 'Stock Fábrica',path: '/stock-fabrica', icon: icons.stockFabrica, perm: 'stockFabrica' },
+  /* Stock Fábrica restringido a admin/almacén (jun 2026, decisión owner): para
+     Enrique (técnico) era redundante — el stock vive en Inventarios ▸ PT ▸
+     Fábrica y el ENVASAR ya está en Producción ▸ En envasado. Josué conserva la
+     pantalla para reenvasar totes y transferir a Terán (lo único que solo vive
+     aquí). Mismo patrón roles[] que "Recepción Terán". */
+  { key: 'stockFabrica', label: 'Stock Fábrica',path: '/stock-fabrica', icon: icons.stockFabrica, perm: 'stockFabrica', roles: ['admin','almacen'] },
   { key: 'recoleccion',  label: 'Recolección',  path: '/recoleccion',   icon: icons.recoleccion,  perm: 'recoleccion' },
   /* FIX jun 2026 (censo menú): la pantalla PRINCIPAL de Josué no existía en el
      sidebar — solo se llegaba por card del Dashboard o el sheet móvil (roto). */

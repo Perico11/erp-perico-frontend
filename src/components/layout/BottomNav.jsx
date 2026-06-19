@@ -89,7 +89,10 @@ const SECCIONES = [
       { path: '/ordenes',                 label: 'Órdenes',       icon: ICONS.ordenes,       perm: 'ordenes',     roles: ['admin','tecnico'] },
       { path: '/produccion',              label: 'Lanzar lote',   icon: ICONS.produccionSub, perm: 'produccion' },
       { path: '/produccion?tab=calidad',  label: 'Calidad QC',    icon: ICONS.lab,           perm: 'produccion' },
-      { path: '/stock-fabrica',           label: 'Stock fábrica', icon: ICONS.stockFabrica,  perm: 'stockFabrica' },
+      /* Stock Fábrica: solo admin/almacén (jun 2026). Para Enrique era redundante
+         (stock = Inventarios ▸ PT ▸ Fábrica; envasar = Producción ▸ En envasado).
+         Josué la conserva para reenvasar + transferir a Terán. */
+      { path: '/stock-fabrica',           label: 'Stock fábrica', icon: ICONS.stockFabrica,  perm: 'stockFabrica', roles: ['admin','almacen'] },
       /* FIX jun 2026 (K8): pantalla principal de Josué (escanear QR para
          recibir PT en Terán) faltaba en sheet. Solo se llegaba por KPI
          del Dashboard o URL directa. */
