@@ -526,6 +526,8 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       solicitud: oc.origen === 'solicitud_tecnico' || oc.estado === 'solicitud',
       /* eliminada cae en el bucket 'recibida' (auditoría) pero se etiqueta distinto */
       eliminada: oc.eliminada || oc.estado === 'eliminada',
+      /* FALTANTE: recibida con menos kg de los pedidos → badge en ComprasScreen. */
+      faltante: !!oc.faltante,
     };
   }), [ocs]);
 

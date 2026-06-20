@@ -118,6 +118,8 @@ export default function ComprasScreen({
                   {o.pago === 'credito' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.amber), color: C.amber }}>Crédito</span>}
                   {o.pago === 'credito-pagado' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.ok), color: C.ok }}>Pagada</span>}
                   {o.pago === 'contado' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.ok), color: C.ok }}>Contado</span>}
+                  {/* FALTANTE: la OC se recibió con menos kg de los pedidos. */}
+                  {o.faltante && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: tint(C.danger), color: C.danger, letterSpacing: '.03em' }}>FALTANTE</span>}
                 </div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>{o.mp}</div>
                 {o.qty && <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{o.qty}</div>}

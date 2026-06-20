@@ -43,6 +43,7 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
   const canvasRef = useRef(null);
   const drawingRef = useRef(false);
   const [hasFirma, setHasFirma] = useState(false);
+  const [confirmFaltante, setConfirmFaltante] = useState(false); /* gate explícito al recibir de menos */
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -58,6 +59,7 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
 
   const updateRecibido = (idx, val) => {
     const v = val === '' ? 0 : Number(val);
+    setConfirmFaltante(false); /* cambió la cantidad → re-confirmar el faltante */
     setItems(items.map((it, i) => i === idx ? { ...it, kg_recibidos: v } : it));
   };
 
@@ -104,6 +106,14 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
       setErr('Si la calidad NO es OK, describe el motivo en las notas');
       return;
     }
+    /* Recepción PARCIAL: si llega menos de lo pedido, exigir confirmación explícita.
+       La OC se cierra con badge FALTANTE; el faltante NO se reordena solo. */
+    const faltanteKg = +(totalPedido - totalRecibido).toFixed(3);
+    if (faltanteKg > 0.01 && !confirmFaltante) {
+      setConfirmFaltante(true);
+      setErr('');
+      return;
+    }
     setSaving(true);
     try {
       const firma = canvasRef.current.toDataURL('image/png');
@@ -133,6 +143,11 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
         </div>
 
         {err && <div style={S.err}>{err}</div>}
+        {confirmFaltante && (
+          <div style={{ background: 'var(--lp-warning-50)', border: '1.5px solid var(--lp-warning-600)', color: 'var(--lp-warning-700)', padding: '10px 12px', borderRadius: 8, fontSize: 12.5, marginBottom: 12, lineHeight: 1.45 }}>
+            <strong>Vas a cerrar la OC con FALTANTE de {(+(totalPedido - totalRecibido).toFixed(3)).toLocaleString('es-MX')} kg.</strong> Quedará marcada como <strong>FALTANTE</strong> y el faltante NO se reordena automáticamente. Si es correcto, vuelve a pulsar el botón.
+          </div>
+        )}
 
         <div style={S.fieldGroup}>
           <label style={S.label}>Kg recibidos por item</label>
@@ -190,8 +205,9 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
                 background: calidadOk ? 'var(--lp-success-50)' : '#fff',
                 color: calidadOk ? 'var(--lp-success-700)' : 'var(--lp-text-secondary)',
                 cursor: 'pointer', fontFamily: 'inherit',
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5,
               }}>
-              ✓ Calidad OK
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Calidad OK
             </button>
             <button
               type="button"
@@ -246,8 +262,8 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
 
         <div style={S.buttons}>
           <button style={{ ...S.btn, ...S.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...S.btn, ...S.btnSuccess }} onClick={recibir} disabled={saving}>
-            {saving ? 'Procesando...' : 'Confirmar recepción'}
+          <button style={{ ...S.btn, ...(confirmFaltante ? { background: 'var(--lp-warning-600)', color: '#fff' } : S.btnSuccess) }} onClick={recibir} disabled={saving}>
+            {saving ? 'Procesando...' : confirmFaltante ? 'Confirmar con faltante' : 'Confirmar recepción'}
           </button>
         </div>
       </div>
