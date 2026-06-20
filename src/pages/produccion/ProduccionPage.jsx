@@ -663,10 +663,11 @@ export default function ProduccionPage() {
     const lotesHoy = lotes.filter(l => l.fecha?.startsWith(hoy)).length;
     const lotesMes = lotes.filter(l => l.fecha?.startsWith(mes)).length;
     const total = ordenes.filter(o => !o.eliminado).length;
-    const completadas = ordenes.filter(o => o.estado === 'terminada' || o.estado === 'entregada').length;
     const qcAprobados = qcRecords.filter(r => r.resultado === 'aprobado').length;
     const qcRechazados = qcRecords.filter(r => r.resultado === 'rechazado').length;
-    return { lotesHoy, lotesMes, total, completadas, qcAprobados, qcRechazados };
+    /* `completadas` eliminado (auditoría): usaba estados legacy 'terminada'/'entregada'
+       que el flujo canónico ya no emite → siempre daba 0 y no se renderiza. */
+    return { lotesHoy, lotesMes, total, qcAprobados, qcRechazados };
   }, [lotes, ordenes, qcRecords]);
 
   /* Sprint H (jun 2026, decisión owner): nuevo tab "Mis activos" como vista

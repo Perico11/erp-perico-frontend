@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import api from '../../../services/api';
 
 const PRESENTACIONES = [
@@ -61,6 +61,18 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* #3 (auditoría): autocompletar MP contra el maestro para evitar nombres NO
+     canónicos que luego fallan al recibir ("la MP no existe en inventario"). */
+  const [mpNames, setMpNames] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    api.getMaestroMP().then(r => {
+      if (!alive) return;
+      const mps = (r && r.data && r.data.mps) || (r && r.mps) || {};
+      setMpNames(Object.keys(mps).filter(n => mps[n] && mps[n].estado !== 'eliminado').sort());
+    }).catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const totalKg = useMemo(() => items.reduce((s, i) => s + (Number(i.kg) || 0), 0), [items]);
   const fleteAuto = useMemo(() => Math.round(totalKg * 5 * 100) / 100, [totalKg]);
@@ -119,7 +131,7 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
           </div>
           {items.map((it, idx) => (
             <div key={idx} style={S.itemRow}>
-              <input style={S.small} value={it.mp} onChange={(e) => updateItem(idx, 'mp', e.target.value)} placeholder="MP" />
+              <input style={S.small} value={it.mp} onChange={(e) => updateItem(idx, 'mp', e.target.value)} placeholder="MP" list="edit-oc-mps" />
               <input style={{ ...S.small, textAlign: 'right' }} type="number" inputMode="decimal" min="0" step="0.1" value={it.kg} onChange={(e) => updateItem(idx, 'kg', e.target.value)} />
               <select style={S.small} value={it.presentacion} onChange={(e) => updateItem(idx, 'presentacion', e.target.value)}>
                 {PRESENTACIONES.map(p => <option key={p.v} value={p.v}>{p.lbl}</option>)}
@@ -129,6 +141,7 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
             </div>
           ))}
           <button style={S.addBtn} onClick={addItem}>+ agregar item</button>
+          <datalist id="edit-oc-mps">{mpNames.map(n => <option key={n} value={n} />)}</datalist>
         </div>
 
         <div style={S.grid2}>

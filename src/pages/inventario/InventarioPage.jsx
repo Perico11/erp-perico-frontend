@@ -1415,6 +1415,7 @@ function ImportPreviewModal({ data, onClose, onConfirmed, modoPropuesta = false 
 /* ── Modal del admin: aprobar / rechazar ajustes propuestos ─────────────── */
 function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
   const [busyId, setBusyId] = useState(null);
+  const [confirm, ConfirmEl] = useConfirm();
   const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
   const aprobar = async (id) => {
     setBusyId(id);
@@ -1422,10 +1423,15 @@ function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
     catch (e) { alert('No se pudo aprobar: ' + (e?.data?.error || e?.message || 'error')); setBusyId(null); }
   };
   const rechazar = async (id) => {
-    const m = window.prompt('Motivo del rechazo (opcional):', '');
-    if (m === null) return;
+    /* useConfirm en vez de window.prompt: en iOS PWA standalone el prompt nativo
+       se descarta en silencio → el admin creía que rechazó sin hacerlo. */
+    const m = await confirm('¿Rechazar este ajuste? No se aplicará al inventario.', {
+      title: 'Rechazar ajuste', confirmText: 'Rechazar', danger: true,
+      prompt: { label: 'Motivo (opcional)', placeholder: 'Ej: no procede, error de captura…', rows: 2 },
+    });
+    if (m === null) return; /* canceló (useConfirm con prompt devuelve null al cerrar) */
     setBusyId(id);
-    try { await api.rechazarAjuste(id, m); onResolved(); }
+    try { await api.rechazarAjuste(id, m || ''); onResolved(); }
     catch (e) { alert('No se pudo rechazar: ' + (e?.data?.error || e?.message || 'error')); setBusyId(null); }
   };
   const ov = { position: 'fixed', inset: 0, background: 'rgba(26,24,21,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 };
@@ -1486,6 +1492,7 @@ function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
           <button onClick={onClose} style={{ height: 42, padding: '0 18px', borderRadius: 'var(--lp-radius-md)', border: '1px solid var(--lp-border-default)', background: 'transparent', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontWeight: 600, fontSize: 13.5 }}>Cerrar</button>
         </div>
       </div>
+      {ConfirmEl}
     </div>
   );
 }
