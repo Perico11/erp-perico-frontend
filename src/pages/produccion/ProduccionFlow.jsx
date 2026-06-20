@@ -527,6 +527,11 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         pedidoId: tipo === 'pedido' ? item.id : (item.pedidoId || ''),
         producto: productoNombre, nombre: productoNombre,
         cantidad: lotes,
+        /* Propagar la MEDIDA real (tote/galón/atomizador) para que el lote y sus
+           vistas downstream muestren "2 totes · N cub" (etiquetaMedidaReal) y no
+           solo cubetas. Antes el lote nacía sin medida y se perdía el contexto. */
+        medida: item.medida || item._raw?.medida || undefined,
+        medidaQty: item.medidaQty || item._raw?.medidaQty || undefined,
         litPerUnit,
         litrosTotal: lotes * litPerUnit,
         estado: 'producido',
