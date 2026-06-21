@@ -4,6 +4,7 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import api from '../services/api';
 import PruebaBadge from './ui/PruebaBadge';
 import { QRScanner } from './QRModal';
+import useConfirm from '../hooks/useConfirm';
 
 /* ──────────────────────────────────────────────────────────────────── */
 /* InboundAlertManager                                                  */
@@ -161,6 +162,7 @@ function injectAnimCSS() {
 }
 
 export default function InboundAlertManager() {
+  const [confirm, ConfirmEl] = useConfirm(); /* reemplaza window.confirm (se descarta solo en iOS PWA) */
   const { user } = useAuth();
   const rol = user?.rol || '';
   const userName = user?.nombre || '';
@@ -438,8 +440,9 @@ export default function InboundAlertManager() {
       /* Escanearon el QR del LOTE completo → ofrecer bulk (mismo flujo que
          Recepción). El guard anti-robo del backend exige el scanCod. */
       if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
-        const ok = window.confirm(
-          `Escaneaste el QR del LOTE ${data.codigoLote}. ¿Recibir TODOS los sublotes elegibles del lote en una sola acción?`
+        const ok = await confirm(
+          `Escaneaste el QR del LOTE ${data.codigoLote}. ¿Recibir TODOS los sublotes elegibles del lote en una sola acción?`,
+          { title: 'Recibir lote completo', confirmText: 'Recibir todos' }
         );
         if (ok) {
           try {
@@ -485,6 +488,7 @@ export default function InboundAlertManager() {
 
   return (
     <>
+    {ConfirmEl}
     <div style={S.container} aria-live="polite">
       {alerts.map(a => {
         /* confirmado tiene PRIORIDAD sobre tomadoPor: si por carrera de eco WS
