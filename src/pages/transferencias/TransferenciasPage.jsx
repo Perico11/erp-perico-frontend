@@ -12,6 +12,7 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { QRScanner } from '../../components/QRModal';
 import { qrDataUrl } from '../../lib/qrGenerator';
+import { PT_MEDIDAS, ptMedidaDef, medidaACubetas, etiquetaMedida } from '../../utils/ptMedidas';
 
 /* ════════════════════════════════════════════════════════════════════════════
    TransferenciasPage — ÓRDENES DE TRANSFERENCIA (OT) Fábrica → Terán.
@@ -154,6 +155,18 @@ const fmtFecha = (iso) => {
   } catch { return ''; }
 };
 
+/* Texto de cantidad de una línea de OT, consciente de presentación para PT.
+   PT con presentación → "52 cubetas" / "1 tote" (+ " · ENVASAR" si pide envasado
+   desde granel). Envases/tapas (o PT legacy sin presentación) → "<cantidad> <unidad>".
+   Usado en la card, el chip del sheet y la hoja imprimible para hablar el mismo idioma. */
+function descLineaCantidad(l) {
+  if (l && l.tipo === 'pt' && l.presentacion) {
+    const conteo = l.cantidadPresentacion != null ? l.cantidadPresentacion : l.cantidad;
+    return etiquetaMedida(l.presentacion, conteo) + (l.envasar ? ' · ENVASAR' : '');
+  }
+  return `${l.cantidad} ${l.unidad || ''}`.trim();
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN PAGE
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -211,6 +224,9 @@ export default function TransferenciasPage() {
      vez; sin polling — son catálogos relativamente estables). */
   const { data: invData } = useApiData(() => api.getInventario(), null, 0);
   const { data: envData } = useApiData(() => api.getEnvases(), null, 0);
+  /* PT desglosado por ubicación → para mostrar el disponible POR PRESENTACIÓN
+     (tote/cubeta/galón/litro/atomizador) en Fábrica dentro del sheet de crear. */
+  const { data: ptUbicData } = useApiData(() => api.getPTPorUbicacion(), null, 0);
 
   /* Realtime: el backend hace broadcast 'inventario' Y 'transferencias' en cada
      scan, y 'transferencias' al crear. onInventario cubre los scans (como pide el
@@ -426,6 +442,7 @@ export default function TransferenciasPage() {
           isDesktop={isDesktop}
           inv={invData}
           env={envData}
+          ptUbic={ptUbicData}
           initialSel={prefillSel}
           onClose={() => { setCrearOpen(false); setPrefillSel(null); }}
           onSaved={(res) => {
@@ -491,7 +508,7 @@ function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint }) {
           <div key={i} style={S.lineaRow}>
             <span style={S.lineaTipo}>{tipoLabel(l)}</span>
             <span style={S.lineaNombre}>{l.nombre || l.producto || '—'}</span>
-            <span style={S.lineaCant}>{l.cantidad} {l.unidad || ''}</span>
+            <span style={S.lineaCant}>{descLineaCantidad(l)}</span>
           </div>
         ))}
       </div>
@@ -551,7 +568,10 @@ function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint }) {
    envases → cantidad → "Agregar línea". Lista las líneas (con quitar). Submit →
    api.crearOT(lineas, nota). Calca el autocompletar de DevolucionesMPPage.
    ═══════════════════════════════════════════════════════════════════════════ */
-function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
+/* Presentación PT → columna del desglose pt-por-ubicacion (backend usa 'atm'). */
+const PRES_COL = { tote: 'tote', cubeta: 'cubeta', galon: 'galon', litro: 'litro', atomizador750: 'atm' };
+
+function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel }) {
   useBodyScrollLock(true);
 
   /* Desenvolver shapes envueltos {ok, data:{...}} (defensivo, igual que DevolucionesMP). */
@@ -559,6 +579,10 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
   const envases = (env && env.data) || env || {};
   const categorias = envases.categorias || {};
   const tapas = envases.tapas || {};
+
+  /* Desglose PT por ubicación (defensivo: puede venir envuelto en {ok,data} o plano).
+     fabricaBuckets[<producto>] = { tote, cubeta, galon, litro, atm, ... } disponibles en Fábrica. */
+  const fabricaBuckets = (ptUbic && (ptUbic.data?.fabrica || ptUbic.fabrica)) || {};
 
   /* Listado de PT ordenado */
   const ptList = useMemo(() => Object.keys(invPt).sort((a, b) => a.localeCompare(b)), [invPt]);
@@ -588,13 +612,18 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
   const [tipo, setTipo] = useState(initialSel?.tipo || 'pt');
   const [sel, setSel] = useState(initialSel?.sel || '');         // PT name | "cat|||sub" | tapaKey según tipo
   const [cantidad, setCantidad] = useState('');
+  const [ptPres, setPtPres] = useState('tote');     // presentación PT elegida (default tote: el PT suele venir a granel)
+  const [envasar, setEnvasar] = useState(false);    // pedir envasada desde granel (solo si ptPres ≠ tote)
   const [lineas, setLineas] = useState([]);   // líneas acumuladas
   const [nota, setNota] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
-  /* Al cambiar de tipo, limpiar la selección */
-  const onTipo = (t) => { setTipo(t); setSel(''); };
+  /* Al cambiar de tipo, limpiar la selección (y resetear presentación si dejamos PT) */
+  const onTipo = (t) => { setTipo(t); setSel(''); if (t !== 'pt') { setPtPres('tote'); setEnvasar(false); } };
+
+  /* Disponible por presentación en Fábrica del PT elegido (columnas tote/cubeta/galon/litro/atm). */
+  const fabricaPres = (tipo === 'pt' && sel.trim() && fabricaBuckets[sel.trim()]) || {};
 
   /* Resuelve la selección actual a sus campos canónicos + stock + nombre */
   const resuelto = useMemo(() => {
@@ -602,7 +631,12 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
       const nombre = sel.trim();
       if (!nombre) return null;
       const r = invPt[nombre];
-      return { ok: !!r, nombre, unidad: 'cub', stock: r ? (Number(r.qty) || 0) : null, linea: { tipo: 'pt', producto: nombre, nombre, unidad: 'cub' } };
+      /* stock = total cub-equivalente en Fábrica (campo qty del inventario PT).
+         presentacion/envasar viajan en la línea; el backend mueve cub-equivalente. */
+      return {
+        ok: !!r, nombre, unidad: 'cub', stock: r ? (Number(r.qty) || 0) : null,
+        linea: { tipo: 'pt', producto: nombre, nombre, unidad: 'cub', presentacion: ptPres, envasar: ptPres !== 'tote' && envasar },
+      };
     }
     if (tipo === 'envase') {
       const o = envaseOpts.find(x => x.value === sel);
@@ -613,7 +647,7 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
       return o ? { ok: true, nombre: o.label, unidad: o.unidad, stock: o.stock, linea: { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, unidad: o.unidad } } : null;
     }
     return null;
-  }, [tipo, sel, invPt, envaseOpts, tapaOpts]);
+  }, [tipo, sel, invPt, envaseOpts, tapaOpts, ptPres, envasar]);
 
   const cantNum = Number(cantidad);
   const puedeAgregar = !!(resuelto && resuelto.ok && Number.isFinite(cantNum) && cantNum > 0);
@@ -621,8 +655,13 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
   const agregarLinea = () => {
     if (!puedeAgregar) { setErr('Elige un ítem válido y una cantidad > 0.'); return; }
     setErr('');
-    setLineas(prev => [...prev, { ...resuelto.linea, cantidad: cantNum }]);
-    setSel(''); setCantidad('');
+    /* PT: cantidad = cubeta-equivalente (medidaACubetas), conserva el conteo en la
+       presentación + flag envasar. Envase/tapa: cantidad cruda como siempre. */
+    const nueva = tipo === 'pt'
+      ? { ...resuelto.linea, presentacion: ptPres, cantidadPresentacion: cantNum, envasar: ptPres !== 'tote' && envasar, cantidad: medidaACubetas(ptPres, cantNum) }
+      : { ...resuelto.linea, cantidad: cantNum };
+    setLineas(prev => [...prev, nueva]);
+    setSel(''); setCantidad(''); setEnvasar(false); setPtPres('tote');
   };
 
   const quitarLinea = (idx) => setLineas(prev => prev.filter((_, i) => i !== idx));
@@ -695,15 +734,55 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
           )}
 
           {resuelto && resuelto.ok && resuelto.stock != null && (
-            <div style={SH.hint}>Stock en Fábrica: {resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad}</div>
+            <div style={SH.hint}>Stock en Fábrica: {resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad} (total cub-equiv.)</div>
           )}
           {tipo === 'pt' && sel.trim() && resuelto && !resuelto.ok && (
             <div style={SH.hint}>Ese producto no está en inventario; elígelo de la lista.</div>
           )}
 
+          {/* ── Presentación PT (consciente del envasado) ──
+              El PT suele venir a granel en tote; aquí se elige CÓMO se pide:
+              tote / cubeta / galón / litro / atomizador. El movimiento de inventario
+              siempre es cubeta-equivalente; esto es la forma física pedida. */}
+          {tipo === 'pt' && resuelto && resuelto.ok && (
+            <>
+              <label style={SH.lbl}>Presentación pedida</label>
+              <div style={SH.presWrap} data-id="transferencias.select.presentacion" data-rol="admin,almacen,inventario">
+                {PT_MEDIDAS.map(m => {
+                  const disp = Number(fabricaPres[PRES_COL[m.key]] || 0);
+                  const active = ptPres === m.key;
+                  return (
+                    <button
+                      key={m.key}
+                      type="button"
+                      onClick={() => { setPtPres(m.key); if (m.key === 'tote') setEnvasar(false); }}
+                      style={{ ...SH.presPill, ...(active ? SH.presPillOn : {}) }}>
+                      <span style={SH.presPillLabel}>{m.label}</span>
+                      <span style={{ ...SH.presPillDisp, ...(active ? SH.presPillDispOn : {}) }}>
+                        {disp.toLocaleString('es-MX')} disp.
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Envasar desde granel — solo aplica si NO es tote */}
+              {ptPres !== 'tote' && (
+                <label style={SH.checkRow}
+                  data-id="transferencias.check.envasar" data-rol="admin,almacen,inventario">
+                  <input type="checkbox" style={SH.check} checked={envasar}
+                    onChange={(e) => setEnvasar(e.target.checked)} />
+                  <span>Pedir <b>envasada</b> en {ptMedidaDef(ptPres)?.label?.toLowerCase()} desde granel</span>
+                </label>
+              )}
+            </>
+          )}
+
           <div style={SH.row2}>
             <div style={{ flex: 2 }}>
-              <label style={SH.lbl}>Cantidad</label>
+              <label style={SH.lbl}>
+                {tipo === 'pt' ? `Cantidad en ${ptMedidaDef(ptPres)?.label?.toLowerCase() || 'cubetas'}` : 'Cantidad'}
+              </label>
               <input style={SH.input} type="number" inputMode="decimal" min="0" value={cantidad}
                 onChange={(e) => setCantidad(e.target.value)} placeholder="0" />
             </div>
@@ -715,7 +794,12 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
               </button>
             </div>
           </div>
-          {resuelto && resuelto.ok && resuelto.stock != null && cantNum > resuelto.stock && (
+          {/* PT: equivalencia en vivo (el inventario se mueve en cubeta-equivalente) */}
+          {tipo === 'pt' && cantNum > 0 && ptPres !== 'cubeta' && (
+            <div style={SH.hint}>= {medidaACubetas(ptPres, cantNum).toLocaleString('es-MX')} cub equivalentes</div>
+          )}
+          {resuelto && resuelto.ok && resuelto.stock != null
+            && (tipo === 'pt' ? medidaACubetas(ptPres, cantNum) : cantNum) > resuelto.stock && (
             <div style={SH.hint}>Excede el stock en Fábrica ({resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad}); el surtido se rechazará si no alcanza.</div>
           )}
 
@@ -729,7 +813,7 @@ function CrearSheet({ isDesktop, inv, env, onClose, onSaved, initialSel }) {
                 <div key={i} style={SH.lineaChip}>
                   <span style={SH.lineaChipTipo}>{l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Env'}</span>
                   <span style={SH.lineaChipNombre}>{l.nombre}</span>
-                  <span style={SH.lineaChipCant}>{l.cantidad} {l.unidad}</span>
+                  <span style={SH.lineaChipCant}>{descLineaCantidad(l)}</span>
                   <button style={SH.lineaChipDel} onClick={() => quitarLinea(i)} aria-label="Quitar línea">
                     <IconX size={13} />
                   </button>
@@ -775,12 +859,23 @@ function OTQRPrintModal({ ot, onClose }) {
     const w = window.open('', '_blank', 'width=720,height=900');
     if (!w) { alert('Habilita las ventanas emergentes para imprimir'); return; }
     const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
-    const filas = lineas.map(l => `
+    const filas = lineas.map(l => {
+      /* Cantidad consciente de presentación; resaltar "ENVASAR" (instrucción a Enrique). */
+      let qtyHtml;
+      if (l.tipo === 'pt' && l.presentacion) {
+        const conteo = l.cantidadPresentacion != null ? l.cantidadPresentacion : l.cantidad;
+        qtyHtml = esc(etiquetaMedida(l.presentacion, conteo))
+          + (l.envasar ? ' <span class="env">ENVASAR</span>' : '');
+      } else {
+        qtyHtml = esc(l.cantidad) + ' ' + esc(l.unidad || '');
+      }
+      return `
       <tr>
         <td class="tp">${esc(l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase')}</td>
         <td>${esc(l.nombre || l.producto || '')}</td>
-        <td class="qty">${esc(l.cantidad)} ${esc(l.unidad || '')}</td>
-      </tr>`).join('');
+        <td class="qty">${qtyHtml}</td>
+      </tr>`;
+    }).join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>OT ${esc(ot.folio)}</title>
       <style>
         @page { size: A4; margin: 16mm; }
@@ -796,6 +891,7 @@ function OTQRPrintModal({ ot, onClose }) {
         td { padding: 9px 6px; border-bottom: 1px solid #e5e5e5; }
         td.tp { font-weight: 700; white-space: nowrap; width: 60px; }
         td.qty { text-align: right; font-family: monospace; font-weight: 700; white-space: nowrap; }
+        .env { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1.5px solid #111; border-radius: 4px; font-family: system-ui, sans-serif; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
         .foot { margin-top: 26px; font-size: 12px; color: #555; }
         .sign { display: flex; gap: 40px; margin-top: 40px; }
         .sign div { flex: 1; border-top: 1px solid #111; padding-top: 6px; font-size: 11px; color: #444; text-align: center; }
@@ -843,7 +939,7 @@ function OTQRPrintModal({ ot, onClose }) {
             {lineas.map((l, i) => (
               <div key={i} style={PM.lineaPrevRow}>
                 <span>{l.nombre || l.producto}</span>
-                <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700 }}>{l.cantidad} {l.unidad || ''}</span>
+                <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700 }}>{descLineaCantidad(l)}</span>
               </div>
             ))}
           </div>
@@ -1010,6 +1106,29 @@ const SH = {
     background: 'var(--lp-brand-600)', color: '#fff', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700,
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
+
+  /* Pills de presentación PT — wrap (5 opciones, cada una con disponible) */
+  presWrap: { display: 'flex', flexWrap: 'wrap', gap: 8 },
+  presPill: {
+    flex: '1 1 auto', minWidth: 84, padding: '8px 12px', borderRadius: 12, cursor: 'pointer',
+    background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
+    fontFamily: 'inherit', textAlign: 'left',
+    display: 'flex', flexDirection: 'column', gap: 2,
+  },
+  presPillOn: {
+    background: 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)',
+    borderColor: 'var(--lp-brand-600)',
+  },
+  presPillLabel: { fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' },
+  presPillDisp: { fontSize: 10.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' },
+  presPillDispOn: { color: 'var(--lp-brand-700)' },
+
+  /* Checkbox "pedir envasada desde granel" */
+  checkRow: {
+    display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 12, cursor: 'pointer',
+    fontSize: 13, color: 'var(--lp-text-secondary)', lineHeight: 1.45,
+  },
+  check: { width: 18, height: 18, marginTop: 1, accentColor: 'var(--lp-brand-600)', flexShrink: 0, cursor: 'pointer' },
 
   emptyLineas: { fontSize: 12.5, color: 'var(--lp-text-tertiary)', padding: '14px 12px', borderRadius: 12, background: 'var(--lp-bg-sunken)', border: '1px dashed var(--lp-border-default)', textAlign: 'center' },
   lineasList: { display: 'flex', flexDirection: 'column', gap: 7 },
