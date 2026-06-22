@@ -374,7 +374,18 @@ function DevCard({ d, onCerrar }) {
 const SH = {
   /* Bottom-sheet en móvil; modal centrado en escritorio (mismo overlay). */
   overlay: (desktop) => ({ position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: desktop ? 'center' : 'flex-end', justifyContent: 'center', overflow: 'auto', padding: desktop ? 16 : 0 }),
-  sheet: (desktop) => ({ background: 'var(--lp-bg-base)', borderRadius: desktop ? 20 : '24px 24px 0 0', padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: desktop ? 'calc(var(--pp-vvh, 100dvh) - 32px)' : 'calc(var(--pp-vvh, 100dvh) - 16px)', overflowY: 'auto', boxShadow: desktop ? '0 12px 48px rgba(0,0,0,.28)' : 'none' }),
+  /* v4 (jun 2026): footer PEGAJOSO. El sheet es columna flex y NO scrollea él
+     mismo (overflow hidden); el BODY scrollea y el footer queda FIJO abajo →
+     botones siempre visibles, nunca cortados bajo el fold en móvil aunque el
+     formulario sea largo. (Patrón espejo de OrdenesPage.jsx.) */
+  sheet: (desktop) => ({ background: 'var(--lp-bg-base)', borderRadius: desktop ? 20 : '24px 24px 0 0', maxWidth: 460, width: '100%', maxHeight: desktop ? 'calc(var(--pp-vvh, 100dvh) - 32px)' : 'calc(var(--pp-vvh, 100dvh) - 16px)', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: desktop ? '0 12px 48px rgba(0,0,0,.28)' : 'none' }),
+  /* Área scrolleable (el sheet padre es overflow:hidden + flex column). flex:1
+     + minHeight:0 deja que encoja y scrollee DENTRO; overscroll contain corta
+     el encadenamiento del scroll al fondo. */
+  body: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '18px 20px 12px' },
+  /* safe-area abajo: en móvil el sheet llega al borde inferior; el padding extra
+     mantiene los botones por encima del home-indicator / gesture bar. */
+  footer: { flexShrink: 0, padding: '12px 20px calc(14px + env(safe-area-inset-bottom, 0px))', borderTop: '1px solid var(--lp-border-subtle)', display: 'flex', gap: 10 },
   h: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
   s: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 8 },
   lbl: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '16px 2px 6px' },
@@ -385,7 +396,9 @@ const SH = {
   drop: (has) => ({ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, padding: '20px 18px', marginTop: 6, border: '1.5px ' + (has ? 'solid var(--lp-brand-600)' : 'dashed var(--lp-border-default)'), borderRadius: 14, background: 'var(--lp-bg-sunken)', cursor: 'pointer', color: has ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)', textAlign: 'center', fontSize: 13, minHeight: 84 }),
   fn: { fontSize: 13, fontWeight: 700, color: 'var(--lp-brand-700)', wordBreak: 'break-all' },
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: '9px 12px', borderRadius: 8, fontSize: 12, marginTop: 12, whiteSpace: 'pre-line' },
-  acts: { display: 'flex', gap: 10, marginTop: 18 },
+  /* Fila de botones DENTRO del footer pegajoso (el footer ya aporta su propio
+     padding superior) → flex:1 para que ocupe el ancho completo del footer. */
+  acts: { display: 'flex', gap: 10, flex: 1 },
   btn: { height: 50, borderRadius: 12, border: 'none', fontFamily: 'inherit', fontSize: 14, fontWeight: 700, cursor: 'pointer' },
   btnGhost: { flex: '0 0 auto', padding: '0 20px', background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' },
   btnPrimary: { flex: 1, background: 'var(--lp-brand-600)', color: '#fff' },
@@ -448,62 +461,68 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
   return (
     <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
       <div style={SH.sheet(isDesktop)}>
-        <div style={SH.h}>Nueva devolución de MP</div>
-        <div style={SH.s}>La materia prima se descuenta del inventario al registrar.</div>
-
-        <label style={SH.lbl}>Materia prima</label>
-        <input style={SH.input} list="mp-list" value={mp} onChange={(e) => onMp(e.target.value)}
-          data-id="devoluciones.input.mp" data-rol="compras,admin" placeholder="Escribe o elige una MP" />
-        <datalist id="mp-list">{mpList.map(m => <option key={m} value={m} />)}</datalist>
-        {mp && stock != null && <div style={SH.hint}>Stock actual: {stock.toLocaleString('es-MX')} {unidad}</div>}
-
-        <label style={SH.lbl}>Proveedor</label>
-        <input style={SH.input} value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="Proveedor destino de la devolución" />
-
-        <div style={SH.row2}>
-          <div style={{ flex: 2 }}>
-            <label style={SH.lbl}>Cantidad</label>
-            <input style={SH.input} type="number" inputMode="decimal" min="0" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="0" />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={SH.lbl}>Unidad</label>
-            <input style={SH.input} value={unidad} onChange={(e) => setUnidad(e.target.value)} placeholder="kg" />
-          </div>
-        </div>
-        {mp && stock != null && Number(cantidad) > stock && (
-          <div style={SH.hint}>Excede el stock; se descontará solo lo disponible ({stock.toLocaleString('es-MX')} {unidad}).</div>
-        )}
-
-        <label style={SH.lbl}>Motivo</label>
-        <textarea style={SH.area} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. Humedad fuera de especificación, no pasó QC de entrada…" />
-
-        <label style={SH.lbl}>Disposición</label>
-        <div data-id="devoluciones.select.disposicion" data-rol="compras,admin">
-          <SegmentedControl
-            options={[{ value: 'devolver', label: 'Devolver a proveedor' }, { value: 'descartar', label: 'Descartar (merma)' }]}
-            value={disposicion} onChange={setDisposicion}
-          />
+        <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
+          <div style={SH.h}>Nueva devolución de MP</div>
+          <div style={SH.s}>La materia prima se descuenta del inventario al registrar.</div>
         </div>
 
-        {disposicion === 'devolver' && (
-          <>
-            <label style={SH.lbl}>Crédito esperado (opcional)</label>
-            <input style={SH.input} type="number" inputMode="decimal" min="0" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$ estimado de la nota de crédito" />
-          </>
-        )}
-        {disposicion === 'descartar' && (
-          <div style={SH.hint}>Merma: la MP se da de baja sin nota de crédito ni reembolso.</div>
-        )}
+        <div style={SH.body}>
+          <label style={SH.lbl}>Materia prima</label>
+          <input style={SH.input} list="mp-list" value={mp} onChange={(e) => onMp(e.target.value)}
+            data-id="devoluciones.input.mp" data-rol="compras,admin" placeholder="Escribe o elige una MP" />
+          <datalist id="mp-list">{mpList.map(m => <option key={m} value={m} />)}</datalist>
+          {mp && stock != null && <div style={SH.hint}>Stock actual: {stock.toLocaleString('es-MX')} {unidad}</div>}
 
-        {err && <div style={SH.err}>{err}</div>}
+          <label style={SH.lbl}>Proveedor</label>
+          <input style={SH.input} value={proveedor} onChange={(e) => setProveedor(e.target.value)} placeholder="Proveedor destino de la devolución" />
 
-        <div style={SH.acts}>
-          <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
-            data-id="devoluciones.btn.crear" data-rol="compras,admin"
-            onClick={guardar} disabled={!puede || saving}>
-            {saving ? 'Creando…' : 'Crear devolución'}
-          </button>
+          <div style={SH.row2}>
+            <div style={{ flex: 2 }}>
+              <label style={SH.lbl}>Cantidad</label>
+              <input style={SH.input} type="number" inputMode="decimal" min="0" value={cantidad} onChange={(e) => setCantidad(e.target.value)} placeholder="0" />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={SH.lbl}>Unidad</label>
+              <input style={SH.input} value={unidad} onChange={(e) => setUnidad(e.target.value)} placeholder="kg" />
+            </div>
+          </div>
+          {mp && stock != null && Number(cantidad) > stock && (
+            <div style={SH.hint}>Excede el stock; se descontará solo lo disponible ({stock.toLocaleString('es-MX')} {unidad}).</div>
+          )}
+
+          <label style={SH.lbl}>Motivo</label>
+          <textarea style={SH.area} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. Humedad fuera de especificación, no pasó QC de entrada…" />
+
+          <label style={SH.lbl}>Disposición</label>
+          <div data-id="devoluciones.select.disposicion" data-rol="compras,admin">
+            <SegmentedControl
+              options={[{ value: 'devolver', label: 'Devolver a proveedor' }, { value: 'descartar', label: 'Descartar (merma)' }]}
+              value={disposicion} onChange={setDisposicion}
+            />
+          </div>
+
+          {disposicion === 'devolver' && (
+            <>
+              <label style={SH.lbl}>Crédito esperado (opcional)</label>
+              <input style={SH.input} type="number" inputMode="decimal" min="0" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$ estimado de la nota de crédito" />
+            </>
+          )}
+          {disposicion === 'descartar' && (
+            <div style={SH.hint}>Merma: la MP se da de baja sin nota de crédito ni reembolso.</div>
+          )}
+
+          {err && <div style={SH.err}>{err}</div>}
+        </div>
+
+        <div style={SH.footer}>
+          <div style={SH.acts}>
+            <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
+            <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
+              data-id="devoluciones.btn.crear" data-rol="compras,admin"
+              onClick={guardar} disabled={!puede || saving}>
+              {saving ? 'Creando…' : 'Crear devolución'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -564,49 +583,55 @@ function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
   return (
     <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
       <div style={SH.sheet(isDesktop)}>
-        <div style={SH.h}>Cerrar {dev.codigo || 'devolución'}</div>
-        <div style={SH.s}>{dev.mp} · {dev.proveedor}{dev.montoEstimado != null ? ` · ${fmtMoney(dev.montoEstimado)}` : ''}</div>
+        <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
+          <div style={SH.h}>Cerrar {dev.codigo || 'devolución'}</div>
+          <div style={SH.s}>{dev.mp} · {dev.proveedor}{dev.montoEstimado != null ? ` · ${fmtMoney(dev.montoEstimado)}` : ''}</div>
+        </div>
 
-        <SegmentedControl
-          options={[{ value: 'nota_credito', label: 'Nota de crédito' }, { value: 'reembolso', label: 'Reembolso' }]}
-          value={tipo} onChange={setTipo}
-        />
+        <div style={SH.body}>
+          <SegmentedControl
+            options={[{ value: 'nota_credito', label: 'Nota de crédito' }, { value: 'reembolso', label: 'Reembolso' }]}
+            value={tipo} onChange={setTipo}
+          />
 
-        {tipo === 'nota_credito' ? (
-          <>
-            <label style={SH.lbl}>Folio de la nota de crédito del proveedor</label>
-            <input style={SH.input} value={nc} onChange={(e) => setNc(e.target.value)} placeholder="Ej. NC-PR-118" />
-          </>
-        ) : (
-          <>
-            <label style={SH.lbl}>Comprobante del reembolso · obligatorio</label>
-            <label style={SH.drop(!!fileB64)} data-id="devoluciones.btn.adjuntar-comprobante" data-rol="compras,admin">
-              {fileB64 ? IFile : ICloud}
-              {fileB64
-                ? <div style={SH.fn}>{fileName}</div>
-                : <>
-                    <div>Sube la transferencia / recibo del proveedor</div>
-                    <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>PDF o imagen</div>
-                  </>}
-              <input type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={onFile} />
-            </label>
-            <label style={SH.lbl}>Referencia de pago</label>
-            <input style={SH.input} value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Ej. SPEI 0098123" />
-          </>
-        )}
+          {tipo === 'nota_credito' ? (
+            <>
+              <label style={SH.lbl}>Folio de la nota de crédito del proveedor</label>
+              <input style={SH.input} value={nc} onChange={(e) => setNc(e.target.value)} placeholder="Ej. NC-PR-118" />
+            </>
+          ) : (
+            <>
+              <label style={SH.lbl}>Comprobante del reembolso · obligatorio</label>
+              <label style={SH.drop(!!fileB64)} data-id="devoluciones.btn.adjuntar-comprobante" data-rol="compras,admin">
+                {fileB64 ? IFile : ICloud}
+                {fileB64
+                  ? <div style={SH.fn}>{fileName}</div>
+                  : <>
+                      <div>Sube la transferencia / recibo del proveedor</div>
+                      <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>PDF o imagen</div>
+                    </>}
+                <input type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={onFile} />
+              </label>
+              <label style={SH.lbl}>Referencia de pago</label>
+              <input style={SH.input} value={ref} onChange={(e) => setRef(e.target.value)} placeholder="Ej. SPEI 0098123" />
+            </>
+          )}
 
-        <label style={SH.lbl}>Monto (opcional)</label>
-        <input style={SH.input} type="number" inputMode="decimal" min="0" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$ del crédito / reembolso" />
+          <label style={SH.lbl}>Monto (opcional)</label>
+          <input style={SH.input} type="number" inputMode="decimal" min="0" value={monto} onChange={(e) => setMonto(e.target.value)} placeholder="$ del crédito / reembolso" />
 
-        {err && <div style={SH.err}>{err}</div>}
+          {err && <div style={SH.err}>{err}</div>}
+        </div>
 
-        <div style={SH.acts}>
-          <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
-            data-id="devoluciones.btn.confirmar-cierre" data-rol="compras,admin"
-            onClick={guardar} disabled={!puede || saving}>
-            {saving ? 'Guardando…' : 'Confirmar cierre'}
-          </button>
+        <div style={SH.footer}>
+          <div style={SH.acts}>
+            <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
+            <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
+              data-id="devoluciones.btn.confirmar-cierre" data-rol="compras,admin"
+              onClick={guardar} disabled={!puede || saving}>
+              {saving ? 'Guardando…' : 'Confirmar cierre'}
+            </button>
+          </div>
         </div>
       </div>
     </div>

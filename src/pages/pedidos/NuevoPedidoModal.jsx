@@ -48,13 +48,17 @@ const S = {
     /* FIX jun 2026 v3: altura contra el viewport VISIBLE real (teclado/barra
        del navegador incluidos) — con 92vh el sheet "cabía" sin overflow en
        teléfono y no había nada que scrollear. */
-    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 40px)', overflowY: 'auto',
-    overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch',
-    padding: '22px 22px 30px',
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 40px)',
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
     boxShadow: '0 12px 40px rgba(26,24,21,.2)',
     transform: shown ? 'none' : 'translateY(24px)',
     transition: `transform .3s ${EASE}`,
   }),
+  /* FIX jun 2026 v4: footer pegajoso (patrón OrdenesPage). El sheet es flex
+     column con overflow oculto; solo este body scrollea, los botones quedan
+     fijos abajo del fold en móvil. */
+  sheetBody: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '20px 22px 12px' },
+  sheetFooter: { flexShrink: 0, padding: '12px 22px calc(14px + env(safe-area-inset-bottom, 0px))', display: 'flex', gap: 10, borderTop: '1px solid var(--lp-border-subtle)' },
   head: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
   title: { fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)', letterSpacing: '-.01em' },
   sub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 3 },
@@ -71,7 +75,6 @@ const S = {
     background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-primary)',
     fontFamily: 'inherit', boxSizing: 'border-box',
   },
-  acts: { display: 'flex', gap: 10, marginTop: 22 },
   btn: (primary) => ({
     flex: 1, minHeight: 46, padding: '0 16px',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -191,8 +194,9 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         <style>{FOCUS_CSS}</style>
 
         {/* Encabezado del sheet (modal-h + modal-s del mockup). La X no viene
-            en el mockup pero se conserva (cierre accesible además del overlay). */}
-        <div style={S.head}>
+            en el mockup pero se conserva (cierre accesible además del overlay).
+            flexShrink:0 → header fijo, no scrollea (footer pegajoso v4). */}
+        <div style={{ ...S.head, flexShrink: 0 }}>
           <div>
             <div style={S.title}>Nuevo pedido</div>
             <div style={S.sub}>Captura el producto y la cantidad. Quedará pendiente para producción.</div>
@@ -202,6 +206,8 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
           </button>
         </div>
 
+        {/* Cuerpo scrolleable — único elemento con overflow. */}
+        <div style={S.sheetBody}>
         {err && <div style={S.err}>{err}</div>}
 
         <label style={S.label} htmlFor="np-prod">Producto *</label>
@@ -274,8 +280,10 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
             <strong>Modo prueba</strong> — no descuenta MP ni suma PT
           </span>
         </div>
+        </div>{/* /sheetBody */}
 
-        <div style={S.acts}>
+        {/* Footer pegajoso — botones fijos abajo (no scrollean). */}
+        <div style={S.sheetFooter}>
           <button style={S.btn(false)} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={S.btn(true)} onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : 'Crear pedido'}

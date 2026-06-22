@@ -35,17 +35,46 @@ const S = {
   modal: {
     background: 'var(--lp-bg-raised)',
     borderRadius: 'var(--lp-radius)',
-    padding: 24,
     maxWidth: 560,
     width: '92%',
     maxHeight: '90vh',
-    overflowY: 'auto',
+    /* v4 (jun 2026): footer PEGAJOSO (igual que OrdenesPage). El modal es columna
+       flex y NO scrollea él mismo (overflow hidden); el BODY scrollea y el footer
+       queda FIJO abajo → los botones Cancelar/Levantar OC siempre visibles, nunca
+       cortados bajo el viewport en móvil aunque el formulario sea largo. El padding
+       24 que tenía aquí pasó al header/body/footer. */
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  /* Header: título fijo arriba (no scrollea). Hereda el padding lateral 24 que
+     tenía el modal + un padding-top para separar del borde superior del sheet. */
+  header: {
+    flexShrink: 0,
+    padding: '20px 24px 0',
   },
   title: {
     fontSize: 16,
     fontWeight: 700,
     color: 'var(--lp-brand-600)',
     marginBottom: 16,
+  },
+  /* Body: ÚNICA área scrolleable (el modal padre es overflow:hidden + flex column).
+     flex:1 + minHeight:0 deja que encoja y scrollee DENTRO del sheet; overscroll
+     contain corta el encadenamiento del scroll al fondo en móvil. */
+  body: {
+    flex: '1 1 auto',
+    minHeight: 0,
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+    WebkitOverflowScrolling: 'touch',
+    padding: '8px 24px',
+  },
+  /* Footer pegajoso: borde superior + safe-area abajo (home-indicator/gesture bar). */
+  footer: {
+    flexShrink: 0,
+    borderTop: '1px solid var(--lp-border-subtle)',
+    padding: '12px 24px calc(12px + env(safe-area-inset-bottom, 0px))',
   },
   label: {
     display: 'block',
@@ -380,8 +409,8 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
     width: isDesktop ? '92%' : '100%',
     borderRadius: isDesktop ? 'var(--lp-radius)' : '24px 24px 0 0',
     /* --pp-vvh (publicado por useBodyScrollLock) sigue al teclado virtual en
-       iOS/Android; fallback a 100dvh. El contenedor scrollea internamente
-       (S.modal ya trae overflowY:'auto') y nada queda detrás del teclado. */
+       iOS/Android; fallback a 100dvh. El contenedor es flex column overflow:hidden;
+       el BODY interno (S.body) scrollea y nada queda detrás del teclado. */
     maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)',
   };
 
@@ -398,11 +427,16 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   if (error) {
     return (
       <div style={ovl} onClick={onClose}>
+        {/* Early-return corto: el box es flex column (overflow hidden). Damos su
+            propio padding (el modal ya no lo trae) y fijamos el botón para que el
+            flex:1 de S.btn no lo estire verticalmente. */}
         <div style={box} onClick={e => e.stopPropagation()}>
-          <div style={{ color: 'var(--lp-danger-600)', marginBottom: 16 }}>Error: {error}</div>
-          <button style={{ ...S.btn, ...S.btnSecondary }} onClick={onClose}>
-            Cerrar
-          </button>
+          <div style={{ padding: 24 }}>
+            <div style={{ color: 'var(--lp-danger-600)', marginBottom: 16 }}>Error: {error}</div>
+            <button style={{ ...S.btn, ...S.btnSecondary, flex: '0 0 auto', alignSelf: 'flex-start' }} onClick={onClose}>
+              Cerrar
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -411,8 +445,13 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   return (
     <div style={ovl} onClick={onClose}>
       <div style={box} onClick={e => e.stopPropagation()}>
-        <div style={S.title}>Nueva orden de compra</div>
+        {/* Header fijo (no scrollea) */}
+        <div style={S.header}>
+          <div style={S.title}>Nueva orden de compra</div>
+        </div>
 
+        {/* Body scrolleable: desde el banner hasta Notas */}
+        <div style={S.body}>
         {/* Banner contextual cuando viene de MRP */}
         {prefillContext && (
           <div style={{
@@ -631,25 +670,29 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
             placeholder="Notas opcionales..."
           />
         </div>
+        </div>{/* /body scrolleable */}
 
-        {/* Buttons — orden del mockup: Cancelar discreto, primario dominante */}
-        <div style={S.buttons}>
-          <button
-            style={{ ...S.btn, ...S.btnSecondary, flex: '0 0 auto', padding: '12px 18px' }}
-            onClick={onClose}
-            disabled={creating}
-          >
-            Cancelar
-          </button>
-          <button
-            style={{ ...S.btn, ...S.btnPrimary }}
-            onClick={handleCreate}
-            /* Habilitado si hay items O un insumo válido en el formulario.
-               Notas NO entra aquí (es opcional, nunca bloquea). */
-            disabled={creating || (items.length === 0 && !(mp && Number(kg) > 0 && presentacion))}
-          >
-            {creating ? 'Creando...' : 'Levantar OC'}
-          </button>
+        {/* Footer PEGAJOSO — botones fijos abajo. Orden del mockup: Cancelar
+            discreto, primario dominante. */}
+        <div style={S.footer}>
+          <div style={S.buttons}>
+            <button
+              style={{ ...S.btn, ...S.btnSecondary, flex: '0 0 auto', padding: '12px 18px' }}
+              onClick={onClose}
+              disabled={creating}
+            >
+              Cancelar
+            </button>
+            <button
+              style={{ ...S.btn, ...S.btnPrimary }}
+              onClick={handleCreate}
+              /* Habilitado si hay items O un insumo válido en el formulario.
+                 Notas NO entra aquí (es opcional, nunca bloquea). */
+              disabled={creating || (items.length === 0 && !(mp && Number(kg) > 0 && presentacion))}
+            >
+              {creating ? 'Creando...' : 'Levantar OC'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
