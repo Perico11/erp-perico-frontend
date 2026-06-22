@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   overlay: {
@@ -9,7 +10,7 @@ const S = {
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
     border: '1.5px solid var(--lp-border-subtle)',
-    maxWidth: 880, width: '100%', maxHeight: '94vh',
+    maxWidth: 880, width: '100%', maxHeight: 'calc(var(--pp-vvh, 94vh) - 32px)',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   header: {
@@ -130,6 +131,11 @@ export default function CompararFormulasModal({ formulas, onClose }) {
       return (a.mp || '').localeCompare(b.mp || '');
     });
   }, [fmA, fmB]);
+
+  /* MÓVIL: bloquea scroll del fondo + publica --pp-vvh (alto visible real, sigue
+     al teclado) que S.modal usa en su maxHeight para que S.body siempre tenga
+     overflow interno scrolleable. El componente sólo se monta cuando está abierto. */
+  useBodyScrollLock(true);
 
   return (
     <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 /* ── Colores por categoría ── (tokens var(--lp-*), sin hardcodes ni morado
    del skin viejo; auto-adaptan a claro/oscuro. La etiqueta de texto distingue
@@ -25,6 +26,11 @@ const S = {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
     display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px',
     overflowY: 'auto',
+    /* MÓVIL: el overlay es el scroller (alignItems flex-start + padding). --pp-vvh
+       (publicado por useBodyScrollLock) sigue al teclado en iOS/Android; cap a la
+       altura visible real menos el padding vertical (24+24) para que siempre haya
+       overflow interno alcanzable y nada quede detrás del teclado. Fallback 100dvh. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 48px)',
   },
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', width: '100%',
@@ -163,6 +169,11 @@ export default function NuevaPruebaModal({ prueba, maestro, labMPs, onClose, onS
   const [pasos, setPasos] = useState(prueba?.pasos || []);
   const [saving, setSaving] = useState(false);
   const [mpSearch, setMpSearch] = useState('');
+
+  /* MÓVIL: congela el scroll del fondo y publica --pp-vvh (alto visible que sigue
+     al teclado) mientras el modal está montado. El modal solo se monta cuando está
+     abierto (el padre controla el montaje), por eso siempre activo. */
+  useBodyScrollLock(true);
 
   /* Catálogo unificado: maestro + lab */
   const allMPs = useMemo(() => {

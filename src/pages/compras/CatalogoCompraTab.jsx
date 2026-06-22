@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { PRESENTACIONES } from './presentaciones';
 
 const fmt$ = n => '$' + Math.round(Number(n) || 0).toLocaleString('es-MX');
@@ -101,6 +102,9 @@ function Stepper({ value, onChange, accent }) {
 /* ── Hoja de revisión del carrito → crear OC(s) ─────────────────────────── */
 function CartSheet({ cart, getQty, setQty, getPres, setPres, removeMp, onClose, onConfirm, creating }) {
   const [notas, setNotas] = useState('');
+  /* MÓVIL: congela el scroll del fondo y publica --pp-vvh (alto visible real,
+     sigue al teclado). El sheet solo se monta cuando está abierto → pasar true. */
+  useBodyScrollLock(true);
   const porProv = useMemo(() => {
     const g = {};
     cart.forEach(f => { const p = f.proveedor || 'POR ASIGNAR'; (g[p] = g[p] || []).push(f); });
@@ -112,7 +116,7 @@ function CartSheet({ cart, getQty, setQty, getPres, setPres, removeMp, onClose, 
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(26,24,21,.55)', zIndex: 9999, display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: 0 }} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: 'var(--lp-bg-raised)', borderRadius: '24px 24px 0 0', width: '100%', maxWidth: 640, maxHeight: '88vh', display: 'flex', flexDirection: 'column', border: '1px solid var(--lp-border-subtle)', borderBottom: 'none' }}>
+      <div style={{ background: 'var(--lp-bg-raised)', borderRadius: '24px 24px 0 0', width: '100%', maxWidth: 640, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', display: 'flex', flexDirection: 'column', border: '1px solid var(--lp-border-subtle)', borderBottom: 'none' }}>
         <div style={{ padding: '18px 20px 10px' }}>
           <div style={{ width: 38, height: 4, borderRadius: 99, background: 'var(--lp-border-strong)', margin: '0 auto 14px' }} />
           <div style={{ fontSize: 17, fontWeight: 700 }}>Tu orden de compra</div>

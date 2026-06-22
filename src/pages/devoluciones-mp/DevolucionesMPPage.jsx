@@ -7,6 +7,7 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useAuth } from '../../context/AuthContext';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import Fab from '../../components/ui/Fab';
 
 /* DevolucionesMPPage — Capa 3 (Arely / rol compras).
@@ -368,7 +369,7 @@ function DevCard({ d, onCerrar }) {
 const SH = {
   /* Bottom-sheet en móvil; modal centrado en escritorio (mismo overlay). */
   overlay: (desktop) => ({ position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: desktop ? 'center' : 'flex-end', justifyContent: 'center', overflow: 'auto', padding: desktop ? 16 : 0 }),
-  sheet: (desktop) => ({ background: 'var(--lp-bg-base)', borderRadius: desktop ? 20 : '24px 24px 0 0', padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: desktop ? '92vh' : '94vh', overflowY: 'auto', boxShadow: desktop ? '0 12px 48px rgba(0,0,0,.28)' : 'none' }),
+  sheet: (desktop) => ({ background: 'var(--lp-bg-base)', borderRadius: desktop ? 20 : '24px 24px 0 0', padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: desktop ? 'calc(var(--pp-vvh, 100dvh) - 32px)' : 'calc(var(--pp-vvh, 100dvh) - 16px)', overflowY: 'auto', boxShadow: desktop ? '0 12px 48px rgba(0,0,0,.28)' : 'none' }),
   h: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
   s: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 8 },
   lbl: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '16px 2px 6px' },
@@ -386,6 +387,10 @@ const SH = {
 };
 
 function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
+  /* Bloquea el scroll del fondo y publica --pp-vvh (alto visible real, sigue al
+     teclado) que el sheet usa en su maxHeight. El componente solo se monta cuando
+     está abierto → siempre activo. */
+  useBodyScrollLock(true);
   /* getInventario() → { ok, data: { mp, pt } }; getMaestroMP() → { ok, data: { mps } }.
      Desenvolvemos .data (con fallback por si el shape cambia). */
   const invMp = (inv && inv.data && inv.data.mp) || (inv && inv.mp) || {};
@@ -509,6 +514,9 @@ const IFile = (
 );
 
 function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
+  /* Bloquea el scroll del fondo y publica --pp-vvh para el maxHeight del sheet.
+     El componente solo se monta cuando está abierto → siempre activo. */
+  useBodyScrollLock(true);
   /* initialTipo: el botón elegido en la card pre-selecciona el camino (mockup §7) */
   const [tipo, setTipo] = useState(initialTipo === 'reembolso' ? 'reembolso' : 'nota_credito');
   const [nc, setNc] = useState('');

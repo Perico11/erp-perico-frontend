@@ -8,13 +8,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useToast } from '../../components/ui/Toast';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const fmt = (n) => Number(n || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 const fmtFecha = (iso) => { try { return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }); } catch { return ''; } };
 
 const S = {
   ov: { position: 'fixed', inset: 0, background: 'rgba(26,24,21,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  box: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)', border: '1px solid var(--lp-border-subtle)', width: '100%', maxWidth: 560, maxHeight: '88vh', display: 'flex', flexDirection: 'column' },
+  box: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)', border: '1px solid var(--lp-border-subtle)', width: '100%', maxWidth: 560, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', display: 'flex', flexDirection: 'column' },
   lbl: { display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', margin: '12px 0 5px' },
   inp: { width: '100%', padding: '10px 12px', border: '1px solid var(--lp-border-subtle)', borderRadius: 10, fontSize: 13.5, fontFamily: 'inherit', boxSizing: 'border-box', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)' },
   btnP: { height: 44, padding: '0 18px', borderRadius: 'var(--lp-radius-md)', border: 'none', background: 'var(--lp-brand-600)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13.5 },
@@ -23,6 +24,7 @@ const S = {
 
 function FreezeModal({ onClose, onDone }) {
   const toast = useToast();
+  useBodyScrollLock(true);
   const [motivo, setMotivo] = useState('');
   const [codigo, setCodigo] = useState('');
   const [saving, setSaving] = useState(false);
@@ -40,7 +42,7 @@ function FreezeModal({ onClose, onDone }) {
   };
   return (
     <div style={S.ov} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={{ ...S.box, padding: '18px 20px 16px' }} onClick={e => e.stopPropagation()}>
+      <div style={{ ...S.box, padding: '18px 20px 16px', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 17, fontWeight: 700 }}>Congelar inventario inicial</div>
         <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 6, lineHeight: 1.45 }}>
           Guarda el inventario <strong>actual</strong> como la <strong>base canónica v1</strong> (inmutable, con checksum). Hazlo <strong>solo cuando ya cargaste los datos reales</strong> — después podrás ver cuánto se mueve el inventario respecto a esta base.
@@ -59,6 +61,7 @@ function FreezeModal({ onClose, onDone }) {
 }
 
 function DeltaModal({ onClose }) {
+  useBodyScrollLock(true);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {

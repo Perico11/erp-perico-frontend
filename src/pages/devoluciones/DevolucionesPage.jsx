@@ -5,6 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -111,7 +112,9 @@ const S = {
     background: 'var(--lp-bg-base)', width: '100%', maxWidth: 520,
     borderRadius: desktop ? 20 : '24px 24px 0 0',
     boxShadow: '0 -8px 40px rgba(0,0,0,.22)',
-    display: 'flex', flexDirection: 'column', maxHeight: '92vh', overflow: 'hidden',
+    /* --pp-vvh (visualViewport, publicado por useBodyScrollLock) sigue al teclado
+       en iOS/Android; fallback a 100dvh. El sheetBody scrollea, no el fondo. */
+    display: 'flex', flexDirection: 'column', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 24px)', overflow: 'hidden',
   }),
   sheetHeader: {
     padding: '18px 20px 14px', borderBottom: '1px solid var(--lp-border-subtle)',
@@ -231,6 +234,10 @@ function DevolucionSheet({ isDesktop, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const firstRef = useRef(null);
+  /* MÓVIL: bloquea scroll del fondo + publica --pp-vvh (alto visible real que
+     sigue al teclado) para que sheetBody siempre tenga overflow interno. El
+     sheet sólo se monta cuando está abierto, así que el lock es siempre activo. */
+  useBodyScrollLock(true);
   useEffect(() => { const t = setTimeout(() => firstRef.current?.focus(), 120); return () => clearTimeout(t); }, []);
 
   const guardar = async () => {

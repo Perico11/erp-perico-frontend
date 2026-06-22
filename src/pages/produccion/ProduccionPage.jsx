@@ -6,6 +6,7 @@ import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
@@ -132,7 +133,7 @@ const S = {
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)',
     width: '100%', maxWidth: 520,
-    maxHeight: 'calc(100vh - 80px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px))',
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 80px - env(safe-area-inset-bottom, 0px) - env(safe-area-inset-top, 0px))',
     overflow: 'auto',
     boxShadow: '0 8px 40px rgba(0,0,0,.22)',
   },
@@ -219,6 +220,12 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
   const [notas, setNotas] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  /* MÓVIL: bloquear el scroll del fondo mientras el modal QC está abierto y
+     publicar --pp-vvh para que el cuerpo del modal scrollee internamente (sin
+     scroll-chaining al fondo). Este componente solo se monta cuando está
+     abierto, por eso `true`. Mismo patrón canónico que src/components/ui/Modal.jsx. */
+  useBodyScrollLock(true);
 
   /* Resolve the lote behind the orden — could be embedded as orden.loteRef
      (when qcItems built the row from a lote without orden), or we resolve
@@ -452,6 +459,12 @@ export default function ProduccionPage() {
 
   /* CSS de paridad mockup (focus verde inputs QC) — una sola vez */
   useEffect(() => { injectPageCSS(); }, []);
+
+  /* MÓVIL: el wizard de producción (prodModal) se renderiza inline en esta
+     página como overlay fixed; bloquear el scroll del fondo y publicar --pp-vvh
+     mientras está abierto para que su cuerpo scrollee internamente. Mismo patrón
+     canónico que src/components/ui/Modal.jsx (QCModal lo hace por su cuenta). */
+  useBodyScrollLock(!!prodModal);
 
   /* Emmanuel (id='admin') es el propietario de las fórmulas — bypass del NDA.
      Para cualquier otro usuario se muestra el modal NDA antes de arrancar. */

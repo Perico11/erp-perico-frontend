@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import api from '../../../services/api';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(26, 24, 21, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto' },
-  modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 440, width: '92%' },
+  modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 440, width: '92%', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' },
   title: { fontSize: 16, fontWeight: 700, color: 'var(--lp-danger-700)', marginBottom: 8 },
   warning: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: '10px 12px', borderRadius: 8, fontSize: 12, marginBottom: 14, lineHeight: 1.5 },
   label: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6 },
@@ -23,6 +24,11 @@ export default function EliminarOCModal({ oc, onClose, onSaved }) {
   const [pin, setPin] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  /* MÓVIL: el modal se monta sólo cuando hay OC seleccionada (sin estado de
+     apertura interno), por eso pasamos `true`. Bloquea el scroll del fondo y
+     publica --pp-vvh para que el contenedor tenga overflow interno scrolleable. */
+  useBodyScrollLock(true);
 
   const eliminar = async () => {
     setErr('');

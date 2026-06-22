@@ -6,6 +6,7 @@ import SegmentedControl from '../../components/ui/SegmentedControl';
 import useConfirm from '../../hooks/useConfirm';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -172,6 +173,11 @@ const S = {
     background: 'var(--lp-bg-base)', width: '100%', maxWidth: 460,
     borderRadius: desktop ? 20 : '24px 24px 0 0', padding: '20px 20px 28px',
     boxShadow: '0 -8px 40px rgba(0,0,0,.22)', boxSizing: 'border-box',
+    /* MÓVIL: el sheet es el scroller — sin esto un formulario alto (input +
+       varianza + PIN + acciones) se sale de pantalla y los botones quedan
+       detrás del teclado. --pp-vvh (visualViewport, lo publica useBodyScrollLock)
+       sigue al teclado; fallback a 100dvh. El fondo queda congelado por el lock. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto',
   }),
   shH: { fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)' },
   shS: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 16 },
@@ -228,6 +234,9 @@ const UMBRAL = 5;
 function StartModal({ onStart, onClose, loading, isDesktop }) {
   const [categoria, setCategoria] = useState('mp');
   const [tipo, setTipo] = useState('completo');
+  /* MÓVIL: este componente sólo se monta cuando está abierto → lock siempre activo
+     mientras vive. Congela el fondo (anti scroll-chaining) y publica --pp-vvh. */
+  useBodyScrollLock(true);
   return (
     <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
@@ -270,6 +279,9 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
   );
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* MÓVIL: sólo se monta cuando está abierto → lock siempre activo mientras vive.
+     Congela el fondo y publica --pp-vvh (el sheet la usa en su maxHeight). */
+  useBodyScrollLock(true);
 
   const f = parseFloat(val);
   const showVar = !isNaN(f);
@@ -357,6 +369,8 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading, isDesktop }) {
   const [asignaciones, setAsignaciones] = useState({});
   const [err, setErr] = useState('');
   const [loadingCat, setLoadingCat] = useState(true);
+  /* MÓVIL: sólo se monta cuando está abierto → lock siempre activo mientras vive. */
+  useBodyScrollLock(true);
 
   useEffect(() => {
     api.getCausasVarianza()
@@ -380,7 +394,7 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading, isDesktop }) {
 
   return (
     <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ ...S.sheet(isDesktop), maxWidth: 720, maxHeight: '88vh', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
+      <div style={{ ...S.sheet(isDesktop), maxWidth: 720, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Asignar causa raíz</div>
         <div style={{ ...S.shS, marginBottom: 14 }}>
           La sesión <strong>{sesion?.id}</strong> tiene <strong>{flagged.length}</strong> item(s) con varianza significativa. Asigna una causa a cada uno antes de aprobar — esto alimenta el análisis Pareto trimestral.
@@ -550,6 +564,8 @@ function AddMPModal({ onAdd, onClose, loading, isDesktop }) {
   const [stockFisico, setStockFisico] = useState('');
   const [unidad, setUnidad] = useState('kg');
   const [err, setErr] = useState('');
+  /* MÓVIL: sólo se monta cuando está abierto → lock siempre activo mientras vive. */
+  useBodyScrollLock(true);
 
   const guardar = async () => {
     const n = nombre.trim();

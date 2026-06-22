@@ -1,4 +1,5 @@
 import { getToken } from '../../../services/api';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 /* ComprobantesOCModal — detalle de una OC recibida (jun 2026).
    Reemplaza el botón "Comprobante" que solo abría un PDF (y a veces nada):
@@ -9,7 +10,7 @@ import { getToken } from '../../../services/api';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 },
-  sheet: { background: 'var(--lp-bg-base)', borderRadius: 20, padding: '20px 20px 24px', maxWidth: 480, width: '100%', maxHeight: '92vh', overflowY: 'auto' },
+  sheet: { background: 'var(--lp-bg-base)', borderRadius: 20, padding: '20px 20px 24px', maxWidth: 480, width: '100%', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' },
   h: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
   sub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 14 },
   sec: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 14px', marginBottom: 10 },
@@ -39,6 +40,10 @@ function fechaFmt(iso) {
 }
 
 export default function ComprobantesOCModal({ oc, onClose }) {
+  /* MÓVIL: bloquea el scroll del FONDO mientras el modal está abierto y publica
+     --pp-vvh (alto visible real) que el sheet usa en su maxHeight. El modal solo
+     se monta cuando hay `oc`, así que el estado de apertura es `!!oc`. */
+  useBodyScrollLock(!!oc);
   if (!oc) return null;
   /* ?token=: el endpoint es GET con auth por header x-session-token, pero
      window.open NO manda headers → el server acepta el token por query SOLO en

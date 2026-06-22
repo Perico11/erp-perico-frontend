@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { qrDataUrl } from '../lib/qrGenerator';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 const S = {
   overlay: {
@@ -11,6 +12,10 @@ const S = {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
     border: '1.5px solid var(--lp-border-subtle)',
     maxWidth: 520, width: '100%',
+    /* MÓVIL: acotar al alto visible real (--pp-vvh sigue al teclado, lo publica
+       useBodyScrollLock; fallback 100dvh). 32px = padding del overlay (16+16).
+       El body interno scrollea; header/footer quedan fijos. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   header: {
@@ -23,7 +28,7 @@ const S = {
     background: 'transparent', border: 'none', cursor: 'pointer',
     fontSize: 22, color: 'var(--lp-text-tertiary)', padding: 4, lineHeight: 1,
   },
-  body: { padding: 20 },
+  body: { padding: 20, overflowY: 'auto', flex: 1, minHeight: 0 },
   qrPreview: {
     display: 'flex', flexDirection: 'column', alignItems: 'center',
     background: 'var(--lp-bg-sunken)', borderRadius: 'var(--lp-radius-sm)',
@@ -119,6 +124,10 @@ export default function QRModal({ lote, onClose }) {
   const cantidadDefault = Number(lote?.cantidad) || 1;
   const [copias, setCopias] = useState(cantidadDefault);
   const [formato, setFormato] = useState('50x40');
+  /* MÓVIL: congela el scroll del fondo y publica --pp-vvh mientras el modal está
+     abierto (= hay lote). Llamado ANTES del early-return para respetar las reglas
+     de hooks. */
+  useBodyScrollLock(!!lote);
   if (!lote) return null;
   const codigo = lote.codigo || lote.codigoLote || lote.id;
 
@@ -310,7 +319,7 @@ const SS = {
   header: S.header,
   title: S.title,
   close: S.close,
-  body: { padding: 20, textAlign: 'center' },
+  body: { padding: 20, textAlign: 'center', overflowY: 'auto', flex: 1, minHeight: 0 },
   video: {
     width: '100%', maxWidth: 380, height: 280,
     background: '#000', borderRadius: 'var(--lp-radius-sm)',
@@ -356,6 +365,10 @@ export function QRScanner({ onResult, onClose }) {
   const [cameraActive, setCameraActive] = useState(false);
   const [pathLabel, setPathLabel] = useState(''); /* 'nativo' | 'jsQR' */
   const [manual, setManual] = useState('');
+
+  /* MÓVIL: congela el scroll del fondo y publica --pp-vvh. Este componente solo
+     se monta cuando el escáner está abierto, así que el estado de apertura es true. */
+  useBodyScrollLock(true);
 
   const handleResult = (raw) => {
     let parsed;

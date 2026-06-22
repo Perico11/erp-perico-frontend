@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { requestPushPermission, getPushPermission, setPushSettings, setCurrentRol } from '../utils/pushNotifications';
 import { pushSupported, subscribeToPush, isSubscribed } from '../utils/webPush';
 
@@ -18,6 +19,11 @@ export default function PushPrompt() {
   const user = auth?.user || null;
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  /* MÓVIL: mientras el banner está arriba, congela el scroll del FONDO (html+body+#root)
+     y publica --pp-vvh para que la card siga al viewport visible. Mismo fix canónico
+     que ui/Modal.jsx. */
+  useBodyScrollLock(show);
 
   useEffect(() => {
     if (!user || !pushSupported()) { setShow(false); return; }
@@ -108,6 +114,11 @@ const S = {
     borderRadius: 16, padding: 14,
     boxShadow: '0 10px 36px rgba(20,36,31,.18)',
     fontFamily: 'var(--lp-font-sans)',
+    /* MÓVIL (viewport bajo / landscape): si la card excede el alto visible, scrollea
+       internamente en vez de salirse de pantalla. --pp-vvh sigue al viewport visible
+       (lo publica useBodyScrollLock); 24px = padding vertical del wrap. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 24px)',
+    overflowY: 'auto',
   },
   iconBox: {
     flexShrink: 0, width: 40, height: 40, borderRadius: 10,

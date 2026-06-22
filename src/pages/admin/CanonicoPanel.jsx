@@ -12,6 +12,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   page: { padding: '0 20px 100px', maxWidth: 1100, margin: '0 auto' },
@@ -46,6 +47,7 @@ const S = {
   modalCard: {
     background: 'var(--lp-bg-raised)', color: '#1A1815', borderRadius: 12, width: '100%', maxWidth: 480,
     padding: 24, boxShadow: '0 24px 60px rgba(0,0,0,.35)', colorScheme: 'light',
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto',
   },
   modalTitle: { fontSize: 16, fontWeight: 700, marginBottom: 12 },
   label: { display: 'block', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#5A5550', marginBottom: 6, marginTop: 14 },
@@ -259,6 +261,9 @@ function CrearCanonicoModal({ onClose, onSaved }) {
   const [motivo, setMotivo] = useState('Congelación inicial del inventario base');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* MÓVIL: el componente solo se monta cuando el modal está abierto → lock fijo.
+     Congela el fondo y publica --pp-vvh para el maxHeight scrolleable del card. */
+  useBodyScrollLock(true);
 
   const handleCrear = async () => {
     if (codigoTOTP.length !== 6) { setErr('El código TOTP debe ser de 6 dígitos'); return; }
@@ -315,6 +320,9 @@ function ModificarCanonicoModal({ canonico, onClose, onSaved }) {
   const [cambiosTexto, setCambiosTexto] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* MÓVIL: el componente solo se monta cuando el modal está abierto → lock fijo.
+     Congela el fondo y publica --pp-vvh para el maxHeight scrolleable del card. */
+  useBodyScrollLock(true);
 
   /* Parser simple: cada línea "TIPO|NOMBRE|qty|min". Ej: MP|AGUA|150|20 */
   const cambiosParsed = useMemo(() => {

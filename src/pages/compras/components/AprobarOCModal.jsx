@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../../services/api';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 /* AprobarOCModal — HANDOFF jun 2026 (Sprint AC).
    Arely aprueba una OC: la OC ya trae proveedor + precio del catálogo, ella
@@ -8,7 +9,7 @@ import api from '../../../services/api';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 },
-  sheet: { background: 'var(--lp-bg-base)', borderRadius: 20, padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: '92vh', overflowY: 'auto' },
+  sheet: { background: 'var(--lp-bg-base)', borderRadius: 20, padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' },
   h: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
   s: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 12 },
   sum: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 14px', marginBottom: 6 },
@@ -50,6 +51,11 @@ export default function AprobarOCModal({ oc, onClose, onSaved }) {
   const [dias, setDias] = useState(30); /* días de crédito — editable (no siempre 30) */
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  /* MÓVIL: bloquea el scroll del fondo y publica --pp-vvh (alto visible real
+     que sigue al teclado) usado por S.sheet.maxHeight. El componente solo se
+     monta cuando está abierto, por eso pasamos true. */
+  useBodyScrollLock(true);
 
   const esContado = pago === 'contado';
 

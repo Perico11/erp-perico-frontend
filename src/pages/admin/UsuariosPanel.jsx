@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
@@ -83,7 +84,7 @@ const S = {
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
     border: '1.5px solid var(--lp-border-subtle)', padding: 0,
-    maxWidth: 560, width: '100%', maxHeight: '92vh',
+    maxWidth: 560, width: '100%', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   modalHeader: {
@@ -148,6 +149,8 @@ function UserFormModal({ user, roles, onClose, onSaved }) {
   const [rol, setRol] = useState(user?.rol || (roles[0] || 'tecnico'));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* MÓVIL: este modal solo se monta cuando está abierto → bloquear scroll del fondo. */
+  useBodyScrollLock(true);
 
   const guardar = async () => {
     setErr('');
@@ -235,6 +238,8 @@ function PinModal({ user, onClose, onSaved }) {
   const [pin2, setPin2] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* MÓVIL: este modal solo se monta cuando está abierto → bloquear scroll del fondo. */
+  useBodyScrollLock(true);
 
   const guardar = async () => {
     setErr('');
@@ -294,6 +299,8 @@ function PermisosRolModal({ rol, permisosActuales, disponibles, onClose, onSaved
   const [perms, setPerms] = useState({ ...(permisosActuales || {}) });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* MÓVIL: este modal solo se monta cuando está abierto → bloquear scroll del fondo. */
+  useBodyScrollLock(true);
 
   const grupos = useMemo(() => ({
     'Pantallas': ['dashboard', 'formulas', 'inventario', 'ordenes', 'produccion', 'envasado', 'stockFabrica', 'recoleccion', 'compras', 'trazabilidad', 'admin', 'cycleCount', 'reports'],
@@ -385,6 +392,8 @@ function PermisosRolModal({ rol, permisosActuales, disponibles, onClose, onSaved
 function ConfirmDelete({ user, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* MÓVIL: este modal solo se monta cuando está abierto → bloquear scroll del fondo. */
+  useBodyScrollLock(true);
   const eliminar = async () => {
     setSaving(true);
     setErr('');

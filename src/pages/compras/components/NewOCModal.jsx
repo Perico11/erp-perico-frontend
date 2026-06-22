@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import api from '../../../services/api';
 import useIsDesktop from '../../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 import { presEnvases } from '../presentaciones';
 
 const PRESENTACIONES = [
@@ -168,6 +169,10 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   /* Mockup integracion/Compras.html: en móvil el alta de OC es un bottom-sheet
      (radio 24 arriba, pegado abajo); en escritorio queda el modal centrado. */
   const isDesktop = useIsDesktop();
+  /* MÓVIL: congela el scroll del FONDO mientras el sheet/modal está montado
+     (este componente sólo se monta cuando está abierto, por eso `true`). El
+     hook también publica --pp-vvh que el contenedor usa en su maxHeight. */
+  useBodyScrollLock(true);
   const [catalog, setCatalog] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -374,7 +379,10 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
     ...S.modal,
     width: isDesktop ? '92%' : '100%',
     borderRadius: isDesktop ? 'var(--lp-radius)' : '24px 24px 0 0',
-    maxHeight: '92vh',
+    /* --pp-vvh (publicado por useBodyScrollLock) sigue al teclado virtual en
+       iOS/Android; fallback a 100dvh. El contenedor scrollea internamente
+       (S.modal ya trae overflowY:'auto') y nada queda detrás del teclado. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)',
   };
 
   if (loading) {

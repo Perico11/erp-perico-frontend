@@ -1,3 +1,5 @@
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+
 const S = {
   overlay: {
     position: 'fixed',
@@ -16,10 +18,10 @@ const S = {
     padding: 0,
     maxWidth: 720,
     width: '100%',
-    maxHeight: '92vh',
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 16px)',
     display: 'flex',
     flexDirection: 'column',
-    overflow: 'hidden',
+    overflowY: 'auto',
     border: '1.5px solid var(--lp-border-subtle)',
   },
   header: {
@@ -96,6 +98,10 @@ function precisionInfo(accMeters) {
 }
 
 export default function SesionMapaModal({ sesion, onClose }) {
+  /* MÓVIL: bloquea el scroll del fondo y publica --pp-vvh (alto visible real,
+     sigue al teclado) que el modal usa en su maxHeight. El componente solo se
+     monta cuando hay sesión, así que el lock está activo mientras es visible. */
+  useBodyScrollLock(true);
   if (!sesion) return null;
   const lat = sesion.geoLatitud;
   const lng = sesion.geoLongitud;

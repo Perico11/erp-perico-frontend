@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import api from '../../../services/api';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 const PRESENTACIONES = [
   { v: 'cubeta_20', lbl: 'CUBETA / 20 kg' },
@@ -20,7 +21,7 @@ const PRIORIDADES = [
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(26, 24, 21, 0.6)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto' },
-  modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 640, width: '92%', maxHeight: '92vh', overflowY: 'auto' },
+  modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 24, maxWidth: 640, width: '92%', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' },
   title: { fontSize: 16, fontWeight: 700, color: 'var(--lp-brand-600)', marginBottom: 16 },
   label: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6 },
   input: { width: '100%', padding: '10px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--lp-font-sans)', boxSizing: 'border-box' },
@@ -41,6 +42,12 @@ const S = {
 };
 
 export default function EditOCModal({ oc, onClose, onSaved }) {
+  /* MÓVIL: bloquea el scroll del FONDO mientras el modal está abierto y publica
+     --pp-vvh (alto visible real, sigue al teclado) que S.modal usa en su maxHeight.
+     Este componente solo se monta cuando está abierto (ComprasPage lo renderiza
+     condicionalmente), por eso pasamos true. */
+  useBodyScrollLock(true);
+
   const [items, setItems] = useState(() =>
     (oc.items || []).map(i => ({
       mp: i.mp || '',

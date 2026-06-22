@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const TIPOS = [
   { v: 'operativa', label: 'Operativa', color: '#0F6E56' },
@@ -26,7 +27,7 @@ const S = {
   btnDanger: { padding: '6px 10px', fontSize: 11, fontWeight: 600, borderRadius: 'var(--lp-radius-sm)', border: 'none', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', cursor: 'pointer' },
   badge: (bg, fg) => ({ display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700, borderRadius: 4, background: bg, color: fg, textTransform: 'uppercase', letterSpacing: '.04em' }),
   modal: { position: 'fixed', inset: 0, background: 'rgba(26,24,21,.5)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  modalBox: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 20, maxWidth: 520, width: '100%', border: '1.5px solid var(--lp-border-subtle)' },
+  modalBox: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 20, maxWidth: 520, width: '100%', border: '1.5px solid var(--lp-border-subtle)', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' },
   input: { width: '100%', padding: '10px 14px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', boxSizing: 'border-box', marginBottom: 12 },
   label: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-secondary)', marginBottom: 4, display: 'block' },
 };
@@ -37,6 +38,10 @@ function EditModal({ causa, onSave, onClose, loading }) {
   const [descripcion, setDescripcion] = useState(causa?.descripcion || '');
   const [tipo, setTipo] = useState(causa?.tipo || 'operativa');
   const [err, setErr] = useState('');
+
+  /* MÓVIL: EditModal solo se monta cuando el modal está abierto, así que el lock
+     se activa con `true`. Congela el fondo y publica --pp-vvh para el scroll interno. */
+  useBodyScrollLock(true);
 
   const guardar = async () => {
     if (!nombre.trim()) { setErr('Nombre requerido'); return; }

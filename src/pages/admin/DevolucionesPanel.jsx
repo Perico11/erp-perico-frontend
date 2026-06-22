@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useConfirm from '../../hooks/useConfirm';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
@@ -50,6 +51,9 @@ const S = {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
     border: '1.5px solid var(--lp-border-subtle)', maxWidth: 520, width: '100%',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
+    /* MÓVIL: el dialog no debe exceder el alto visible (sigue al teclado vía
+       --pp-vvh, publicado por useBodyScrollLock); el body interno scrollea. */
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)',
   },
   modalHeader: {
     padding: '14px 18px', borderBottom: '1.5px solid var(--lp-border-subtle)',
@@ -60,7 +64,7 @@ const S = {
     background: 'transparent', border: 'none', cursor: 'pointer',
     fontSize: 22, color: 'var(--lp-text-tertiary)', padding: 4, lineHeight: 1,
   },
-  modalBody: { padding: 16 },
+  modalBody: { padding: 16, overflowY: 'auto', flex: 1 },
   modalFooter: {
     padding: '12px 16px', borderTop: '1.5px solid var(--lp-border-subtle)',
     display: 'flex', gap: 8, justifyContent: 'flex-end',
@@ -93,6 +97,12 @@ function DevolucionModal({ onClose, onSaved }) {
   const [ajustar, setAjustar] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  /* MÓVIL: bloquea el scroll del fondo mientras el modal está abierto y publica
+     --pp-vvh (alto visible real, sigue al teclado) que el dialog usa en su
+     maxHeight para que el body SIEMPRE tenga overflow interno scrolleable.
+     El componente sólo se monta cuando showModal=true → pasamos true. */
+  useBodyScrollLock(true);
 
   const guardar = async () => {
     setErr('');

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../services/api';
+import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 const COMPANY_NAME = 'PINTURAS EL PERICO S.A. DE C.V.';
 /* Duración del NDA: 7 días desde aceptación. Antes era diario (caducaba cada
@@ -23,7 +24,7 @@ export function ndaYaAceptado(user, context) {
 
 const S = {
   overlay: { position:'fixed', inset:0, background:'rgba(15,12,8,.92)', backdropFilter:'blur(10px)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:99998, padding:16 },
-  modal: { background:'var(--lp-bg-raised)', borderRadius:14, maxWidth:680, width:'100%', maxHeight:'92vh', display:'flex', flexDirection:'column', boxShadow:'0 30px 60px rgba(0,0,0,.5)', overflow:'hidden', fontFamily:'var(--lp-font-sans)' },
+  modal: { background:'var(--lp-bg-raised)', borderRadius:14, maxWidth:680, width:'100%', maxHeight:'calc(var(--pp-vvh, 100dvh) - 32px)', display:'flex', flexDirection:'column', boxShadow:'0 30px 60px rgba(0,0,0,.5)', overflow:'hidden', fontFamily:'var(--lp-font-sans)' },
   header: { background:'linear-gradient(135deg, #7c1d1d 0%, #b91c1c 100%)', padding:'20px 24px', color:'#fff' },
   iconLine: { display:'flex', alignItems:'center', gap:12 },
   iconBox: { width:44, height:44, borderRadius:12, background:'rgba(255,255,255,.18)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 },
@@ -56,12 +57,15 @@ export default function NDAModal({ user, onAccept, onReject, context, productoNo
   const isProduccion = context === 'produccion';
   const modalRef = useRef(null);
 
+  /* MÓVIL: bloquea el scroll del FONDO (html+body+#root, el scroller real) y
+     publica --pp-vvh para que el body del modal siempre tenga overflow interno
+     scrolleable. El componente solo se monta cuando debe mostrarse → true. */
+  useBodyScrollLock(true);
+
   useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
     const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); } };
     window.addEventListener('keydown', onKey, true);
-    return () => { document.body.style.overflow = prev; window.removeEventListener('keydown', onKey, true); };
+    return () => { window.removeEventListener('keydown', onKey, true); };
   }, []);
 
   useEffect(() => {

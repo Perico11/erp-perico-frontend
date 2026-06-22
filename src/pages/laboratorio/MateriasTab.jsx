@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import api from '../../services/api';
 import useConfirm from '../../hooks/useConfirm';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   toolbar: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
@@ -37,7 +38,7 @@ const S = {
   },
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', width: '100%',
-    maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', padding: 24,
+    maxWidth: 520, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto', padding: 24,
     boxShadow: '0 8px 32px rgba(0,0,0,.12)',
   },
   modalTitle: { fontSize: 17, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 16 },
@@ -92,6 +93,12 @@ const EMPTY_MP = { nombre: '', proveedor: '', tipo: 'otro', densidad: '', solido
 function MPModal({ mp, onClose, onSave }) {
   const [form, setForm] = useState(mp ? { ...mp, densidad: mp.densidad ?? '', solidos: mp.solidos ?? '', viscosidad: mp.viscosidad ?? '', ph: mp.ph ?? '', costoKg: mp.costoKg ?? '' } : { ...EMPTY_MP });
   const [saving, setSaving] = useState(false);
+
+  /* MÓVIL: bloquea el scroll del FONDO mientras el modal está montado y publica
+     --pp-vvh (alto visible real, sigue al teclado) que S.modal usa en su maxHeight
+     para que el contenido SIEMPRE tenga overflow interno scrolleable. MPModal solo
+     se monta cuando está abierto (showModal && ...), así que pasamos true. */
+  useBodyScrollLock(true);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 

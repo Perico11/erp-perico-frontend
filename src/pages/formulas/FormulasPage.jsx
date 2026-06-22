@@ -8,6 +8,7 @@ import CompararFormulasModal from './CompararFormulasModal';
 import HelpHint from '../../components/HelpHint';
 import SecureView from '../../components/SecureView';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const B = (bg, fg) => ({
   display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 600,
@@ -71,7 +72,7 @@ const S = {
   },
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
-    width: '100%', maxWidth: 560, maxHeight: '90vh', overflow: 'auto',
+    width: '100%', maxWidth: 560, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto',
     boxShadow: '0 8px 32px rgba(0,0,0,.18)',
   },
   modalHeader: {
@@ -128,6 +129,10 @@ function RenameModal({ formulaId, onClose, onSuccess }) {
   const [newName, setNewName] = useState(formulaId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  /* MÓVIL: el modal solo se monta cuando está abierto → bloquea scroll de fondo
+     y publica --pp-vvh para que el cuerpo scrollee internamente. */
+  useBodyScrollLock(true);
 
   const handleSave = async () => {
     const n = newName.trim();
@@ -291,6 +296,10 @@ function NuevaMPModal({ nombreInicial, onClose, onCreated }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
+  /* MÓVIL: el modal solo se monta cuando está abierto → bloquea scroll de fondo
+     y publica --pp-vvh para que el cuerpo scrollee internamente. */
+  useBodyScrollLock(true);
+
   const CATEGORIAS = [
     'Resinas y Ligantes', 'Pigmentos y Colorantes', 'Solventes y Coalescentes',
     'Aditivos y Dispersantes', 'Cargas y Cargas Minerales', 'Conservadores y Biocidas',
@@ -428,6 +437,10 @@ function EditIngModal({ formulaId, formula, onClose, onSuccess }) {
   const [dragArmedIdx, setDragArmedIdx] = useState(null); /* idx con drag habilitado (handle pressed) */
   const [creatingMP, setCreatingMP] = useState(null); /* { idx, nombre } */
   const [mps, setMps] = useState([]); /* lista MPs del maestro */
+
+  /* MÓVIL: el modal solo se monta cuando está abierto → bloquea scroll de fondo
+     y publica --pp-vvh para que el cuerpo scrollee internamente. */
+  useBodyScrollLock(true);
 
   /* Cargar MPs del maestro al abrir */
   useEffect(() => {

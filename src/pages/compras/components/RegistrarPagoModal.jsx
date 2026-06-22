@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import api from '../../../services/api';
+import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
 
 /* RegistrarPagoModal — HANDOFF jun 2026 (Sprint AC2).
    Cierra una OC a crédito: sube el comprobante del pago real (transferencia /
@@ -8,7 +9,7 @@ import api from '../../../services/api';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 },
-  sheet: { background: 'var(--lp-bg-base)', borderRadius: 20, padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: '92vh', overflowY: 'auto' },
+  sheet: { background: 'var(--lp-bg-base)', borderRadius: 20, padding: '20px 20px 28px', maxWidth: 460, width: '100%', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' },
   h: { fontSize: 18, fontWeight: 700, color: 'var(--lp-text-primary)' },
   s: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 2, marginBottom: 12 },
   lbl: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '16px 2px 6px' },
@@ -35,6 +36,11 @@ export default function RegistrarPagoModal({ oc, onClose, onSaved }) {
   const [ref, setRef] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  /* MÓVIL: este modal se monta solo cuando está abierto (el padre lo renderiza
+     condicionalmente), por eso pasamos `true`. Congela el scroll del fondo y
+     publica --pp-vvh para que el sheet tenga overflow interno scrolleable. */
+  useBodyScrollLock(true);
 
   const onFile = (e) => {
     const f = e.target.files && e.target.files[0];

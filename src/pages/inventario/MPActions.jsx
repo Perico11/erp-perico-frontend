@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   overlay: {
@@ -10,7 +11,8 @@ const S = {
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
     border: '1.5px solid var(--lp-border-subtle)',
-    maxWidth: 480, width: '100%', maxHeight: '92vh',
+    maxWidth: 480, width: '100%',
+    maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
   },
   header: {
@@ -83,6 +85,11 @@ export function EliminarMPModal({ mp, onClose, onSaved }) {
   const [forzar, setForzar] = useState(false);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  /* MÓVIL: este modal sólo se monta cuando está abierto, así que bloqueamos el
+     scroll del fondo siempre que esté en el árbol. El hook publica --pp-vvh que
+     usa S.modal en su maxHeight para que S.body tenga overflow interno. */
+  useBodyScrollLock(true);
 
   useEffect(() => {
     api.checkMPFormulas(mp)
@@ -170,6 +177,11 @@ export function SustituirMPModal({ mp, mpsDisponibles, onClose, onSaved }) {
   const [sustituta, setSustituta] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+
+  /* MÓVIL: este modal sólo se monta cuando está abierto, así que bloqueamos el
+     scroll del fondo siempre que esté en el árbol. El hook publica --pp-vvh que
+     usa S.modal en su maxHeight para que S.body tenga overflow interno. */
+  useBodyScrollLock(true);
 
   const sustituir = async () => {
     setErr('');

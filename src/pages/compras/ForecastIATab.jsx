@@ -13,6 +13,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../components/ui/Toast';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { PRESENTACIONES } from './presentaciones';
 
 const S = {
@@ -32,7 +33,7 @@ const S = {
   badge: (bg, fg) => ({ display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700, borderRadius: 4, background: bg, color: fg, textTransform: 'uppercase', letterSpacing: '.04em' }),
   search: { flex: 1, minWidth: 200, padding: '8px 12px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-raised)', boxSizing: 'border-box' },
   modal: { position: 'fixed', inset: 0, background: 'rgba(26,24,21,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
-  modalBox: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 20, maxWidth: 720, width: '100%', maxHeight: '85vh', overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)' },
+  modalBox: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', padding: 20, maxWidth: 720, width: '100%', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)' },
 };
 
 const PRIORIDAD_COLORS = {
@@ -72,6 +73,10 @@ function Sparkline({ data, color = 'var(--lp-qc-600)' }) {
 function DetalleModal({ mp, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  /* MÓVIL: bloquea scroll del fondo + publica --pp-vvh para el maxHeight del box.
+     Este componente solo se monta cuando está abierto → siempre activo (true). */
+  useBodyScrollLock(true);
 
   useEffect(() => {
     api.getForecastSugerencia(mp)
@@ -208,6 +213,10 @@ const _mInput = { width: 56, border: 'none', textAlign: 'center', fontFamily: 'v
 const _mSelect = { flex: '0 0 auto', height: 34, maxWidth: 150, padding: '0 8px', borderRadius: 8, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)', fontSize: 12, fontFamily: 'var(--lp-font-sans)' };
 
 function BulkOCModal({ items, onConfirm, onClose, loading }) {
+  /* MÓVIL: bloquea scroll del fondo + publica --pp-vvh para el maxHeight del box.
+     Este componente solo se monta cuando está abierto → siempre activo (true). */
+  useBodyScrollLock(true);
+
   /* Estado editable por MP: cantidad + presentación, partiendo de la sugerencia. */
   const [rows, setRows] = useState(() => items.map(it => ({
     mp: it.mp,

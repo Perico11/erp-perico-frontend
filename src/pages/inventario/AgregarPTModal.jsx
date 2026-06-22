@@ -8,6 +8,7 @@
    Permisos en backend: admin + inventario + almacen (NO recolectores). */
 import { useState, useMemo, useEffect } from 'react';
 import api from '../../services/api';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   overlay: {
@@ -19,7 +20,7 @@ const S = {
   modal: {
     background: 'var(--lp-bg-raised)', color: '#1A1815',
     borderRadius: 12, width: '100%', maxWidth: 560,
-    maxHeight: 'calc(100vh - 32px)', maxBlockSize: 'calc(100dvh - 32px)',
+    maxHeight: 'calc(100vh - 32px)', maxBlockSize: 'calc(var(--pp-vvh, 100dvh) - 32px)',
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
     boxShadow: '0 24px 60px rgba(0,0,0,.35)',
     colorScheme: 'light',
@@ -102,6 +103,11 @@ const S = {
 };
 
 export default function AgregarPTModal({ onClose, onSaved }) {
+  /* MÓVIL: bloquea el scroll del FONDO y publica --pp-vvh (alto visible real que
+     sigue al teclado) que el dialog usa en su maxHeight. El componente solo se
+     monta cuando está abierto → siempre activo. */
+  useBodyScrollLock(true);
+
   const [tab, setTab] = useState('individual');
 
   /* Cargar lista de productos del summary para autocompletar */

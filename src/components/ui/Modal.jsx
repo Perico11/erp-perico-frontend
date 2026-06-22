@@ -5,6 +5,7 @@
    el modal transparente. */
 import { useEffect, useRef, useState } from 'react';
 import Button from './Button';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   overlay: {
@@ -37,7 +38,9 @@ const S = {
        los botones quedan ocultos detrás del teclado (= "no funciona").
        Fallback a 100vh para navegadores viejos. */
     maxHeight: 'calc(100vh - 32px)',
-    maxBlockSize: 'calc(100dvh - 32px)',
+    /* --pp-vvh (visualViewport, publicado por useBodyScrollLock) sigue al teclado
+       en iOS/Android; fallback a 100dvh. El body interno scrollea, no el fondo. */
+    maxBlockSize: 'calc(var(--pp-vvh, 100dvh) - 32px)',
     overflow: 'hidden',
     display: 'flex', flexDirection: 'column',
     animation: 'modalIn 0.18s cubic-bezier(0.32, 0.72, 0, 1)',
@@ -132,6 +135,13 @@ if (typeof document !== 'undefined' && !document.getElementById('__modal_keyfram
 export default function Modal({ open, onClose, title, children, footer, maxWidth = 448 }) {
   const overlayRef = useRef(null);
   const dialogRef = useRef(null);
+
+  /* MÓVIL: bloquea el scroll del FONDO mientras el modal está abierto. Sin esto el
+     gesto "sangra" y mueve la pantalla de atrás (scroll-chaining). El hook v2
+     congela html+body+#root (el scroller real) y publica --pp-vvh (alto visible
+     real, sigue al teclado) que el dialog usa en su maxHeight para que el body
+     SIEMPRE tenga overflow interno scrolleable. */
+  useBodyScrollLock(open);
 
   useEffect(() => {
     if (!open) return;

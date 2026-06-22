@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import api from '../../services/api';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   overlay: {
@@ -8,7 +9,7 @@ const S = {
   },
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)', width: '100%',
-    maxWidth: 520, maxHeight: '90vh', overflowY: 'auto', padding: 24,
+    maxWidth: 520, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto', padding: 24,
     boxShadow: '0 8px 32px rgba(0,0,0,.15)',
   },
   title: { fontSize: 17, fontWeight: 700, color: 'var(--lp-text-primary)', marginBottom: 4 },
@@ -59,6 +60,10 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
   const [imagenBase64, setImagenBase64] = useState(existingQC.imagenBase64 || null);
   const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
+
+  /* MÓVIL: el componente se monta solo cuando está abierto → lock siempre activo.
+     Congela el fondo y publica --pp-vvh para el maxHeight del scroller interno. */
+  useBodyScrollLock(true);
 
   /* ─── Rangos QC del producto (calculados desde fórmula en backend) ───
      Carga al abrir el modal. Si el producto no tiene specs configurados,

@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect, useCallback } from 'react';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const TIPO_INFO = {
   propio:     { label: 'Propio',     bg: 'var(--lp-success-100)', fg: 'var(--lp-success-700)', border: 'var(--lp-success-500)' },
@@ -84,7 +85,7 @@ const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
   modal: { background: 'var(--lp-bg-raised)', borderRadius: 14, width: '100%', maxWidth: 440,
-           maxHeight: '90vh', overflow: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.18)' },
+           maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.18)' },
   modalHead: { padding: '16px 20px', borderBottom: '1px solid var(--lp-border-subtle)' },
   modalTitle: { fontSize: 15, fontWeight: 700, color: 'var(--lp-text-primary)' },
   modalSub: { fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 4 },
@@ -359,6 +360,11 @@ function EditModal({ item, formulas, onClose, onSave }) {
   const [reventaMarca, setReventaMarca] = useState(item.reventa_marca || '');
   const [razonNoPintura, setRazonNoPintura] = useState(item.razon_no_pintura || '');
   const [saving, setSaving] = useState(false);
+
+  /* MÓVIL: bloquea el scroll del fondo mientras el modal está montado y publica
+     --pp-vvh (usado por S.modal en su maxHeight). El componente solo se monta
+     cuando `editing` es truthy en el padre → siempre activo. */
+  useBodyScrollLock(true);
 
   const handleSave = async () => {
     setSaving(true);

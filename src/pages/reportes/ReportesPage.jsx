@@ -27,6 +27,7 @@ import api from '../../services/api';
 import HelpHint from '../../components/HelpHint';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import CausasManager from './CausasManager';
 import EstrategicoTab from './EstrategicoTab';
 
@@ -116,7 +117,7 @@ const S = {
 
   /* bottom-sheet */
   sheetOverlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 1200, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
-  sheet: { background: 'var(--lp-bg-base)', width: '100%', maxWidth: 460, borderRadius: '24px 24px 0 0', padding: '8px 18px calc(22px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.22)' },
+  sheet: { background: 'var(--lp-bg-base)', width: '100%', maxWidth: 460, borderRadius: '24px 24px 0 0', padding: '8px 18px calc(22px + env(safe-area-inset-bottom))', boxShadow: '0 -8px 40px rgba(0,0,0,.22)', maxHeight: 'calc(var(--pp-vvh, 100dvh) - 24px)', overflowY: 'auto' },
   sheetGrab: { width: 40, height: 4, borderRadius: 999, background: 'var(--lp-border-strong)', margin: '8px auto 14px' },
   sheetTitle: { fontSize: 12, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.05em', margin: '0 2px 12px' },
   sheetGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
@@ -865,6 +866,10 @@ const SECCIONES = [
 
 /* ── Bottom-sheet de secciones (móvil) ───────────────────────────────────── */
 function SeccionesSheet({ active, onPick, onClose }) {
+  /* MÓVIL: este sheet sólo se monta cuando está abierto (ver render gateado con
+     !isDesktop && sheetOpen). Bloquea el scroll del FONDO y publica --pp-vvh para
+     que el contenedor tenga overflow interno scrolleable (mismo fix que Modal.jsx). */
+  useBodyScrollLock(true);
   return (
     <div style={S.sheetOverlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
