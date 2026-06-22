@@ -405,6 +405,21 @@ export default function AsistenteFlotante() {
     cands.forEach(c => { const sc = _score(texto, { label: c.nombre }); if (sc > bs) { bs = sc; best = c; } });
     return bs > 0 ? best : null;
   }
+  /* Resuelve un texto ("blanco mate", "el pedido de azul rey") al PEDIDO de almacén
+     con su id/código/producto/cantidad/estado. Si `soloPendientes`, restringe a los
+     que aún esperan acción. Usa _score (tolera plurales/typos por token), igual que
+     _resolverTransferible. La usa la IA para aceptar/rechazar un pedido. */
+  async function _resolverPedido(texto, soloPendientes) {
+    const r = await api.getPedidos().catch(() => null);
+    const arr = Array.isArray(r) ? r : (r?.data || r?.pedidos || []);
+    let cands = (arr || []).filter(Boolean).map(p => ({
+      id: p.id, codigo: p.codigo || p.id, producto: p.producto || p.nombre || '?', cantidad: p.cantidad, estado: p.estado,
+    }));
+    if (soloPendientes) cands = cands.filter(c => c.estado === 'pendiente');
+    let best = null, bs = 0;
+    cands.forEach(c => { const sc = _score(texto, { label: c.producto + ' ' + c.codigo }); if (sc > bs) { bs = sc; best = c; } });
+    return bs > 0 ? best : null;
+  }
 
   async function accionStock(nombre) {
     const items = await _todosLosItems();
@@ -488,6 +503,8 @@ export default function AsistenteFlotante() {
       if (acc.tipo === 'pin') r = await accionPin(acc.user, acc.pin);
       else if (acc.tipo === 'agregarMP') r = await accionAgregarMP(acc.nombre, acc.n);
       else if (acc.tipo === 'transferir') r = await accionTransferir(acc.it, acc.n);
+      else if (acc.tipo === 'aceptarPedido') { await api.aceptarYProducir(acc.pedidoId, { lanzarProduccion: true, ndaAceptado: true }); r = 'Listo: acepté el pedido ' + acc.label + ' y arranqué su producción. 🏭'; }
+      else if (acc.tipo === 'rechazarPedido') { await api.rechazarPedido(acc.pedidoId, acc.motivo || 'Rechazado desde el asistente'); r = 'Listo: rechacé el pedido ' + acc.label + '.'; }
       else r = 'Acción no reconocida.';
     } catch (e) { r = 'No se pudo: ' + (e?.data?.error || e?.message || 'error'); }
     reemplazarUltimo(r);
@@ -528,6 +545,22 @@ export default function AsistenteFlotante() {
           if (r.accion.accion === 'transferir_a_teran') {
             const p = r.accion.params || {};
             await _proponerTransferencia(String(p.item || ''), Number(p.cantidad), true);
+          } else if (r.accion.accion === 'aceptar_pedido') {
+            const p = r.accion.params || {};
+            if (!['admin', 'tecnico'].includes(user.rol)) { reemplazarUltimo('Aceptar y producir un pedido lo hace **producción** (técnico) o admin.'); return; }
+            const ped = await _resolverPedido(String(p.pedido || ''), true);
+            if (!ped) { reemplazarUltimo(`No encontré un pedido pendiente de "${p.pedido || ''}". ¿Está bien el nombre?`); return; }
+            reemplazarUltimo({ text: `Aceptar el pedido **${ped.codigo}** (${ped.cantidad} de ${ped.producto}) y ARRANCAR su producción (crea la orden). ¿Confirmo?`, confirm: { tipo: 'aceptarPedido', pedidoId: ped.id, label: ped.codigo || ped.producto } });
+          } else if (r.accion.accion === 'rechazar_pedido') {
+            const p = r.accion.params || {};
+            if (!['admin', 'tecnico'].includes(user.rol)) { reemplazarUltimo('Rechazar un pedido lo hace **producción** (técnico) o admin.'); return; }
+            const ped = await _resolverPedido(String(p.pedido || ''), true);
+            if (!ped) { reemplazarUltimo(`No encontré un pedido pendiente de "${p.pedido || ''}". ¿Está bien el nombre?`); return; }
+            reemplazarUltimo({ text: `Rechazar el pedido **${ped.codigo}** (${ped.cantidad} de ${ped.producto}). ¿Confirmo?`, confirm: { tipo: 'rechazarPedido', pedidoId: ped.id, motivo: p.motivo || '', label: ped.codigo || ped.producto } });
+          } else if (r.accion.accion === 'agregar_stock_mp') {
+            const p = r.accion.params || {};
+            if (!['admin', 'inventario'].includes(user.rol)) { reemplazarUltimo('Agregar stock de materia prima lo hace **inventario** o admin.'); return; }
+            reemplazarUltimo({ text: `Agregar **${Number(p.cantidad)} kg** de **${p.materia}** al stock de Fábrica. ¿Confirmo?`, confirm: { tipo: 'agregarMP', nombre: p.materia, n: Number(p.cantidad) } });
           } else { reemplazarUltimo(r.text || 'Esa acción todavía no la puedo ejecutar.'); }
           return;
         }
