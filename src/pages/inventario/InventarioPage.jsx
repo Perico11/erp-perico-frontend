@@ -550,7 +550,7 @@ function PTMedidaBadge({ medida, medidaQty, qty }) {
   );
 }
 
-function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad }) {
+function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir }) {
   const { nombre, inv, pct } = item;
   const qty = inv.qty || 0;
   const u = item.unidad || unidad || 'cub'; /* envases = 'pz', PT = 'cub' */
@@ -572,6 +572,15 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad }) 
         {!item._env && inv.medida && <PTMedidaBadge medida={inv.medida} medidaQty={inv.medidaQty} qty={qty} />}
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
+      {/* Sprint Y2 (jun 2026): transferir envase/tapa de Fábrica → Terán (espeja el
+          botón de PT Fábrica). Solo se pasa onTransferir en la sub-vista 'fabrica'. */}
+      {onTransferir && (
+        <button type="button" data-id="inventario.btn.transferir-env" data-rol="admin,almacen,inventario"
+          onClick={(e) => { e.stopPropagation(); onTransferir(); }}
+          style={{ ...S.btnGhost, marginTop: 10, width: '100%', color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>
+          → Terán
+        </button>
+      )}
     </div>
   );
 }
@@ -973,12 +982,13 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
 }
 
 /* ── Tabla de inventario (escritorio) ── */
-function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query }) {
+function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir }) {
   /* La columna "Acción" solo se muestra si el rol tiene ALGUNA acción posible en
      esta tabla. Antes el header "Acción" se pintaba siempre y dejaba celdas vacías
      para roles sin acciones (p.ej. inventario/Burgos: sin editarInventario) → columna
-     fantasma. Ahora: si no hay acción, no se pinta la columna. */
-  const showActionCol = canEdit || canContar || (tipo === 'mp' ? canDelete : canPedir);
+     fantasma. Ahora: si no hay acción, no se pinta la columna.
+     onTransferir (envases en sub-vista Fábrica): añade el botón "→ Terán" por fila. */
+  const showActionCol = canEdit || canContar || !!onTransferir || (tipo === 'mp' ? canDelete : canPedir);
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -1038,6 +1048,15 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {canEdit && (
                     <button type="button" data-id="inventario.btn.ajustar" data-rol="admin,tecnico,almacen,compras"
                       style={S.btnGhost} onClick={() => onAdjust(it)}>Ajustar</button>
+                  )}
+                  {/* Sprint Y2 (jun 2026): transferir envase/tapa de Fábrica → Terán (espeja
+                      el botón de PT Fábrica). Solo en la sub-vista 'fabrica' de Envases. */}
+                  {onTransferir && (
+                    <button type="button" data-id="inventario.btn.transferir-env" data-rol="admin,almacen,inventario"
+                      onClick={() => onTransferir(it)} title="Transferir piezas de este envase del stock de Fábrica al de Terán"
+                      style={{ ...S.btnGhost, marginLeft: 8, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>
+                      → Terán
+                    </button>
                   )}
                   {/* Burgos (rol inventario): su acción es CONTAR (conteo físico), no editar.
                       Lleva a /conteo. Solo cuando no puede editar directo (evita duplicar para admin). */}
@@ -1520,9 +1539,16 @@ export default function InventarioPage() {
   const [agregarPtUbic, setAgregarPtUbic] = useState(null);
   /* Parte B (jun 2026): transferencia manual PT Fábrica→Terán. { producto } */
   const [transferirPt, setTransferirPt] = useState(null);
+  /* Sprint Y2 (jun 2026): transferencia manual de ENVASE/TAPA Fábrica→Terán.
+     Guarda el item completo de envItems (trae item._env para el contrato del backend). */
+  const [transferirEnv, setTransferirEnv] = useState(null);
   /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
+  /* Sprint Y2 (jun 2026): sub-vista de Envases (espeja ptSubtab). 'total' = stock+teran,
+     'fabrica' = stock, 'teran' = teran. Cambia el qty MOSTRADO y habilita el botón
+     "Transferir a Terán" (solo en 'fabrica'). */
+  const [envSubtab, setEnvSubtab] = useState('total');
   const [activeFilter, setActiveFilter] = useState(searchParams.get('filter') || 'todos');
   /* Sync URL → estado: si navegas a /inventario?tab=pt&pt=fabrica (p.ej. desde el
      asistente) estando YA en Inventario, react-router NO remonta y el useState
@@ -1584,6 +1610,9 @@ export default function InventarioPage() {
   const canEditMP = can('editarInventario');
   /* Transferir PT a Terán: Josué (almacen) + admin + inventario (espeja el backend). */
   const canTransferirPT = !!user && ['admin', 'almacen', 'inventario'].includes(user.rol);
+  /* Transferir ENVASE/TAPA a Terán: mismo gate que PT (admin/almacen/inventario),
+     espeja el backend POST /api/envases/transferir-teran. Sprint Y2 (jun 2026). */
+  const canTransferirEnv = !!user && ['admin', 'almacen', 'inventario'].includes(user.rol);
   /* Alineado con el backend (POST /api/envases/stock|tapa/stock): admin / compras
      / inventario. Antes mostraba el botón a técnico (editarInventario) que luego
      recibía 403 al guardar. */
@@ -1740,28 +1769,34 @@ export default function InventarioPage() {
     const cats = data.categorias || {};
     const tapas = data.tapas || {};
     const out = [];
+    /* qty MOSTRADO según la sub-vista: Terán→teran, Fábrica→stock, Total→stock+teran.
+       `stock` (Fábrica) y `teran` (Terán) son campos independientes del envases.json;
+       teran es opcional (default 0 si ausente). El min se conserva tal cual. */
+    const qtyView = (stock, teran) => envSubtab === 'teran' ? teran : envSubtab === 'fabrica' ? stock : stock + teran;
     Object.entries(cats).forEach(([catName, cat]) => {
       Object.entries(cat.subcategorias || {}).forEach(([subKey, sub]) => {
-        const qty = Number(sub.stock) || 0, min = Number(sub.min) || 0;
+        const fabrica = Number(sub.stock) || 0, teran = Number(sub.teran) || 0, min = Number(sub.min) || 0;
+        const qty = qtyView(fabrica, teran);
         out.push({
-          nombre: sub.nombre || subKey, inv: { qty, min },
+          nombre: sub.nombre || subKey, inv: { qty, min }, teran,
           pct: min > 0 ? Math.round((qty / min) * 100) : 999,
           grupo: catName, unidad: sub.unidad || 'pz', marca: sub.marca || null,
-          _env: { tipo: 'envase', catKey: catName, subKey },
+          _env: { tipo: 'envase', catKey: catName, subKey, fabrica, teran },
         });
       });
     });
     Object.entries(tapas).forEach(([tapaKey, tapa]) => {
-      const qty = Number(tapa.stock) || 0, min = Number(tapa.min) || 0;
+      const fabrica = Number(tapa.stock) || 0, teran = Number(tapa.teran) || 0, min = Number(tapa.min) || 0;
+      const qty = qtyView(fabrica, teran);
       out.push({
-        nombre: tapa.nombre || tapaKey, inv: { qty, min },
+        nombre: tapa.nombre || tapaKey, inv: { qty, min }, teran,
         pct: min > 0 ? Math.round((qty / min) * 100) : 999,
         grupo: 'Tapas', unidad: 'pz', color: tapa.color || null,
-        _env: { tipo: 'tapa', tapaKey },
+        _env: { tipo: 'tapa', tapaKey, fabrica, teran },
       });
     });
     return out.sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [activeTab, envData]);
+  }, [activeTab, envData, envSubtab]);
 
   const filteredEnv = useMemo(() => {
     let items = filterFn(envItems, it => it.inv.qty || 0, it => it.pct);
@@ -2312,7 +2347,19 @@ export default function InventarioPage() {
         {activeTab === 'env' && (
           <>
             <div style={S.subRow}>
-              <div style={{ flex: 1 }} />
+              {/* Sub-vistas Fábrica/Terán (espeja las pills de PT). 'fabrica' habilita
+                  el botón "Transferir a Terán" por fila/card. Sprint Y2 (jun 2026). */}
+              <div style={S.pillGroup}>
+                {[
+                  { id: 'total', label: 'Total', hint: 'Suma fábrica + Terán' },
+                  { id: 'fabrica', label: 'Fábrica', hint: 'Envases/tapas en planta de fábrica' },
+                  { id: 'teran', label: 'Terán', hint: 'Envases/tapas ya repartidos a Terán' },
+                ].map(p => (
+                  <button key={p.id} type="button" title={p.hint}
+                    data-id={`inventario.envview.${p.id}`} data-rol="admin,almacen,inventario"
+                    style={S.chip(p.id === envSubtab)} onClick={() => setEnvSubtab(p.id)}>{p.label}</button>
+                ))}
+              </div>
               <div style={S.actionsCluster(isDesktop)}>
                 {canEditEnvases && isDesktop && (
                   <button style={S.btnAdd} onClick={() => setShowAgregarEnv(true)} title="Agregar una presentación de envase nueva">+ Agregar envase</button>
@@ -2349,12 +2396,14 @@ export default function InventarioPage() {
                 </div>
                 {isDesktop ? (
                   <InvTable items={sec.items} tipo="pt" unidad="pz" canEdit={canEditEnvases}
-                    onAdjust={handleAdjustEnv} canPedir={false} query={debouncedQuery} />
+                    onAdjust={handleAdjustEnv} canPedir={false} query={debouncedQuery}
+                    onTransferir={(envSubtab === 'fabrica' && canTransferirEnv) ? (item) => setTransferirEnv(item) : undefined} />
                 ) : (
                   <div>
                     {sec.items.map(item => (
                       <PTRow key={item._env.tipo + '-' + (item._env.subKey || item._env.tapaKey)}
-                        item={item} canEdit={canEditEnvases} onAdjust={handleAdjustEnv} query={debouncedQuery} />
+                        item={item} canEdit={canEditEnvases} onAdjust={handleAdjustEnv} query={debouncedQuery}
+                        onTransferir={(envSubtab === 'fabrica' && canTransferirEnv) ? () => setTransferirEnv(item) : undefined} />
                     ))}
                   </div>
                 )}
@@ -2450,6 +2499,21 @@ export default function InventarioPage() {
             setToastMsg(`${r.producto}: ${r.transferido} cub → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
             reloadInv();
             reloadPtUbi();
+            setTimeout(() => setToastMsg(''), 4500);
+          }}
+        />
+      )}
+
+      {/* ── Sprint Y2: Transferir Envase/Tapa Fábrica → Terán (Josué) ── */}
+      {transferirEnv && (
+        <TransferirEnvaseTeranModal
+          item={transferirEnv}
+          isDesktop={isDesktop}
+          onClose={() => setTransferirEnv(null)}
+          onDone={(r) => {
+            setTransferirEnv(null);
+            setToastMsg(`${r.item}: ${r.transferido} ${r.unidad || 'pz'} → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
+            reloadEnv();
             setTimeout(() => setToastMsg(''), 4500);
           }}
         />
@@ -2609,6 +2673,50 @@ function TransferirPTTeranModal({ producto, isDesktop, onClose, onDone }) {
         </div>
         <label style={S.flbl}>Cubetas a transferir</label>
         <input ref={inputRef} style={S.finQty} type="number" inputMode="numeric" step="1" min="1"
+          value={cant} onChange={e => setCant(e.target.value)}
+          onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
+          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
+            {saving ? 'Transfiriendo…' : 'Transferir a Terán'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Sprint Y2 (jun 2026, pedido dueño): modal de transferencia de ENVASE/TAPA
+   Fábrica→Terán. ESPEJO de TransferirPTTeranModal: mueve N piezas de `stock`
+   (Fábrica) a `teran` (Terán) en envases.json — no cambia el total.
+   item._env = { tipo:'envase', catKey, subKey, fabrica, teran } | { tipo:'tapa', tapaKey, fabrica, teran }. */
+function TransferirEnvaseTeranModal({ item, isDesktop, onClose, onDone }) {
+  const [cant, setCant] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const inputRef = useRef(null);
+  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 120); return () => clearTimeout(t); }, []);
+  const disponible = Number(item?._env?.fabrica) || 0; /* lo que hay en Fábrica para mover */
+  const unidad = item?.unidad || 'pz';
+  const n = parseInt(cant, 10);
+  const valido = !isNaN(n) && n > 0 && n <= disponible;
+  const submit = async () => {
+    if (!valido || saving) return;
+    setSaving(true); setErr('');
+    try { const r = await api.transferirEnvaseATeran(item._env, n); onDone(r); }
+    catch (e) { setErr(e?.data?.error || e.message || 'No se pudo transferir'); setSaving(false); }
+  };
+  return (
+    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shH}>Transferir a Terán</div>
+        <div style={S.shS}>{item?.nombre}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
+          Mueve piezas del stock de <strong>Fábrica</strong> al de <strong>Terán</strong>. No cambia el total — solo dónde están los envases. Disponible en Fábrica: <strong>{disponible.toLocaleString('es-MX')} {unidad}</strong>.
+        </div>
+        <label style={S.flbl}>Piezas a transferir</label>
+        <input ref={inputRef} style={S.finQty} type="number" inputMode="numeric" step="1" min="1" max={disponible}
           value={cant} onChange={e => setCant(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
         {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}

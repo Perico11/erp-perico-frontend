@@ -164,6 +164,10 @@ const api = {
      inv.pt[X].qty a inv.pt[X].teran (no cambia el total). */
   transferirPTaTeran: (producto, cantidad, nota) =>
     request('POST', '/api/inventario/pt/transferir-teran', { producto, cantidad, nota }),
+  /* Transferencia de envase/tapa Fábrica→Terán (Josué): mueve N piezas de stock
+     (Fábrica) a teran. ref = { tipo:'envase', catKey, subKey } | { tipo:'tapa', tapaKey }. */
+  transferirEnvaseATeran: (ref, cantidad, nota) =>
+    request('POST', '/api/envases/transferir-teran', { ...ref, cantidad, nota }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
      Más seguro que el overwrite completo de POST /api/inventario que es solo admin. */
   /* Ajuste individual de MP (qty + min) con candado: necesita sesión de conteo
