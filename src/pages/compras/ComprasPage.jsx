@@ -209,6 +209,8 @@ function _ocMPLabel(oc) {
 /* ===== OCs TAB: pills (Por aprobar / Activas / Recibidas) + Levantar OC ===== */
 function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed, onCreated, isDesktop }) {
   const { can, user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const ocSeg = searchParams.get('seg'); /* deep-link de bucket: ?seg=porAprobar|activa|recibida */
   const [showNew, setShowNew] = useState(false);
   /* Modal activo (uno a la vez), levantado a este nivel: ComprasScreen es
      presentacional y dispara onAccion(cod) → aquí se resuelve la OC real y se
@@ -293,6 +295,7 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       )}
       <ComprasScreen
         data={{ ocs: ocsForScreen }}
+        initialTab={ocSeg}
         isDesktop={isDesktop}
         role={user?.rol}
         can={canForScreen}

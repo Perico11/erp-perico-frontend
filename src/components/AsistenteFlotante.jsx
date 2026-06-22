@@ -136,6 +136,10 @@ const INDICE = [
   { label: 'Devoluciones MP · Merma', sub: 'Devoluciones en merma', ruta: '/devoluciones-mp?tab=merma', roles: 'admin,compras', keywords: 'devoluciones mp merma descartado perdida proveedor' },
   /* Recepción Terán (estados) */
   { label: 'Recepción Terán · Recibidos', sub: 'Lotes recibidos hoy', ruta: '/almacen?tab=en_almacen', roles: 'admin,almacen', keywords: 'recibidos hoy recepcion teran ya recibidos en almacen' },
+  /* Compras → OCs: segmento "Por aprobar / Activas / Recibidas" (deep-link por ?seg=) */
+  { label: 'Compras · OCs por aprobar', sub: 'OCs pendientes de aprobar', ruta: '/compras?tab=ocs&seg=porAprobar', roles: 'admin,compras', keywords: 'oc ocs por aprobar pendientes de aprobar autorizar orden de compra sin aprobar' },
+  { label: 'Compras · OCs activas', sub: 'OCs aprobadas (por recibir/pagar)', ruta: '/compras?tab=ocs&seg=activa', roles: 'admin,compras', keywords: 'oc ocs activas en curso aprobadas por recibir por pagar pendientes de pago' },
+  { label: 'Compras · OCs recibidas', sub: 'OCs recibidas/cerradas', ruta: '/compras?tab=ocs&seg=recibida', roles: 'admin,compras', keywords: 'oc ocs recibidas cerradas completadas ya llego entregadas' },
 ];
 
 /* Botones que abren un FORMULARIO/modal seguro → el bot puede "abrirlos" directo
@@ -281,6 +285,19 @@ export default function AsistenteFlotante() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  /* PRIVACIDAD: la conversación es POR USUARIO. Este componente vive SOBRE las
+     rutas (siempre montado), así que al cambiar de usuario (logout→login de otro
+     en el mismo dispositivo) el state `mensajes` se retendría y un usuario vería
+     el chat del anterior. Al cambiar la identidad (incluido el logout→null), borra
+     la conversación y cierra el panel. */
+  const lastUidRef = useRef(undefined);
+  useEffect(() => {
+    const uid = user?.id ?? user?.nombre ?? null;
+    if (lastUidRef.current !== undefined && lastUidRef.current !== uid) {
+      setMensajes([]); setOpen(false); setQ('');
+    }
+    lastUidRef.current = uid;
+  }, [user?.id, user?.nombre]);
   /* Auto-scroll al último mensaje. */
   useEffect(() => { if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight; }, [mensajes, open]);
 

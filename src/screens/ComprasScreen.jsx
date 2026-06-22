@@ -5,7 +5,7 @@
 //   onNuevaOC, onAprobarOC(cod), onEditarOC(cod), onEliminarOC(cod), onRecibirMP(cod),
 //   onRegistrarPago(cod), onImprimirOC(cod), onVerComprobante(cod), can, role, isDesktop.
 // "Aprobar OC" llama onAprobarOC(cod) → abre el modal REAL (pago + comprobante + vencimiento).
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const DEMO = { ocs: [
   { cod:'OC-2050', mp:'Dióxido de titanio', qty:'500 kg', sol:'Enrique', prov:'Química Tlaloc', monto:'$185,000', entrega:'10 jun', estado:'porAprobar', solicitud:true },
@@ -39,10 +39,12 @@ function btn(kind) {
 
 export default function ComprasScreen({
   data = DEMO, onNuevaOC, onAprobarOC, onEditarOC, onEliminarOC, onRecibirMP, onRegistrarPago, onImprimirOC, onVerComprobante,
-  can = () => true, role, isDesktop = false,
+  can = () => true, role, isDesktop = false, initialTab,
 }) {
   const ocs = (data && data.ocs) || DEMO.ocs;
-  const [tab, setTab] = useState('porAprobar');
+  /* initialTab (deep-link del bot vía ?seg=) prefija el bucket; el usuario puede cambiarlo. */
+  const [tab, setTab] = useState(initialTab && TABS.some(([k]) => k === initialTab) ? initialTab : 'porAprobar');
+  useEffect(() => { if (initialTab && TABS.some(([k]) => k === initialTab)) setTab(initialTab); }, [initialTab]);
   const [q, setQ] = useState('');
 
   const cnt = (k) => ocs.filter(o => o.estado === k).length;
