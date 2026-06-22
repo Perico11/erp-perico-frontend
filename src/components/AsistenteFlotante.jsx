@@ -428,6 +428,17 @@ export default function AsistenteFlotante() {
     else await api.transferirEnvaseATeran(it.ref, n, 'Transferido desde el asistente');
     return `Listo: transferí **${n} ${it.unidad}** de ${it.nombre} de Fábrica a Terán. 📦`;
   }
+  /* Propone una transferencia a Terán: resuelve el ítem, valida stock y pide
+     CONFIRMACIÓN mostrando el ítem RESUELTO. La usan el comando por patrón y la IA. */
+  async function _proponerTransferencia(itemText, n, yaHayMensaje) {
+    if (!canTransferir) { const msg = 'Las transferencias a Terán las hace **almacén** o admin.'; yaHayMensaje ? reemplazarUltimo(msg) : pushBot(msg); return; }
+    if (!yaHayMensaje) pushBot('Buscando…');
+    if (!itemText || !(n > 0)) { reemplazarUltimo('¿Qué y cuánto transferir a Terán? Ej: "transfiere 50 tapas rojas a Terán".'); return; }
+    const it = await _resolverTransferible(itemText);
+    if (!it) { reemplazarUltimo(`No encontré "${itemText}" para transferir. ¿Está bien el nombre?`); return; }
+    if (n > it.fabrica) { reemplazarUltimo(`Solo hay **${it.fabrica} ${it.unidad}** de ${it.nombre} en Fábrica (pediste ${n}). No transfiero de más.`); return; }
+    reemplazarUltimo({ text: `Transferir **${n} ${it.unidad}** de **${it.nombre}** de Fábrica a Terán (quedarían ${it.fabrica - n} en Fábrica). ¿Confirmo?`, confirm: { tipo: 'transferir', it, n } });
+  }
   async function accionPin(nombreUser, pin) {
     const r = await api.getUsuarios().catch(() => null);
     const arr = r?.data || r?.usuarios || (Array.isArray(r) ? r : []) || [];
@@ -512,6 +523,14 @@ export default function AsistenteFlotante() {
         const _base = window.location.pathname;
         const _scr = INDICE.find(e => e.ruta && e.ruta.split('?')[0] === _base);
         const r = await api.asistenteChat(t, historial, destinos, _scr ? _scr.label : _base);
+        /* Acción de ESCRITURA propuesta por la IA → confirmar+ejecutar en el cliente. */
+        if (r && r.accion && r.accion.tipo === 'accion') {
+          if (r.accion.accion === 'transferir_a_teran') {
+            const p = r.accion.params || {};
+            await _proponerTransferencia(String(p.item || ''), Number(p.cantidad), true);
+          } else { reemplazarUltimo(r.text || 'Esa acción todavía no la puedo ejecutar.'); }
+          return;
+        }
         if (r && r.accion && r.accion.tipo === 'navegar') {
           const dest = INDICE[r.accion.destino_id];
           if (r.accion.ejecutar) {
@@ -545,16 +564,7 @@ export default function AsistenteFlotante() {
         await responderIA();
         return;
       }
-      if (acc.tipo === 'transferir') {
-        if (!canTransferir) { pushBot('Las transferencias a Terán las hace **almacén** o admin.'); return; }
-        pushBot('Buscando…');
-        const it = await _resolverTransferible(acc.itemText);
-        if (!it) { reemplazarUltimo(`No encontré "${acc.itemText}" para transferir. ¿Está bien el nombre?`); return; }
-        if (acc.n > it.fabrica) { reemplazarUltimo(`Solo hay **${it.fabrica} ${it.unidad}** de ${it.nombre} en Fábrica (pediste ${acc.n}). No transfiero de más.`); return; }
-        /* CONFIRMACIÓN con el ítem ya RESUELTO + cantidad → mitiga el riesgo del parse. */
-        reemplazarUltimo({ text: `Transferir **${acc.n} ${it.unidad}** de **${it.nombre}** de Fábrica a Terán (quedarían ${it.fabrica - acc.n} en Fábrica). ¿Confirmo?`, confirm: { tipo: 'transferir', it, n: acc.n } });
-        return;
-      }
+      if (acc.tipo === 'transferir') { await _proponerTransferencia(acc.itemText, acc.n, false); return; }
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
       return;
     }
