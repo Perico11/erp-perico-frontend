@@ -1519,20 +1519,6 @@ export default function OrdenesPage() {
               </button>
             ))}
           </div>
-          {/* Botón fijo "Nueva orden" — visible en MÓVIL y escritorio (reporte
-              dueño jun 2026: se retiró el FAB flotante; el botón fijo queda en
-              TODAS las pestañas de nuevas solicitudes, consistente con OC MP). */}
-          {mainTab === 'ordenes' && canManage && (
-            <button
-              className="ordx-btn-primary"
-              style={S.btnNew}
-              data-id="ordenes.btn.nueva"
-              data-rol="admin,tecnico"
-              onClick={() => setShowNewModal(true)}
-            >
-              {Icon.plus} Nueva orden
-            </button>
-          )}
         </div>
 
         {/* Subtítulo en vivo (mockup .tsub) */}
@@ -1562,6 +1548,23 @@ export default function OrdenesPage() {
                 </button>
               ))}
             </div>
+
+            {/* Botón "Nueva orden" — MISMA ubicación que OC MP: fila propia
+                alineada a la derecha, debajo de las sub-pestañas (reporte dueño
+                jun 2026). Antes estaba junto a las seg-pills (lugar distinto). */}
+            {canManage && (
+              <div style={{ ...S.toolbar, justifyContent: 'flex-end' }}>
+                <button
+                  className="ordx-btn-primary"
+                  style={S.btnNew}
+                  data-id="ordenes.btn.nueva"
+                  data-rol="admin,tecnico"
+                  onClick={() => setShowNewModal(true)}
+                >
+                  {Icon.plus} Nueva orden
+                </button>
+              </div>
+            )}
 
             {subTab === 'activas' && (
               <>
