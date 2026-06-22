@@ -363,6 +363,8 @@ export default function AsistenteFlotante() {
   /* Permiso granular real (mismo can() del ERP) — para que el cerebro offline
      gatee acciones sin depender de la IA. */
   const can = (p) => !!(auth && typeof auth.can === 'function' && auth.can(p));
+  /* Quién puede transferir a Terán (mismo gate que el backend para PT y envases). */
+  const canTransferir = !!user && ['admin', 'almacen', 'inventario'].includes(user.rol);
   const pushBot = (msg) => setMensajes(m => [...m, typeof msg === 'string' ? { from: 'bot', text: msg } : { from: 'bot', ...msg }]);
   const reemplazarUltimo = (payload) => setMensajes(m => { const c = [...m]; for (let i = c.length - 1; i >= 0; i--) if (c[i].from === 'bot') { c[i] = typeof payload === 'string' ? { from: 'bot', text: payload } : { from: 'bot', ...payload }; break; } return c; });
 
@@ -388,6 +390,21 @@ export default function AsistenteFlotante() {
     });
     return bs > 0 ? best : null;
   }
+  /* Resuelve un texto ("tapas rojas", "blanco mate", "litro premium") al ítem
+     TRANSFERIBLE a Terán: PT (cubetas), envase o tapa — con su `ref` para el backend
+     y el stock disponible en Fábrica. Usa _score (tolera plurales/typos por token). */
+  async function _resolverTransferible(texto) {
+    const [invR, envR] = await Promise.all([api.getInventario().catch(() => null), api.getEnvases().catch(() => null)]);
+    const inv = invR?.data || invR || {};
+    const env = envR?.data || envR || {};
+    const cands = [];
+    Object.entries(inv.pt || {}).forEach(([k, v]) => cands.push({ nombre: k, tipo: 'pt', fabrica: +v.qty || 0, ref: { producto: k }, unidad: 'cub' }));
+    Object.entries(env.categorias || {}).forEach(([catKey, cat]) => Object.entries((cat && cat.subcategorias) || {}).forEach(([subKey, s]) => { if (s && s.nombre) cands.push({ nombre: s.nombre, tipo: 'envase', fabrica: +s.stock || 0, ref: { tipo: 'envase', catKey, subKey }, unidad: s.unidad || 'pz' }); }));
+    Object.entries(env.tapas || {}).forEach(([tapaKey, tp]) => { if (tp && tp.nombre) cands.push({ nombre: tp.nombre, tipo: 'tapa', fabrica: +tp.stock || 0, ref: { tipo: 'tapa', tapaKey }, unidad: tp.unidad || 'pz' }); });
+    let best = null, bs = 0;
+    cands.forEach(c => { const sc = _score(texto, { label: c.nombre }); if (sc > bs) { bs = sc; best = c; } });
+    return bs > 0 ? best : null;
+  }
 
   async function accionStock(nombre) {
     const items = await _todosLosItems();
@@ -403,6 +420,13 @@ export default function AsistenteFlotante() {
     if (!it) return `No encontré la materia prima "${nombre}". Créala en Inventario → MP.`;
     await api.setMPUbicacion(it.k, 'fabrica', n, 'agregar', 'Agregado desde el asistente');
     return `Listo: agregué ${n} kg de ${it.k} al stock de Fábrica.`;
+  }
+  /* Ejecuta la transferencia ya RESUELTA (PT o envase/tapa) → Terán. El descuento
+     real lo hace el backend (mutex + clamp); aquí solo disparamos el endpoint correcto. */
+  async function accionTransferir(it, n) {
+    if (it.tipo === 'pt') await api.transferirPTaTeran(it.ref.producto, n, 'Transferido desde el asistente');
+    else await api.transferirEnvaseATeran(it.ref, n, 'Transferido desde el asistente');
+    return `Listo: transferí **${n} ${it.unidad}** de ${it.nombre} de Fábrica a Terán. 📦`;
   }
   async function accionPin(nombreUser, pin) {
     const r = await api.getUsuarios().catch(() => null);
@@ -436,6 +460,10 @@ export default function AsistenteFlotante() {
     if ((m = s.match(/(?:agrega\w*|sube\w*|suma\w*|a[nñ]ade\w*)\s+(\d+(?:\.\d+)?)\s*(?:kg|kilos)?\s+(?:de\s+|al\s+|a\s+)?(.+?)(?:\s+(?:a|en)\s+(?:la\s+)?fabrica)?\s*$/))) {
       return { tipo: 'agregarMP', admin: true, nombre: m[2].trim(), n: parseFloat(m[1]), desc: `agregar ${m[1]} kg de “${m[2].trim()}” al stock de Fábrica` };
     }
+    /* Transferir a Terán: "transfiere/manda/pasa/lleva N <item> a teran" (PT o envases/tapas). */
+    if ((m = s.match(/(?:transfiere\w*|transferir|manda\w*|envia\w*|pasa\w*|mueve\w*|lleva\w*)\s+(\d+(?:\.\d+)?)\s+(.+?)\s+(?:a|al|para|hacia)\s+(?:el\s+|la\s+)?teran\b/))) {
+      return { tipo: 'transferir', admin: false, n: parseFloat(m[1]), itemText: m[2].trim() };
+    }
     if ((m = s.match(/(?:stock|existencia|inventario|cuant[oa]\s+(?:hay|tengo|queda))\s+(?:de\s+|del\s+)?(.+)/))) {
       return { tipo: 'stock', admin: false, nombre: m[1].trim() };
     }
@@ -448,6 +476,7 @@ export default function AsistenteFlotante() {
     try {
       if (acc.tipo === 'pin') r = await accionPin(acc.user, acc.pin);
       else if (acc.tipo === 'agregarMP') r = await accionAgregarMP(acc.nombre, acc.n);
+      else if (acc.tipo === 'transferir') r = await accionTransferir(acc.it, acc.n);
       else r = 'Acción no reconocida.';
     } catch (e) { r = 'No se pudo: ' + (e?.data?.error || e?.message || 'error'); }
     reemplazarUltimo(r);
@@ -514,6 +543,16 @@ export default function AsistenteFlotante() {
         if (r) { reemplazarUltimo(r); return; }
         /* No es un producto (ej. "inventario de fábrica") → que la IA navegue/conteste. */
         await responderIA();
+        return;
+      }
+      if (acc.tipo === 'transferir') {
+        if (!canTransferir) { pushBot('Las transferencias a Terán las hace **almacén** o admin.'); return; }
+        pushBot('Buscando…');
+        const it = await _resolverTransferible(acc.itemText);
+        if (!it) { reemplazarUltimo(`No encontré "${acc.itemText}" para transferir. ¿Está bien el nombre?`); return; }
+        if (acc.n > it.fabrica) { reemplazarUltimo(`Solo hay **${it.fabrica} ${it.unidad}** de ${it.nombre} en Fábrica (pediste ${acc.n}). No transfiero de más.`); return; }
+        /* CONFIRMACIÓN con el ítem ya RESUELTO + cantidad → mitiga el riesgo del parse. */
+        reemplazarUltimo({ text: `Transferir **${acc.n} ${it.unidad}** de **${it.nombre}** de Fábrica a Terán (quedarían ${it.fabrica - acc.n} en Fábrica). ¿Confirmo?`, confirm: { tipo: 'transferir', it, n: acc.n } });
         return;
       }
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
