@@ -21,6 +21,7 @@
    Import/Export gateado compras/admin.
    ════════════════════════════════════════════════════════════════════════════ */
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -896,7 +897,21 @@ export default function ReportesPage() {
   const { user } = useAuth();
   const [confirm, ConfirmEl] = useConfirm();
   const isDesktop = useIsDesktop();
-  const [activeTab, setActiveTab] = useState('cierre');
+  const [searchParams] = useSearchParams();
+  /* Deep-link a sub-pestaña vía ?tab= (p.ej. el asistente abre /reportes?tab=trimestral).
+     Validado contra los ids de SECCIONES; valor inválido cae a 'cierre'. */
+  const TABS_VALIDOS = ['cierre', 'historico', 'trimestral', 'analisis', 'estrategico', 'causas'];
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && TABS_VALIDOS.includes(t)) ? t : 'cierre';
+  });
+  /* Sync URL → estado: si navegas a /reportes?tab=... estando YA en Reportes,
+     react-router NO remonta y el useState inicial no se relee. Setear al mismo
+     valor es no-op (no provoca loop). */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && TABS_VALIDOS.includes(t)) setActiveTab(t);
+  }, [searchParams]);
   const [detallePeriodo, setDetallePeriodo] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const esAdmin = user?.rol === 'admin';

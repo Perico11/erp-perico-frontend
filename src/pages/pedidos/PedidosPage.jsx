@@ -396,7 +396,14 @@ export default function PedidosPage() {
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState('activos');
+  /* Deep-link a sub-pestaña vía ?tab= (el asistente/bot puede abrir
+     /pedidos?tab=rechazados). Reusa la MISMA instancia searchParams que ?nuevo/?focus.
+     Validado; valor inválido cae a 'activos'. */
+  const TABS_VALIDOS = ['activos', 'pruebas', 'rechazados', 'historial'];
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && TABS_VALIDOS.includes(t)) ? t : 'activos';
+  });
   const [showNuevo, setShowNuevo] = useState(false);
   /* Prefill desde otra pantalla (Inventario → "Pedir reposición" ?nuevo=BLANCO MATE) */
   const [prefillProducto, setPrefillProducto] = useState(null);
@@ -427,6 +434,16 @@ export default function PedidosPage() {
     }
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
+
+  /* Sync URL → pestaña vía ?tab=: si navegas a /pedidos?tab=... estando YA en
+     Pedidos, react-router NO remonta y el useState inicial no se relee. NO se
+     limpia el param (a diferencia de ?nuevo/?focus) para que el deep-link sea
+     estable. Setear al mismo valor es no-op. */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && TABS_VALIDOS.includes(t)) setTab(t);
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [searchParams]);
 
   const { data, loading, reload } = useApiData(() => api.getPedidos(), [], 8000);
 

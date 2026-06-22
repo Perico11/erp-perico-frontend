@@ -167,7 +167,19 @@ export default function AlmacenRecepcionPage() {
   const userName = user?.nombre || '?';
   const rol = user?.rol || '';
   const [confirm, ConfirmEl] = useConfirm();
-  const [filter, setFilter] = useState('en_camino'); /* en_camino | en_almacen */
+  const [searchParams, setSearchParams] = useSearchParams();
+  /* Pestaña activa deep-linkeable vía ?tab= (reusa searchParams de ?reenvasar).
+     El asistente puede abrir /almacen-recepcion?tab=en_almacen directamente. */
+  const FILTROS_VALIDOS = ['en_camino', 'en_almacen'];
+  const [filter, setFilter] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && FILTROS_VALIDOS.includes(t)) ? t : 'en_camino';
+  });
+  /* Sync URL → estado en vivo si ?tab= cambia ya montado. No toca ?reenvasar. */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && FILTROS_VALIDOS.includes(t)) setFilter(t);
+  }, [searchParams]);
   const [scanning, setScanning] = useState(false);
   const [reenvaseFor, setReenvaseFor] = useState(null);
   const [printQR, setPrintQR] = useState(null);
@@ -176,7 +188,6 @@ export default function AlmacenRecepcionPage() {
   const envases = envDataRec?.data || envDataRec || null;
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(null);
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const showToast = useCallback((msg, isErr = false) => {
     setToast({ msg, isErr });

@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import PageTabs from '../../components/ui/PageTabs';
 import { useAuth } from '../../context/AuthContext';
@@ -172,7 +173,18 @@ export default function RecoleccionPage() {
   const [confirm, ConfirmEl] = useConfirm();
   const userName = user?.nombre || '?';
   const rol = user?.rol || '';
-  const [activeTab, setActiveTab] = useState('pendientes');
+  /* Pestaña activa deep-linkeable vía ?tab= (p.ej. /recoleccion?tab=enCamino
+     desde el asistente). Inicializa y re-sincroniza desde la URL validada. */
+  const [searchParams] = useSearchParams();
+  const TABS_VALIDOS = ['pendientes', 'enCamino', 'entregados'];
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && TABS_VALIDOS.includes(t)) ? t : 'pendientes';
+  });
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && TABS_VALIDOS.includes(t)) setActiveTab(t);
+  }, [searchParams]);
   const [searchQ, setSearchQ] = useState('');
   const [toast, setToast] = useState(null);
   const [busy, setBusy] = useState(null); // sublote.cod while saving

@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import TopBar from '../../components/layout/TopBar';
@@ -25,8 +26,22 @@ const S = {
   }),
 };
 
+const TABS_VALIDOS = ['pruebas', 'materias'];
+
 export default function LaboratorioPage() {
-  const [tab, setTab] = useState('pruebas');
+  /* Deep-linking por ?tab= (replica patrón InventarioPage): el bot puede abrir
+     /laboratorio?tab=materias directo en Materias Primas. ?tab= inválido → default. */
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && TABS_VALIDOS.includes(t)) ? t : 'pruebas';
+  });
+  /* Sync URL → estado en vivo: si navegas a /laboratorio?tab=materias estando YA
+     en la pantalla, react-router no remonta; este efecto aplica la pestaña del query. */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && TABS_VALIDOS.includes(t)) setTab(t);
+  }, [searchParams]);
 
   const fetchMaterias = useCallback(() => api.getLabMaterias(), []);
   const fetchPruebas  = useCallback(() => api.getLabPruebas(),  []);

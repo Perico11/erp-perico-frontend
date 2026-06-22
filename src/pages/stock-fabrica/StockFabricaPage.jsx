@@ -1783,7 +1783,19 @@ export default function StockFabricaPage() {
   const highlightLote = searchParams.get('lote') || '';
   const userName = user?.nombre || '?';
   const rol = user?.rol || '';
-  const [activeTab, setActiveTab] = useState('enFabrica');
+  /* Pestaña activa deep-linkeable vía ?tab= (reusa searchParams de ?lote).
+     El asistente puede abrir /stock-fabrica?tab=rechazados directamente. */
+  const TABS_VALIDOS = ['enFabrica', 'transferidos', 'pruebas', 'rechazados'];
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && TABS_VALIDOS.includes(t)) ? t : 'enFabrica';
+  });
+  /* Sync URL → estado en vivo: si ?tab= cambia estando ya en la pantalla
+     (react-router no remonta), aplica la pestaña. No toca ?lote. */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && TABS_VALIDOS.includes(t)) setActiveTab(t);
+  }, [searchParams]);
   const [searchQ, setSearchQ] = useState(highlightLote);
   const [toastMsg, setToastMsg] = useState('');
   const [envasadoModal, setEnvasadoModal] = useState(null);

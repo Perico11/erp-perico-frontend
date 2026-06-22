@@ -685,7 +685,18 @@ function AuditoriaPanel() {
 }
 
 function ReportesPanel() {
-  const [tab, setTab] = useState('rentabilidad'); /* rentabilidad | valoracion | produccion | tiempos */
+  /* Sub-sub-pestaña deep-linkeable vía ?sub= (nivel 2 bajo ?section=reportes).
+     Ej: /admin?section=reportes&sub=valoracion abre Valuación. */
+  const [searchParams] = useSearchParams();
+  const SUB_VALIDOS = ['rentabilidad', 'valoracion', 'produccion', 'tiempos'];
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get('sub');
+    return (t && SUB_VALIDOS.includes(t)) ? t : 'rentabilidad';
+  }); /* rentabilidad | valoracion | produccion | tiempos */
+  useEffect(() => {
+    const t = searchParams.get('sub');
+    if (t && SUB_VALIDOS.includes(t)) setTab(t);
+  }, [searchParams]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState('');
@@ -1127,6 +1138,14 @@ export default function AdminPage() {
     if (sec && SECTION_PANELS[sec]) return sec;
     return null;
   });
+
+  /* Sync URL → estado en vivo: si ?section= cambia estando YA en /admin
+     (react-router no remonta), aplica la sección. Permite al asistente
+     deep-linkear a otra sección sin recargar. setear al mismo valor = no-op. */
+  useEffect(() => {
+    const s = searchParams.get('section');
+    if (s && SECTION_PANELS[s]) setActiveSection(s);
+  }, [searchParams]);
 
   const currentSection = activeSection
     ? ADMIN_SECTIONS.find(s => s.id === activeSection)

@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
 import { useToast } from '../../components/ui/Toast';
@@ -1326,8 +1326,28 @@ export default function ComprasPage({ mode = 'compras' }) {
   const location = useLocation();
   const { user } = useAuth();
   const esPronostico = mode === 'pronostico';
-  /* Tab inicial por modo: compras→ocs (Por aprobar), pronostico→forecast (Forecast IA). */
-  const [activeTab, setActiveTab] = useState(esPronostico ? 'forecast' : 'ocs');
+  /* Deep-linking por ?tab= (replica patrón InventarioPage): el set de pestañas
+     válidas y el default DEPENDEN del modo. Pronóstico expone forecast/mrp/etc;
+     Compras expone ocs/catalogo. Así /pronostico?tab=mrp cae en MRP y
+     /compras?tab=catalogo en Catálogo. ?tab= inválido para el modo → default. */
+  const [searchParams] = useSearchParams();
+  const TABS_VALIDOS = esPronostico
+    ? ['forecast', 'mrp', 'pronostico', 'ia', 'pedidos']
+    : ['ocs', 'catalogo'];
+  const TAB_DEFAULT = esPronostico ? 'forecast' : 'ocs';
+  /* Tab inicial por modo: compras→ocs (Por aprobar), pronostico→forecast (Forecast IA).
+     Si la URL trae ?tab= válido para el modo, arranca ahí. */
+  const [activeTab, setActiveTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && TABS_VALIDOS.includes(t)) ? t : TAB_DEFAULT;
+  });
+  /* Sync URL → estado en vivo: si navegas a /pronostico?tab=mrp estando YA en la
+     pantalla (mismo mode), react-router no remonta y el useState inicial no se
+     relee; este efecto aplica la pestaña del query. Setear al mismo valor es no-op. */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && TABS_VALIDOS.includes(t)) setActiveTab(t);
+  }, [searchParams]);
   /* Prefill de "Levantar OC": puede venir local (modo compras) o por router state
      (cuando el usuario generó una OC desde /pronostico y se le redirige a /compras). */
   const [newOCPrefill, setNewOCPrefill] = useState(location.state?.newOCPrefill || null); // { mp, kg, proveedor }

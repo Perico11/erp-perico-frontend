@@ -101,6 +101,41 @@ const INDICE = [
   /* Botones específicos (resaltado; no se auto-abren) */
   { label: 'Botón: Generar QR del lote', sub: 'Stock Fábrica → en la tarjeta del lote', ruta: '/stock-fabrica', roles: 'admin,tecnico,almacen', dataId: 'stock.btn.qr', keywords: 'qr codigo generar etiqueta imprimir lote ticket stock fabrica' },
   { label: 'Botón: Recibir MP (Órdenes)', sub: 'Órdenes → recibir materia prima solicitada', ruta: '/ordenes', roles: 'admin,tecnico', dataId: 'ordenes.btn.recibir-mp', keywords: 'recibir materia prima mp solicitud orden entrada llego el material' },
+
+  /* ── Sub-pestañas deep-linkables (jun 2026): el bot entra DIRECTO a la sub-vista
+     vía ?tab= / ?sub=. Habilitado por el refactor de cada página a URL. ── */
+  /* Pronóstico (sub-tabs) */
+  { label: 'Pronóstico · MRP', sub: 'Material Requirements Planning — qué comprar', ruta: '/pronostico?tab=mrp', roles: 'admin,compras', keywords: 'mrp material requirements planning que comprar deficit necesito comprar requerimiento de materiales' },
+  { label: 'Pronóstico · Tendencia', sub: 'Tendencia histórica de compras', ruta: '/pronostico?tab=pronostico', roles: 'admin,compras', keywords: 'tendencia historico grafica de compras evolucion estacional wma yoy' },
+  { label: 'Pronóstico · IA avanzada', sub: 'Predicción con IA (Holt-Winters)', ruta: '/pronostico?tab=ia', roles: 'admin,compras', keywords: 'ia inteligencia artificial prediccion avanzada holt winters forecast ai' },
+  { label: 'Pronóstico · Pedidos', sub: 'Demanda POS / pedidos sugeridos', ruta: '/pronostico?tab=pedidos', roles: 'admin,compras', keywords: 'pedidos demanda pos ventas sugeridos palaco' },
+  /* Compras */
+  { label: 'Compras · Catálogo', sub: 'Catálogo de proveedores y precios', ruta: '/compras?tab=catalogo', roles: 'admin,compras', keywords: 'catalogo proveedores precios por proveedor lista de proveedores quien me vende' },
+  /* Reportes (/reportes, sub-tabs) */
+  { label: 'Reportes · Histórico mensual', sub: 'Histórico mes a mes', ruta: '/reportes?tab=historico', roles: 'admin,inventario,compras', keywords: 'historico mensual mes a mes evolucion historial reporte' },
+  { label: 'Reportes · Trimestral', sub: 'Reporte trimestral', ruta: '/reportes?tab=trimestral', roles: 'admin,inventario,compras', keywords: 'trimestral trimestre tres meses reporte' },
+  { label: 'Reportes · Análisis avanzado', sub: 'Análisis avanzado', ruta: '/reportes?tab=analisis', roles: 'admin,inventario,compras', keywords: 'analisis avanzado profundo metricas reporte' },
+  { label: 'Reportes · Estratégico', sub: 'Vista estratégica', ruta: '/reportes?tab=estrategico', roles: 'admin,inventario,compras', keywords: 'estrategico estrategia direccion decisiones reporte' },
+  { label: 'Reportes · Causas', sub: 'Catálogo de causas de varianza', ruta: '/reportes?tab=causas', roles: 'admin,inventario,compras', keywords: 'causas varianza catalogo motivos razones de ajuste' },
+  /* Admin → Reportes (sub-sub-pestaña por ?section=reportes&sub=) */
+  { label: 'Admin Reportes · Valuación de inventario', sub: 'Cuánto vale el inventario', ruta: '/admin?section=reportes&sub=valoracion', roles: 'admin', keywords: 'valuacion valoracion cuanto vale el inventario valor del inventario costo total existencias' },
+  { label: 'Admin Reportes · Producción mensual', sub: 'Cubetas/galones producidos por mes', ruta: '/admin?section=reportes&sub=produccion', roles: 'admin', keywords: 'produccion mensual cuanto produje cubetas galones por mes fabricado' },
+  { label: 'Admin Reportes · Tiempos por lote', sub: 'Tiempos de producción por lote', ruta: '/admin?section=reportes&sub=tiempos', roles: 'admin', keywords: 'tiempos por lote cuanto tarda duracion produccion tiempo de fabricacion' },
+  /* Laboratorio */
+  { label: 'Laboratorio · Materias Primas', sub: 'MP de laboratorio', ruta: '/laboratorio?tab=materias', roles: 'admin,tecnico', keywords: 'laboratorio materias primas mp lab materiales de prueba' },
+  /* Pedidos (estados) */
+  { label: 'Pedidos · Rechazados', sub: 'Pedidos rechazados', ruta: '/pedidos?tab=rechazados', roles: 'admin,almacen,tecnico', keywords: 'pedidos rechazados rechazo no aceptados' },
+  { label: 'Pedidos · Historial', sub: 'Pedidos completados', ruta: '/pedidos?tab=historial', roles: 'admin,almacen,tecnico', keywords: 'pedidos historial completados viejos pasados' },
+  /* Stock Fábrica (estados) */
+  { label: 'Stock Fábrica · Transferidos', sub: 'Lotes transferidos a Terán', ruta: '/stock-fabrica?tab=transferidos', roles: 'admin,tecnico,almacen', keywords: 'transferidos lotes enviados a teran ya movidos' },
+  /* Recolección (estados) */
+  { label: 'Recolección · En camino', sub: 'Lotes en camino', ruta: '/recoleccion?tab=enCamino', roles: 'admin,recolector,almacen', keywords: 'en camino recoleccion llevando transporte que va en camino' },
+  { label: 'Recolección · Entregados', sub: 'Lotes entregados', ruta: '/recoleccion?tab=entregados', roles: 'admin,recolector,almacen', keywords: 'entregados recoleccion ya entregue completados' },
+  /* Devoluciones MP (estados) */
+  { label: 'Devoluciones MP · Con NC', sub: 'Con nota de crédito', ruta: '/devoluciones-mp?tab=registrada', roles: 'admin,compras', keywords: 'devoluciones mp con nota de credito nc registradas proveedor' },
+  { label: 'Devoluciones MP · Merma', sub: 'Devoluciones en merma', ruta: '/devoluciones-mp?tab=merma', roles: 'admin,compras', keywords: 'devoluciones mp merma descartado perdida proveedor' },
+  /* Recepción Terán (estados) */
+  { label: 'Recepción Terán · Recibidos', sub: 'Lotes recibidos hoy', ruta: '/almacen?tab=en_almacen', roles: 'admin,almacen', keywords: 'recibidos hoy recepcion teran ya recibidos en almacen' },
 ];
 
 /* Botones que abren un FORMULARIO/modal seguro → el bot puede "abrirlos" directo

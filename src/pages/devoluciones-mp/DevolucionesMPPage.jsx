@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import PageTabs from '../../components/ui/PageTabs';
 import SegmentedControl from '../../components/ui/SegmentedControl';
@@ -101,7 +102,21 @@ const fmtMoney = (n) => (n == null || n === '') ? '—' : '$' + Number(n).toLoca
 export default function DevolucionesMPPage() {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
-  const [tab, setTab] = useState('por_gestionar');
+  const [searchParams] = useSearchParams();
+  /* Deep-link a sub-pestaña vía ?tab= (el bot puede abrir
+     /devoluciones-mp?tab=merma). Validado; valor inválido cae a 'por_gestionar'. */
+  const TABS_VALIDOS = ['por_gestionar', 'registrada', 'merma'];
+  const [tab, setTab] = useState(() => {
+    const t = searchParams.get('tab');
+    return (t && TABS_VALIDOS.includes(t)) ? t : 'por_gestionar';
+  });
+  /* Sync URL → estado: si navegas a /devoluciones-mp?tab=... estando YA en la
+     pantalla, react-router NO remonta y el useState inicial no se relee. Setear
+     al mismo valor es no-op (no provoca loop). */
+  useEffect(() => {
+    const t = searchParams.get('tab');
+    if (t && TABS_VALIDOS.includes(t)) setTab(t);
+  }, [searchParams]);
   const [crear, setCrear] = useState(false);
   /* { dev, tipo } — tipo viene del botón elegido (mockup: Nota de crédito | Reembolso) */
   const [cerrar, setCerrar] = useState(null);
