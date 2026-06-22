@@ -204,12 +204,12 @@ function _score(query, entry) {
    solo rellena el input (frase incompleta, p.ej. "stock de …"); sin fill = se
    envía directo. Filtra por rol para no ofrecer acciones que el usuario no hace. */
 const SUGERENCIAS = {
-  admin:      [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Stock de…', q: 'stock de ', fill: true }, { t: 'Aprobar OC', q: 'aprobar oc' }, { t: 'Conteo', q: 'conteo' }],
-  compras:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Aprobar OC', q: 'aprobar oc' }, { t: 'Pronóstico', q: 'pronostico' }, { t: 'Recibir MP', q: 'recibir mp' }],
-  tecnico:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Nueva orden', q: 'nueva orden' }, { t: 'Calidad (QC)', q: 'calidad qc' }, { t: 'Stock de…', q: 'stock de ', fill: true }],
-  almacen:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Nuevo pedido', q: 'nuevo pedido' }, { t: 'Recibir en Terán', q: 'escanear teran' }, { t: 'Recolección', q: 'recoleccion' }],
-  inventario: [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Iniciar conteo', q: 'nueva sesion conteo' }, { t: 'Stock de…', q: 'stock de ', fill: true }, { t: 'Agregar MP', q: 'agregar materia prima' }],
-  recolector: [{ t: 'Recolección', q: 'recoleccion' }, { t: 'Trazabilidad', q: 'trazabilidad' }],
+  admin:      [{ t: 'Mis pendientes', q: 'pendientes' }, { t: '¿Qué me falta?', q: 'qué está por debajo del mínimo' }, { t: 'Stock de…', q: 'stock de ', fill: true }, { t: 'Aprobar OC', q: 'aprobar oc' }, { t: 'Conteo', q: 'conteo' }],
+  compras:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: '¿Qué comprar?', q: 'qué necesito comprar' }, { t: 'Aprobar OC', q: 'aprobar oc' }, { t: 'Pronóstico', q: 'pronostico' }, { t: 'Recibir MP', q: 'recibir mp' }],
+  tecnico:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: 'Mis órdenes', q: 'órdenes de producción pendientes' }, { t: 'Nueva orden', q: 'nueva orden' }, { t: 'Calidad (QC)', q: 'calidad qc' }],
+  almacen:    [{ t: 'Mis pendientes', q: 'pendientes' }, { t: '¿Qué va en camino?', q: 'qué lotes van en camino' }, { t: 'Nuevo pedido', q: 'nuevo pedido' }, { t: 'Recibir en Terán', q: 'escanear teran' }],
+  inventario: [{ t: 'Mis pendientes', q: 'pendientes' }, { t: '¿Qué está bajo?', q: 'qué está por debajo del mínimo' }, { t: 'Iniciar conteo', q: 'nueva sesion conteo' }, { t: 'Stock de…', q: 'stock de ', fill: true }],
+  recolector: [{ t: '¿Qué va en camino?', q: 'qué lotes van en camino' }, { t: 'Recolección', q: 'recoleccion' }, { t: 'Trazabilidad', q: 'trazabilidad' }],
 };
 
 /* Humaniza títulos técnicos de notificaciones para los "pendientes" del bot
@@ -478,7 +478,11 @@ export default function AsistenteFlotante() {
           .slice(-8)
           .map(x => ({ role: x.from === 'user' ? 'user' : 'assistant', content: x.text }));
         const destinos = INDICE.map((e, i) => ({ id: i, label: e.label, sub: e.sub || '', boton: !!e.dataId, abrible: !!e.dataId && ABRIBLES.has(e.dataId), roles: e.roles || '', perm: _permDe(e) }));
-        const r = await api.asistenteChat(t, historial, destinos);
+        /* Pantalla actual → el backend la usa para dar contexto. Deriva el label
+           del INDICE (ruta sin query === pathname) o cae al pathname. */
+        const _base = window.location.pathname;
+        const _scr = INDICE.find(e => e.ruta && e.ruta.split('?')[0] === _base);
+        const r = await api.asistenteChat(t, historial, destinos, _scr ? _scr.label : _base);
         if (r && r.accion && r.accion.tipo === 'navegar') {
           const dest = INDICE[r.accion.destino_id];
           if (r.accion.ejecutar) {
