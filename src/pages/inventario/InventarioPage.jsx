@@ -550,6 +550,25 @@ function PTMedidaBadge({ medida, medidaQty, qty }) {
   );
 }
 
+/* Badge "en tránsito: N" — material en camino de Fábrica → Terán por una OT
+   surtida y aún no recibida. Solo se pinta cuando transito>0. Naranja (igual
+   semántica de "en movimiento" que el tote granel). jun 2026. */
+function TransitoBadge({ transito, unidad }) {
+  const n = Number(transito) || 0;
+  if (n <= 0) return null;
+  const c = 'var(--lp-warning-600)';
+  return (
+    <span title="En tránsito por una orden de transferencia (surtida, falta recibir en Terán)"
+      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, height: 18, padding: '0 8px', borderRadius: 999,
+        fontSize: 10.5, fontWeight: 600, fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+        color: c, background: `color-mix(in srgb, ${c} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${c} 30%, transparent)` }}>
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+      en tránsito: {n.toLocaleString('es-MX', { maximumFractionDigits: 1 })}{unidad ? ' ' + unidad : ''}
+    </span>
+  );
+}
+
 function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir }) {
   const { nombre, inv, pct } = item;
   const qty = inv.qty || 0;
@@ -570,6 +589,8 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} {u}</span>
         {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
         {!item._env && inv.medida && <PTMedidaBadge medida={inv.medida} medidaQty={inv.medidaQty} qty={qty} />}
+        {/* OT (jun 2026): stock en camino Fábrica→Terán. Visible en cualquier sub-vista. */}
+        <TransitoBadge transito={item.transito} unidad={u} />
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
       {/* Sprint Y2 (jun 2026): transferir envase/tapa de Fábrica → Terán (espeja el
@@ -1030,7 +1051,11 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   <StockGauge qty={qty} min={min} color={sev.color} />
                 </td>
                 <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
-                  {qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {unidad}
+                  <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                    <span>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {unidad}</span>
+                    {/* OT (jun 2026): stock en camino Fábrica→Terán. */}
+                    {(Number(it.transito) || 0) > 0 && <TransitoBadge transito={it.transito} unidad={unidad} />}
+                  </div>
                 </td>
                 <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: 'var(--lp-text-tertiary)' }}>
                   {min.toLocaleString('es-MX')} {unidad}
@@ -1531,6 +1556,32 @@ export default function InventarioPage() {
   };
   /* Acción del rol inventario (Burgos): ir a Conteo físico (su flujo de ajuste). */
   const handleContar = () => navigate('/conteo');
+
+  /* ── OT (jun 2026): "Transferir a Terán" ya NO mueve stock al instante.
+     Ahora CREA una solicitud de Orden de Transferencia (OT): navega a la
+     pantalla de OT con el ítem precargado vía `?nueva=<encoded>`. La OT pasa
+     por dos escaneos (surtir en Fábrica → recibir en Terán) y es auditable.
+
+     CONTRATO de `?nueva=`: JSON URL-encoded con la línea canónica que la OT
+     espera (mismos campos que routes/transferencias.js `_validarLineaEntrada`):
+       PT     → { tipo:'pt',     producto, nombre, unidad:'cub' }
+       envase → { tipo:'envase', catKey, subKey, nombre, unidad:'pz' }
+       tapa   → { tipo:'tapa',   tapaKey, nombre, unidad:'pz' }
+     La pantalla de OT (TransferenciasPage) lee este query y pre-abre el sheet
+     "Nueva OT" con esa línea. Mantenemos los modales instantáneos
+     (TransferirPTTeranModal / TransferirEnvaseTeranModal) montados pero el
+     flujo NORMAL del botón es la OT. */
+  const irASolicitudOT = useCallback((linea) => {
+    navigate('/transferencias?nueva=' + encodeURIComponent(JSON.stringify(linea)));
+  }, [navigate]);
+  /* Construye la línea OT desde un item PT (por nombre) o desde un item de
+     envItems (trae item._env). */
+  const otLineaDePT = (nombre) => ({ tipo: 'pt', producto: nombre, nombre, unidad: 'cub' });
+  const otLineaDeEnv = (item) => {
+    const e = item?._env || {};
+    if (e.tipo === 'tapa') return { tipo: 'tapa', tapaKey: e.tapaKey, nombre: item.nombre, unidad: 'pz' };
+    return { tipo: 'envase', catKey: e.catKey, subKey: e.subKey, nombre: item.nombre, unidad: 'pz' };
+  };
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'mp');
   const [mpSubtab, setMpSubtab] = useState(searchParams.get('mp') || 'stock'); /* stock | fabrica | teran | costos | maestro */
   /* Sprint X (jun 2026, pedido dueño): modal "Agregar MP a almacén". { ubicacion } */
@@ -1705,7 +1756,10 @@ export default function InventarioPage() {
     return Object.entries(ptInv)
       .map(([nombre, inv]) => {
         const pct = inv.min > 0 ? Math.round(((inv.qty || 0) / inv.min) * 100) : 999;
-        return { nombre, inv, pct };
+        /* OT (jun 2026): expone `transito` al nivel del item (igual que envItems)
+           para que PTRow/InvTable pinten el badge "en tránsito: N". El inv.pt del
+           backend OT lleva { qty, transito, teran, min }. */
+        return { nombre, inv, pct, transito: Number(inv.transito) || 0 };
       })
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [activeTab, inventory.pt]);
@@ -1769,30 +1823,32 @@ export default function InventarioPage() {
     const cats = data.categorias || {};
     const tapas = data.tapas || {};
     const out = [];
-    /* qty MOSTRADO según la sub-vista: Terán→teran, Fábrica→stock, Total→stock+teran.
-       `stock` (Fábrica) y `teran` (Terán) son campos independientes del envases.json;
-       teran es opcional (default 0 si ausente). El min se conserva tal cual. */
-    const qtyView = (stock, teran) => envSubtab === 'teran' ? teran : envSubtab === 'fabrica' ? stock : stock + teran;
+    /* qty MOSTRADO según la sub-vista: Terán→teran, Fábrica→stock, Total→stock+teran+transito.
+       `stock` (Fábrica), `teran` (Terán) y `transito` (en camino vía OT) son campos
+       independientes del envases.json; teran/transito son opcionales (default 0 si
+       ausentes). En Total se incluye el tránsito (las OTs surtidas que aún no se
+       reciben) para que el conteo NO "desaparezca" mientras viaja. El min se conserva. */
+    const qtyView = (stock, teran, transito) => envSubtab === 'teran' ? teran : envSubtab === 'fabrica' ? stock : stock + teran + transito;
     Object.entries(cats).forEach(([catName, cat]) => {
       Object.entries(cat.subcategorias || {}).forEach(([subKey, sub]) => {
-        const fabrica = Number(sub.stock) || 0, teran = Number(sub.teran) || 0, min = Number(sub.min) || 0;
-        const qty = qtyView(fabrica, teran);
+        const fabrica = Number(sub.stock) || 0, teran = Number(sub.teran) || 0, transito = Number(sub.transito) || 0, min = Number(sub.min) || 0;
+        const qty = qtyView(fabrica, teran, transito);
         out.push({
-          nombre: sub.nombre || subKey, inv: { qty, min }, teran,
+          nombre: sub.nombre || subKey, inv: { qty, min }, teran, transito,
           pct: min > 0 ? Math.round((qty / min) * 100) : 999,
           grupo: catName, unidad: sub.unidad || 'pz', marca: sub.marca || null,
-          _env: { tipo: 'envase', catKey: catName, subKey, fabrica, teran },
+          _env: { tipo: 'envase', catKey: catName, subKey, fabrica, teran, transito },
         });
       });
     });
     Object.entries(tapas).forEach(([tapaKey, tapa]) => {
-      const fabrica = Number(tapa.stock) || 0, teran = Number(tapa.teran) || 0, min = Number(tapa.min) || 0;
-      const qty = qtyView(fabrica, teran);
+      const fabrica = Number(tapa.stock) || 0, teran = Number(tapa.teran) || 0, transito = Number(tapa.transito) || 0, min = Number(tapa.min) || 0;
+      const qty = qtyView(fabrica, teran, transito);
       out.push({
-        nombre: tapa.nombre || tapaKey, inv: { qty, min }, teran,
+        nombre: tapa.nombre || tapaKey, inv: { qty, min }, teran, transito,
         pct: min > 0 ? Math.round((qty / min) * 100) : 999,
         grupo: 'Tapas', unidad: 'pz', color: tapa.color || null,
-        _env: { tipo: 'tapa', tapaKey, fabrica, teran },
+        _env: { tipo: 'tapa', tapaKey, fabrica, teran, transito },
       });
     });
     return out.sort((a, b) => a.nombre.localeCompare(b.nombre));
@@ -2337,7 +2393,7 @@ export default function InventarioPage() {
                 canEdit={canEditMP}
                 onAgregar={(ubic) => setAgregarPtUbic({ ubicacion: ubic })}
                 onEliminarTeran={handleEliminarPTTeran}
-                onTransferir={canTransferirPT ? (producto) => setTransferirPt({ producto }) : undefined}
+                onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : undefined}
               />
             )}
           </>
@@ -2397,13 +2453,13 @@ export default function InventarioPage() {
                 {isDesktop ? (
                   <InvTable items={sec.items} tipo="pt" unidad="pz" canEdit={canEditEnvases}
                     onAdjust={handleAdjustEnv} canPedir={false} query={debouncedQuery}
-                    onTransferir={(envSubtab === 'fabrica' && canTransferirEnv) ? (item) => setTransferirEnv(item) : undefined} />
+                    onTransferir={(envSubtab === 'fabrica' && canTransferirEnv) ? (item) => irASolicitudOT(otLineaDeEnv(item)) : undefined} />
                 ) : (
                   <div>
                     {sec.items.map(item => (
                       <PTRow key={item._env.tipo + '-' + (item._env.subKey || item._env.tapaKey)}
                         item={item} canEdit={canEditEnvases} onAdjust={handleAdjustEnv} query={debouncedQuery}
-                        onTransferir={(envSubtab === 'fabrica' && canTransferirEnv) ? () => setTransferirEnv(item) : undefined} />
+                        onTransferir={(envSubtab === 'fabrica' && canTransferirEnv) ? () => irASolicitudOT(otLineaDeEnv(item)) : undefined} />
                     ))}
                   </div>
                 )}

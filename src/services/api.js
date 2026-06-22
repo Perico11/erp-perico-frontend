@@ -168,6 +168,10 @@ const api = {
      (Fábrica) a teran. ref = { tipo:'envase', catKey, subKey } | { tipo:'tapa', tapaKey }. */
   transferirEnvaseATeran: (ref, cantidad, nota) =>
     request('POST', '/api/envases/transferir-teran', { ...ref, cantidad, nota }),
+  /* ── Órdenes de Transferencia (OT) — flujo formal Fábrica↔Terán con escaneo ── */
+  crearOT: (lineas, nota) => request('POST', '/api/transferencias/crear', { lineas, nota }),
+  getOTs: (estado) => request('GET', '/api/transferencias' + (estado ? '?estado=' + encodeURIComponent(estado) : '')),
+  escanearOT: (otId, accion) => request('POST', '/api/transferencias/scan', { otId, accion }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
      Más seguro que el overwrite completo de POST /api/inventario que es solo admin. */
   /* Ajuste individual de MP (qty + min) con candado: necesita sesión de conteo

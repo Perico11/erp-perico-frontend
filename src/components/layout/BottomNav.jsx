@@ -54,6 +54,7 @@ const ICONS = {
   conteo:       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 14l2 2 4-4"/></svg>,
   inv:          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/></svg>,
   devol:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>,
+  transfer:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>,
   compr:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 002 1.61h9.72a2 2 0 002-1.61L23 6H6"/></svg>,
   recol:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>,
   /* FIX jun 2026 (K8): icono para "Recepción Terán" — la pantalla
@@ -107,6 +108,7 @@ const SECCIONES = [
     items: [
       { path: '/inventario',   label: 'Stock MP',     icon: ICONS.inv,      perm: 'inventario' },
       { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount' },
+      { path: '/transferencias', label: 'Transferencias', icon: ICONS.transfer, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
       { path: '/devoluciones', label: 'Devoluciones', icon: ICONS.devol,    perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
       { path: '/reportes',     label: 'Reportes',     icon: ICONS.reportes, perm: 'inventario', roles: ['admin','inventario','compras'] },
     ],

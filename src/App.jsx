@@ -31,6 +31,7 @@ const NotificacionesPage  = lazy(() => import('./pages/notificaciones/Notificaci
 const DevolucionesPage    = lazy(() => import('./pages/devoluciones/DevolucionesPage'));
 const DevolucionesMPPage  = lazy(() => import('./pages/devoluciones-mp/DevolucionesMPPage'));
 const PedidosPage         = lazy(() => import('./pages/pedidos/PedidosPage'));
+const TransferenciasPage  = lazy(() => import('./pages/transferencias/TransferenciasPage'));
 const LaboratorioPage     = lazy(() => import('./pages/laboratorio/LaboratorioPage'));
 const ReportesPage        = lazy(() => import('./pages/reportes/ReportesPage'));
 const SeguridadPage       = lazy(() => import('./pages/seguridad/SeguridadPage'));
@@ -148,6 +149,7 @@ export default function App() {
               <Route path="inventario"     element={<RoleRoute roles={['admin','tecnico','compras','almacen','inventario']}><ErrorBoundary><InventarioPage /></ErrorBoundary></RoleRoute>} />
               <Route path="ordenes"        element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><OrdenesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pedidos"        element={<RoleRoute roles={['admin','almacen','tecnico']}><ErrorBoundary><PedidosPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="transferencias" element={<RoleRoute roles={['admin','almacen','inventario','tecnico']}><ErrorBoundary><TransferenciasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="flujo"          element={<RoleRoute roles={['admin','tecnico','almacen','recolector']}><ErrorBoundary><FlujoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="produccion"     element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><ProduccionPage /></ErrorBoundary></RoleRoute>} />
               <Route path="stock-fabrica"  element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><StockFabricaPage /></ErrorBoundary></RoleRoute>} />
