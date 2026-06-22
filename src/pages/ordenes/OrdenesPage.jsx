@@ -12,7 +12,6 @@ import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge from '../../components/ui/PruebaBadge';
-import Fab from '../../components/ui/Fab';
 import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 
@@ -360,7 +359,10 @@ const S = {
   },
   /* Modal */
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
+    /* z 1100 > 1000 del bottom-nav fijo (.bottom-nav-mobile): sin esto, en móvil
+       el nav se pinta ENCIMA del footer del sheet y tapa los botones (reporte
+       dueño jun 2026). El modal debe cubrir TODO, incluida la barra inferior. */
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1100,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
   },
   modal: {
@@ -372,17 +374,32 @@ const S = {
        visible REAL (visualViewport, la setea useBodyScrollLock; sigue al
        teclado en iOS); fallback 100dvh. */
     maxHeight: 'calc(var(--pp-vvh, 100dvh) - 60px - env(safe-area-inset-bottom, 0px))',
-    overflow: 'auto',
+    /* v4 (jun 2026, reporte dueño): footer PEGAJOSO. El modal es columna flex y
+       NO scrollea él mismo (overflow hidden); el BODY (modalBody) scrollea y el
+       footer queda FIJO abajo → los botones siempre visibles, nunca cortados
+       bajo el viewport en móvil aunque el formulario sea largo. */
+    display: 'flex', flexDirection: 'column', overflow: 'hidden',
     boxShadow: '0 8px 32px rgba(0,0,0,.18)',
   },
   modalHeader: {
     padding: '16px 20px', borderBottom: '1px solid var(--lp-border-subtle)',
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    flexShrink: 0,
   },
-  modalBody: { padding: '16px 20px' },
+  /* v4 (jun 2026): ESTE es el área scrolleable (el modal padre es overflow:hidden
+     + flex column). flex:1 + minHeight:0 deja que encoja y scrollee DENTRO del
+     sheet; overscroll contain corta el encadenamiento del scroll al fondo. */
+  modalBody: {
+    padding: '16px 20px', flex: '1 1 auto', minHeight: 0, overflowY: 'auto',
+    overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch',
+  },
   modalFooter: {
-    padding: '12px 20px', borderTop: '1px solid var(--lp-border-subtle)',
+    /* safe-area abajo: en móvil el sheet llega al borde inferior; el padding
+       extra mantiene los botones por encima del home-indicator / gesture bar. */
+    padding: '12px 20px calc(12px + env(safe-area-inset-bottom, 0px))',
+    borderTop: '1px solid var(--lp-border-subtle)',
     display: 'flex', justifyContent: 'flex-end', gap: 8,
+    flexShrink: 0,
   },
   fieldLabel: {
     fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)',
@@ -1502,9 +1519,10 @@ export default function OrdenesPage() {
               </button>
             ))}
           </div>
-          {/* Paquete MOCKUP 8 (lp-createbtn): inline solo en escritorio —
-              en móvil lo cubre el FAB flotante. */}
-          {mainTab === 'ordenes' && canManage && isDesktop && (
+          {/* Botón fijo "Nueva orden" — visible en MÓVIL y escritorio (reporte
+              dueño jun 2026: se retiró el FAB flotante; el botón fijo queda en
+              TODAS las pestañas de nuevas solicitudes, consistente con OC MP). */}
+          {mainTab === 'ordenes' && canManage && (
             <button
               className="ordx-btn-primary"
               style={S.btnNew}
@@ -1516,11 +1534,6 @@ export default function OrdenesPage() {
             </button>
           )}
         </div>
-        {/* FAB móvil (paquete MOCKUP 8) — misma acción que "Nueva orden" */}
-        {mainTab === 'ordenes' && canManage && (
-          <Fab label="Nueva orden" dataId="ordenes.fab.nueva" dataRol="admin,tecnico"
-            onClick={() => setShowNewModal(true)} />
-        )}
 
         {/* Subtítulo en vivo (mockup .tsub) */}
         <div style={S.tsub}>
