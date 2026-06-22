@@ -51,7 +51,7 @@ const INDICE = [
   { label: 'Trazabilidad', sub: 'Seguir un lote en el flujo', ruta: '/trazabilidad', roles: 'admin,tecnico,almacen,compras,recolector,inventario', keywords: 'trazabilidad lote rastreo seguimiento en camino checkpoint pipeline' },
 
   { label: 'Conteo físico (cycle count)', sub: 'Contar inventario (Burgos)', ruta: '/conteo', roles: 'admin,inventario', keywords: 'conteo cycle count contar fisico varianza burgos ajuste' },
-  { label: 'Reportes', sub: 'Rentabilidad, cierre mensual', ruta: '/reportes', roles: 'admin,inventario,compras', keywords: 'reportes reporte rentabilidad margenes valuacion cierre mensual ira' },
+  { label: 'Reportes', sub: 'Rentabilidad, cierre mensual', ruta: '/reportes', roles: 'admin,inventario,compras', keywords: 'reportes reporte rentabilidad margenes valuacion cierre mensual iva cuanto vendi cuanto produje cuanto vale el inventario ganancias utilidad numeros del mes estadisticas graficas' },
 
   { label: 'Administración / Usuarios', sub: 'Usuarios, permisos, branding', ruta: '/admin', roles: 'admin', keywords: 'admin administracion usuarios permisos roles pin branding sesiones margenes' },
   { label: 'Seguridad', sub: 'Auditoría y candado', ruta: '/seguridad', roles: 'admin,tecnico,inventario,almacen', keywords: 'seguridad auditoria candado totp codigo' },
@@ -80,6 +80,27 @@ const INDICE = [
   { label: 'Botón: Generar OC (Pronóstico)', sub: 'Pronóstico → sugerencias → generar', ruta: '/pronostico', roles: 'admin,compras', dataId: 'forecast.btn.agregar-oc', keywords: 'generar oc pronostico sugerencia agregar a la orden' },
   { label: 'Botón: Exportar reporte', sub: 'Reportes → exportar', ruta: '/reportes', roles: 'admin,inventario,compras', dataId: 'reportes.btn.exportar', keywords: 'exportar reporte excel descargar' },
   { label: 'Botón: Atender pendiente (Inicio)', sub: 'Inicio → botón del hero', ruta: '/', dataId: 'inicio.btn.atender-hero', keywords: 'atender pendiente hero inicio revisar' },
+
+  /* ── AUDITORÍA jun 2026: destinos que faltaban en el catálogo (el bot decía
+     "no existe"). Rutas/roles/data-id verificados contra App.jsx y los componentes. ── */
+  /* Pantallas completas que no estaban listadas */
+  { label: 'Flujo del lote (línea de vida)', sub: 'Ver y avanzar cada lote: pedido → entregado', ruta: '/flujo', roles: 'admin,tecnico,almacen,recolector', keywords: 'flujo linea de vida pipeline lote pedido a entregado donde va mi pedido en que paso etapa avanzar seguimiento tablero kanban produccion envasado recoleccion' },
+  { label: 'POS Aliases', sub: 'Mapear productos de tienda (POS) a fórmulas', ruta: '/pos-aliases', roles: 'admin,compras', keywords: 'pos alias aliases mapeo productos tienda punto de venta vincular sku formula equivalencia palaco ventas' },
+  /* Sub-vistas de Inventario (deep-link por ?mp=) */
+  { label: 'Inventario · Costos de MP', sub: 'Costo por kg de cada materia prima', ruta: '/inventario?tab=mp&mp=costos', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'costo costos materia prima mp precio por kilo cuanto cuesta kg costeo valor' },
+  { label: 'Inventario · Maestro de MP', sub: 'Ficha maestra de cada materia prima', ruta: '/inventario?tab=mp&mp=maestro', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'maestro materia prima mp ficha catalogo categoria proveedor estado en formulas datos de la mp' },
+  /* Secciones de Admin (deep-link por ?section=, solo admin) */
+  { label: 'Precios y márgenes PT', sub: 'Admin → precio de venta y margen por producto', ruta: '/admin?section=margenes', roles: 'admin', keywords: 'precio precios venta margen margenes producto terminado pt cambiar precio donde agrego precios cuanto vale costo de venta rentabilidad cuanto gano ganancia poner precio actualizar precio agregar precio lista de precios' },
+  { label: 'Costos auxiliares', sub: 'Admin → envases, tapas, mano de obra, merma', ruta: '/admin?section=costos-aux', roles: 'admin', keywords: 'costos auxiliares envase tapa mano de obra merma costo de envasado afecta margen producto terminado' },
+  { label: 'Apariencia / Branding', sub: 'Admin → colores, fuente, logo, nombre del sistema', ruta: '/admin?section=branding', roles: 'admin', keywords: 'branding apariencia tema color colores fuente logo logotipo nombre del sistema personalizar diseno modo oscuro' },
+  { label: 'Configuración general', sub: 'Admin → tipo de cambio, flete por kg, IVA', ruta: '/admin?section=configuracion', roles: 'admin', keywords: 'configuracion ajustes tipo de cambio dolar usd mxn flete por kg iva parametros generales' },
+  { label: 'Auditoría (log de eventos)', sub: 'Admin → bitácora de cambios y eliminaciones', ruta: '/admin?section=auditoria', roles: 'admin', keywords: 'auditoria log bitacora historial eventos quien cambio quien elimino registro de cambios verificar cadena' },
+  { label: 'Usuarios y permisos', sub: 'Admin → crear/editar usuarios, PIN, permisos por rol', ruta: '/admin?section=usuarios', roles: 'admin', keywords: 'usuarios usuario crear usuario nuevo empleado pin contrasena permisos por rol roles desbloquear editar permiso quien puede' },
+  { label: 'Inventario Canónico', sub: 'Admin → fuente de verdad inicial (protegido)', ruta: '/admin?section=canonico', roles: 'admin', keywords: 'canonico inventario inicial fuente de verdad base reset stock protegido' },
+  { label: 'Google Authenticator (código)', sub: 'Admin → configurar/regenerar el código de 6 dígitos', ruta: '/admin?section=totp', roles: 'admin', keywords: 'google authenticator totp codigo de 6 digitos doble factor 2fa candado seguridad regenerar qr autenticacion' },
+  /* Botones específicos (resaltado; no se auto-abren) */
+  { label: 'Botón: Generar QR del lote', sub: 'Stock Fábrica → en la tarjeta del lote', ruta: '/stock-fabrica', roles: 'admin,tecnico,almacen', dataId: 'stock.btn.qr', keywords: 'qr codigo generar etiqueta imprimir lote ticket stock fabrica' },
+  { label: 'Botón: Recibir MP (Órdenes)', sub: 'Órdenes → recibir materia prima solicitada', ruta: '/ordenes', roles: 'admin,tecnico', dataId: 'ordenes.btn.recibir-mp', keywords: 'recibir materia prima mp solicitud orden entrada llego el material' },
 ];
 
 /* Botones que abren un FORMULARIO/modal seguro → el bot puede "abrirlos" directo
