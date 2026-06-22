@@ -420,6 +420,20 @@ export default function AsistenteFlotante() {
     cands.forEach(c => { const sc = _score(texto, { label: c.producto + ' ' + c.codigo }); if (sc > bs) { bs = sc; best = c; } });
     return bs > 0 ? best : null;
   }
+  /* Resuelve un texto ("blanco mate", "la producción de azul rey") al PEDIDO que está
+     EN PRODUCCIÓN (o aceptado, listo para arrancar) con su id/código/producto. Lo usa la
+     IA para ABRIR el wizard y TERMINAR esa producción (continuar_produccion). Igual que
+     _resolverPedido, pero filtra a estados de producción y matchea por _score. */
+  async function _resolverEnProduccion(texto) {
+    const r = await api.getPedidos().catch(() => null);
+    const arr = Array.isArray(r) ? r : (r?.data || r?.pedidos || []);
+    const cands = (arr || []).filter(Boolean)
+      .filter(p => p.estado === 'en_produccion' || p.estado === 'aceptado')
+      .map(p => ({ id: p.id, codigo: p.codigo || p.id, producto: p.producto || p.nombre || '?' }));
+    let best = null, bs = 0;
+    cands.forEach(c => { const sc = _score(texto, { label: c.producto + ' ' + c.codigo }); if (sc > bs) { bs = sc; best = c; } });
+    return bs > 0 ? best : null;
+  }
 
   async function accionStock(nombre) {
     const items = await _todosLosItems();
@@ -561,6 +575,21 @@ export default function AsistenteFlotante() {
             const p = r.accion.params || {};
             if (!['admin', 'inventario'].includes(user.rol)) { reemplazarUltimo('Agregar stock de materia prima lo hace **inventario** o admin.'); return; }
             reemplazarUltimo({ text: `Agregar **${Number(p.cantidad)} kg** de **${p.materia}** al stock de Fábrica. ¿Confirmo?`, confirm: { tipo: 'agregarMP', nombre: p.materia, n: Number(p.cantidad) } });
+          } else if (r.accion.accion === 'continuar_produccion') {
+            /* NAVEGACIÓN (no escritura): abre el wizard ProduccionFlow de ese batch.
+               Terminar producción exige el wizard interactivo (QC + cierre). */
+            const p = r.accion.params || {};
+            if (!['admin', 'tecnico'].includes(user.rol)) { reemplazarUltimo('La producción la maneja técnico o admin.'); return; }
+            const ped = await _resolverEnProduccion(String(p.orden || ''));
+            if (ped) {
+              reemplazarUltimo('Te abro la producción de **' + ped.producto + '** para terminarla. 🏭');
+              setOpen(false);
+              setTimeout(() => navigate('/produccion?tab=produccion&continuar=' + ped.id), 350);
+            } else {
+              reemplazarUltimo('No vi una producción en curso de "' + (p.orden || '') + '". Te llevo a Producción.');
+              setOpen(false);
+              setTimeout(() => navigate('/produccion'), 350);
+            }
           } else { reemplazarUltimo(r.text || 'Esa acción todavía no la puedo ejecutar.'); }
           return;
         }
