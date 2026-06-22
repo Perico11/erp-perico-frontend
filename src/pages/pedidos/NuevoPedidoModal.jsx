@@ -32,7 +32,7 @@ const EASE = 'cubic-bezier(.22,1,.36,1)';
 const S = {
   overlay: (isDesktop, shown) => ({
     position: 'fixed', inset: 0, background: 'rgba(10,16,14,.45)',
-    zIndex: 100, display: 'flex',
+    zIndex: 1100, display: 'flex',
     alignItems: isDesktop ? 'center' : 'flex-end',
     justifyContent: 'center',
     padding: isDesktop ? 20 : 0,

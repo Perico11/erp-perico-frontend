@@ -9,7 +9,6 @@ import QRModal, { QRScanner } from '../../components/QRModal';
 import { useAuth } from '../../context/AuthContext';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
-import Fab from '../../components/ui/Fab';
 
 /* ════════════════════════════════════════════════════════════════════════
    TrazabilidadPage — Reskin "Claude Design" verde (jun 2026).
@@ -722,25 +721,7 @@ export default function TrazabilidadPage() {
           >
             {ICONS.qr} Escanear QR
           </button>
-          {/* Paquete MOCKUP 8 (lp-createbtn): inline solo en escritorio —
-              en móvil lo cubre el FAB flotante (solo admin). */}
-          {esAdmin && isDesktop && (
-            <button
-              data-id="traza.btn.lote-manual"
-              data-rol="admin"
-              title="Solo admin"
-              style={S.btnGhost(!isDesktop)}
-              onClick={handleLoteManual}
-            >
-              {ICONS.plus} Lote manual
-            </button>
-          )}
         </div>
-        {/* FAB móvil (paquete MOCKUP 8) — Nuevo lote manual, solo admin */}
-        {esAdmin && (
-          <Fab label="Nuevo lote manual" dataId="traza.fab.lote-manual" dataRol="admin"
-            onClick={handleLoteManual} />
-        )}
 
         {/* Selector de lote (.lotes/.lpill del mockup): pills mono scrollables.
             Tap = enfocar SOLO ese lote con su bitácora abierta; re-tap = volver
@@ -774,6 +755,23 @@ export default function TrazabilidadPage() {
             </button>
           ))}
         </div>
+
+        {/* Botón "Lote manual" — fila propia alineada a la derecha, debajo de los
+            filtros (patrón consistente Órdenes/OC MP, reporte dueño jun 2026).
+            Visible en móvil Y escritorio; antes solo FAB flotante en móvil. */}
+        {esAdmin && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+            <button
+              data-id="traza.btn.lote-manual"
+              data-rol="admin"
+              title="Solo admin"
+              style={{ height: 44, padding: '0 16px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-brand-600)', color: '#fff' }}
+              onClick={handleLoteManual}
+            >
+              {ICONS.plus} Lote manual
+            </button>
+          </div>
+        )}
 
         {/* Lote cards — cada uno con su timeline individual. Con pill activa
             se muestra solo ese lote ya expandido (vista detalle del mockup). */}

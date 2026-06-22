@@ -8,7 +8,6 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useAuth } from '../../context/AuthContext';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
-import Fab from '../../components/ui/Fab';
 
 /* DevolucionesMPPage — Capa 3 (Arely / rol compras).
    Devoluciones de MATERIA PRIMA al proveedor. Flujo SEPARADO del de PT.
@@ -187,12 +186,18 @@ export default function DevolucionesMPPage() {
         {/* tsub del mockup: "MP a proveedor · N por gestionar" con conteo en vivo */}
         <div style={S.tsub}>MP a proveedor · {counts.por_gestionar} por gestionar</div>
 
-        {/* Paquete MOCKUP 8 (lp-createbtn): en móvil el botón inline se va —
-            lo cubre el FAB flotante (mismo handler). */}
-        <Fab label="Nueva devolución" dataId="devoluciones.fab.nueva" dataRol="compras,admin"
-          onClick={() => setCrear(true)} />
-
         <PageTabs tabs={tabs} activeTab={tab} onChange={setTab} style={{ marginBottom: 14 }} />
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+          <button
+            data-id="devoluciones.btn.nueva"
+            data-rol="compras,admin"
+            style={{ height: 44, padding: '0 16px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-brand-600)', color: '#fff' }}
+            onClick={() => setCrear(true)}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg> Nueva devolución
+          </button>
+        </div>
 
         {loading && !data ? (
           <div style={S.empty}>Cargando…</div>

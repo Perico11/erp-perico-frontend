@@ -14,7 +14,6 @@ import NuevoPedidoModal from './NuevoPedidoModal';
 import PedidoLoteActions from '../../components/PedidoLoteActions';
 import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import PruebaBadge from '../../components/ui/PruebaBadge';
-import Fab from '../../components/ui/Fab';
 /* Lenguaje visual del checkpoint (handoff Claude Design jun 2026) */
 import { ETAPAS_PEDIDO, CK_COLOR, CkCheck, injectCkCSS } from '../../components/pipeline/Checkpoint';
 import {
@@ -778,24 +777,8 @@ export default function PedidosPage() {
     <div>
       <TopBar
         title="Pedidos"
-        action={canCrear && isDesktop ? (
-          /* Paquete MOCKUP 8 (lp-createbtn): en móvil el botón inline se
-             oculta — lo cubre el FAB flotante de abajo. */
-          <button
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 999, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', minHeight: 40, whiteSpace: 'nowrap' }}
-            data-id="pedidos.btn.nuevo"
-            data-rol="almacen,admin,tecnico"
-            onClick={() => setShowNuevo(true)}
-          >
-            {Icon.plus}Nuevo
-          </button>
-        ) : null}
+        action={null}
       />
-      {/* FAB móvil (paquete MOCKUP 8) — misma acción que "+ Nuevo" */}
-      {canCrear && (
-        <Fab label="Nuevo pedido" dataId="pedidos.fab.nuevo" dataRol="almacen,admin,tecnico"
-          onClick={() => setShowNuevo(true)} />
-      )}
       <div style={S.wrap}>
         {err && <div style={S.err}>{err}</div>}
 
@@ -831,6 +814,19 @@ export default function PedidosPage() {
             })}
           </div>
         </div>
+
+        {canCrear && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+            <button
+              data-id="pedidos.btn.nuevo"
+              data-rol="almacen,admin,tecnico"
+              style={{ height: 44, padding: '0 16px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-brand-600)', color: '#fff' }}
+              onClick={() => setShowNuevo(true)}
+            >
+              {Icon.plus} Nuevo pedido
+            </button>
+          </div>
+        )}
 
         {/* Lista — escritorio: grid g3 (cards anchas). móvil: cards apiladas. */}
         {loading && pedidos.length === 0 ? (

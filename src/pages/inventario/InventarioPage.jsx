@@ -17,7 +17,6 @@ import ImportExportPrint from '../../components/ui/ImportExportPrint';
 import CanonicoCard from './CanonicoCard';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
-import Fab from '../../components/ui/Fab';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
    Iconos abreviados estilo "tag" de 2 letras (sin emojis para consistencia
@@ -285,7 +284,9 @@ const S = {
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    zIndex: 1000, padding: 16,
+    /* z 1100 > 1000 del bottom-nav fijo (.bottom-nav-mobile): sin esto el nav se
+       pinta encima del footer del modal en móvil y tapa los botones (jun 2026). */
+    zIndex: 1100, padding: 16,
   },
   modal: {
     background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius)',
@@ -2106,6 +2107,22 @@ export default function InventarioPage() {
           ]} />
         )}
 
+        {/* Botón "Acciones" — fila propia a la derecha en MÓVIL (reemplaza el FAB
+            flotante; en escritorio las acciones siguen inline). Patrón consistente
+            con Órdenes/OC MP — reporte dueño jun 2026. */}
+        {!isDesktop && (activeTab === 'mp' || activeTab === 'pt') && (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
+            <button
+              data-id="inventario.btn.acciones"
+              data-rol="admin,compras,inventario,almacen,tecnico"
+              style={{ height: 44, padding: '0 16px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-brand-600)', color: '#fff' }}
+              onClick={() => setASheetOpen(true)}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg> Acciones
+            </button>
+          </div>
+        )}
+
         {/* KPIs + banda de atención (escritorio, mockup propuesta A) */}
         {isDesktop && ((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total') || activeTab === 'env') && (() => {
           const kpiItems = activeTab === 'mp' ? mpItems : activeTab === 'pt' ? ptItems : envItems;
@@ -2438,12 +2455,8 @@ export default function InventarioPage() {
         />
       )}
 
-      {/* ── Paquete MOCKUP 8: FAB de acciones + hojas móviles ── */}
-      {(activeTab === 'mp' || activeTab === 'pt') && (
-        <Fab label="Acciones de inventario" dataId="inventario.fab.acciones"
-          dataRol="admin,compras,inventario,almacen,tecnico"
-          onClick={() => setASheetOpen(true)} />
-      )}
+      {/* ── Paquete MOCKUP 8: hojas móviles (el FAB se reemplazó por el botón
+          fijo "Acciones" de arriba, debajo de las tabs — consistencia jun 2026) ── */}
       {vSheetOpen && (
         <VistaFiltrosSheet
           activeTab={activeTab}
