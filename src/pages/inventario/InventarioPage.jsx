@@ -571,7 +571,8 @@ function TransitoBadge({ transito, unidad }) {
 
 function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir }) {
   const { nombre, inv, pct } = item;
-  const qty = inv.qty || 0;
+  /* PT vista "Total": item.displayQty = Fábrica + Terán. Env/MP no lo traen → qty real. */
+  const qty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
   const u = item.unidad || unidad || 'cub'; /* envases = 'pz', PT = 'cub' */
   const sev = sevOf(qty, pct);
   const clickable = canEdit || canContar;
@@ -589,6 +590,10 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
         <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} {u}</span>
         {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
         {!item._env && inv.medida && <PTMedidaBadge medida={inv.medida} medidaQty={inv.medidaQty} qty={qty} />}
+        {/* Desglose Fábrica/Terán cuando hay stock en Terán (vista Total, jun 2026) */}
+        {(Number(item.teranQty) || 0) > 0 && (
+          <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>Fáb {Math.round(item.fabQty)} · Terán {Math.round(item.teranQty)}</span>
+        )}
         {/* OT (jun 2026): stock en camino Fábrica→Terán. Visible en cualquier sub-vista. */}
         <TransitoBadge transito={item.transito} unidad={u} />
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
@@ -1028,7 +1033,8 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
         <tbody>
           {items.map(it => {
             const nombre = tipo === 'mp' ? it.mp : it.nombre;
-            const qty = it.inv.qty || 0;
+            /* PT vista "Total": it.displayQty = Fábrica + Terán. MP/Env no lo traen → qty real. */
+            const qty = it.displayQty != null ? it.displayQty : (it.inv.qty || 0);
             const min = it.inv.min || 0;
             const sev = sevOf(qty, it.pct);
             const prov = tipo === 'mp' ? it.maestro?.proveedor?.principal : null;
@@ -1045,6 +1051,10 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
                       <PTMedidaBadge medida={it.inv.medida} medidaQty={it.inv.medidaQty} qty={qty} />
                     </span>
+                  )}
+                  {/* Desglose Fábrica/Terán cuando hay stock en Terán (vista Total, jun 2026) */}
+                  {tipo === 'pt' && (Number(it.teranQty) || 0) > 0 && (
+                    <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· Fáb {Math.round(it.fabQty)} · Terán {Math.round(it.teranQty)}</span>
                   )}
                 </td>
                 <td style={S.td}>
@@ -1590,6 +1600,7 @@ export default function InventarioPage() {
   const [agregarPtUbic, setAgregarPtUbic] = useState(null);
   /* Parte B (jun 2026): transferencia manual PT Fábrica→Terán. { producto } */
   const [transferirPt, setTransferirPt] = useState(null);
+  const [reenvasarTeran, setReenvasarTeran] = useState(null); /* { producto, scalar } */
   /* Sprint Y2 (jun 2026): transferencia manual de ENVASE/TAPA Fábrica→Terán.
      Guarda el item completo de envItems (trae item._env para el contrato del backend). */
   const [transferirEnv, setTransferirEnv] = useState(null);
@@ -1661,6 +1672,8 @@ export default function InventarioPage() {
   const canEditMP = can('editarInventario');
   /* Transferir PT a Terán: Josué (almacen) + admin + inventario (espeja el backend). */
   const canTransferirPT = !!user && ['admin', 'almacen', 'inventario'].includes(user.rol);
+  /* Reenvasar en Terán: tote/granel → cubetas/galones (espeja gate backend). */
+  const canReenvasar = !!user && ['admin', 'almacen', 'tecnico'].includes(user.rol);
   /* Transferir ENVASE/TAPA a Terán: mismo gate que PT (admin/almacen/inventario),
      espeja el backend POST /api/envases/transferir-teran. Sprint Y2 (jun 2026). */
   const canTransferirEnv = !!user && ['admin', 'almacen', 'inventario'].includes(user.rol);
@@ -1755,11 +1768,16 @@ export default function InventarioPage() {
     const ptInv = inventory.pt || {};
     return Object.entries(ptInv)
       .map(([nombre, inv]) => {
-        const pct = inv.min > 0 ? Math.round(((inv.qty || 0) / inv.min) * 100) : 999;
+        /* Vista "Total" = Fábrica (qty) + Terán (teran). Antes mostraba solo qty
+           (Fábrica) pese a que el hint promete "Suma fábrica + Terán" (fix jun 2026). */
+        const fabQty = Number(inv.qty) || 0;
+        const teranQty = Number(inv.teran) || 0;
+        const totalQty = fabQty + teranQty;
+        const pct = inv.min > 0 ? Math.round((totalQty / inv.min) * 100) : 999;
         /* OT (jun 2026): expone `transito` al nivel del item (igual que envItems)
            para que PTRow/InvTable pinten el badge "en tránsito: N". El inv.pt del
            backend OT lleva { qty, transito, teran, min }. */
-        return { nombre, inv, pct, transito: Number(inv.transito) || 0 };
+        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty };
       })
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [activeTab, inventory.pt]);
@@ -1788,7 +1806,7 @@ export default function InventarioPage() {
   }, [mpItems, debouncedQuery, filterFn]);
 
   const filteredPT = useMemo(() => {
-    let items = filterFn(ptItems, it => it.inv.qty || 0, it => it.pct);
+    let items = filterFn(ptItems, it => (it.displayQty != null ? it.displayQty : (it.inv.qty || 0)), it => it.pct);
     if (debouncedQuery) {
       const q = debouncedQuery.toLowerCase();
       /* También por SKU (catálogo PT, jun 2026) — Burgos busca por etiqueta */
@@ -2394,6 +2412,7 @@ export default function InventarioPage() {
                 onAgregar={(ubic) => setAgregarPtUbic({ ubicacion: ubic })}
                 onEliminarTeran={handleEliminarPTTeran}
                 onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : undefined}
+                onReenvasar={canReenvasar ? (producto, scalar) => setReenvasarTeran({ producto, scalar }) : undefined}
               />
             )}
           </>
@@ -2555,6 +2574,25 @@ export default function InventarioPage() {
             setToastMsg(`${r.producto}: ${r.transferido} cub → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
             reloadInv();
             reloadPtUbi();
+            setTimeout(() => setToastMsg(''), 4500);
+          }}
+        />
+      )}
+
+      {/* ── Reenvasar PT en Terán (tote/granel → cubetas/galones) ── */}
+      {reenvasarTeran && (
+        <ReenvasarTeranModal
+          producto={reenvasarTeran.producto}
+          scalar={reenvasarTeran.scalar}
+          envData={envData?.data || envData}
+          isDesktop={isDesktop}
+          onClose={() => setReenvasarTeran(null)}
+          onDone={(r) => {
+            setReenvasarTeran(null);
+            setToastMsg(`${r.producto} reenvasado en Terán`);
+            reloadInv();
+            reloadPtUbi();
+            reloadEnv();
             setTimeout(() => setToastMsg(''), 4500);
           }}
         />
@@ -2787,7 +2825,113 @@ function TransferirEnvaseTeranModal({ item, isDesktop, onClose, onDone }) {
   );
 }
 
-function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir }) {
+/* Reenvasar PT del pool de Terán: convierte tote/granel en cubetas/galones,
+   consumiendo envases vacíos + tapas del pool de TERÁN. Espeja el backend
+   POST /api/inventario/pt/reenvasar-teran (el cub-equiv total se conserva). */
+const REENV_ML = { tote: 988000, cubeta: 19000, galon: 3785, litro: 946, atomizador750: 750 };
+const reenvCubEq = (p, n) => p === 'granel' ? (Number(n) || 0) : (REENV_ML[p] ? (Number(n) || 0) * (REENV_ML[p] / 19000) : 0);
+const REENV_TIPO_LBL = { tote: 'Tote', cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador', granel: 'Granel' };
+const REENV_TIPO_CAT = { cubeta: 'cubeta', galon: 'galon', litro: 'litro', atomizador750: 'otros' };
+
+function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, onDone }) {
+  const origenes = Object.entries(scalar || {}).filter(([p, n]) => reenvCubEq(p, n) > 0.001).map(([p]) => p);
+  const [origen, setOrigen] = useState(origenes[0] || 'tote');
+  const destinoOpts = ['cubeta', 'galon', 'litro', 'atomizador750'].filter(t => t !== origen);
+  const [destinoTipo, setDestinoTipo] = useState(destinoOpts[0] || 'cubeta');
+  const [qty, setQty] = useState('');
+  const [subKey, setSubKey] = useState('');
+  const [tapaKey, setTapaKey] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const cats = envData?.categorias || {};
+  const tapas = envData?.tapas || {};
+  const catKey = REENV_TIPO_CAT[destinoTipo];
+  const subs = Object.entries(cats[catKey]?.subcategorias || {});
+  const usaTapa = !!cats[catKey]?.usa_tapa;
+  const tapaList = Object.entries(tapas);
+
+  const n = parseInt(qty, 10);
+  const dispCub = reenvCubEq(origen, scalar?.[origen] || 0) + (origen !== 'granel' ? (Number(scalar?.granel) || 0) : 0);
+  const producedCub = !isNaN(n) && n > 0 ? reenvCubEq(destinoTipo, n) : 0;
+  const valido = !isNaN(n) && n > 0 && producedCub <= dispCub + 0.01;
+  const restante = Math.max(0, dispCub - producedCub);
+
+  const submit = async () => {
+    if (!valido || saving) return;
+    setSaving(true); setErr('');
+    try {
+      const destinos = [{ tipo: destinoTipo, qty: n, subKey: subKey || null, tapaKey: usaTapa ? (tapaKey || null) : null }];
+      const r = await api.reenvasarPTTeran(producto, origen, destinos);
+      onDone(r);
+    } catch (e) { setErr(e?.data?.error || e.message || 'No se pudo reenvasar'); setSaving(false); }
+  };
+
+  const selStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)' };
+
+  return (
+    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shH}>Reenvasar en Terán</div>
+        <div style={S.shS}>{producto}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
+          Convierte un <strong>tote</strong> (o granel) en cubetas/galones. No cambia el total de pintura — solo su forma. Consume envases vacíos del stock de <strong>Terán</strong>; lo que sobra de un tote abierto queda <strong>a granel</strong>.
+        </div>
+
+        <label style={S.flbl}>Origen</label>
+        <select style={selStyle} value={origen} onChange={e => setOrigen(e.target.value)}>
+          {origenes.map(p => (
+            <option key={p} value={p}>{REENV_TIPO_LBL[p] || p} — {p === 'granel' ? `${Math.round(scalar[p])} cub` : `${scalar[p]} (${Math.round(reenvCubEq(p, scalar[p]))} cub)`} disp.</option>
+          ))}
+        </select>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 92px', gap: 10, marginTop: 12 }}>
+          <div>
+            <label style={S.flbl}>Convertir a</label>
+            <select style={selStyle} value={destinoTipo} onChange={e => { setDestinoTipo(e.target.value); setSubKey(''); setTapaKey(''); }}>
+              {destinoOpts.map(t => <option key={t} value={t}>{REENV_TIPO_LBL[t]}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={S.flbl}>Cantidad</label>
+            <input style={S.finQty} type="number" inputMode="numeric" min="1" step="1" value={qty} onChange={e => setQty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
+          </div>
+        </div>
+
+        <label style={{ ...S.flbl, marginTop: 12 }}>Envase a usar (de Terán)</label>
+        <select style={selStyle} value={subKey} onChange={e => setSubKey(e.target.value)}>
+          <option value="">— sin descontar envase —</option>
+          {subs.map(([sk, sub]) => <option key={sk} value={sk}>{sub.nombre} (Terán: {Math.round(Number(sub.teran) || 0)})</option>)}
+        </select>
+        {usaTapa && (
+          <>
+            <label style={{ ...S.flbl, marginTop: 12 }}>Tapa (de Terán)</label>
+            <select style={selStyle} value={tapaKey} onChange={e => setTapaKey(e.target.value)}>
+              <option value="">— sin tapa —</option>
+              {tapaList.map(([tk, t]) => <option key={tk} value={tk}>{t.nombre} (Terán: {Math.round(Number(t.teran) || 0)})</option>)}
+            </select>
+          </>
+        )}
+
+        <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6 }}>
+          Disponible en <strong>{REENV_TIPO_LBL[origen] || origen}</strong>: <strong>{Math.round(dispCub)} cub-equiv</strong><br />
+          Producirás: <strong>{n > 0 ? n : 0} {(REENV_TIPO_LBL[destinoTipo] || '').toLowerCase()}</strong> = {producedCub ? (producedCub < 10 ? producedCub.toFixed(2) : Math.round(producedCub)) : 0} cub-equiv<br />
+          {valido && <>Quedará a granel: <strong>~{Math.round(restante)} cub</strong></>}
+        </div>
+
+        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
+          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
+            {saving ? 'Reenvasando…' : 'Reenvasar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar }) {
   const bucket = data?.[ubicacion] || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => {
@@ -2803,10 +2947,16 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
     acc.galon  += d.galon  || 0;
     acc.litro  += d.litro  || 0;
     acc.atm    += d.atm    || 0;
+    acc.granel += d.granel || 0;
     return acc;
-  }, { tote: 0, cubeta: 0, galon: 0, litro: 0, atm: 0 });
+  }, { tote: 0, cubeta: 0, galon: 0, litro: 0, atm: 0, granel: 0 });
 
   const esFabrica = ubicacion === 'fabrica';
+  /* Grid: Producto · TOTE · Cub · Gal · Lt · ATM · Granel · Acción */
+  const gridCols = 'minmax(170px, 2fr) 60px 60px 60px 56px 56px 72px 132px';
+  /* ¿Hay algo reenvasable en el pool ESCALAR de este renglón? (tote/granel/…) */
+  const reenvasable = (d) => !esFabrica && !!onReenvasar && d.teranPresScalar
+    && Object.entries(d.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
   const acentColor = esFabrica ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
   const acentBg    = esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)';
 
@@ -2824,6 +2974,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
           { label: 'Galones',   v: totales.galon },
           { label: 'Litros',    v: totales.litro },
           { label: 'ATM',       v: totales.atm },
+          ...(!esFabrica ? [{ label: 'Granel (cub)', v: Math.round(totales.granel) }] : []),
         ].map(k => (
           <div key={k.label} style={{
             background: 'var(--lp-bg-raised)',
@@ -2892,7 +3043,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
           {/* Header de tabla */}
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 70px 110px',
+            gridTemplateColumns: gridCols,
             padding: '10px 14px',
             background: 'var(--lp-bg-sunken)',
             fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
@@ -2905,6 +3056,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
             <span style={{ textAlign: 'right' }}>Gal</span>
             <span style={{ textAlign: 'right' }}>Lt</span>
             <span style={{ textAlign: 'right' }}>ATM</span>
+            <span style={{ textAlign: 'right' }} title="Volumen suelto en cub-equiv (tote abierto al reenvasar)">Granel</span>
             <span style={{ textAlign: 'right' }}>Acción</span>
           </div>
           {/* Filas */}
@@ -2914,7 +3066,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
             return (
               <div key={nombre} style={{
                 display: 'grid',
-                gridTemplateColumns: 'minmax(180px, 2fr) 70px 70px 70px 70px 70px 110px',
+                gridTemplateColumns: gridCols,
                 padding: '12px 14px',
                 borderBottom: '1px solid var(--lp-border-subtle)',
                 fontSize: 13, alignItems: 'center',
@@ -2954,6 +3106,7 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.atm || 0)    > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.atm    || 0}</span>
+                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 16, fontWeight: 600, color: (d.granel || 0) > 0 ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)' }} title={(d.granel || 0) > 0 ? `${Math.round(d.granel)} cub-equiv a granel (tote abierto)` : ''}>{(d.granel || 0) > 0 ? Math.round(d.granel) : 0}</span>
                 <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   {canPedir && (
                     <button
@@ -2971,6 +3124,14 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
                       title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
                       style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
                     >→ Terán</button>
+                  )}
+                  {/* Reenvasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán). */}
+                  {reenvasable(d) && (
+                    <button
+                      onClick={() => onReenvasar(nombre, d.teranPresScalar)}
+                      title="Reenvasar: convertir tote/granel en cubetas o galones (consume envases de Terán)"
+                      style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
+                    >Reenvasar</button>
                   )}
                   {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
                   {!esFabrica && canEdit && onEliminarTeran && (Number(d.manual) || 0) > 0 && (

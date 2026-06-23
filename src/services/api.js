@@ -164,6 +164,10 @@ const api = {
      inv.pt[X].qty a inv.pt[X].teran (no cambia el total). */
   transferirPTaTeran: (producto, cantidad, nota) =>
     request('POST', '/api/inventario/pt/transferir-teran', { producto, cantidad, nota }),
+  /* Reenvasar PT del pool de Terán: convierte `origen` (tote/granel) en `destinos`
+     [{tipo,qty,subKey,tapaKey}] consumiendo envases de Terán. No cambia el total. */
+  reenvasarPTTeran: (producto, origen, destinos, nota) =>
+    request('POST', '/api/inventario/pt/reenvasar-teran', { producto, origen, destinos, nota }),
   /* Transferencia de envase/tapa Fábrica→Terán (Josué): mueve N piezas de stock
      (Fábrica) a teran. ref = { tipo:'envase', catKey, subKey } | { tipo:'tapa', tapaKey }. */
   transferirEnvaseATeran: (ref, cantidad, nota) =>
