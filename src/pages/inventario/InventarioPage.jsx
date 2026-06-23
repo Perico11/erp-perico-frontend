@@ -1604,8 +1604,9 @@ export default function InventarioPage() {
   /* Sprint Y2 (jun 2026): transferencia manual de ENVASE/TAPA Fábrica→Terán.
      Guarda el item completo de envItems (trae item._env para el contrato del backend). */
   const [transferirEnv, setTransferirEnv] = useState(null);
-  /* Envases que llegan DIRECTO a Terán sin pasar por Fábrica (jun 2026). */
-  const [agregarEnvTeran, setAgregarEnvTeran] = useState(false);
+  /* Entrada de envases (suma a stock): { ubic:'fabrica'|'teran' } o null. Fábrica =
+     llegada de proveedor (Enrique); Terán = envases que llegan directo a Terán. */
+  const [agregarEnv, setAgregarEnv] = useState(null);
   /* W3 (jun 2026): sub-vista para PT por ubicación. 'total' usa inv.pt agregado;
      'fabrica' y 'teran' usan /api/inventario/pt-por-ubicacion (desde trazabilidad). */
   const [ptSubtab, setPtSubtab] = useState(searchParams.get('pt') || 'total');
@@ -1683,6 +1684,9 @@ export default function InventarioPage() {
      / inventario. Antes mostraba el botón a técnico (editarInventario) que luego
      recibía 403 al guardar. */
   const canEditEnvases = ['admin', 'compras', 'inventario'].includes(user?.rol);
+  /* AGREGAR (sumar) envases — entrada de proveedor. Incluye técnico (Enrique
+     registra envases que le llegan) PERO no puede AJUSTAR/fijar (eso es canEditEnvases). */
+  const canAgregarEnv = ['admin', 'compras', 'inventario', 'tecnico'].includes(user?.rol);
   /* §8 (handoff verde): eliminar/sustituir MP es exclusivo del permiso `eliminarMP`
      (admin por defecto) — NO de cualquiera con editarInventario. */
   const canDeleteMP = can('eliminarMP');
@@ -2443,10 +2447,13 @@ export default function InventarioPage() {
                 ))}
               </div>
               <div style={S.actionsCluster(isDesktop)}>
-                {/* Envases que llegan directo a Terán (sin pasar por Fábrica) */}
-                {canEditEnvases && envSubtab === 'teran' && (
+                {/* Entrada de envases (SUMA al stock). Fábrica = llegada de proveedor
+                    (Enrique/técnico); Terán = llegada directa a Terán. Contextual a la
+                    sub-vista. NO es "ajustar" (fijar): técnico puede sumar, no sobrescribir. */}
+                {canAgregarEnv && (
                   <button style={{ ...S.btnAdd, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
-                    onClick={() => setAgregarEnvTeran(true)} title="Registrar envases/tapas que llegaron directo a Terán">+ Agregar a Terán</button>
+                    onClick={() => setAgregarEnv({ ubic: envSubtab === 'teran' ? 'teran' : 'fabrica' })}
+                    title="Registrar entrada de envases/tapas que llegaron (suma al stock)">+ Agregar a {envSubtab === 'teran' ? 'Terán' : 'Fábrica'}</button>
                 )}
                 {canEditEnvases && isDesktop && (
                   <button style={S.btnAdd} onClick={() => setShowAgregarEnv(true)} title="Agregar una presentación de envase nueva">+ Agregar envase</button>
@@ -2625,14 +2632,15 @@ export default function InventarioPage() {
         />
       )}
 
-      {/* ── Agregar envases/tapas que llegan DIRECTO a Terán (sin pasar por Fábrica) ── */}
-      {agregarEnvTeran && (
-        <AgregarEnvaseTeranModal
+      {/* ── Entrada de envases/tapas (suma a stock): Fábrica (proveedor) o Terán ── */}
+      {agregarEnv && (
+        <EntradaEnvaseModal
+          ubic={agregarEnv.ubic}
           envData={envData?.data || envData}
           isDesktop={isDesktop}
-          onClose={() => setAgregarEnvTeran(false)}
+          onClose={() => setAgregarEnv(null)}
           onDone={(msg) => {
-            setAgregarEnvTeran(false);
+            setAgregarEnv(null);
             setToastMsg(msg);
             reloadEnv();
             setTimeout(() => setToastMsg(''), 4500);
@@ -2852,20 +2860,23 @@ function TransferirEnvaseTeranModal({ item, isDesktop, onClose, onDone }) {
   );
 }
 
-/* Agregar envases/tapas que llegan DIRECTO a Terán (sin pasar por Fábrica).
-   Suma al campo `teran` vía /api/envases/stock|tapa/stock con ubic='teran',
-   modo='agregar'. No toca el stock de Fábrica. */
-function AgregarEnvaseTeranModal({ envData, isDesktop, onClose, onDone }) {
+/* Entrada de envases/tapas (SUMA al stock de Fábrica o Terán). Fábrica = llegada
+   de proveedor (Enrique/técnico); Terán = envases que llegan directo a Terán.
+   Vía /api/envases/stock|tapa/stock con ubic + modo='agregar'. Solo SUMA (no fija). */
+function EntradaEnvaseModal({ ubic, envData, isDesktop, onClose, onDone }) {
+  const esTeran = ubic === 'teran';
+  const lugar = esTeran ? 'Terán' : 'Fábrica';
+  const field = esTeran ? 'teran' : 'stock';
   const cats = envData?.categorias || {};
   const tapas = envData?.tapas || {};
   const opts = [];
   Object.entries(cats).forEach(([catKey, cat]) => {
     Object.entries(cat.subcategorias || {}).forEach(([subKey, sub]) => {
-      opts.push({ id: 'env:' + catKey + ':' + subKey, tipo: 'envase', catKey, subKey, nombre: sub.nombre || subKey, teran: Number(sub.teran) || 0 });
+      opts.push({ id: 'env:' + catKey + ':' + subKey, tipo: 'envase', catKey, subKey, nombre: sub.nombre || subKey, actual: Number(sub[field]) || 0 });
     });
   });
   Object.entries(tapas).forEach(([tapaKey, t]) => {
-    opts.push({ id: 'tapa:' + tapaKey, tipo: 'tapa', tapaKey, nombre: t.nombre || tapaKey, teran: Number(t.teran) || 0 });
+    opts.push({ id: 'tapa:' + tapaKey, tipo: 'tapa', tapaKey, nombre: t.nombre || tapaKey, actual: Number(t[field]) || 0 });
   });
   const [sel, setSel] = useState(opts[0]?.id || '');
   const [cant, setCant] = useState('');
@@ -2879,35 +2890,37 @@ function AgregarEnvaseTeranModal({ envData, isDesktop, onClose, onDone }) {
     setSaving(true); setErr('');
     try {
       if (opt.tipo === 'tapa') {
-        await api.post('/api/envases/tapa/stock', { key: opt.tapaKey, stock: n, ubic: 'teran', modo: 'agregar' });
+        await api.post('/api/envases/tapa/stock', { key: opt.tapaKey, stock: n, ubic, modo: 'agregar' });
       } else {
-        await api.post('/api/envases/stock', { categoria: opt.catKey, subcategoria: opt.subKey, subKey: opt.subKey, stock: n, ubic: 'teran', modo: 'agregar' });
+        await api.post('/api/envases/stock', { categoria: opt.catKey, subcategoria: opt.subKey, subKey: opt.subKey, stock: n, ubic, modo: 'agregar' });
       }
-      onDone(`${opt.nombre}: +${n} en Terán`);
+      onDone(`${opt.nombre}: +${n} en ${lugar}`);
     } catch (e) { setErr(e?.data?.error || e.message || 'No se pudo agregar'); setSaving(false); }
   };
   const selStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)' };
   return (
     <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
-        <div style={S.shH}>Agregar a Terán</div>
-        <div style={S.shS}>Envases/tapas que llegaron directo a Terán</div>
+        <div style={S.shH}>Agregar a {lugar}</div>
+        <div style={S.shS}>{esTeran ? 'Envases/tapas que llegaron directo a Terán' : 'Entrada de envases/tapas (llegada de proveedor)'}</div>
         <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Suma piezas al stock de <strong>Terán</strong> sin pasar por Fábrica (para compras que se entregan directo allá). No toca el stock de Fábrica.
+          {esTeran
+            ? <>Suma piezas al stock de <strong>Terán</strong> sin pasar por Fábrica. No toca el stock de Fábrica.</>
+            : <>Suma piezas al stock de <strong>Fábrica</strong> (compras que llegan del proveedor). Solo SUMA lo que llegó — no fija ni sobrescribe.</>}
         </div>
         <label style={S.flbl}>Envase / tapa</label>
         <select style={selStyle} value={sel} onChange={e => setSel(e.target.value)}>
-          {opts.map(o => <option key={o.id} value={o.id}>{o.nombre} (Terán: {o.teran})</option>)}
+          {opts.map(o => <option key={o.id} value={o.id}>{o.nombre} ({lugar}: {o.actual})</option>)}
         </select>
         <label style={{ ...S.flbl, marginTop: 12 }}>Piezas que llegaron</label>
         <input style={S.finQty} type="number" inputMode="numeric" min="1" step="1" value={cant}
           onChange={e => setCant(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} autoFocus />
-        {opt && valido && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>Terán: {opt.teran} → <strong>{opt.teran + n}</strong></div>}
+        {opt && valido && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>{lugar}: {opt.actual} → <strong>{opt.actual + n}</strong></div>}
         {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
-            {saving ? 'Agregando…' : 'Agregar a Terán'}
+            {saving ? 'Agregando…' : `Agregar a ${lugar}`}
           </button>
         </div>
       </div>
