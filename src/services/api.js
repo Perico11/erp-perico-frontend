@@ -486,6 +486,8 @@ const api = {
   /* ── Maestro MP (estado/sustituir/eliminar) ── */
   setMaestroMPEstado: (mp, estado) =>
     request('POST', '/api/maestro-mp/estado', { mp, estado }),
+  setMaestroMPCampo: (mp, campo, valor) =>
+    request('POST', '/api/maestro-mp', { mp, campo, valor }),
   eliminarMP: (mp, forzar) =>
     request('POST', '/api/mp/eliminar', { mp, forzar }),
   sustituirMP: (mpOriginal, mpSustituta) =>

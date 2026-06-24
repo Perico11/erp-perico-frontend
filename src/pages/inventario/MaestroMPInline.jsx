@@ -17,21 +17,32 @@ const S = {
   badge: { display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700, borderRadius: 4, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em' },
   estadoBadge: (color) => ({ display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700, borderRadius: 4, background: 'var(--lp-bg-raised)', color, textTransform: 'uppercase', letterSpacing: '.04em' }),
   actions: { display: 'flex', alignItems: 'center', gap: 6 },
+  catBtn: { background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--lp-text-tertiary)', cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 2 },
+  catBtnEmpty: { background: 'none', border: 'none', padding: 0, font: 'inherit', color: 'var(--lp-warning-600)', cursor: 'pointer', fontWeight: 600, textDecoration: 'underline dotted', textUnderlineOffset: 2 },
+  catInput: { fontSize: 11, padding: '2px 6px', border: '1px solid var(--lp-border-default)', borderRadius: 4, fontFamily: 'inherit', maxWidth: 170, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-primary)' },
+  catSave: { border: 'none', background: 'var(--lp-brand-600)', color: '#fff', borderRadius: 4, cursor: 'pointer', fontSize: 11, padding: '2px 7px', lineHeight: 1.4 },
+  catCancel: { border: '1px solid var(--lp-border-default)', background: 'transparent', color: 'var(--lp-text-secondary)', borderRadius: 4, cursor: 'pointer', fontSize: 11, padding: '2px 7px', lineHeight: 1.4 },
   hint: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 12, textAlign: 'center', lineHeight: 1.5 },
   empty: { textAlign: 'center', padding: 24, color: 'var(--lp-text-tertiary)', fontSize: 13 },
   loading: { textAlign: 'center', padding: 32, color: 'var(--lp-text-tertiary)' },
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12 },
 };
 
-/* canDelete = permiso `eliminarMP` (admin). onAction(action, mp) abre los modales
-   Sustituir/Eliminar del padre (InventarioPage). query = búsqueda de la barra superior;
-   con búsqueda se listan TODAS las MP que coinciden (cualquier estado) para poder
-   encontrar la que se va a sustituir; sin búsqueda, Top 20 activas por uso.
-   reloadSignal: el padre lo incrementa tras sustituir/eliminar para refrescar. */
-export default function MaestroMPInline({ query = '', canDelete = false, mpsDisponibles = [], onAction, reloadSignal = 0 }) {
+const sinCat = (c) => !c || /sin\s*categor[ií]a/i.test(String(c));
+
+/* canDelete = permiso `eliminarMP` (admin) → menú Sustituir/Eliminar.
+   canEditCat = admin/compras → editar la categoría inline (POST /api/maestro-mp).
+   onAction(action, mp) abre los modales del padre. query = búsqueda de la barra superior;
+   con búsqueda se listan TODAS las MP que coinciden (cualquier estado); sin búsqueda,
+   Top 20 activas por uso. reloadSignal: el padre lo incrementa tras sustituir/eliminar. */
+export default function MaestroMPInline({ query = '', canDelete = false, canEditCat = false, mpsDisponibles = [], onAction, reloadSignal = 0 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const [editCat, setEditCat] = useState(null); /* nombre de MP en edición de categoría */
+  const [catVal, setCatVal] = useState('');
+  const [savingCat, setSavingCat] = useState(false);
+
   useEffect(() => {
     setLoading(true); setErr('');
     api.getMaestroMP()
@@ -40,12 +51,28 @@ export default function MaestroMPInline({ query = '', canDelete = false, mpsDisp
       .finally(() => setLoading(false));
   }, [reloadSignal]);
   if (loading) return <div style={S.loading}>Cargando maestro MP...</div>;
-  if (err) return <div style={S.err}>{err}</div>;
+  if (err && !data) return <div style={S.err}>{err}</div>;
   const mps = data?.mps || {};
   const list = Object.entries(mps);
   const activos = list.filter(([, m]) => m.estado === 'activo').length;
   const ocultos = list.filter(([, m]) => m.estado === 'oculto').length;
   const eliminados = list.filter(([, m]) => m.estado === 'eliminado').length;
+
+  /* categorías existentes (para el datalist) */
+  const categorias = [...new Set(list.map(([, m]) => m.categoria).filter(c => !sinCat(c)))].sort();
+
+  const startEdit = (nombre, actual) => { setEditCat(nombre); setCatVal(sinCat(actual) ? '' : String(actual)); setErr(''); };
+  const saveCat = async (nombre) => {
+    const v = catVal.trim();
+    if (!v) { setEditCat(null); return; }
+    setSavingCat(true);
+    try {
+      await api.setMaestroMPCampo(nombre, 'categoria', v);
+      setData(d => ({ ...d, mps: { ...d.mps, [nombre]: { ...d.mps[nombre], categoria: v } } }));
+      setEditCat(null);
+    } catch (e) { setErr('No se pudo guardar la categoría: ' + (e?.message || 'error')); }
+    finally { setSavingCat(false); }
+  };
 
   const q = (query || '').trim().toLowerCase();
   const filtradas = (q
@@ -62,6 +89,7 @@ export default function MaestroMPInline({ query = '', canDelete = false, mpsDisp
 
   return (
     <div style={S.panel}>
+      <datalist id="maestro-cats">{categorias.map(c => <option key={c} value={c} />)}</datalist>
       <div style={S.metric}>
         <div style={S.metricCard}>
           <div style={S.metricVal}>{list.length}</div>
@@ -80,6 +108,7 @@ export default function MaestroMPInline({ query = '', canDelete = false, mpsDisp
           <div style={S.metricLabel}>Eliminados</div>
         </div>
       </div>
+      {err && <div style={{ ...S.err, marginBottom: 10 }}>{err}</div>}
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>
         {q ? `Resultados de "${query}" (${visibles.length})` : 'Top 20 activas por uso en formulas'}
       </div>
@@ -87,6 +116,7 @@ export default function MaestroMPInline({ query = '', canDelete = false, mpsDisp
         {visibles.length === 0 && <div style={S.empty}>Sin coincidencias para "{query}".</div>}
         {visibles.map(([nombre, m]) => {
           const eb = estadoInfo(m.estado);
+          const editando = editCat === nombre;
           return (
             <div key={nombre} style={S.row}>
               <div style={S.avatar(eb ? eb.color : 'var(--lp-warning-600)')}>{nombre.charAt(0)}</div>
@@ -98,8 +128,27 @@ export default function MaestroMPInline({ query = '', canDelete = false, mpsDisp
                   )}
                 </div>
                 <div style={S.meta}>
-                  {m.categoria || 'sin categoria'}
-                  {m.stock?.qty != null && ' · stock ' + m.stock.qty}
+                  {editando ? (
+                    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+                      <input
+                        list="maestro-cats" autoFocus value={catVal} disabled={savingCat}
+                        onChange={e => setCatVal(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveCat(nombre); if (e.key === 'Escape') setEditCat(null); }}
+                        placeholder="Categoría…" style={S.catInput}
+                      />
+                      <button onMouseDown={e => { e.preventDefault(); saveCat(nombre); }} disabled={savingCat} style={S.catSave} title="Guardar">{savingCat ? '…' : '✓'}</button>
+                      <button onMouseDown={e => { e.preventDefault(); setEditCat(null); }} disabled={savingCat} style={S.catCancel} title="Cancelar">✕</button>
+                    </span>
+                  ) : (
+                    <>
+                      {canEditCat ? (
+                        <button onClick={() => startEdit(nombre, m.categoria)} style={sinCat(m.categoria) ? S.catBtnEmpty : S.catBtn} title="Editar categoría">
+                          {m.categoria || 'sin categoría'}<span style={{ opacity: .55, marginLeft: 3 }}>✎</span>
+                        </button>
+                      ) : (m.categoria || 'sin categoria')}
+                      {m.stock?.qty != null && ' · stock ' + m.stock.qty}
+                    </>
+                  )}
                 </div>
               </div>
               <div style={S.actions}>
@@ -118,6 +167,7 @@ export default function MaestroMPInline({ query = '', canDelete = false, mpsDisp
           {canDelete
             ? 'Busca arriba para encontrar y sustituir/eliminar cualquier materia prima.'
             : 'Busca arriba para encontrar cualquier materia prima.'}
+          {canEditCat && ' La categoría se edita con el lápiz ✎.'}
         </div>
       )}
     </div>

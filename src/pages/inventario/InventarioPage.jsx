@@ -2362,6 +2362,7 @@ export default function InventarioPage() {
               <MaestroMPInline
                 query={debouncedQuery}
                 canDelete={canDeleteMP}
+                canEditCat={esAdmin || user?.rol === 'compras'}
                 mpsDisponibles={mpsDisponibles}
                 onAction={handleMPAction}
                 reloadSignal={maestroReload}
