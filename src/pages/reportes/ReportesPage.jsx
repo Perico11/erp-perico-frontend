@@ -289,6 +289,15 @@ function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
         <KPI label="Salidas mes" accent={CHART.amber} value={fmtN(k.salidasMes, 0)} sub="kg consumidos" />
       </div>
 
+      {/* FIX (audit): para non-admin el desglose de producción se OMITE (endpoint
+          solo-admin) — antes desaparecía sin explicación ("vacío en silencio"). */}
+      {!esAdmin && (
+        <div style={{ ...S.section, fontSize: 12, color: 'var(--lp-text-tertiary)', textAlign: 'center', lineHeight: 1.5 }}>
+          El <b>desglose de producción mensual</b> y el <b>cierre de mes</b> son exclusivos de administración.
+          Tienes acceso completo a <b>Histórico</b>, <b>Trimestral</b>, <b>Análisis</b> y <b>Estratégico</b>.
+        </div>
+      )}
+
       {/* ── Producción · últimos 6 meses (mockup: barras, último mes acento) ── */}
       {prod && prod.serie.length > 0 && (() => {
         const max = Math.max(...prod.serie.map(s => s.total), 1);
