@@ -1286,13 +1286,15 @@ function AccionesSheet({ rows, importExportNode, onClose }) {
 }
 
 /* KPIs de escritorio (mockup .kpis, propuesta A "Centro de control") */
-function KpisInventario({ items, tipo, unidad }) {
+function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal }) {
   const crit = items.filter(i => (i.inv.qty || 0) <= 0);
   const bajo = items.filter(i => (i.inv.qty || 0) > 0 && i.pct <= 100);
-  /* Valor estimado SOLO con costo real (maestro.costo.costoKg en MP);
-     sin dato → '—' (no se inventan precios). */
-  let valor = null;
-  if (tipo === 'mp') {
+  /* Valor estimado (qty × costo): si el backend lo proveyó (admin) se usa ese —
+     incluye PT (costo por cubeta = fórmula + envase + tapa + MO + merma) y Envases,
+     que el cliente no puede calcular. Si no, fallback client-side SOLO para MP con
+     maestro.costo.costoKg. Sin dato → '—' (no se inventan precios). */
+  let valor = (valorBackend != null && valorBackend > 0) ? valorBackend : null;
+  if (valor == null && tipo === 'mp') {
     let suma = 0, con = 0;
     items.forEach(i => {
       const ck = Number(i.maestro?.costo?.costoKg);
@@ -1301,12 +1303,16 @@ function KpisInventario({ items, tipo, unidad }) {
     if (con > 0) valor = suma;
   }
   const money = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n).toLocaleString('es-MX');
+  const moneyFull = (n) => '$' + Math.round(n).toLocaleString('es-MX');
   const noun = tipo === 'env' ? 'envases' : tipo === 'pt' ? 'productos' : 'materia prima';
+  const valorSub = valor != null
+    ? (valorTotal != null ? `${moneyFull(valor)} · total inv. ${money(valorTotal)}` : moneyFull(valor))
+    : 'Sin costo unitario';
   const K = [
     ['SKUs activos', String(items.length), noun, 'var(--lp-brand-600)', 'var(--lp-text-primary)'],
     ['En crítico', String(crit.length), 'Reabastecer ya', 'var(--lp-danger-600)', 'var(--lp-danger-600)'],
     ['Stock bajo', String(bajo.length), 'Por debajo del mínimo', 'var(--lp-warning-600)', 'var(--lp-warning-600)'],
-    ['Valor estimado', valor != null ? money(valor) : '—', valor != null ? `Inventario ${tipo.toUpperCase()}` : 'Sin costo unitario', 'var(--lp-info-600)', 'var(--lp-text-primary)'],
+    ['Valor estimado', valor != null ? money(valor) : '—', valorSub, 'var(--lp-info-600)', 'var(--lp-text-primary)'],
   ];
   return (
     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 16 }}>
@@ -1650,6 +1656,15 @@ export default function InventarioPage() {
   const { data: invData, loading: invLoading, reload: reloadInv } = useApiData(() => api.getInventario(), [], 8000);
   const { data: maestroData } = useApiData(() => api.getMaestroMP(), [], 15000);
   const { data: envData, reload: reloadEnv } = useApiData(() => api.getEnvases(), [], 15000);
+  /* Valor de inventario estimado (qty × costo): el backend lo calcula con el costo
+     real de MP (costoKg), el costo por cubeta de PT (fórmula + config) y el costo de
+     envases. Solo admin (dato financiero); otros roles ven el fallback client-side de
+     MP. El KPI "Valor estimado" antes salía "—" en PT/Envases por falta de este dato. */
+  const { data: valuationData } = useApiData(
+    () => (user?.rol === 'admin' ? api.getReportValuation() : Promise.resolve(null)),
+    [user?.rol], 60000
+  );
+  const valuation = (valuationData && (valuationData.data || valuationData)) || null;
   /* W3: stock PT desglosado por ubicación física (desde trazabilidad) */
   const { data: ptUbiData, reload: reloadPtUbi } = useApiData(() => api.getPTPorUbicacion(), [], 15000);
   /* Sprint X: stock MP desglosado por almacén (fábrica/Terán) — inv.mp[X].ubic */
@@ -2250,13 +2265,32 @@ export default function InventarioPage() {
           const criticos = kpiItems.filter(i => (i.inv.qty || 0) <= 0);
           return (
             <>
-              <KpisInventario items={kpiItems} tipo={activeTab} unidad={unidad} />
+              <KpisInventario items={kpiItems} tipo={activeTab} unidad={unidad}
+                valorBackend={valuation ? (activeTab === 'mp' ? valuation.valorMP : activeTab === 'pt' ? valuation.valorPT : valuation.valorEnvases) : null}
+                valorTotal={valuation ? valuation.valorTotal : null} />
               {activeTab === 'mp' && (
                 <BandaAtencion criticos={criticos} unidad={unidad}
                   canOC={user?.rol === 'admin' || user?.rol === 'compras'}
                   onGenerarOC={() => navigate('/pronostico')} />
               )}
             </>
+          );
+        })()}
+
+        {/* Valor estimado en MÓVIL (admin): el KPI grid es solo escritorio (≥880px);
+            este chip compacto evita que el dato falte en el teléfono. */}
+        {!isDesktop && valuation && ((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total') || activeTab === 'env') && (() => {
+          const v = activeTab === 'mp' ? valuation.valorMP : activeTab === 'pt' ? valuation.valorPT : valuation.valorEnvases;
+          const money = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n || 0).toLocaleString('es-MX');
+          const full = '$' + Math.round(v || 0).toLocaleString('es-MX');
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderLeft: '4px solid var(--lp-info-600)', borderRadius: 12, padding: '10px 14px', marginBottom: 14 }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' }}>Valor estimado · {activeTab.toUpperCase()}</div>
+                <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{full} · total inv. {money(valuation.valorTotal)}</div>
+              </div>
+              <div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--lp-text-primary)', flexShrink: 0 }}>{money(v)}</div>
+            </div>
           );
         })()}
 
