@@ -11,6 +11,7 @@ import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 import { ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, normEstado } from '../../lib/estados';
+import LoteDetalleModal from './LoteDetalleModal';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
 /* DECISIÓN OWNER jun 2026: al terminar la producción, la card del lote NO se
@@ -458,6 +459,7 @@ export default function ProduccionPage() {
   const initialTab = searchParams.get('tab') === 'calidad' ? 'calidad' : 'produccion';
   const [activeTab, setActiveTab] = useState(initialTab);
   const [verLotes, setVerLotes] = useState(null); /* null | 'hoy' | 'mes' — KPI Lotes desplegable */
+  const [detalleLote, setDetalleLote] = useState(null); /* lote para el modal de detalle/trazabilidad inline */
   /* Limpiar el query param después de leerlo para que un F5 no vuelva al mismo tab forzado.
      FIX jun 2026 (M1): no borrar `continuar` hasta que el efecto de auto-abrir
      wizard lo haya consumido (depende de productibles que cargan async). */
@@ -834,8 +836,8 @@ export default function ProduccionPage() {
                       key={l.id || cod}
                       type="button"
                       style={S.loteRow}
-                      onClick={() => navigate(`/trazabilidad?q=${encodeURIComponent(cod)}`)}
-                      title="Ver historial del lote en Trazabilidad"
+                      onClick={() => setDetalleLote(l)}
+                      title="Ver detalle y trazabilidad del lote"
                     >
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div style={S.loteCod}>{cod}{l.esPrueba && <span style={S.loteBadgePrueba}>🧪 prueba</span>}</div>
@@ -1233,6 +1235,19 @@ export default function ProduccionPage() {
         />
       )}
       {printQR && <SubloteQRPrintModal payload={printQR} onClose={() => setPrintQR(null)} />}
+
+      {/* ── Detalle de lote (trazabilidad + tiempo) inline, sin salir de la pantalla ── */}
+      {detalleLote && (
+        <LoteDetalleModal
+          lote={detalleLote}
+          onClose={() => setDetalleLote(null)}
+          onVerTrazabilidad={() => {
+            const c = detalleLote.codigoLote || detalleLote.codigo || detalleLote.id;
+            setDetalleLote(null);
+            navigate(`/trazabilidad?q=${encodeURIComponent(c)}`);
+          }}
+        />
+      )}
 
       {/* ── Toast ── */}
       {toastMsg && <div style={S.toast}><IcoCheck size={16} />{toastMsg}</div>}
