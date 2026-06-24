@@ -19,6 +19,7 @@ import { ETAPAS_PEDIDO, CK_COLOR, CkCheck, injectCkCSS } from '../../components/
 import {
   ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
   ESTADO_PEDIDO_COLOR as ESTADO_COLOR,
+  bucketPedido, esPedidoTerminal, normEstado,
 } from '../../lib/estados';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 
@@ -504,14 +505,11 @@ export default function PedidosPage() {
     return arr.filter(p => p && p.id && !p.eliminado && p.estado !== 'eliminado');
   }, [data]);
 
-  /* Estados terminales = histórico */
-  const TERMINALES = ['entregado', 'rechazado', 'cancelado'];
-  /* Activos REALES (sin pruebas, sin terminales) */
-  const activos    = pedidos.filter(p => !TERMINALES.includes(p.estado) && !p.esPrueba);
-  /* Pruebas activas separadas */
-  const pruebas    = pedidos.filter(p => !TERMINALES.includes(p.estado) && p.esPrueba);
-  /* Rechazados / cancelados separados del histórico normal */
-  const rechazados = pedidos.filter(p => p.estado === 'rechazado' || p.estado === 'cancelado');
+  /* Buckets desde la fuente ÚNICA lib/estados.js (antes inline → derivaba; un
+     pedido en 'en_almacen' o variante 'entregada' se caía entre pestañas). */
+  const activos    = pedidos.filter(p => bucketPedido(p) === 'activos');
+  const pruebas    = pedidos.filter(p => bucketPedido(p) === 'pruebas');
+  const rechazados = pedidos.filter(p => bucketPedido(p) === 'rechazados');
 
   /* Órdenes INTERNAS terminadas (entregadas, sin pedido) → entradas equivalentes
      a un pedido completado, mapeadas a la forma de pedido para reusar la card.
@@ -524,7 +522,7 @@ export default function PedidosPage() {
     return (Array.isArray(arr) ? arr : [])
       .filter(o => o && !o.eliminado
         && (o.origen === 'interna' || !o.pedidoId)
-        && o.estado === 'entregado'
+        && normEstado(o.estado) === 'entregado'
         && !o.esPrueba)
       .map(o => ({
         ...o,
@@ -555,9 +553,9 @@ export default function PedidosPage() {
     const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
     const yo = norm(user?.nombre);
     const entregadosRef = new Set([
-      ...pedidos.filter(p => p.estado === 'entregado').map(p => p.id),
+      ...pedidos.filter(p => bucketPedido(p) === 'historial').map(p => p.id),
       ...((Array.isArray(ordData?.data || ordData) ? (ordData?.data || ordData) : [])
-        .filter(o => o && o.estado === 'entregado').map(o => o.id)),
+        .filter(o => o && normEstado(o.estado) === 'entregado').map(o => o.id)),
     ]);
     const vistos = new Set();
     return (Array.isArray(arr) ? arr : [])
@@ -586,7 +584,7 @@ export default function PedidosPage() {
 
   /* Historial = operación completada: pedidos/órdenes entregados + lo que produje */
   const historial  = [
-    ...pedidos.filter(p => p.estado === 'entregado' && !p.esPrueba),
+    ...pedidos.filter(p => bucketPedido(p) === 'historial'),
     ...ordenesInternasHist,
     ...miProduccionHist,
   ];
@@ -921,7 +919,7 @@ export default function PedidosPage() {
             /* Cancelar disponible siempre que el pedido no esté en estado terminal.
                Admin puede cancelar cualquier pedido (cascada orden + reversa MP).
                Técnico solo pedidos pendientes/aceptados (no producidos aún). */
-            const esTerminal = TERMINALES.includes(p.estado);
+            const esTerminal = esPedidoTerminal(p.estado);
             const puedeAdminCancelar = user?.rol === 'admin' && !esTerminal;
             const puedeTecnicoCancelar = canAceptar && !puedeAdminCancelar && ['pendiente', 'aceptado'].includes(p.estado);
             const mostrarCancelar = (puedeAdminCancelar || puedeTecnicoCancelar) && tabOperable;

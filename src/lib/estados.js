@@ -43,6 +43,37 @@ export const esOrdenPendiente  = e => ESTADO_ORDEN_PENDIENTE.includes(String(e |
 export const esLoteActivo      = e => ESTADO_LOTE_ACTIVO.includes(String(e || '').toLowerCase());
 export const esLoteTerminal    = e => ESTADO_LOTE_TERMINAL.includes(String(e || '').toLowerCase());
 
+/* ── Normalización de estados FANTASMA / variantes → canónico ──────────────
+   FIX jun 2026 (deriva de buckets): la causa raíz de la familia de bugs donde
+   un ítem "se cae" entre pestañas = cada pantalla re-implementa su filtro y
+   algunas usan variantes que otras NO reconocen. Aquí se normalizan a UN estado
+   canónico, en un solo lugar. Casos reales/vistos:
+     · 'entregada' (con -a, timeline de OrdenesPage) → 'entregado'
+     · 'en_stock_teran' (sublote recibido en Terán)  → 'en_almacen'
+   NOTA: 'en_proceso' es un estado REAL (orden en producción) → NO se aliasa.
+   'terminada'/'completado' son etiquetas de UI/ledger, no estados de pedido. */
+const ESTADO_ALIAS = { entregada: 'entregado', en_stock_teran: 'en_almacen' };
+export const normEstado = e => {
+  const s = String(e || '').toLowerCase();
+  return ESTADO_ALIAS[s] || s;
+};
+
+/* ── Buckets de PEDIDO (Activos / Pruebas / Rechazados / Historial) ────────
+   Fuente ÚNICA del bucketeo que vivía inline en PedidosPage (y derivaba). Todas
+   las predicate usan normEstado, así la variante 'entregada' ya no se pierde.
+   bucketPedido devuelve el bucket o null (entregado-prueba = invisible, idéntico
+   al comportamiento histórico). El "Historial = lo que produje" del técnico se
+   suma aparte en PedidosPage desde el ledger (no es estado de pedido). */
+export const esPedidoTerminal  = e => ESTADO_PEDIDO_TERMINAL.includes(normEstado(e));
+export const esPedidoRechazado = e => { const n = normEstado(e); return n === 'rechazado' || n === 'cancelado'; };
+export const esPedidoHistorial = p => normEstado(p && p.estado) === 'entregado' && !(p && p.esPrueba);
+export function bucketPedido(p) {
+  if (!p) return null;
+  if (esPedidoRechazado(p.estado)) return 'rechazados';
+  if (esPedidoTerminal(p.estado)) return esPedidoHistorial(p) ? 'historial' : null; /* entregado-prueba: invisible */
+  return p.esPrueba ? 'pruebas' : 'activos';
+}
+
 /* ════════════════════════════════════════════════════════════════════
    FIX jun 2026 (Sprint X3): labels + colors canónicos de PEDIDO y ORDEN.
 
