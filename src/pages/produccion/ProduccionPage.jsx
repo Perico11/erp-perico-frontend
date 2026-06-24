@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -10,6 +10,7 @@ import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
+import { ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, normEstado } from '../../lib/estados';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
 /* DECISIÓN OWNER jun 2026: al terminar la producción, la card del lote NO se
@@ -86,6 +87,34 @@ const S = {
   }),
   kpiLabel: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' },
   kpiValue: { fontSize: 24, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', marginTop: 4 },
+
+  /* ── Desplegable de lotes del periodo (KPI Lotes Hoy/Mes clickeable) ── */
+  lotesPanel: {
+    background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
+    borderRadius: 'var(--lp-radius)', marginBottom: 16, overflow: 'hidden',
+  },
+  lotesPanelHead: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    padding: '10px 14px', borderBottom: '1px solid var(--lp-border-subtle)',
+    fontSize: 12.5, fontWeight: 700, color: 'var(--lp-text-secondary)',
+    background: 'var(--lp-bg-base)',
+  },
+  lotesPanelClose: {
+    border: 'none', background: 'transparent', cursor: 'pointer',
+    color: 'var(--lp-text-tertiary)', fontSize: 12, fontWeight: 600, font: 'inherit',
+  },
+  loteRow: {
+    display: 'flex', alignItems: 'center', gap: 12, width: '100%',
+    padding: '11px 14px', background: 'transparent',
+    border: 'none', borderBottom: '1px solid var(--lp-border-subtle)',
+    cursor: 'pointer', textAlign: 'left', font: 'inherit',
+  },
+  loteCod: { fontSize: 13, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  loteProd: { fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  loteEstado: { fontSize: 10.5, fontWeight: 700, padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap' },
+  loteFecha: { fontSize: 11, color: 'var(--lp-text-tertiary)', whiteSpace: 'nowrap' },
+  loteChevron: { fontSize: 18, color: 'var(--lp-text-tertiary)', lineHeight: 1 },
+  loteBadgePrueba: { fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' },
 
   /* ── Cards móvil — mockup .lcard/.ltitle/.lmeta ── */
   card: (highlight) => ({
@@ -421,12 +450,14 @@ export default function ProduccionPage() {
      Permite que push notifs o notificacionesPage envíen al usuario directo
      a la tab Calidad QC. */
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   /* FIX jun 2026 (censo duplicados, decisión owner): se eliminan "Mis activos"
      (lista que solo navegaba — duplicaba las cards de Pedidos) y "Reportes"
      (placeholder con KPI roto). Quedan: Lanzar lote (default) · Calidad QC.
      Deep links ?tab=calidad siguen funcionando; ?tab=activos/reportes caen al default. */
   const initialTab = searchParams.get('tab') === 'calidad' ? 'calidad' : 'produccion';
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [verLotes, setVerLotes] = useState(null); /* null | 'hoy' | 'mes' — KPI Lotes desplegable */
   /* Limpiar el query param después de leerlo para que un F5 no vuelva al mismo tab forzado.
      FIX jun 2026 (M1): no borrar `continuar` hasta que el efecto de auto-abrir
      wizard lo haya consumido (depende de productibles que cargan async). */
@@ -673,14 +704,18 @@ export default function ProduccionPage() {
   const stats = useMemo(() => {
     const hoy = new Date().toISOString().slice(0, 10);
     const mes = hoy.slice(0, 7);
-    const lotesHoy = lotes.filter(l => l.fecha?.startsWith(hoy)).length;
-    const lotesMes = lotes.filter(l => l.fecha?.startsWith(mes)).length;
+    /* Listas, no solo conteos: los KPI "Lotes Hoy/Mes" son desplegables — el
+       usuario quiere VER cuáles lotes son y abrir su historial, no un número
+       muerto. Orden: más reciente primero. */
+    const porFechaDesc = (a, b) => String(b.fecha || '').localeCompare(String(a.fecha || ''));
+    const lotesHoyList = lotes.filter(l => l.fecha?.startsWith(hoy)).sort(porFechaDesc);
+    const lotesMesList = lotes.filter(l => l.fecha?.startsWith(mes)).sort(porFechaDesc);
     const total = ordenes.filter(o => !o.eliminado).length;
     const qcAprobados = qcRecords.filter(r => r.resultado === 'aprobado').length;
     const qcRechazados = qcRecords.filter(r => r.resultado === 'rechazado').length;
     /* `completadas` eliminado (auditoría): usaba estados legacy 'terminada'/'entregada'
        que el flujo canónico ya no emite → siempre daba 0 y no se renderiza. */
-    return { lotesHoy, lotesMes, total, qcAprobados, qcRechazados };
+    return { lotesHoy: lotesHoyList.length, lotesMes: lotesMesList.length, lotesHoyList, lotesMesList, total, qcAprobados, qcRechazados };
   }, [lotes, ordenes, qcRecords]);
 
   /* Sprint H (jun 2026, decisión owner): nuevo tab "Mis activos" como vista
@@ -751,15 +786,73 @@ export default function ProduccionPage() {
                 <div style={S.kpiLabel}>En QC</div>
                 <div style={S.kpiValue}>{qcItems.length}</div>
               </div>
-              <div style={S.kpi('var(--lp-success-600)')}>
-                <div style={S.kpiLabel}>Lotes Hoy</div>
-                <div style={S.kpiValue}>{stats.lotesHoy}</div>
-              </div>
-              <div style={S.kpi('var(--lp-brand-600)')}>
-                <div style={S.kpiLabel}>Lotes Mes</div>
-                <div style={S.kpiValue}>{stats.lotesMes}</div>
-              </div>
+              {/* Lotes Hoy/Mes: KPIs CLICKEABLES → despliegan la lista de esos lotes
+                  (antes eran números muertos: no se veía cuáles ni se abría su historial). */}
+              {[
+                { key: 'hoy', accent: 'var(--lp-success-600)', label: 'Lotes Hoy', n: stats.lotesHoy },
+                { key: 'mes', accent: 'var(--lp-brand-600)',   label: 'Lotes Mes', n: stats.lotesMes },
+              ].map(({ key, accent, label, n }) => {
+                const on = verLotes === key;
+                const dis = n === 0;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    disabled={dis}
+                    onClick={() => setVerLotes(on ? null : key)}
+                    style={{
+                      ...S.kpi(accent), textAlign: 'left', font: 'inherit',
+                      cursor: dis ? 'default' : 'pointer', opacity: dis ? 0.7 : 1,
+                      boxShadow: on ? `0 0 0 1.5px ${accent}` : 'none',
+                    }}
+                    title={dis ? 'Sin lotes en este periodo' : (on ? 'Ocultar' : 'Ver cuáles son')}
+                  >
+                    <div style={{ ...S.kpiLabel, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                      <span>{label}</span>
+                      {!dis && <span style={{ fontSize: 10, color: accent }}>{on ? '▲ ocultar' : '▼ ver'}</span>}
+                    </div>
+                    <div style={S.kpiValue}>{n}</div>
+                  </button>
+                );
+              })}
             </div>
+
+            {/* Desplegable de lotes del periodo — cada fila abre su historial en
+                Trazabilidad (?q=código). Visible aun con "Sin producción activa". */}
+            {verLotes && (
+              <div style={S.lotesPanel}>
+                <div style={S.lotesPanelHead}>
+                  <span>{verLotes === 'hoy' ? 'Lotes de hoy' : 'Lotes de este mes'} · {(verLotes === 'hoy' ? stats.lotesHoyList : stats.lotesMesList).length}</span>
+                  <button type="button" style={S.lotesPanelClose} onClick={() => setVerLotes(null)}>Cerrar ✕</button>
+                </div>
+                {(verLotes === 'hoy' ? stats.lotesHoyList : stats.lotesMesList).map(l => {
+                  const cod = l.codigoLote || l.codigo || l.id; /* codigoLote = lo que indexa el filtro de Trazabilidad */
+                  const est = normEstado(l.estado);
+                  const fch = l.fecha ? new Date(l.fecha).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+                  return (
+                    <button
+                      key={l.id || cod}
+                      type="button"
+                      style={S.loteRow}
+                      onClick={() => navigate(`/trazabilidad?q=${encodeURIComponent(cod)}`)}
+                      title="Ver historial del lote en Trazabilidad"
+                    >
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={S.loteCod}>{cod}{l.esPrueba && <span style={S.loteBadgePrueba}>🧪 prueba</span>}</div>
+                        <div style={S.loteProd}>{l.producto || l.nombre || '—'}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                        <span style={{ ...S.loteEstado, background: (ESTADO_PEDIDO_COLOR[est] || 'var(--lp-text-tertiary)') + '22', color: ESTADO_PEDIDO_COLOR[est] || 'var(--lp-text-secondary)' }}>
+                          {ESTADO_PEDIDO_LABEL[est] || est || '—'}
+                        </span>
+                        <span style={S.loteFecha}>{fch}</span>
+                        <span style={S.loteChevron}>›</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {productibles.length === 0 ? (
               <div style={S.empty}>

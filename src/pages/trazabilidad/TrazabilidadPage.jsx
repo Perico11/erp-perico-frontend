@@ -1,4 +1,5 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
@@ -536,6 +537,11 @@ export default function TrazabilidadPage() {
   const esAdmin = rol === 'admin';
 
   const { query, debouncedQuery, setQuery } = useSearch(200);
+  /* Deep-link: /trazabilidad?q=LP-... pre-llena el buscador. Lo usa el KPI
+     "Lotes Hoy/Mes" de Producción (click en un lote → abre su historial aquí). */
+  const [searchParams] = useSearchParams();
+  const qParam = searchParams.get('q');
+  useEffect(() => { if (qParam) setQuery(qParam); }, [qParam, setQuery]);
   const [filter, setFilter] = useState('todos');
   /* selector de lote del mockup: pill activa = ver SOLO ese lote, expandido */
   const [selLote, setSelLote] = useState(null);
