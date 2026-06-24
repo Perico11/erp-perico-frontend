@@ -479,6 +479,9 @@ export default function PedidosPage() {
      SITIO con un solo click — antes navegaba a /stock-fabrica y obligaba a
      volver a pulsar "Envasar" allá (doble click). */
   const { data: envData } = useApiData(() => api.getEnvases(), null, 30000);
+  /* Ledger de producción (produccion_historial.json) → alimenta "Historial = lo
+     que produje" del técnico (Opción B, jun 2026). Polling lento: no es time-critical. */
+  const { data: prodHistData } = useApiData(() => api.getProduccionHistorial(), [], 60000);
   const envases = envData?.data || envData || null;
   const [envasarModal, setEnvasarModal] = useState(null);     /* lote */
   const [reenvasarModal, setReenvasarModal] = useState(null); /* lote */
@@ -536,10 +539,56 @@ export default function PedidosPage() {
       }));
   }, [ordData]);
 
-  /* Historial = entregados (operación completada exitosa): pedidos + órdenes internas */
+  /* Opción B (jun 2026): "Historial = LO QUE PRODUJE" para el técnico, desde el
+     ledger produccion_historial.json (registra usuario + producto + lotes por cada
+     producción real). Antes Historial solo mostraba estado==='entregado' → un
+     técnico cuyas órdenes descansan en 'en_almacen' veía Historial=0 aunque sí
+     había producido. Aquí sumamos sus producciones registradas.
+       - técnico: solo SUS producciones (por usuario/producidoPor).
+       - admin: todas (supervisión). Otros roles: nada (no producen).
+       - dedup: si la producción ya aparece como entregado (mismo pedido/orden), se
+         omite para no duplicar la card. */
+  const miProduccionHist = useMemo(() => {
+    const arr = prodHistData?.data || prodHistData || [];
+    const rol = user?.rol;
+    if (rol !== 'admin' && rol !== 'tecnico') return [];
+    const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
+    const yo = norm(user?.nombre);
+    const entregadosRef = new Set([
+      ...pedidos.filter(p => p.estado === 'entregado').map(p => p.id),
+      ...((Array.isArray(ordData?.data || ordData) ? (ordData?.data || ordData) : [])
+        .filter(o => o && o.estado === 'entregado').map(o => o.id)),
+    ]);
+    const vistos = new Set();
+    return (Array.isArray(arr) ? arr : [])
+      .filter(e => e && e.estado === 'completado' && !e.esPrueba)
+      .filter(e => rol === 'admin' || norm(e.usuario || e.producidoPor) === yo)
+      .filter(e => {
+        const ref = e.pedidoId || e.ordenId;
+        if (ref && entregadosRef.has(ref)) return false; /* ya está como entregado */
+        const k = e.id || ref;
+        if (!k || vistos.has(k)) return false;
+        vistos.add(k);
+        return true;
+      })
+      .map(e => ({
+        id: e.id || ('PH-' + (e.pedidoId || e.ordenId)),
+        _esProduccion: true,
+        _folio: e.pedidoId || e.ordenId || e.id,
+        producto: e.producto || e.formula,
+        cantidad: e.lotes,
+        estado: 'producido',
+        esPrueba: false,
+        fecha: e.fecha || e.fechaRegistro,
+        creadoPor: e.usuario || e.producidoPor,
+      }));
+  }, [prodHistData, pedidos, ordData, user]);
+
+  /* Historial = operación completada: pedidos/órdenes entregados + lo que produje */
   const historial  = [
     ...pedidos.filter(p => p.estado === 'entregado' && !p.esPrueba),
     ...ordenesInternasHist,
+    ...miProduccionHist,
   ];
 
   /* (jun 2026, mockup Pedidos.html: la fila de KPIs regresa como EMBUDO —
@@ -804,7 +853,7 @@ export default function PedidosPage() {
           {tab === 'activos' ? `${activos.length} activos · esperan tu acción`
             : tab === 'pruebas' ? `${pruebas.length} en modo prueba`
             : tab === 'rechazados' ? `${rechazados.length} rechazados o cancelados`
-            : `${historial.length} entregados`}
+            : `${historial.length} en historial`}
         </div>
 
         {/* Embudo de KPIs en vivo (mockup/HANDOFF §5) */}
@@ -883,7 +932,7 @@ export default function PedidosPage() {
             /* Las órdenes internas mostradas en el Historial NO son pedidos:
                el botón "Eliminar pedido" no aplica (rompería contra un id de
                orden). Se oculta para esas entradas. */
-            const mostrarEliminar = esAdmin && !p._esOrdenInterna;
+            const mostrarEliminar = esAdmin && !p._esOrdenInterna && !p._esProduccion;
             const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
             return (
               <div key={p.id} id={'ped-' + p.id} style={{ ...S.pedidoCard(p.estado, p.esPrueba), ...(p.id === focusId ? { outline: '2px solid var(--lp-brand-600)', outlineOffset: 2, boxShadow: '0 0 0 4px color-mix(in srgb, var(--lp-brand-600) 18%, transparent)' } : {}) }}>
@@ -896,6 +945,9 @@ export default function PedidosPage() {
                   {p._esOrdenInterna && (
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Interna</span>
                   )}
+                  {p._esProduccion && (
+                    <span title="Registro del ledger de producción (lo que produjiste)" style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-brand-50)', color: 'var(--lp-brand-700)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Producción</span>
+                  )}
                   {p.esPrueba && <PruebaBadge size="sm" />}
                   {p.estado === 'en_produccion' && p.fechaInicioProduccion && (
                     <span style={{ marginLeft: 'auto' }}>
@@ -907,7 +959,7 @@ export default function PedidosPage() {
                 {/* Mini-pipeline horizontal del estado del pedido. Ayuda visual
                     rápida — el operario ve la fase de un vistazo. Mockup: las
                     cards ENTREGADAS (historial) van compactas, sin timeline. */}
-                {p.estado !== 'entregado' && (
+                {p.estado !== 'entregado' && !p._esProduccion && (
                   <PipelinePedido estado={p.estado} esPrueba={p.esPrueba} />
                 )}
 
