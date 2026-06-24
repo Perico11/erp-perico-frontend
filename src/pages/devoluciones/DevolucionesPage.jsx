@@ -384,7 +384,10 @@ export default function DevolucionesPage() {
   /* Realtime: cualquier evento 'devolucion' refresca la lista.
      Si trae requiereReembolso y el usuario es compras/admin, muestra banner. */
   useRealtimeSync({
-    devolucion: (data) => {
+    /* FIX (audit): el hook invoca handlers `on<Evento>` (onDevolucion), NO `devolucion`
+       → el auto-refresh por WS y el banner de reembolso NUNCA se disparaban (solo
+       refrescaba tras acción local o al montar). La página de MP sí usa onDevolucion. */
+    onDevolucion: (data) => {
       cargar();
       if (data && data.requiereReembolso &&
           user && ['admin', 'compras'].includes(user.rol) &&
@@ -393,6 +396,7 @@ export default function DevolucionesPage() {
         setReembolsoAlert(data);
       }
     },
+    onInventario: () => cargar(), /* la devolución ajusta inventario → refrescar lista */
   });
 
   const verNota = useCallback((id) => {

@@ -94,6 +94,12 @@ export default function TopBar({ title, action }) {
     onInventario: () => cargarCount(),
     onOc: () => cargarCount(),
     onTrazabilidad: () => cargarCount(),
+    /* FIX (audit): el badge también debe refrescar al finalizar conteo, crear
+       devolución (MP/PT) o mover una OT — antes esos pendientes tardaban hasta 60s
+       (solo escuchaba inventario/oc/trazabilidad). */
+    onCycleCount: () => cargarCount(),
+    onDevolucion: () => cargarCount(),
+    onTransferencias: () => cargarCount(),
   });
 
   /* Logos desde branding configurable. HANDOFF jun 2026: default = logo
