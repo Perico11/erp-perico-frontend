@@ -426,6 +426,8 @@ const api = {
     request('POST', '/api/formulas/update-formula', { formulaId, ingredientes, tecnico }),
   renameFormula: (oldName, newName) =>
     request('POST', '/api/formulas/rename-react', { oldName, newName }),
+  duplicateFormula: (oldName, newName) =>
+    request('POST', '/api/formulas/duplicate', { oldName, newName }),
 
   /* ── Compras ── */
   getForecast: () => request('GET', '/api/compras/forecast-avanzado'),

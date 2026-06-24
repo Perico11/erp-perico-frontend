@@ -185,6 +185,63 @@ function RenameModal({ formulaId, onClose, onSuccess }) {
   );
 }
 
+function DuplicarModal({ formulaId, onClose, onSuccess }) {
+  const [newName, setNewName] = useState(formulaId);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  useBodyScrollLock(true);
+
+  const handleSave = async () => {
+    const n = newName.trim();
+    if (!n) return setError('Nombre vacío');
+    if (n === formulaId) return setError('El nombre nuevo debe ser distinto del original');
+    setSaving(true);
+    setError('');
+    try {
+      await api.duplicateFormula(formulaId, n);
+      onSuccess(`Duplicada: "${formulaId}" → "${n}"`);
+    } catch (err) {
+      setError(err.message || 'Error al duplicar');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={S.overlay} onClick={onClose}>
+      <div style={S.modal} onClick={e => e.stopPropagation()}>
+        <div style={S.modalHeader}>
+          <span style={{ fontSize: 15, fontWeight: 700 }}>Duplicar Fórmula</span>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: 'var(--lp-text-tertiary)' }} aria-label="Cerrar">✕</button>
+        </div>
+        <div style={S.modalBody}>
+          {error && (
+            <div style={{ padding: '8px 12px', background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', borderRadius: 8, fontSize: 12, fontWeight: 600, marginBottom: 12 }}>
+              {error}
+            </div>
+          )}
+          <div style={{ padding: 12, background: 'var(--lp-bg-sunken)', borderRadius: 8, marginBottom: 16, fontSize: 12, color: 'var(--lp-text-secondary)' }}>
+            Crea una fórmula NUEVA copiando los ingredientes de la original. La original no se modifica — luego puedes ajustar la receta de la copia.
+          </div>
+          <label style={S.fieldLabel}>Copiar de</label>
+          <div style={{ padding: '8px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--lp-font-mono)', marginBottom: 12, color: 'var(--lp-text-tertiary)' }}>
+            {formulaId}
+          </div>
+          <label style={S.fieldLabel}>Nombre de la nueva fórmula</label>
+          <input style={S.fieldInput} value={newName} onChange={e => setNewName(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleSave()} autoFocus />
+        </div>
+        <div style={S.modalFooter}>
+          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
+          <button style={S.btnPrimary} disabled={saving} onClick={handleSave}>
+            {saving ? 'Duplicando...' : 'Duplicar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ═══════════════════════════════════════════════════════════════════ */
 /* COMBOBOX — buscar MP en maestro con autocomplete + crear nueva     */
 /* ═══════════════════════════════════════════════════════════════════ */
@@ -703,7 +760,7 @@ function EditIngModal({ formulaId, formula, onClose, onSuccess }) {
 /* ═══════════════════════════════════════════════════════════════════ */
 /* FORMULA CARD                                                        */
 /* ═══════════════════════════════════════════════════════════════════ */
-function FormulaCard({ id, formula, isAdmin, onRename, onEdit }) {
+function FormulaCard({ id, formula, isAdmin, onRename, onEdit, onDuplicate }) {
   const [open, setOpen] = useState(false);
   const ings = formula.ingredientes || [];
   const tec = formula.tecnico || {};
@@ -745,6 +802,10 @@ function FormulaCard({ id, formula, isAdmin, onRename, onEdit }) {
                 <button style={{ ...S.btnSmall, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' }}
                   onClick={(e) => { e.stopPropagation(); onRename(id); }}>
                   Renombrar
+                </button>
+                <button style={{ ...S.btnSmall, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)' }}
+                  onClick={(e) => { e.stopPropagation(); onDuplicate(id); }}>
+                  Duplicar
                 </button>
               </div>
             )}
@@ -798,6 +859,7 @@ export default function FormulasPage() {
     [ndaOk], 30000
   );
   const [renameId, setRenameId] = useState(null);
+  const [dupId, setDupId] = useState(null);
   const [editTarget, setEditTarget] = useState(null); // { id, formula }
   const [toastMsg, setToastMsg] = useState('');
   const [comparar, setComparar] = useState(false);
@@ -923,6 +985,7 @@ export default function FormulasPage() {
               formula={formula}
               isAdmin={isAdmin}
               onRename={setRenameId}
+              onDuplicate={setDupId}
               onEdit={(fId, f) => setEditTarget({ id: fId, formula: f })}
             />
           ))
@@ -935,6 +998,13 @@ export default function FormulasPage() {
           formulaId={renameId}
           onClose={() => setRenameId(null)}
           onSuccess={(msg) => { setRenameId(null); reload(); showToast(msg); }}
+        />
+      )}
+      {dupId && (
+        <DuplicarModal
+          formulaId={dupId}
+          onClose={() => setDupId(null)}
+          onSuccess={(msg) => { setDupId(null); reload(); showToast(msg); }}
         />
       )}
 
