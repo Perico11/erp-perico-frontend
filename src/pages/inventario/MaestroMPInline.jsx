@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
+import { MPActionsMenu } from './MPActions';
 
 const S = {
   panel: { background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius)', padding: 16 },
@@ -14,20 +15,30 @@ const S = {
   name: { fontSize: 13, fontWeight: 600, color: 'var(--lp-text-primary)' },
   meta: { fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 },
   badge: { display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700, borderRadius: 4, background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em' },
+  estadoBadge: (color) => ({ display: 'inline-flex', padding: '2px 8px', fontSize: 10, fontWeight: 700, borderRadius: 4, background: 'var(--lp-bg-raised)', color, textTransform: 'uppercase', letterSpacing: '.04em' }),
+  actions: { display: 'flex', alignItems: 'center', gap: 6 },
+  hint: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 12, textAlign: 'center', lineHeight: 1.5 },
+  empty: { textAlign: 'center', padding: 24, color: 'var(--lp-text-tertiary)', fontSize: 13 },
   loading: { textAlign: 'center', padding: 32, color: 'var(--lp-text-tertiary)' },
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: 10, borderRadius: 6, fontSize: 12 },
 };
 
-export default function MaestroMPInline() {
+/* canDelete = permiso `eliminarMP` (admin). onAction(action, mp) abre los modales
+   Sustituir/Eliminar del padre (InventarioPage). query = búsqueda de la barra superior;
+   con búsqueda se listan TODAS las MP que coinciden (cualquier estado) para poder
+   encontrar la que se va a sustituir; sin búsqueda, Top 20 activas por uso.
+   reloadSignal: el padre lo incrementa tras sustituir/eliminar para refrescar. */
+export default function MaestroMPInline({ query = '', canDelete = false, mpsDisponibles = [], onAction, reloadSignal = 0 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
   useEffect(() => {
+    setLoading(true); setErr('');
     api.getMaestroMP()
       .then(r => setData(r.data || r))
       .catch(e => setErr(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadSignal]);
   if (loading) return <div style={S.loading}>Cargando maestro MP...</div>;
   if (err) return <div style={S.err}>{err}</div>;
   const mps = data?.mps || {};
@@ -35,6 +46,20 @@ export default function MaestroMPInline() {
   const activos = list.filter(([, m]) => m.estado === 'activo').length;
   const ocultos = list.filter(([, m]) => m.estado === 'oculto').length;
   const eliminados = list.filter(([, m]) => m.estado === 'eliminado').length;
+
+  const q = (query || '').trim().toLowerCase();
+  const filtradas = (q
+    ? list.filter(([nombre, m]) => nombre.toLowerCase().includes(q) || (m.categoria || '').toLowerCase().includes(q))
+    : list.filter(([, m]) => m.estado === 'activo')
+  ).sort((a, b) => (b[1].en_formulas?.length || 0) - (a[1].en_formulas?.length || 0));
+  const visibles = q ? filtradas : filtradas.slice(0, 20);
+
+  const estadoInfo = (estado) => {
+    if (estado === 'eliminado') return { txt: 'eliminada', color: 'var(--lp-danger-600)' };
+    if (estado === 'oculto') return { txt: 'oculta', color: 'var(--lp-warning-600)' };
+    return null;
+  };
+
   return (
     <div style={S.panel}>
       <div style={S.metric}>
@@ -56,27 +81,45 @@ export default function MaestroMPInline() {
         </div>
       </div>
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-        Top 20 activas por uso en formulas
+        {q ? `Resultados de "${query}" (${visibles.length})` : 'Top 20 activas por uso en formulas'}
       </div>
       <div style={S.list}>
-        {list
-          .filter(([, m]) => m.estado === 'activo')
-          .sort((a, b) => (b[1].en_formulas?.length || 0) - (a[1].en_formulas?.length || 0))
-          .slice(0, 20)
-          .map(([nombre, m]) => (
+        {visibles.length === 0 && <div style={S.empty}>Sin coincidencias para "{query}".</div>}
+        {visibles.map(([nombre, m]) => {
+          const eb = estadoInfo(m.estado);
+          return (
             <div key={nombre} style={S.row}>
-              <div style={S.avatar('var(--lp-warning-600)')}>{nombre.charAt(0)}</div>
+              <div style={S.avatar(eb ? eb.color : 'var(--lp-warning-600)')}>{nombre.charAt(0)}</div>
               <div style={S.info}>
-                <div style={S.name}>{nombre}</div>
+                <div style={S.name}>
+                  {nombre}
+                  {m.sustituidaPor && (
+                    <span style={{ fontWeight: 500, color: 'var(--lp-text-tertiary)' }}> → {m.sustituidaPor}</span>
+                  )}
+                </div>
                 <div style={S.meta}>
                   {m.categoria || 'sin categoria'}
                   {m.stock?.qty != null && ' · stock ' + m.stock.qty}
                 </div>
               </div>
-              <span style={S.badge}>{(m.en_formulas || []).length} formulas</span>
+              <div style={S.actions}>
+                {eb && <span style={S.estadoBadge(eb.color)}>{eb.txt}</span>}
+                <span style={S.badge}>{(m.en_formulas || []).length} formulas</span>
+                {canDelete && onAction && m.estado !== 'eliminado' && (
+                  <MPActionsMenu mp={nombre} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
+                )}
+              </div>
             </div>
-          ))}
+          );
+        })}
       </div>
+      {!q && (
+        <div style={S.hint}>
+          {canDelete
+            ? 'Busca arriba para encontrar y sustituir/eliminar cualquier materia prima.'
+            : 'Busca arriba para encontrar cualquier materia prima.'}
+        </div>
+      )}
     </div>
   );
 }

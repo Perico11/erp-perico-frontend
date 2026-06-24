@@ -1286,10 +1286,10 @@ function AccionesSheet({ rows, importExportNode, onClose }) {
 }
 
 /* KPIs de escritorio (mockup .kpis, propuesta A "Centro de control") */
-function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal }) {
+function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal, valorMercado }) {
   const crit = items.filter(i => (i.inv.qty || 0) <= 0);
   const bajo = items.filter(i => (i.inv.qty || 0) > 0 && i.pct <= 100);
-  /* Valor estimado (qty × costo): si el backend lo proveyó (admin) se usa ese —
+  /* Valor a COSTO (producción): si el backend lo proveyó (admin) se usa ese —
      incluye PT (costo por cubeta = fórmula + envase + tapa + MO + merma) y Envases,
      que el cliente no puede calcular. Si no, fallback client-side SOLO para MP con
      maestro.costo.costoKg. Sin dato → '—' (no se inventan precios). */
@@ -1302,20 +1302,31 @@ function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal }) {
     });
     if (con > 0) valor = suma;
   }
+  /* Valor MERCADO (precio de venta): solo PT (la MP/envases no se venden). */
+  const mercado = (valorMercado != null && valorMercado > 0) ? valorMercado : null;
   const money = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n).toLocaleString('es-MX');
   const moneyFull = (n) => '$' + Math.round(n).toLocaleString('es-MX');
   const noun = tipo === 'env' ? 'envases' : tipo === 'pt' ? 'productos' : 'materia prima';
+  /* En PT el costo es "Valor producción"; en MP/Envases es simplemente "Valor estimado". */
+  const labelCosto = tipo === 'pt' ? 'Valor producción' : 'Valor estimado';
   const valorSub = valor != null
     ? (valorTotal != null ? `${moneyFull(valor)} · total inv. ${money(valorTotal)}` : moneyFull(valor))
     : 'Sin costo unitario';
+  const mercadoSub = mercado != null
+    ? (valor != null && valor > 0 ? `${moneyFull(mercado)} · margen ${Math.round((mercado - valor) / mercado * 100)}%` : moneyFull(mercado))
+    : '—';
   const K = [
     ['SKUs activos', String(items.length), noun, 'var(--lp-brand-600)', 'var(--lp-text-primary)'],
     ['En crítico', String(crit.length), 'Reabastecer ya', 'var(--lp-danger-600)', 'var(--lp-danger-600)'],
     ['Stock bajo', String(bajo.length), 'Por debajo del mínimo', 'var(--lp-warning-600)', 'var(--lp-warning-600)'],
-    ['Valor estimado', valor != null ? money(valor) : '—', valorSub, 'var(--lp-info-600)', 'var(--lp-text-primary)'],
+    [labelCosto, valor != null ? money(valor) : '—', valorSub, 'var(--lp-info-600)', 'var(--lp-text-primary)'],
   ];
+  /* Card "Valor mercado" solo cuando hay precio de venta (PT). */
+  if (mercado != null) {
+    K.push(['Valor mercado', money(mercado), mercadoSub, 'var(--lp-success-600)', 'var(--lp-success-700)']);
+  }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 16 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 14, marginBottom: 16 }}>
       {K.map(([l, v, s, c, vc]) => (
         <div key={l} style={{ background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 16, padding: '15px 17px', position: 'relative', overflow: 'hidden' }}>
           <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: c }} />
@@ -1641,6 +1652,9 @@ export default function InventarioPage() {
   const [confirm, ConfirmEl] = useConfirm();
   const [eliminarMP, setEliminarMP] = useState(null);
   const [sustituirMP, setSustituirMP] = useState(null);
+  /* Señal para refrescar la vista Maestro tras sustituir/eliminar (la vista lee
+     maestro_mp.json por su cuenta; el backend ya la sincroniza). */
+  const [maestroReload, setMaestroReload] = useState(0);
   /* AG2 (jun 2026): escritorio = tabla, móvil = cards. Sheet "Ajustar existencia" compartido. */
   const isDesktop = useIsDesktop();
   const [ajusteItem, setAjusteItem] = useState(null);
@@ -2267,7 +2281,8 @@ export default function InventarioPage() {
             <>
               <KpisInventario items={kpiItems} tipo={activeTab} unidad={unidad}
                 valorBackend={valuation ? (activeTab === 'mp' ? valuation.valorMP : activeTab === 'pt' ? valuation.valorPT : valuation.valorEnvases) : null}
-                valorTotal={valuation ? valuation.valorTotal : null} />
+                valorTotal={valuation ? valuation.valorTotal : null}
+                valorMercado={valuation && activeTab === 'pt' ? valuation.valorMercadoPT : null} />
               {activeTab === 'mp' && (
                 <BandaAtencion criticos={criticos} unidad={unidad}
                   canOC={user?.rol === 'admin' || user?.rol === 'compras'}
@@ -2330,7 +2345,15 @@ export default function InventarioPage() {
             </div>
 
             {mpSubtab === 'costos' && <CostosMPPanel />}
-            {mpSubtab === 'maestro' && <MaestroMPInline />}
+            {mpSubtab === 'maestro' && (
+              <MaestroMPInline
+                query={debouncedQuery}
+                canDelete={canDeleteMP}
+                mpsDisponibles={mpsDisponibles}
+                onAction={handleMPAction}
+                reloadSignal={maestroReload}
+              />
+            )}
             {(mpSubtab === 'fabrica' || mpSubtab === 'teran') && (
               <MPUbicacionView
                 ubicacion={mpSubtab}
@@ -2730,6 +2753,7 @@ export default function InventarioPage() {
             setToastMsg('MP eliminada: ' + eliminarMP);
             setEliminarMP(null);
             reloadInv();
+            setMaestroReload(x => x + 1);
             setTimeout(() => setToastMsg(''), 4000);
           }}
         />
@@ -2743,6 +2767,7 @@ export default function InventarioPage() {
             setToastMsg('MP sustituida: ' + sustituirMP);
             setSustituirMP(null);
             reloadInv();
+            setMaestroReload(x => x + 1);
             setTimeout(() => setToastMsg(''), 4000);
           }}
         />
