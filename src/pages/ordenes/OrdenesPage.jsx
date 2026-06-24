@@ -12,7 +12,7 @@ import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge from '../../components/ui/PruebaBadge';
-import { ESTADO_ORDEN_LABEL } from '../../lib/estados';
+import { ESTADO_ORDEN_LABEL, normEstado } from '../../lib/estados';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 
 /* ── Iconos line (sin emojis) — verde Claude Design ──────────────────────
@@ -478,12 +478,12 @@ const ESTADO_STEP_IDX = {
   pendiente: 0, aceptado: 0,
   en_proceso: 1, en_produccion: 1, produccion: 1,
   producido: 2, qc_hold: 2, qc_aprobado: 2,
-  en_envasado: 3, envasado: 3, en_recoleccion: 3, en_camino: 3, terminada: 3,
-  en_almacen: 4, entregado: 4, entregada: 4,
+  en_envasado: 3, envasado: 3, en_recoleccion: 3, en_camino: 3,
+  en_almacen: 4, entregado: 4,
 };
 
 function Timeline({ estado }) {
-  const idx = ESTADO_STEP_IDX[estado] ?? 0;
+  const idx = ESTADO_STEP_IDX[normEstado(estado)] ?? 0;
   return (
     <div style={S.tl}>
       {STEPS.map(([key, label], i) => {
@@ -1601,7 +1601,7 @@ export default function OrdenesPage() {
                     { key: 'en_proceso',  titulo: 'En proceso',             sub: 'Producción en curso',   color: 'var(--lp-brand-600)',   estados: ['en_proceso', 'en_produccion', 'produccion'] },
                     { key: 'qc',          titulo: 'En control de calidad',  sub: 'Esperando aprobación',  color: 'var(--lp-granel-600)',  estados: ['producido', 'qc_hold', 'qc_aprobado', 'qc'] },
                     { key: 'envasado',    titulo: 'Envasado y transporte',  sub: 'Rumbo a almacén',       color: 'var(--lp-info-600)',    estados: ['en_envasado', 'envasado', 'en_recoleccion', 'en_camino'] },
-                    { key: 'almacen',     titulo: 'En almacén',             sub: 'Recibidas en Terán',    color: 'var(--lp-success-600)', estados: ['en_almacen', 'terminada', 'entregada'] },
+                    { key: 'almacen',     titulo: 'En almacén',             sub: 'Recibidas en Terán',    color: 'var(--lp-success-600)', estados: ['en_almacen', 'entregado'] },
                   ];
                   /* Grid responsive: escritorio = cards anchas en grilla;
                      móvil = una columna (cards apiladas, mockup phone). */
@@ -1630,7 +1630,7 @@ export default function OrdenesPage() {
                   FASES.forEach(f => { porFase[f.key] = []; });
                   const otras = [];
                   filteredActivas.forEach(o => {
-                    const est = (o.estado || '').toLowerCase();
+                    const est = normEstado(o.estado);
                     const fase = FASES.find(f => f.estados.includes(est));
                     if (fase) porFase[fase.key].push(o);
                     else otras.push(o);
