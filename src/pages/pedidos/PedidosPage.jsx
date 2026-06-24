@@ -480,9 +480,6 @@ export default function PedidosPage() {
      SITIO con un solo click — antes navegaba a /stock-fabrica y obligaba a
      volver a pulsar "Envasar" allá (doble click). */
   const { data: envData } = useApiData(() => api.getEnvases(), null, 30000);
-  /* Ledger de producción (produccion_historial.json) → alimenta "Historial = lo
-     que produje" del técnico (Opción B, jun 2026). Polling lento: no es time-critical. */
-  const { data: prodHistData } = useApiData(() => api.getProduccionHistorial(), [], 60000);
   const envases = envData?.data || envData || null;
   const [envasarModal, setEnvasarModal] = useState(null);     /* lote */
   const [reenvasarModal, setReenvasarModal] = useState(null); /* lote */
@@ -511,82 +508,49 @@ export default function PedidosPage() {
   const pruebas    = pedidos.filter(p => bucketPedido(p) === 'pruebas');
   const rechazados = pedidos.filter(p => bucketPedido(p) === 'rechazados');
 
-  /* Órdenes INTERNAS terminadas (entregadas, sin pedido) → entradas equivalentes
-     a un pedido completado, mapeadas a la forma de pedido para reusar la card.
-     `_esOrdenInterna` marca la entrada para ocultar acciones que no aplican a
-     una orden (eliminar pedido). El id se conserva = o.id para que
-     PedidoLoteActions resuelva el lote por ordenId; `_folio` muestra el código
-     legible (OP-…). */
+  /* Órdenes INTERNAS (origen 'interna', sin pedido) ya TERMINADAS = "lo que produje".
+     Modelo (dueño jun 2026): una orden interna es FINAL al producirse+envasarse
+     ('envasado') — pasa a STOCK FÁBRICA, disponible para transferencia vía OT; NO va
+     por el flujo de recolección→Terán de un pedido. Por eso "terminado" para una
+     interna = 'envasado' en adelante (NO exige 'entregado'). Se muestra con su ESTADO
+     REAL — antes (ledger) se forzaba a 'producido' y NO concordaba con Órdenes.
+     El técnico ve las SUYAS; admin todas; otros roles ninguna.
+     `_esOrdenInterna` oculta acciones de pedido; el id = o.id resuelve el lote por
+     ordenId en PedidoLoteActions; `_folio` muestra el código legible (OP-…). */
   const ordenesInternasHist = useMemo(() => {
     const arr = ordData?.data || ordData || [];
+    const rol = user?.rol;
+    if (rol !== 'admin' && rol !== 'tecnico') return [];
+    const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+    const yo = norm(user?.nombre);
+    /* Una interna terminó su producción al llegar a 'envasado'; los estados de
+       entrega posteriores (si se transfirió por OT) también cuentan como terminado. */
+    const FINAL_INTERNA = ['envasado', 'en_recoleccion', 'en_camino', 'en_almacen', 'entregado'];
     return (Array.isArray(arr) ? arr : [])
       .filter(o => o && !o.eliminado
         && (o.origen === 'interna' || !o.pedidoId)
-        && normEstado(o.estado) === 'entregado'
-        && !o.esPrueba)
+        && FINAL_INTERNA.includes(normEstado(o.estado))
+        && !o.esPrueba
+        && (rol === 'admin' || norm(o.usuario || o.creadoPor) === yo))
       .map(o => ({
         ...o,
         _esOrdenInterna: true,
         _folio: o.codigo || o.id,
         producto: o.producto || o.formula,
         cantidad: o.cantidad,
-        estado: o.estado,
+        estado: o.estado,          /* ESTADO REAL → concuerda con Órdenes */
         esPrueba: !!o.esPrueba,
         fecha: o.fecha || o.fechaCreacion || o.fechaRequerida,
         creadoPor: o.usuario,
       }));
-  }, [ordData]);
+  }, [ordData, user]);
 
-  /* Opción B (jun 2026): "Historial = LO QUE PRODUJE" para el técnico, desde el
-     ledger produccion_historial.json (registra usuario + producto + lotes por cada
-     producción real). Antes Historial solo mostraba estado==='entregado' → un
-     técnico cuyas órdenes descansan en 'en_almacen' veía Historial=0 aunque sí
-     había producido. Aquí sumamos sus producciones registradas.
-       - técnico: solo SUS producciones (por usuario/producidoPor).
-       - admin: todas (supervisión). Otros roles: nada (no producen).
-       - dedup: si la producción ya aparece como entregado (mismo pedido/orden), se
-         omite para no duplicar la card. */
-  const miProduccionHist = useMemo(() => {
-    const arr = prodHistData?.data || prodHistData || [];
-    const rol = user?.rol;
-    if (rol !== 'admin' && rol !== 'tecnico') return [];
-    const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-    const yo = norm(user?.nombre);
-    const entregadosRef = new Set([
-      ...pedidos.filter(p => bucketPedido(p) === 'historial').map(p => p.id),
-      ...((Array.isArray(ordData?.data || ordData) ? (ordData?.data || ordData) : [])
-        .filter(o => o && normEstado(o.estado) === 'entregado').map(o => o.id)),
-    ]);
-    const vistos = new Set();
-    return (Array.isArray(arr) ? arr : [])
-      .filter(e => e && e.estado === 'completado' && !e.esPrueba)
-      .filter(e => rol === 'admin' || norm(e.usuario || e.producidoPor) === yo)
-      .filter(e => {
-        const ref = e.pedidoId || e.ordenId;
-        if (ref && entregadosRef.has(ref)) return false; /* ya está como entregado */
-        const k = e.id || ref;
-        if (!k || vistos.has(k)) return false;
-        vistos.add(k);
-        return true;
-      })
-      .map(e => ({
-        id: e.id || ('PH-' + (e.pedidoId || e.ordenId)),
-        _esProduccion: true,
-        _folio: e.pedidoId || e.ordenId || e.id,
-        producto: e.producto || e.formula,
-        cantidad: e.lotes,
-        estado: 'producido',
-        esPrueba: false,
-        fecha: e.fecha || e.fechaRegistro,
-        creadoPor: e.usuario || e.producidoPor,
-      }));
-  }, [prodHistData, pedidos, ordData, user]);
 
-  /* Historial = operación completada: pedidos/órdenes entregados + lo que produje */
+  /* Historial = operación completada: pedidos entregados + órdenes internas
+     terminadas (producidas+envasadas, ya en stock fábrica). */
   const historial  = [
     ...pedidos.filter(p => bucketPedido(p) === 'historial'),
     ...ordenesInternasHist,
-    ...miProduccionHist,
   ];
 
   /* (jun 2026, mockup Pedidos.html: la fila de KPIs regresa como EMBUDO —
@@ -930,7 +894,7 @@ export default function PedidosPage() {
             /* Las órdenes internas mostradas en el Historial NO son pedidos:
                el botón "Eliminar pedido" no aplica (rompería contra un id de
                orden). Se oculta para esas entradas. */
-            const mostrarEliminar = esAdmin && !p._esOrdenInterna && !p._esProduccion;
+            const mostrarEliminar = esAdmin && !p._esOrdenInterna;
             const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
             return (
               <div key={p.id} id={'ped-' + p.id} style={{ ...S.pedidoCard(p.estado, p.esPrueba), ...(p.id === focusId ? { outline: '2px solid var(--lp-brand-600)', outlineOffset: 2, boxShadow: '0 0 0 4px color-mix(in srgb, var(--lp-brand-600) 18%, transparent)' } : {}) }}>
@@ -943,9 +907,6 @@ export default function PedidosPage() {
                   {p._esOrdenInterna && (
                     <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Interna</span>
                   )}
-                  {p._esProduccion && (
-                    <span title="Registro del ledger de producción (lo que produjiste)" style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-brand-50)', color: 'var(--lp-brand-700)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Producción</span>
-                  )}
                   {p.esPrueba && <PruebaBadge size="sm" />}
                   {p.estado === 'en_produccion' && p.fechaInicioProduccion && (
                     <span style={{ marginLeft: 'auto' }}>
@@ -957,7 +918,7 @@ export default function PedidosPage() {
                 {/* Mini-pipeline horizontal del estado del pedido. Ayuda visual
                     rápida — el operario ve la fase de un vistazo. Mockup: las
                     cards ENTREGADAS (historial) van compactas, sin timeline. */}
-                {p.estado !== 'entregado' && !p._esProduccion && (
+                {p.estado !== 'entregado' && !p._esOrdenInterna && (
                   <PipelinePedido estado={p.estado} esPrueba={p.esPrueba} />
                 )}
 
