@@ -2296,15 +2296,28 @@ export default function InventarioPage() {
             este chip compacto evita que el dato falte en el teléfono. */}
         {!isDesktop && valuation && ((activeTab === 'mp' && mpSubtab === 'stock') || (activeTab === 'pt' && ptSubtab === 'total') || activeTab === 'env') && (() => {
           const v = activeTab === 'mp' ? valuation.valorMP : activeTab === 'pt' ? valuation.valorPT : valuation.valorEnvases;
+          const mercado = activeTab === 'pt' && valuation.valorMercadoPT > 0 ? valuation.valorMercadoPT : null;
           const money = (n) => n >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? '$' + Math.round(n / 1e3) + 'K' : '$' + Math.round(n || 0).toLocaleString('es-MX');
           const full = '$' + Math.round(v || 0).toLocaleString('es-MX');
+          const labelCosto = activeTab === 'pt' ? 'Valor producción · PT' : `Valor estimado · ${activeTab.toUpperCase()}`;
           return (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderLeft: '4px solid var(--lp-info-600)', borderRadius: 12, padding: '10px 14px', marginBottom: 14 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' }}>Valor estimado · {activeTab.toUpperCase()}</div>
-                <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{full} · total inv. {money(valuation.valorTotal)}</div>
+            <div style={{ background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderLeft: '4px solid var(--lp-info-600)', borderRadius: 12, padding: '10px 14px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' }}>{labelCosto}</div>
+                  <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{full} · total inv. {money(valuation.valorTotal)}</div>
+                </div>
+                <div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--lp-text-primary)', flexShrink: 0 }}>{money(v)}</div>
               </div>
-              <div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--lp-text-primary)', flexShrink: 0 }}>{money(v)}</div>
+              {mercado != null && (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 8, paddingTop: 8, borderTop: '1px solid var(--lp-border-subtle)' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-success-700)' }}>Valor mercado · PT</div>
+                    <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{'$' + Math.round(mercado).toLocaleString('es-MX')}{v > 0 ? ` · margen ${Math.round((mercado - v) / mercado * 100)}%` : ''}</div>
+                  </div>
+                  <div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 20, fontWeight: 700, color: 'var(--lp-success-700)', flexShrink: 0 }}>{money(mercado)}</div>
+                </div>
+              )}
             </div>
           );
         })()}
