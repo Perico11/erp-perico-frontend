@@ -397,6 +397,7 @@ function LoteCard({ lote, isDesktop, onShowQR, defaultOpen = false }) {
         <div style={S.cardHeader}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <span style={S.loteCode}>{lote.codigoLote || lote.id}</span>
+            {lote.bachaDe > 1 && <span style={S.badge('var(--lp-brand-50)', 'var(--lp-brand-700)')}>Bacha {lote.bachaIndex}/{lote.bachaDe}</span>}
             {isPrueba && <PruebaBadge size="sm" />}
             <span style={S.badge(est.bg, est.fg)}>{est.label}</span>
             {hasTotes && <span style={S.badge('var(--lp-brand-50)', 'var(--lp-brand-700)')}>2 fases</span>}

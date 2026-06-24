@@ -1588,6 +1588,7 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
         <span style={{ fontWeight: 600, fontSize: 12, color: 'var(--lp-brand-600)', fontFamily: 'var(--lp-font-mono)' }}>
           {lote.codigo || lote.codigoLote || lote.id}
         </span>
+        {lote.bachaDe > 1 && <span style={tintBadge('var(--lp-brand-600)')}>Bacha {lote.bachaIndex}/{lote.bachaDe}</span>}
         <span style={tintBadge(badge.c)}>{badge.label}</span>
         {hasTotes && <span style={tintBadge('var(--lp-info-600)')}>2 fases</span>}
         {lote.esPrueba && <PruebaBadge size="sm" />}

@@ -74,7 +74,7 @@ export default function LoteDetalleModal({ lote, onClose, onVerTrazabilidad }) {
         {/* ── Header ── */}
         <div style={S.head}>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={S.cod}>{cod}{lote.esPrueba && <span style={S.prueba}>🧪 prueba</span>}</div>
+            <div style={S.cod}>{cod}{lote.bachaDe > 1 && <span style={S.bacha}>Bacha {lote.bachaIndex}/{lote.bachaDe}</span>}{lote.esPrueba && <span style={S.prueba}>🧪 prueba</span>}</div>
             <div style={S.prod}>{lote.producto || lote.nombre || '—'}</div>
           </div>
           <span style={{ ...S.estado, background: estColor + '22', color: estColor }}>{ESTADO_PEDIDO_LABEL[est] || est || '—'}</span>
@@ -213,6 +213,7 @@ const S = {
   cod: { fontSize: 14, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   prod: { fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 3 },
   prueba: { fontSize: 9.5, fontWeight: 700, padding: '1px 5px', borderRadius: 6, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' },
+  bacha: { fontSize: 9.5, fontWeight: 700, padding: '1px 6px', borderRadius: 6, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)' },
   estado: { fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999, whiteSpace: 'nowrap', flexShrink: 0, alignSelf: 'center' },
   closeBtn: { border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--lp-text-tertiary)', fontSize: 16, lineHeight: 1, padding: 4, flexShrink: 0 },
 

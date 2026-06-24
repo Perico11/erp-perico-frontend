@@ -149,6 +149,20 @@ const S = {
              borderRadius: 10, boxSizing: 'border-box', background: 'var(--lp-bg-raised)',
              color: 'var(--lp-text-primary)', outline: 'none' },
   qcRange: { fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 5 },
+  /* Multi-bacha: bloque QC por bacha + barra de configuración de bachas. */
+  qcBachaBlock: { border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: '4px 12px 12px', marginTop: 12, background: 'var(--lp-bg-raised)' },
+  qcBachaTitle: { fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-700)', marginTop: 10, textTransform: 'uppercase', letterSpacing: '.03em' },
+  bachaBar: { background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: '10px 14px', marginBottom: 12 },
+  bachaBarHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' },
+  bachaBarLbl: { fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)' },
+  bachaStepper: { display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 },
+  bachaStepBtn: { width: 32, height: 32, borderRadius: 9, border: '1px solid var(--lp-border)', background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)', fontSize: 18, fontWeight: 700, cursor: 'pointer', lineHeight: 1 },
+  bachaStepN: { fontSize: 17, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', minWidth: 20, textAlign: 'center', color: 'var(--lp-text-primary)' },
+  bachaCantRow: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 },
+  bachaCantField: { display: 'flex', flexDirection: 'column', gap: 3 },
+  bachaCantLbl: { fontSize: 10.5, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase' },
+  bachaCantInput: { width: 84, height: 38, padding: '0 10px', fontSize: 15, fontFamily: 'var(--lp-font-mono)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 9, boxSizing: 'border-box', background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)', outline: 'none' },
+  bachaSum: { fontSize: 12, fontWeight: 600, marginTop: 8 },
 
   /* Footer de navegación — mockup .foot: Anterior ghost / Completar primary,
      pegado abajo del modal con hairline arriba. */
@@ -181,7 +195,14 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   const [timerSec, setTimerSec] = useState(0);
   const [running, setRunning] = useState(false);
   const [dualPhase, setDualPhase] = useState('add'); /* 'add' | 'disp' */
-  const [qcReadings, setQcReadings] = useState({}); /* { pasoIdx: { fieldId: value } } */
+  const [qcReadings, setQcReadings] = useState({}); /* bacha 1: { pasoIdx: { fieldId: value } } */
+  /* Multi-bacha (jun 2026): N bachas = N lotes INDEPENDIENTES (cada uno con su #
+     de lote, su QR y su QC). numBachas default 1 = flujo clásico byte-idéntico.
+     Bacha 1 usa qcReadings (path actual intacto, cero regresión); las bachas 2..N
+     usan qcExtraBachas[b]. cantBachas reparte la cantidad total entre bachas. */
+  const [numBachas, setNumBachas] = useState(1);
+  const [cantBachas, setCantBachas] = useState(() => [item.cantidad || 1]); /* [cant1, …] long. numBachas */
+  const [qcExtraBachas, setQcExtraBachas] = useState({}); /* { 2:{pasoIdx:{fieldId}}, 3:{…} } */
   /* Sprint D (C3/R5): ajustes MP registrados durante producción.
      Array de { mp, kgAdicional, motivo }. Se SUMAN al descuento de MP al
      finalizar y se persisten en lote.ajustesMP[] para auditoría. */
@@ -240,6 +261,10 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             if (st.qcReadings && typeof st.qcReadings === 'object') setQcReadings(st.qcReadings);
             if (Array.isArray(st.ajustesMP)) setAjustesMP(st.ajustesMP);
             if (st.stepDone && typeof st.stepDone === 'object') setStepDone(st.stepDone);
+            /* Multi-bacha: restaurar nº de bachas, reparto y QC extra. */
+            if (typeof st.numBachas === 'number' && st.numBachas >= 1) setNumBachas(st.numBachas);
+            if (Array.isArray(st.cantBachas) && st.cantBachas.length) setCantBachas(st.cantBachas);
+            if (st.qcExtraBachas && typeof st.qcExtraBachas === 'object') setQcExtraBachas(st.qcExtraBachas);
           }
         } catch { /* sin checkpoint */ }
       } catch (e) {
@@ -258,10 +283,36 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
     ckRef.current = setInterval(() => {
       api.saveProduccionCheckpoint(item.id, {
         nombre: productoNombre, curStep, timerSec, dualPhase, qcReadings, ajustesMP, stepDone,
+        numBachas, cantBachas, qcExtraBachas,
       }, userName).then(() => setSavedAt(Date.now())).catch(() => {});
     }, 15000);
     return () => { if (ckRef.current) clearInterval(ckRef.current); };
-  }, [item.id, productoNombre, curStep, timerSec, dualPhase, qcReadings, stepDone, loading, error, userName]);
+  }, [item.id, productoNombre, curStep, timerSec, dualPhase, qcReadings, stepDone, loading, error, userName, numBachas, cantBachas, qcExtraBachas]);
+
+  /* Multi-bacha: cambiar el nº de bachas reparte la cantidad total parejo (el
+     operario ajusta después) y descarta el QC de bachas que ya no existen. Tope:
+     no más bachas que cubetas, máx 6. */
+  const cambiarNumBachas = useCallback((n) => {
+    const totalCant = item.cantidad || 1;
+    const nn = Math.max(1, Math.min(6, totalCant, n));
+    setNumBachas(nn);
+    const base = Math.floor(totalCant / nn);
+    const arr = Array.from({ length: nn }, () => base);
+    arr[nn - 1] += totalCant - base * nn;
+    setCantBachas(arr);
+    setQcExtraBachas(x => { const y = {}; Object.keys(x).forEach(k => { if (Number(k) >= 2 && Number(k) <= nn) y[k] = x[k]; }); return y; });
+  }, [item.cantidad]);
+
+  /* QC de la bacha b (b = 1..numBachas): bacha 1 = qcReadings (path clásico);
+     resto = qcExtraBachas[b]. Devuelve { pasoIdx: { fieldId } }. */
+  const getBachaQC = useCallback((b) => (b === 1 ? qcReadings : (qcExtraBachas[b] || {})), [qcReadings, qcExtraBachas]);
+  const setBachaQCField = useCallback((b, pasoIdx, fieldId, value) => {
+    if (b === 1) {
+      setQcReadings(r => ({ ...r, [pasoIdx]: { ...(r[pasoIdx] || {}), [fieldId]: value } }));
+    } else {
+      setQcExtraBachas(x => ({ ...x, [b]: { ...(x[b] || {}), [pasoIdx]: { ...((x[b] || {})[pasoIdx] || {}), [fieldId]: value } } }));
+    }
+  }, []);
 
   /* Timer regresivo */
   useEffect(() => {
@@ -397,8 +448,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   /* QC validation: todos los campos obligatorios deben estar dentro de rango */
   const qcEnRango = useMemo(() => {
     if (!step || step.type !== 'qc') return true;
-    const readings = qcReadings[curStep] || {};
-    return (step.pruebas || []).every(p => {
+    const evalReadings = (readings) => (step.pruebas || []).every(p => {
       const v = readings[p.id];
       if (v == null || v === '') return false;
       if (p.tipo === 'select') return (p.aprobados || []).includes(v);
@@ -408,7 +458,13 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
       if (p.max != null && num > p.max) return false;
       return true;
     });
-  }, [step, qcReadings, curStep]);
+    /* Multi-bacha: TODAS las bachas deben tener su QC en rango para avanzar. */
+    for (let b = 1; b <= numBachas; b++) {
+      const readings = (b === 1 ? qcReadings : (qcExtraBachas[b] || {}))[curStep] || {};
+      if (!evalReadings(readings)) return false;
+    }
+    return true;
+  }, [step, qcReadings, qcExtraBachas, numBachas, curStep]);
 
   /* Finalizar producción: descuenta MP, suma PT, crea lote, actualiza pedido/orden */
   const handleFinalize = useCallback(async () => {
@@ -521,118 +577,146 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
          FIX HIGH litrosTotal: usar item.litPerUnit (no hardcoded 19) — sistema
          maneja cubetas/galones/litros con presentaciones distintas. */
       const litPerUnit = Number(item.litPerUnit) || Number(item._raw?.litPerUnit) || 19;
-      const lotePayload = {
-        ordenId: tipo === 'orden' ? item.id : '',
-        ordenCodigo: tipo === 'orden' ? item.codigo : '',
-        pedidoId: tipo === 'pedido' ? item.id : (item.pedidoId || ''),
-        producto: productoNombre, nombre: productoNombre,
-        cantidad: lotes,
-        /* Propagar la MEDIDA real (tote/galón/atomizador) para que el lote y sus
-           vistas downstream muestren "2 totes · N cub" (etiquetaMedidaReal) y no
-           solo cubetas. Antes el lote nacía sin medida y se perdía el contexto. */
-        medida: item.medida || item._raw?.medida || undefined,
-        medidaQty: item.medidaQty || item._raw?.medidaQty || undefined,
-        litPerUnit,
-        litrosTotal: lotes * litPerUnit,
-        estado: 'producido',
-        esPrueba: item.esPrueba || false,
-        fecha: ahora, usuario: userName,
-        sublotes: [],
-        qcReadings,
-        ajustesMP: ajustesLimpios, /* persistencia para auditoría: qué MPs se agregaron post-molienda */
-        /* Tiempos para reporte */
-        duracionProduccionMs: duracionTotalMs,
-        tiempoActivoMs,
-        tiempoPausadoMs,
-        numPausas,
-        eventos: eventsFinal,
-        fechaInicio: new Date(tInicio).toISOString(),
-        fechaFin: ahora,
-        historial: [{ estado:'producido', fecha:ahora, usuario:userName,
-          nota:`Producción flujo paso-a-paso: ${lotes} ${litPerUnit === 19 ? 'cubetas' : 'unidades'} · activo ${Math.round(tiempoActivoMs/60000)}min · pausa ${Math.round(tiempoPausadoMs/60000)}min · ${numPausas} pausas` }],
-      };
-      const loteRes = await api.crearLote(lotePayload);
-      if (!loteRes?.ok || !loteRes?.lote) {
-        throw new Error(loteRes?.error || 'No se pudo crear lote en trazabilidad');
-      }
-      const loteCreado = loteRes.lote;
 
-      /* FIX D-C4 (auditoría 2026-06): auto-aprobar QC si las lecturas del
-         wizard están todas en rango.
-         Antes el wizard salía con `estado='producido'` aunque Enrique hubiera
-         completado todas las mediciones QC. Esto obligaba a ir al QCModal y
-         re-ingresar los datos. Los lotes se quedaban en cola de QC sin que
-         nadie lo notara → cuello de botella permanente.
-         Ahora: si TODOS los steps de tipo 'qc' tienen sus lecturas dentro
-         de rango, disparamos `aprobarQC` con las lecturas y el lote queda en
-         `qc_aprobado` listo para envasar. Si alguna falla, queda en `qc_hold`. */
-      let estadoFinal = 'producido';
-      try {
-        const qcSteps = (steps || []).filter(s => s && s.type === 'qc');
-        if (qcSteps.length > 0) {
-          /* Evaluar TODOS los steps QC del wizard contra qcReadings */
-          let todosEnRango = true;
-          const qcConsolidado = {};
-          for (let i = 0; i < steps.length; i++) {
-            const s = steps[i];
-            if (!s || s.type !== 'qc') continue;
-            const readings = qcReadings[i] || {};
-            for (const p of (s.pruebas || [])) {
-              const v = readings[p.id];
-              qcConsolidado[p.id] = v;
-              if (v == null || v === '') { todosEnRango = false; continue; }
-              if (p.tipo === 'select') {
-                if (!(p.aprobados || []).includes(v)) { todosEnRango = false; continue; }
-              } else {
-                const num = parseFloat(v);
-                if (isNaN(num)) { todosEnRango = false; continue; }
-                if (p.min != null && num < p.min) { todosEnRango = false; }
-                if (p.max != null && num > p.max) { todosEnRango = false; }
+      /* ── MULTI-BACHA (jun 2026): crear N lotes INDEPENDIENTES (cada bacha con su
+         propio #, QR y QC). La MP ya se descontó UNA vez por el total arriba; aquí
+         solo se materializan los lotes (crearLote no toca inventario). N=1 = clásico. */
+      const N = Math.max(1, numBachas);
+      const cantPorBacha = N === 1 ? [lotes] : cantBachas.map(c => parseInt(c) || 0);
+      const sumaBachas = cantPorBacha.reduce((a, c) => a + c, 0);
+      if (N > 1 && sumaBachas !== lotes) {
+        throw new Error(`El reparto por bacha (${sumaBachas}) no cuadra con el total (${lotes}). Ajusta las cantidades por bacha.`);
+      }
+      /* La sesión cronometrada se reparte entre las bachas (≈ sesión ÷ N). */
+      const divDur = Math.round(duracionTotalMs / N);
+      const divAct = Math.round(tiempoActivoMs / N);
+      const divPau = Math.round(tiempoPausadoMs / N);
+
+      const folios = [];
+      const estadosFinales = [];
+      for (let b = 1; b <= N; b++) {
+        const cantBacha = cantPorBacha[b - 1] || 0;
+        if (cantBacha <= 0) continue; /* bacha sin cantidad → no se materializa */
+        const qcBacha = (b === 1 ? qcReadings : (qcExtraBachas[b] || {}));
+        const medidaQtyOrig = item.medidaQty || item._raw?.medidaQty || undefined;
+        const medidaQtyBacha = N === 1
+          ? medidaQtyOrig
+          : (item.medida && medidaQtyOrig ? Math.max(1, Math.round(Number(medidaQtyOrig) * cantBacha / lotes)) : medidaQtyOrig);
+        const lotePayload = {
+          ordenId: tipo === 'orden' ? item.id : '',
+          ordenCodigo: tipo === 'orden' ? item.codigo : '',
+          pedidoId: tipo === 'pedido' ? item.id : (item.pedidoId || ''),
+          producto: productoNombre, nombre: productoNombre,
+          cantidad: cantBacha,
+          medida: item.medida || item._raw?.medida || undefined,
+          medidaQty: medidaQtyBacha,
+          litPerUnit,
+          litrosTotal: +(cantBacha * litPerUnit).toFixed(2),
+          estado: 'producido',
+          esPrueba: item.esPrueba || false,
+          fecha: ahora, usuario: userName,
+          sublotes: [],
+          qcReadings: qcBacha,
+          /* El ajuste de MP fue del proceso total — se ancla en la bacha 1 para auditoría. */
+          ajustesMP: b === 1 ? ajustesLimpios : [],
+          duracionProduccionMs: divDur,
+          tiempoActivoMs: divAct,
+          tiempoPausadoMs: divPau,
+          numPausas,
+          eventos: eventsFinal,
+          fechaInicio: new Date(tInicio).toISOString(),
+          fechaFin: ahora,
+          ...(N > 1 ? { bachaIndex: b, bachaDe: N } : {}),
+          historial: [{ estado:'producido', fecha:ahora, usuario:userName,
+            nota: N > 1
+              ? `Bacha ${b}/${N} · ${cantBacha} ${litPerUnit === 19 ? 'cubetas' : 'unidades'} · tiempo ≈ sesión ÷ ${N} (activo ${Math.round(divAct/60000)}min)`
+              : `Producción flujo paso-a-paso: ${cantBacha} ${litPerUnit === 19 ? 'cubetas' : 'unidades'} · activo ${Math.round(tiempoActivoMs/60000)}min · pausa ${Math.round(tiempoPausadoMs/60000)}min · ${numPausas} pausas` }],
+        };
+        const loteRes = await api.crearLote(lotePayload);
+        if (!loteRes?.ok || !loteRes?.lote) {
+          throw new Error(loteRes?.error || `No se pudo crear el lote${N > 1 ? ` de la bacha ${b}` : ''} en trazabilidad`);
+        }
+        const loteCreado = loteRes.lote;
+        folios.push(loteCreado.codigoLote);
+
+        /* Auto-QC POR BACHA: si TODAS las lecturas de ESTA bacha están en rango →
+           aprobarQC; si no → qc_hold. Cada bacha decide independiente (una puede
+           aprobar y otra quedar en hold — ese es el valor de la trazabilidad por
+           calidad). FIX D-C4 original preservado, ahora por bacha. */
+        let estadoFinal = 'producido';
+        try {
+          const qcSteps = (steps || []).filter(s => s && s.type === 'qc');
+          if (qcSteps.length > 0) {
+            let todosEnRango = true;
+            const qcConsolidado = {};
+            for (let i = 0; i < steps.length; i++) {
+              const s = steps[i];
+              if (!s || s.type !== 'qc') continue;
+              const readings = qcBacha[i] || {};
+              for (const p of (s.pruebas || [])) {
+                const v = readings[p.id];
+                qcConsolidado[p.id] = v;
+                if (v == null || v === '') { todosEnRango = false; continue; }
+                if (p.tipo === 'select') {
+                  if (!(p.aprobados || []).includes(v)) { todosEnRango = false; continue; }
+                } else {
+                  const num = parseFloat(v);
+                  if (isNaN(num)) { todosEnRango = false; continue; }
+                  if (p.min != null && num < p.min) { todosEnRango = false; }
+                  if (p.max != null && num > p.max) { todosEnRango = false; }
+                }
               }
             }
-          }
-          const accion = todosEnRango ? 'aprobarQC' : 'rechazarQC';
-          try {
-            const trans = await api.transicionLote(loteCreado.id, accion, {
-              qc: qcConsolidado,
-              nota: todosEnRango
-                ? 'Auto-aprobado al cerrar wizard de producción (todas las lecturas en rango)'
-                : 'Auto-rechazado al cerrar wizard — alguna lectura fuera de rango',
-            });
-            if (trans?.ok) {
-              estadoFinal = todosEnRango ? 'qc_aprobado' : 'qc_hold';
+            const accion = todosEnRango ? 'aprobarQC' : 'rechazarQC';
+            try {
+              const trans = await api.transicionLote(loteCreado.id, accion, {
+                qc: qcConsolidado,
+                nota: todosEnRango
+                  ? `Auto-aprobado al cerrar wizard${N > 1 ? ` (bacha ${b}/${N})` : ' de producción'} — todas las lecturas en rango`
+                  : `Auto-rechazado al cerrar wizard${N > 1 ? ` (bacha ${b}/${N})` : ''} — alguna lectura fuera de rango`,
+              });
+              if (trans?.ok) estadoFinal = todosEnRango ? 'qc_aprobado' : 'qc_hold';
+            } catch (eTrans) {
+              console.warn(`[WIZARD] auto-QC${N > 1 ? ` bacha ${b}` : ''} falló (no crítico):`, eTrans.message);
             }
-          } catch (eTrans) {
-            console.warn('[WIZARD] auto-aprobación QC falló (no es crítico, lote sigue en producido):', eTrans.message);
           }
+        } catch (eQc) {
+          console.warn(`[WIZARD] error evaluando auto-QC${N > 1 ? ` bacha ${b}` : ''}:`, eQc.message);
         }
-      } catch (eQc) {
-        console.warn('[WIZARD] error evaluando auto-QC:', eQc.message);
+        estadosFinales.push(estadoFinal);
+      }
+
+      if (folios.length === 0) {
+        throw new Error('No se creó ningún lote — revisa el reparto por bacha.');
       }
 
       /* 4. Limpiar checkpoint */
       try { await api.clearProduccionCheckpoint(item.id); } catch {}
 
+      /* Estado consolidado para el mensaje: el menos avanzado entre bachas. */
+      const algunHold = estadosFinales.includes('qc_hold');
+      const todasAprob = estadosFinales.length > 0 && estadosFinales.every(e => e === 'qc_aprobado');
+      const estadoFinal = algunHold ? 'qc_hold' : (todasAprob ? 'qc_aprobado' : 'producido');
       const sufijoMsg = estadoFinal === 'qc_aprobado'
         ? ' · QC aprobado automáticamente — listo para envasar'
         : estadoFinal === 'qc_hold'
-          ? ' · QC en HOLD (lecturas fuera de rango) — revisa en Calidad'
+          ? (N > 1 ? ' · alguna bacha en HOLD (lecturas fuera de rango) — revisa en Calidad' : ' · QC en HOLD (lecturas fuera de rango) — revisa en Calidad')
           : '';
-      /* Pantalla de éxito (mockup): ring + "¡Lote completado!" + folio mono.
-         El onSuccess original (cerrar modal + reload + toast) se dispara con
-         "Continuar" — toda la persistencia de arriba ya quedó hecha. */
+      /* Pantalla de éxito (mockup): ring + "¡Lote completado!" + folio(s) mono. */
       setSuccessInfo({
-        codigo: loteCreado.codigoLote,
+        codigo: folios.join(' · '),
         cantidad: lotes,
         estadoFinal,
-        msg: `Lote ${loteCreado.codigoLote} producido: ${productoNombre} x${lotes}${sufijoMsg}`,
+        msg: N > 1
+          ? `${folios.length} bachas producidas: ${productoNombre} — lotes ${folios.join(', ')}${sufijoMsg}`
+          : `Lote ${folios[0]} producido: ${productoNombre} x${lotes}${sufijoMsg}`,
       });
     } catch (e) {
       setError(e.message || 'Error al finalizar producción');
     } finally {
       setSaving(false);
     }
-  }, [item, productoNombre, qcReadings, ajustesMP, total, tipo, userName, saving, events, curStep, steps]);
+  }, [item, productoNombre, qcReadings, ajustesMP, total, tipo, userName, saving, events, curStep, steps, numBachas, cantBachas, qcExtraBachas]);
 
   if (loading) {
     return (
@@ -704,6 +788,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   const isWait = step.type === 'wait';
   const isPrep = step.type === 'prep';
   const isAjustes = step.type === 'ajustes';
+  const sumaCantBachas = cantBachas.reduce((a, c) => a + (Number(c) || 0), 0);
 
   const danger = timerSec > 0 && timerSec <= 30 && running;
   /* ── Derivados SOLO de presentación del timerbox (mockup) ──
@@ -736,6 +821,38 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           </div>
         </div>
         <button style={S.btn('ghost')} onClick={onClose}>Cerrar</button>
+      </div>
+
+      {/* MULTI-BACHA (jun 2026): cada bacha (mezcla) = un lote independiente con su
+          propio #, QR y QC. Default 1 = flujo clásico. El reparto debe sumar el total. */}
+      <div style={S.bachaBar}>
+        <div style={S.bachaBarHead}>
+          <span style={S.bachaBarLbl}>Bachas (mezclas) — cada una será un lote propio (# · QR · QC)</span>
+          <div style={S.bachaStepper}>
+            <button type="button" style={S.bachaStepBtn} disabled={numBachas <= 1} onClick={() => cambiarNumBachas(numBachas - 1)} aria-label="Menos bachas">−</button>
+            <span style={S.bachaStepN}>{numBachas}</span>
+            <button type="button" style={S.bachaStepBtn} disabled={numBachas >= Math.min(6, item.cantidad || 1)} onClick={() => cambiarNumBachas(numBachas + 1)} aria-label="Más bachas">+</button>
+          </div>
+        </div>
+        {numBachas > 1 && (
+          <>
+            <div style={S.bachaCantRow}>
+              {cantBachas.map((c, i) => (
+                <div key={i} style={S.bachaCantField}>
+                  <span style={S.bachaCantLbl}>Bacha {i + 1}</span>
+                  <input
+                    type="number" min="0" inputMode="numeric" style={S.bachaCantInput}
+                    value={c}
+                    onChange={e => setCantBachas(prev => prev.map((x, j) => j === i ? e.target.value : x))}
+                  />
+                </div>
+              ))}
+            </div>
+            <div style={{ ...S.bachaSum, color: sumaCantBachas === (item.cantidad || 0) ? 'var(--lp-success-600)' : 'var(--lp-danger-600)' }}>
+              Reparto: {sumaCantBachas} / {item.cantidad} {item.medida || 'cub'} {sumaCantBachas === (item.cantidad || 0) ? '✓ cuadra' : '— debe sumar el total'}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Checkpoint A (handoff Claude Design): riel horizontal con icono por
@@ -932,40 +1049,52 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             <div style={S.saction}>
               {step.desc}
             </div>
-            <div style={S.qcGrid}>
-              {(step.pruebas || []).map(p => {
-                const val = (qcReadings[curStep] || {})[p.id] ?? '';
-                const num = parseFloat(val);
-                const inRange = p.tipo === 'select'
-                  ? (p.aprobados || []).includes(val)
-                  : (val !== '' && !isNaN(num) && (p.min == null || num >= p.min) && (p.max == null || num <= p.max));
-                return (
-                  <div key={p.id} style={S.qcField}>
-                    <div style={S.qcLbl}>{p.lbl}{p.unidad ? ` (${p.unidad})` : ''}</div>
-                    {p.tipo === 'select' ? (
-                      <select
-                        className="lp-qci"
-                        style={{ ...S.qcInput, borderColor: val ? (inRange ? 'var(--lp-success-500)' : 'var(--lp-danger-500)') : 'var(--lp-border-subtle)' }}
-                        value={val}
-                        onChange={e => setQcReadings(r => ({ ...r, [curStep]: { ...(r[curStep] || {}), [p.id]: e.target.value } }))}
-                      >
-                        <option value="">— seleccionar —</option>
-                        {(p.opciones || []).map(o => <option key={o} value={o}>{o}</option>)}
-                      </select>
-                    ) : (
-                      <input
-                        className="lp-qci"
-                        type="number" step={p.step || 0.1} inputMode="decimal" placeholder={p.rango || ''}
-                        style={{ ...S.qcInput, borderColor: val ? (inRange ? 'var(--lp-success-500)' : 'var(--lp-danger-500)') : 'var(--lp-border-subtle)' }}
-                        value={val}
-                        onChange={e => setQcReadings(r => ({ ...r, [curStep]: { ...(r[curStep] || {}), [p.id]: e.target.value } }))}
-                      />
-                    )}
-                    {p.rango && <div style={S.qcRange}>Rango {p.rango}{p.equipo ? ` · ${p.equipo}` : ''}</div>}
+            {/* Multi-bacha: una rejilla de QC por bacha (cada bacha = su lote con su
+                propio QC). Con 1 bacha es exactamente la rejilla clásica, sin título. */}
+            {Array.from({ length: numBachas }, (_, i) => i + 1).map(b => {
+              const bReadings = getBachaQC(b)[curStep] || {};
+              return (
+                <div key={b} style={numBachas > 1 ? S.qcBachaBlock : undefined}>
+                  {numBachas > 1 && (
+                    <div style={S.qcBachaTitle}>Bacha {b} de {numBachas} · {cantBachas[b - 1] || 0} {item.medida || 'cub'}</div>
+                  )}
+                  <div style={S.qcGrid}>
+                    {(step.pruebas || []).map(p => {
+                      const val = bReadings[p.id] ?? '';
+                      const num = parseFloat(val);
+                      const inRange = p.tipo === 'select'
+                        ? (p.aprobados || []).includes(val)
+                        : (val !== '' && !isNaN(num) && (p.min == null || num >= p.min) && (p.max == null || num <= p.max));
+                      return (
+                        <div key={p.id} style={S.qcField}>
+                          <div style={S.qcLbl}>{p.lbl}{p.unidad ? ` (${p.unidad})` : ''}</div>
+                          {p.tipo === 'select' ? (
+                            <select
+                              className="lp-qci"
+                              style={{ ...S.qcInput, borderColor: val ? (inRange ? 'var(--lp-success-500)' : 'var(--lp-danger-500)') : 'var(--lp-border-subtle)' }}
+                              value={val}
+                              onChange={e => setBachaQCField(b, curStep, p.id, e.target.value)}
+                            >
+                              <option value="">— seleccionar —</option>
+                              {(p.opciones || []).map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          ) : (
+                            <input
+                              className="lp-qci"
+                              type="number" step={p.step || 0.1} inputMode="decimal" placeholder={p.rango || ''}
+                              style={{ ...S.qcInput, borderColor: val ? (inRange ? 'var(--lp-success-500)' : 'var(--lp-danger-500)') : 'var(--lp-border-subtle)' }}
+                              value={val}
+                              onChange={e => setBachaQCField(b, curStep, p.id, e.target.value)}
+                            />
+                          )}
+                          {p.rango && <div style={S.qcRange}>Rango {p.rango}{p.equipo ? ` · ${p.equipo}` : ''}</div>}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
+                </div>
+              );
+            })}
             {!qcEnRango && (
               <div style={S.alerta}>
                 <span style={{ display: 'inline-flex', flexShrink: 0 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
@@ -999,11 +1128,11 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         ) : (
           <button
             className="lp-btn-acc"
-            style={S.footPrimary(saving || (isQC && !qcEnRango))}
+            style={S.footPrimary(saving || (isQC && !qcEnRango) || (numBachas > 1 && sumaCantBachas !== (item.cantidad || 0)))}
             onClick={handleFinalize}
-            disabled={saving || (isQC && !qcEnRango)}
+            disabled={saving || (isQC && !qcEnRango) || (numBachas > 1 && sumaCantBachas !== (item.cantidad || 0))}
           >
-            {saving ? 'Finalizando…' : 'Terminar lote'}
+            {saving ? 'Finalizando…' : (numBachas > 1 ? `Terminar ${numBachas} bachas` : 'Terminar lote')}
           </button>
         )}
       </div>

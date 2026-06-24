@@ -1224,8 +1224,12 @@ export default function OrdenesPage() {
       const tiene = ['brillo', 'viscosidad', 'ph', 'densidad', 'finura']
         .some(k => qc[k] != null && qc[k] !== '');
       if (!tiene) return;
-      if (l.ordenId) map['id:' + l.ordenId] = qc;
-      if (l.pedidoId) map['ped:' + l.pedidoId] = qc;
+      /* Multi-bacha: una orden puede tener N lotes con QC propio. El chip de la
+         card muestra UNO representativo — preferimos la bacha 1 (determinista) en
+         vez de que el último lote pise al anterior. El detalle por bacha vive en
+         las tarjetas de PedidoLoteActions. N=1 = idéntico. */
+      if (l.ordenId && (!map['id:' + l.ordenId] || Number(l.bachaIndex) === 1)) map['id:' + l.ordenId] = qc;
+      if (l.pedidoId && (!map['ped:' + l.pedidoId] || Number(l.bachaIndex) === 1)) map['ped:' + l.pedidoId] = qc;
     });
     return map;
   }, [trazaData]);

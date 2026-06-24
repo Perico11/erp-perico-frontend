@@ -187,7 +187,7 @@ function QCInline({ lote, accion, userName, onSuccess, onCancel }) {
   );
 }
 
-export default function PedidoLoteActions({ pedido, lotes, userRol, userName, onSuccess, onError, onEnvasarInline, onReenvasarInline, onPrintQR, ocultarVerSublotes }) {
+function LoteActionsCard({ pedido, lote, userRol, userName, onSuccess, onError, onEnvasarInline, onReenvasarInline, onPrintQR, ocultarVerSublotes }) {
   /* onEnvasarInline(lote) / onReenvasarInline(tote, lote): si se pasan (pantalla
      /flujo), los botones Envasar / Re-envasar abren el modal EN SITIO en vez de
      navegar a otra pestaña. Sin ellos, conservan el navigate (PedidosPage etc.).
@@ -203,15 +203,8 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
   const [verSubs, setVerSubs] = useState(false);
   const [confirm, ConfirmEl] = useConfirm();
 
-  /* Resolver el lote asociado al pedido */
-  const lote = useMemo(() => {
-    if (!pedido || !Array.isArray(lotes)) return null;
-    return lotes.find(l => l && !l.eliminado && (
-      (l.pedidoId && l.pedidoId === pedido.id) ||
-      (l.ordenId && l.ordenId === pedido.id)
-    )) || null;
-  }, [pedido, lotes]);
-
+  /* `lote` llega como prop: el wrapper PedidoLoteActions resuelve TODAS las bachas
+     del pedido/orden y renderiza una tarjeta por cada una (estado propio por bacha). */
   if (!lote) return null;
 
   const sublotes = Array.isArray(lote.sublotes) ? lote.sublotes : [];
@@ -673,6 +666,39 @@ export default function PedidoLoteActions({ pedido, lotes, userRol, userName, on
           onCancel={() => setQcMode(null)}
         />
       )}
+    </div>
+  );
+}
+
+/* PedidoLoteActions — un pedido/orden puede tener N lotes (bachas). Resuelve TODAS
+   las bachas vivas y renderiza una tarjeta de acciones por cada una: cada bacha es
+   un lote independiente con su #, QR, QC y envasado propios. Cada tarjeta tiene su
+   estado interno (busy/qc/verSubs) — no se comparte entre bachas. N=1 = una sola
+   tarjeta DOM-idéntica al comportamiento anterior. */
+export default function PedidoLoteActions({ pedido, lotes, ...rest }) {
+  if (!pedido || !Array.isArray(lotes)) return null;
+  const lotesDelPedido = lotes.filter(l => l && !l.eliminado && (
+    (l.pedidoId && l.pedidoId === pedido.id) ||
+    (l.ordenId && l.ordenId === pedido.id)
+  ));
+  if (lotesDelPedido.length === 0) return null;
+  /* Orden estable: por bachaIndex, luego por código. */
+  lotesDelPedido.sort((a, b) =>
+    (Number(a.bachaIndex) || 0) - (Number(b.bachaIndex) || 0) ||
+    String(a.codigoLote || a.id).localeCompare(String(b.codigoLote || b.id)));
+  if (lotesDelPedido.length === 1) {
+    return <LoteActionsCard pedido={pedido} lote={lotesDelPedido[0]} {...rest} />;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {lotesDelPedido.map((l, i) => (
+        <div key={l.id || l.codigoLote} style={{ border: '1px dashed var(--lp-border-subtle)', borderRadius: 12, padding: '8px 10px' }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-brand-700)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 6 }}>
+            Bacha {l.bachaIndex || i + 1} de {l.bachaDe || lotesDelPedido.length} · {l.codigoLote || l.id}
+          </div>
+          <LoteActionsCard pedido={pedido} lote={l} {...rest} />
+        </div>
+      ))}
     </div>
   );
 }
