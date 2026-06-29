@@ -93,6 +93,14 @@ function IconX({ size = 14 }) {
     </svg>
   );
 }
+function IconEdit({ size = 16 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
 
 /* ── Estado → presentación del badge (color-mix 14% como el resto del DS) ──── */
 const ESTADO_META = {
@@ -197,6 +205,7 @@ export default function TransferenciasPage() {
   const [crearOpen, setCrearOpen] = useState(false);
   const [prefillSel, setPrefillSel] = useState(null); // {tipo, sel} desde ?nueva= (botón "Transferir a Terán" de Inventario)
   const [printOT, setPrintOT] = useState(null);    // OT cuyo QR se imprime
+  const [editOT, setEditOT] = useState(null);      // OT en edición (sustituir/cambiar líneas)
 
   const showToast = useCallback((msg, isErr = false) => {
     setToast({ msg, isErr });
@@ -425,6 +434,7 @@ export default function TransferenciasPage() {
                 isDesktop={isDesktop}
                 onAccion={(accion) => ejecutar(ot, accion)}
                 onPrint={() => setPrintOT(ot)}
+                onEditar={() => setEditOT(ot)}
               />
             ))}
           </div>
@@ -436,20 +446,25 @@ export default function TransferenciasPage() {
         <QRScanner onResult={handleScan} onClose={() => setScannerOpen(false)} />
       )}
 
-      {/* Sheet de crear */}
-      {crearOpen && (
+      {/* Sheet de crear / editar (sustituir líneas) */}
+      {(crearOpen || editOT) && (
         <CrearSheet
           isDesktop={isDesktop}
           inv={invData}
           env={envData}
           ptUbic={ptUbicData}
-          initialSel={prefillSel}
-          onClose={() => { setCrearOpen(false); setPrefillSel(null); }}
+          initialSel={editOT ? null : prefillSel}
+          editOT={editOT}
+          onClose={() => { setCrearOpen(false); setPrefillSel(null); setEditOT(null); }}
           onSaved={(res) => {
-            setCrearOpen(false);
+            const wasEdit = !!editOT;
+            setCrearOpen(false); setEditOT(null); setPrefillSel(null);
             reload();
-            showToast(`Solicitud creada: ${res?.folio || ''}`);
-            if (res?.ot) setPrintOT(res.ot);   // ofrecer imprimir el QR de inmediato
+            if (wasEdit) showToast(`Solicitud ${res?.folio || editOT?.folio || ''} actualizada`);
+            else {
+              showToast(`Solicitud creada: ${res?.folio || ''}`);
+              if (res?.ot) setPrintOT(res.ot);   // ofrecer imprimir el QR de inmediato
+            }
           }}
         />
       )}
@@ -477,13 +492,20 @@ export default function TransferenciasPage() {
    quién+cuándo / acciones contextuales (Surtir / Recibir / Cancelar) +
    Imprimir hoja QR.
    ═══════════════════════════════════════════════════════════════════════════ */
-function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint }) {
+function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint, onEditar }) {
   const lineas = Array.isArray(ot.lineas) ? ot.lineas : [];
 
-  /* Acciones contextuales por estado + rol */
+  /* Acciones contextuales por estado + rol (espejo de la SM en el backend) */
   const puedeSurtir   = ot.estado === 'solicitada' && (rol === 'tecnico' || rol === 'admin');
   const puedeRecibir  = ot.estado === 'surtida' && (rol === 'almacen' || rol === 'admin');
-  const puedeCancelar = (ot.estado === 'solicitada' || ot.estado === 'surtida') && (rol === 'admin' || rol === 'almacen');
+  /* Cancelar: en 'Solicitada' → Josué (almacen), Enrique (tecnico) y admin.
+     En 'En tránsito' (surtida) → solo admin (válvula de reversa). */
+  const puedeCancelar =
+    (ot.estado === 'solicitada' && (rol === 'admin' || rol === 'almacen' || rol === 'tecnico')) ||
+    (ot.estado === 'surtida' && rol === 'admin');
+  /* Editar/sustituir líneas: solo antes de surtir ('Solicitada'), por los mismos
+     roles que crean/operan la OT (admin/almacen/tecnico). */
+  const puedeEditar = ot.estado === 'solicitada' && (rol === 'admin' || rol === 'almacen' || rol === 'tecnico');
 
   const tipoLabel = (l) => l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase';
 
@@ -538,6 +560,14 @@ function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint }) {
             {busy ? <span aria-hidden="true">…</span> : <><IconCheck size={isDesktop ? 18 : 20} /> Recibir en Terán</>}
           </button>
         )}
+        {/* Editar / sustituir líneas — solo 'Solicitada' (antes de surtir) */}
+        {puedeEditar && (
+          <button style={{ ...(isDesktop ? S.btnDesktop : S.btnMobile), ...S.btnGhost }}
+            disabled={busy} onClick={onEditar}
+            data-id="transferencias.btn.editar" data-rol="admin,almacen,tecnico">
+            <IconEdit size={isDesktop ? 16 : 18} /> Editar
+          </button>
+        )}
         {/* Imprimir hoja QR — disponible mientras la OT siga viva */}
         {ot.estado !== 'cancelada' && (
           <button style={{ ...(isDesktop ? S.btnDesktop : S.btnMobile), ...S.btnGhost }}
@@ -571,8 +601,9 @@ function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint }) {
 /* Presentación PT → columna del desglose pt-por-ubicacion (backend usa 'atm'). */
 const PRES_COL = { tote: 'tote', cubeta: 'cubeta', galon: 'galon', litro: 'litro', atomizador750: 'atm' };
 
-function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel }) {
+function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel, editOT }) {
   useBodyScrollLock(true);
+  const isEdit = !!editOT;
 
   /* Desenvolver shapes envueltos {ok, data:{...}} (defensivo, igual que DevolucionesMP). */
   const invPt = (inv && inv.data && inv.data.pt) || (inv && inv.pt) || {};
@@ -614,8 +645,9 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel 
   const [cantidad, setCantidad] = useState('');
   const [ptPres, setPtPres] = useState('tote');     // presentación PT elegida (default tote: el PT suele venir a granel)
   const [envasar, setEnvasar] = useState(false);    // pedir envasada desde granel (solo si ptPres ≠ tote)
-  const [lineas, setLineas] = useState([]);   // líneas acumuladas
-  const [nota, setNota] = useState('');
+  /* En edición, precargamos las líneas y la nota de la OT existente. */
+  const [lineas, setLineas] = useState(() => (isEdit && Array.isArray(editOT.lineas)) ? editOT.lineas.map(l => ({ ...l })) : []);
+  const [nota, setNota] = useState(isEdit ? (editOT.nota || '') : '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
@@ -671,7 +703,9 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel 
     if (lineas.length === 0) { setErr('Agrega al menos una línea a la solicitud.'); return; }
     setSaving(true);
     try {
-      const res = await api.crearOT(lineas, nota.trim() || undefined);
+      const res = isEdit
+        ? await api.editarOT(editOT.id, lineas, nota.trim() || undefined)
+        : await api.crearOT(lineas, nota.trim() || undefined);
       onSaved && onSaved(res);
     } catch (e) {
       setErr(e?.data?.error || e.message || 'Error al crear la solicitud');
@@ -686,8 +720,10 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel 
     <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
       <div style={SH.sheet(isDesktop)}>
         <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
-          <div style={SH.h}>Nueva solicitud de transferencia</div>
-          <div style={SH.s}>Fábrica → Terán · el inventario se mueve al surtir y recibir, no ahora.</div>
+          <div style={SH.h}>{isEdit ? `Editar solicitud ${editOT.folio}` : 'Nueva solicitud de transferencia'}</div>
+          <div style={SH.s}>{isEdit
+            ? 'Sustituye ítems, cambia cantidades o agrega/quita líneas. Solo disponible antes de surtir.'
+            : 'Fábrica → Terán · el inventario se mueve al surtir y recibir, no ahora.'}</div>
         </div>
 
         <div style={SH.body}>
@@ -835,7 +871,9 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel 
             <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: lineas.length && !saving ? 1 : 0.5 }}
               onClick={guardar} disabled={!lineas.length || saving}
               data-id="transferencias.btn.crear" data-rol="admin,almacen,inventario">
-              {saving ? 'Creando…' : `Crear solicitud${lineas.length ? ` (${lineas.length})` : ''}`}
+              {isEdit
+                ? (saving ? 'Guardando…' : `Guardar cambios${lineas.length ? ` (${lineas.length})` : ''}`)
+                : (saving ? 'Creando…' : `Crear solicitud${lineas.length ? ` (${lineas.length})` : ''}`)}
             </button>
           </div>
         </div>
@@ -859,9 +897,9 @@ function OTQRPrintModal({ ot, onClose }) {
     const w = window.open('', '_blank', 'width=720,height=900');
     if (!w) { alert('Habilita las ventanas emergentes para imprimir'); return; }
     const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
-    /* Filas con datos reales de la OT + relleno hasta 8 para que la tabla se vea
+    /* Filas con datos reales de la OT + relleno hasta 5 para que la tabla se vea
        completa y quede espacio para anotar a mano. */
-    const minRows = Math.max(lineas.length, 8);
+    const minRows = Math.max(lineas.length, 5);
     let totalPiezas = 0;
     const filas = Array.from({ length: minRows }, (_, i) => {
       const l = lineas[i];
@@ -884,17 +922,17 @@ function OTQRPrintModal({ ot, onClose }) {
         <td class="uni">${uni}</td>
       </tr>`;
     }).join('');
-    const logo = `${location.origin}/logo-perico.svg`;
+    const logo = `${location.origin}/logos/logo-perico-green.svg`;
     const G = '#0f7a5a';
     const firmas = [
-      { role: 'Entregado', place: 'Almacén Huertas' },
-      { role: 'Recolectado', place: 'Almacén Huertas' },
-      { role: 'Recibido en almacén', place: 'Almacén Terán' },
-      { role: 'Recibido en recepción', place: 'Recepción Terán' },
+      { name: 'Enrique Gamboa García', role: 'Entregado', place: 'Almacén Huertas' },
+      { name: 'Luis Jonathan Lara', role: 'Recolectado', place: 'Almacén Huertas' },
+      { name: 'Rodolfo Casanova', role: 'Recibido en almacén', place: 'Almacén Terán' },
+      { name: 'Arely L. Meza', role: 'Recibido en recepción', place: 'Recepción Terán' },
     ].map(f => `
       <div class="sg">
         <div class="sgline"></div>
-        <div class="sgname">Nombre y firma</div>
+        <div class="sgname">${esc(f.name)}</div>
         <div class="sgrole">${esc(f.role)}</div>
         <div class="sgplace">${esc(f.place)}</div>
       </div>`).join('');
@@ -911,10 +949,15 @@ function OTQRPrintModal({ ot, onClose }) {
         .brand img { width:52px; height:auto; display:block; }
         .bname { font-size:19px; font-weight:600; letter-spacing:-.02em; color:${G}; }
         .btag { font-size:10px; color:#5a6b63; letter-spacing:.04em; text-transform:uppercase; }
-        .hr { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
-        .hr .ttl { font-size:12px; font-weight:500; }
-        .qr { width:100px; height:100px; display:block; }
-        .folio { font-size:12px; font-weight:600; color:${G}; border:1px solid ${G}; border-radius:6px; padding:3px 12px; }
+        .hr { display:flex; align-items:flex-start; gap:16px; }
+        .hrtext { display:flex; flex-direction:column; align-items:flex-end; gap:8px; padding-top:2px; }
+        .hrtext .ttl { font-size:13px; font-weight:500; color:#16201c; }
+        .foliorow { display:flex; align-items:center; gap:8px; }
+        .foliolbl { font-size:10px; color:#5a6b63; text-transform:uppercase; letter-spacing:.06em; }
+        .folio { font-size:13px; font-weight:600; color:${G}; border:1px solid ${G}; border-radius:6px; padding:3px 12px; }
+        .qrbox { border:1px solid rgba(15,122,90,.4); border-radius:10px; padding:7px 7px 5px; display:flex; flex-direction:column; align-items:center; gap:3px; }
+        .qr { width:62px; height:62px; display:block; }
+        .qrlbl { font-size:8px; letter-spacing:.14em; color:#5a6b63; text-transform:uppercase; }
         .title { margin-top:18px; text-align:center; }
         .title .t { font-size:18px; font-weight:600; letter-spacing:-.02em; }
         .title .s { font-size:11px; color:#5a6b63; margin-top:3px; }
@@ -942,7 +985,7 @@ function OTQRPrintModal({ ot, onClose }) {
         .firmas .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:600; margin-bottom:16px; }
         .fgrid { display:grid; grid-template-columns:1fr 1fr; gap:24px 40px; }
         .sg { text-align:center; } .sgline { border-bottom:1px solid #16201c; height:30px; }
-        .sgname { font-size:10px; color:#9aa8a2; margin-top:4px; } .sgrole { font-size:12px; font-weight:600; color:${G}; margin-top:3px; } .sgplace { font-size:10px; color:#5a6b63; }
+        .sgname { font-size:13px; font-weight:500; color:#16201c; margin-top:6px; } .sgrole { font-size:12px; font-weight:600; color:${G}; margin-top:3px; } .sgplace { font-size:10px; color:#5a6b63; margin-top:1px; }
         .pie { margin-top:20px; padding-top:10px; border-top:1px solid rgba(0,0,0,.08); display:flex; justify-content:space-between; font-size:9px; color:#9aa8a2; }
       </style></head><body>
       <div class="sheet">
@@ -955,15 +998,20 @@ function OTQRPrintModal({ ot, onClose }) {
             </div>
           </div>
           <div class="hr">
-            <div class="ttl">Formato de transferencia</div>
-            <img class="qr" src="${qrPrint}" alt="QR ${esc(ot.folio)}" />
-            <div class="folio">${esc(ot.folio)}</div>
+            <div class="hrtext">
+              <div class="ttl">Formato de transferencia</div>
+              <div class="foliorow"><span class="foliolbl">Folio</span><span class="folio">${esc(ot.folio)}</span></div>
+            </div>
+            <div class="qrbox">
+              <img class="qr" src="${qrPrint}" alt="QR ${esc(ot.folio)}" />
+              <div class="qrlbl">Escanea</div>
+            </div>
           </div>
         </div>
 
         <div class="title">
           <div class="t">Transferencia de mercancía entre almacén y tienda</div>
-          <div class="s">Documento de control para entrega, traslado y recepción de producto${ot.solicitadoPor ? ' · Solicitó: ' + esc(ot.solicitadoPor) : ''}</div>
+          <div class="s">Documento de control para entrega, traslado y recepción de producto</div>
         </div>
 
         <div class="od">
@@ -998,8 +1046,8 @@ function OTQRPrintModal({ ot, onClose }) {
         </div>
 
         <div class="pie">
-          <span>Pinturas El Perico · Formato de transferencia interna · ${esc(ot.folio)}</span>
-          <span>Conservar copia en origen y destino · Escanea el QR al surtir y al recibir</span>
+          <span>Pinturas El Perico · Formato de transferencia interna</span>
+          <span>Conservar copia en almacén de origen y destino</span>
         </div>
       </div>
       <script>setTimeout(() => window.print(), 450);</script>
