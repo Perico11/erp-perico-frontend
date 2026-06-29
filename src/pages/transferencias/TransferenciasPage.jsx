@@ -1004,7 +1004,7 @@ function OTQRPrintModal({ ot, onClose }) {
     const minRows = Math.max(lineas.length, 10);
     const filas = Array.from({ length: minRows }, (_, i) => {
       const l = lineas[i];
-      if (!l) return `<tr><td class="num">${i + 1}</td><td></td><td class="cod"></td><td class="qty"></td><td class="uni"></td></tr>`;
+      if (!l) return `<div class="trow"><div class="c c-num">${i + 1}</div><div class="c c-desc"></div><div class="c c-cod"></div><div class="c c-qty"></div><div class="c c-uni"></div></div>`;
       const tipo = l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase';
       let cant, uni;
       if (l.tipo === 'pt' && l.presentacion) {
@@ -1014,13 +1014,13 @@ function OTQRPrintModal({ ot, onClose }) {
         cant = l.cantidad; uni = esc(l.unidad || '');
       }
       const env = l.envasar ? ' <span class="env">ENVASAR</span>' : '';
-      return `<tr>
-        <td class="num">${i + 1}</td>
-        <td><span class="desc">${esc(l.nombre || l.producto || '')}</span><span class="tag">${tipo}</span>${env}</td>
-        <td class="cod"></td>
-        <td class="qty">${esc(cant)}</td>
-        <td class="uni">${uni}</td>
-      </tr>`;
+      return `<div class="trow">
+        <div class="c c-num">${i + 1}</div>
+        <div class="c c-desc"><span>${esc(l.nombre || l.producto || '')}</span><span class="tag">${tipo}</span>${env}</div>
+        <div class="c c-cod"></div>
+        <div class="c c-qty">${esc(cant)}</div>
+        <div class="c c-uni">${uni}</div>
+      </div>`;
     }).join('');
     const logo = `${location.origin}/logos/logo-perico-green.svg`;
     const G = '#0f7a5a';
@@ -1055,7 +1055,8 @@ function OTQRPrintModal({ ot, onClose }) {
         .foliorow { display:flex; align-items:center; gap:8px; }
         .foliolbl { font-size:10px; color:#5a6b63; text-transform:uppercase; letter-spacing:.06em; }
         .folio { font-size:13px; font-weight:500; color:${G}; border:1px solid ${G}; border-radius:6px; padding:3px 12px; }
-        .qrbox { border:1px solid rgba(15,122,90,.4); border-radius:10px; padding:7px 7px 5px; display:flex; flex-direction:column; align-items:center; gap:3px; }
+        .qrcol { display:flex; flex-direction:column; align-items:center; gap:4px; }
+        .qrbox { border:1px solid rgba(15,122,90,.4); border-radius:10px; padding:6px; line-height:0; }
         .qr { width:62px; height:62px; display:block; }
         .qrlbl { font-size:8px; letter-spacing:.14em; color:#5a6b63; text-transform:uppercase; }
         .title { margin-top:16px; text-align:center; }
@@ -1067,15 +1068,16 @@ function OTQRPrintModal({ ot, onClose }) {
         .fld { display:flex; align-items:baseline; gap:8px; font-size:12px; margin-bottom:8px; }
         .fld span { color:#5a6b63; min-width:64px; }
         .fld i { flex:1; border-bottom:1px dotted #b6c2bc; font-style:normal; }
-        table { width:100%; border-collapse:collapse; margin-top:16px; border:1px solid rgba(0,0,0,.10); border-radius:12px; overflow:hidden; }
-        thead th { background:${G}; color:#fff; font-size:11px; font-weight:500; padding:9px 8px; text-align:center; }
-        thead th.l { text-align:left; padding-left:12px; }
-        tbody td { font-size:12px; padding:4px 8px; height:24px; border-top:1px solid rgba(0,0,0,.07); border-left:1px solid rgba(0,0,0,.05); }
-        tbody td:first-child { border-left:none; }
-        td.num { text-align:center; color:#9aa8a2; width:48px; }
-        td.cod { width:90px; }
-        td.qty { text-align:right; font-weight:500; width:90px; }
-        td.uni { width:110px; }
+        .tbl { margin-top:16px; border:1px solid rgba(0,0,0,.14); border-radius:12px; overflow:hidden; }
+        .thead { display:grid; grid-template-columns:48px 1fr 90px 90px 110px; background:${G}; color:#fff; font-size:11px; font-weight:500; }
+        .thead > div { padding:9px 8px; text-align:center; }
+        .thead .th-l { text-align:left; padding-left:12px; }
+        .thead .th-d { border-left:1px solid rgba(255,255,255,.18); }
+        .trow { display:grid; grid-template-columns:48px 1fr 90px 90px 110px; font-size:12px; border-top:1px solid rgba(0,0,0,.08); min-height:24px; }
+        .trow .c { padding:4px 8px; display:flex; align-items:center; min-width:0; }
+        .trow .c-num { justify-content:center; color:#9aa8a2; }
+        .trow .c-desc, .trow .c-cod, .trow .c-qty, .trow .c-uni { border-left:1px solid rgba(0,0,0,.07); }
+        .trow .c-qty { justify-content:flex-end; font-weight:500; }
         .tag { display:inline-block; margin-left:6px; font-size:9px; font-weight:500; color:${G}; background:rgba(15,122,90,.10); border-radius:4px; padding:1px 6px; vertical-align:middle; }
         .env { display:inline-block; margin-left:6px; padding:1px 7px; border:1.5px solid ${G}; border-radius:4px; font-size:10px; font-weight:500; color:${G}; }
         .obs .lbl { font-size:11px; color:#5a6b63; font-weight:500; margin:14px 0 8px; }
@@ -1101,8 +1103,8 @@ function OTQRPrintModal({ ot, onClose }) {
               <div class="ttl">Formato de transferencia</div>
               <div class="foliorow"><span class="foliolbl">Folio</span><span class="folio">${esc(ot.folio)}</span></div>
             </div>
-            <div class="qrbox">
-              <img class="qr" src="${qrPrint}" alt="QR ${esc(ot.folio)}" />
+            <div class="qrcol">
+              <div class="qrbox"><img class="qr" src="${qrPrint}" alt="QR ${esc(ot.folio)}" /></div>
               <div class="qrlbl">Escanea</div>
             </div>
           </div>
@@ -1128,10 +1130,16 @@ function OTQRPrintModal({ ot, onClose }) {
           </div>
         </div>
 
-        <table>
-          <thead><tr><th>#</th><th class="l">Descripción del producto</th><th>Código</th><th>Cantidad</th><th>Unidad</th></tr></thead>
-          <tbody>${filas}</tbody>
-        </table>
+        <div class="tbl">
+          <div class="thead">
+            <div>#</div>
+            <div class="th-l">Descripción del producto</div>
+            <div class="th-d">Código</div>
+            <div class="th-d">Cantidad</div>
+            <div class="th-d">Unidad</div>
+          </div>
+          ${filas}
+        </div>
 
         <div class="obs">
           <div class="lbl">Observaciones</div>
