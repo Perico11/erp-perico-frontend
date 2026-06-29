@@ -258,6 +258,27 @@ export default function AlmacenRecepcionPage() {
     setScanning(false);
     const code = result?.cod || result?.raw || '';
     if (!code) return showToast('QR no reconocido', true);
+
+    /* ¿Es el QR de una ORDEN DE TRANSFERENCIA (OT)? → flujo de transferencias,
+       NO sublote. Josué la recibe aquí mismo (mueve el material tránsito→Terán).
+       Antes caía a escanearSublote y daba "sublote no encontrado / ¿QR viejo?"
+       porque la OT no es un lote de producción. */
+    const otMatch = /transfer-qr\/(OT-[A-Za-z0-9_-]+)/i.exec(code)
+      || /^\s*(OT-[A-Za-z0-9_-]+)\s*$/i.exec(code);
+    if (otMatch) {
+      const otId = otMatch[1];
+      setBusy(code);
+      try {
+        const r = await api.escanearOT(otId, 'recibir');
+        reload();
+        if (r && r.idempotente) showToast(`${(r.ot && r.ot.folio) || otId}: ${r.aviso || 'sin cambios'}`);
+        else showToast(`Transferencia ${(r && r.ot && r.ot.folio) || otId} recibida en Terán ✓`);
+      } catch (err) {
+        showToast('Error: ' + (err?.data?.error || err.message || 'No se pudo recibir la transferencia'), true);
+      } finally { setBusy(null); }
+      return;
+    }
+
     setBusy(code);
     try {
       const r = await api.escanearSublote(code, 'escanearRecibirTeran');
