@@ -140,6 +140,7 @@ export default function NotificacionesPage() {
   const [pushPerm, setPushPerm] = useState(getPushPermission());
   const [filterSev, setFilterSev] = useState('todas');
   const [filterArea, setFilterArea] = useState('todas');
+  const [verLeidas, setVerLeidas] = useState(false);
   const { data, loading, reload } = useApiData(() => api.getNotificaciones(), null, 30000);
 
   /* Refrescar el badge del permiso: al volver el foco (pudo cambiar en
@@ -170,7 +171,17 @@ export default function NotificacionesPage() {
   /* Click en card → navega a la pantalla relevante. Prioridad: ruta explícita
      que mande el backend (ej. conteo pendiente → '/conteo' para aprobar), luego
      el mapa por área, y como último recurso el home. */
+  /* Marcar 1+ notifs como leídas y refrescar la bandeja. */
+  const marcarLeidas = (items) => {
+    if (!items || !items.length) return;
+    api.marcarNotificacionesLeidas(items).then(() => reload()).catch(() => {});
+  };
+
   const handleCardClick = (notif) => {
+    /* Al click se marca leída (sale de la bandeja) + navega a su pantalla. */
+    if (notif && !notif.leida) {
+      api.marcarNotificacionesLeidas([{ id: notif.id, hash: notif._hash }]).catch(() => {});
+    }
     const ruta = notif.ruta || AREA_ROUTE[notif.area];
     if (ruta) navigate(ruta);
     else navigate('/');
@@ -179,10 +190,16 @@ export default function NotificacionesPage() {
   const notifs = useMemo(() => {
     const arr = Array.isArray(data) ? data : (data?.data || []);
     let res = [...arr];
+    if (!verLeidas) res = res.filter(n => !n.leida); /* leídas ocultas salvo toggle */
     if (filterSev !== 'todas') res = res.filter(n => n.severidad === filterSev);
     if (filterArea !== 'todas') res = res.filter(n => n.area === filterArea);
     return res;
-  }, [data, filterSev, filterArea]);
+  }, [data, filterSev, filterArea, verLeidas]);
+
+  /* Para los botones del final: cuántas hay sin leer / leídas (sobre el total real). */
+  const todasRaw = Array.isArray(data) ? data : (data?.data || []);
+  const sinLeer = todasRaw.filter(n => !n.leida);
+  const nLeidas = todasRaw.length - sinLeer.length;
 
   const k = (data && data.resumen) || { total: 0, criticas: 0, medias: 0, bajas: 0 };
 
@@ -274,14 +291,40 @@ export default function NotificacionesPage() {
         {loading ? (
           <div style={S.loading}>Cargando alertas...</div>
         ) : notifs.length === 0 ? (
-          <div style={S.loading}>Sin alertas para los filtros actuales — todo en orden</div>
+          <div style={S.loading}>{verLeidas ? 'Sin notificaciones.' : 'Sin alertas pendientes — todo al día'}</div>
         ) : (
           /* Card del mockup jun 2026 (NotificacionCard): ícono-app del perico +
              título + tiempo relativo + área con color semántico. La ruta de
-             click la resuelve handleCardClick (ruta propia → mapa por área). */
+             click la resuelve handleCardClick (ruta propia → mapa por área).
+             Las leídas (cuando se muestran con el toggle) van atenuadas. */
           notifs.map(n => (
-            <NotificacionCard key={n.id} notif={n} onClick={handleCardClick} humanizar={humanizar} />
+            <div key={n.id} style={n.leida ? { opacity: 0.5 } : undefined}>
+              <NotificacionCard notif={n} onClick={handleCardClick} humanizar={humanizar} />
+            </div>
           ))
+        )}
+
+        {/* Acciones al final: "Leer todas" + ver/ocultar leídas */}
+        {!loading && (sinLeer.length > 0 || nLeidas > 0) && (
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
+            {sinLeer.length > 0 && (
+              <button
+                onClick={() => marcarLeidas(sinLeer.map(n => ({ id: n.id, hash: n._hash })))}
+                style={{ height: 40, padding: '0 18px', borderRadius: 999, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                Leer todas ({sinLeer.length})
+              </button>
+            )}
+            {nLeidas > 0 && (
+              <button
+                onClick={() => setVerLeidas(v => !v)}
+                style={{ height: 40, padding: '0 16px', borderRadius: 999, border: '1px solid var(--lp-border)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                {verLeidas ? 'Ocultar leídas' : `Ver leídas (${nLeidas})`}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

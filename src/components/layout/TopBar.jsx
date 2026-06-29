@@ -76,7 +76,9 @@ export default function TopBar({ title, action }) {
     api.getNotificaciones().then(r => {
       const arr = Array.isArray(r) ? r : (r?.data || []);
       const k = (Array.isArray(arr) ? null : arr.resumen) || (r?.resumen);
-      if (k && typeof k.criticas === 'number') {
+      if (k && typeof k.noLeidas === 'number') {
+        setCount(k.noLeidas); /* badge = no leídas (baja al marcar leídas) */
+      } else if (k && typeof k.criticas === 'number') {
         setCount((k.criticas || 0) + (k.medias || 0));
       } else if (Array.isArray(arr)) {
         setCount(arr.length);

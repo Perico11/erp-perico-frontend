@@ -450,6 +450,7 @@ const api = {
 
   /* ── Notificaciones ── */
   getNotificaciones: () => request('GET', '/api/notificaciones'),
+  marcarNotificacionesLeidas: (items) => request('POST', '/api/notificaciones/leer', { items }),
 
   /* ── Usuarios (admin) ── */
   getUsuarios: () => request('GET', '/api/usuarios'),
