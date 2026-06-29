@@ -55,6 +55,22 @@ export function PedidosNotifProvider({ children }) {
       /* Ordenar por fecha asc (más viejo primero — el técnico debería atenderlos en orden) */
       pend.sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
       setPendientes(pend);
+      /* Mezclar "vistos / en cola" PERSISTENTES del servidor (cross-dispositivo) con
+         los locales — así un pedido puesto "en cola" en otro equipo no re-abre el
+         modal aquí. El servidor ya poda los que dejaron de estar pendientes. */
+      try {
+        const rv = await api.getPedidosVistos();
+        const sids = (rv && Array.isArray(rv.ids)) ? rv.ids : [];
+        if (sids.length) {
+          setVistos(prev => {
+            const next = new Set(prev);
+            let add = false;
+            sids.forEach(id => { if (!next.has(id)) { next.add(id); add = true; } });
+            if (add) saveVistos(next);
+            return next;
+          });
+        }
+      } catch {}
     } catch (e) {
       console.warn('[PedidosNotif] refresh falló:', e?.message);
     } finally {
@@ -141,6 +157,9 @@ export function PedidosNotifProvider({ children }) {
       if (pedido.codigo) next.add(pedido.codigo);
       saveVistos(next); return next;
     });
+    /* Persistir "en cola" en el servidor (cross-dispositivo): así NO reaparece en
+       otro equipo ni al reiniciar sesión — antes solo vivía en localStorage. */
+    if (pedido.id) api.marcarPedidosVistos([pedido.id]).catch(() => {});
   }, []);
 
   /* Si un pedido visto ya no está en pendientes (fue resuelto en otro lado),

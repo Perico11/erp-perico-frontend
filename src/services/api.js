@@ -305,6 +305,8 @@ const api = {
   /* ── Órdenes ── */
   getOrdenes: () => request('GET', '/api/ordenes'),
   getPedidos: () => request('GET', '/api/pedidos'),
+  getPedidosVistos: () => request('GET', '/api/pedidos/vistos'),
+  marcarPedidosVistos: (pedidoIds) => request('POST', '/api/pedidos/marcar-visto', { pedidoIds }),
   upsertPedido: (pedido) => request('POST', '/api/pedidos/upsert', pedido),
   /* X2 (jun 2026): deletePedido eliminado — backend retorna 410. Usar eliminarPedido. */
   /* Eliminar pedido (admin con motivo + PIN). Revierte MP si tiene orden vinculada
