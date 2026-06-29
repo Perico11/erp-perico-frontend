@@ -203,10 +203,13 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   const [numBachas, setNumBachas] = useState(1);
   const [cantBachas, setCantBachas] = useState(() => [item.cantidad || 1]); /* [cant1, …] long. numBachas */
   const [qcExtraBachas, setQcExtraBachas] = useState({}); /* { 2:{pasoIdx:{fieldId}}, 3:{…} } */
-  /* Sprint D (C3/R5): ajustes MP registrados durante producción.
-     Array de { mp, kgAdicional, motivo }. Se SUMAN al descuento de MP al
-     finalizar y se persisten en lote.ajustesMP[] para auditoría. */
-  const [ajustesMP, setAjustesMP] = useState([]);
+  /* CONSUMO REAL vs fórmula (jun 2026): la fórmula da el TEÓRICO; aquí el operador
+     edita lo REALMENTE usado por MP (sube/baja/0), sustituye una MP por otra del
+     catálogo, o agrega una extra. El descuento usa el REAL; la varianza queda en el
+     lote. Reemplaza el "ajustes (solo sumar)" anterior — ahora cubre bajar/sustituir.
+     Fila: { mp, teorico, real, sustituyeA, esExtra, motivo }. */
+  const [consumoReal, setConsumoReal] = useState([]);
+  const [mpCatalogo, setMpCatalogo] = useState([]); /* nombres de MP del catálogo (autocompletar) */
   const [stepDone, setStepDone] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -251,6 +254,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         setSteps(r.steps);
 
         /* Intentar restaurar checkpoint */
+        let restoredCR = false;
         try {
           const ck = await api.getProduccionCheckpoint(item.id);
           if (ck?.checkpoint?.state && !cancel) {
@@ -259,7 +263,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             if (typeof st.timerSec === 'number') setTimerSec(st.timerSec);
             if (st.dualPhase) setDualPhase(st.dualPhase);
             if (st.qcReadings && typeof st.qcReadings === 'object') setQcReadings(st.qcReadings);
-            if (Array.isArray(st.ajustesMP)) setAjustesMP(st.ajustesMP);
+            if (Array.isArray(st.consumoReal) && st.consumoReal.length) { setConsumoReal(st.consumoReal); restoredCR = true; }
             if (st.stepDone && typeof st.stepDone === 'object') setStepDone(st.stepDone);
             /* Multi-bacha: restaurar nº de bachas, reparto y QC extra. */
             if (typeof st.numBachas === 'number' && st.numBachas >= 1) setNumBachas(st.numBachas);
@@ -267,6 +271,32 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             if (st.qcExtraBachas && typeof st.qcExtraBachas === 'object') setQcExtraBachas(st.qcExtraBachas);
           }
         } catch { /* sin checkpoint */ }
+
+        /* Fórmula (teórico por MP) + catálogo de MP (autocompletar). Construye el
+           consumo real (real = teórico) si no se restauró del checkpoint. Si la
+           fórmula no carga, handleFinalize cae al cálculo teórico (sin regresión). */
+        try {
+          const lotes = item.cantidad || 1;
+          const [fr, mr] = await Promise.all([
+            api.getFormulas().catch(() => null),
+            api.getMaestroMP().catch(() => null),
+          ]);
+          if (!cancel) {
+            const fmap = fr?.formulas || fr?.data?.formulas || fr || {};
+            const f = fmap[productoNombre];
+            if (!restoredCR && f && Array.isArray(f.ingredientes)) {
+              setConsumoReal(f.ingredientes
+                .filter(ing => ing && ing.nombre)
+                .map(ing => {
+                  const teo = +((Number(ing.kg19) || 0) * lotes).toFixed(3);
+                  return { mp: ing.nombre, teorico: teo, real: teo, sustituyeA: null, esExtra: false, motivo: '' };
+                }));
+            }
+            const mps = mr?.data?.mps || mr?.mps || {};
+            const names = Object.keys(mps).filter(Boolean).sort();
+            if (names.length) setMpCatalogo(names);
+          }
+        } catch { /* fórmula/catálogo opcional */ }
       } catch (e) {
         if (!cancel) setError(e.message || 'Error al cargar pasos');
       } finally {
@@ -282,12 +312,12 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
     if (ckRef.current) clearInterval(ckRef.current);
     ckRef.current = setInterval(() => {
       api.saveProduccionCheckpoint(item.id, {
-        nombre: productoNombre, curStep, timerSec, dualPhase, qcReadings, ajustesMP, stepDone,
+        nombre: productoNombre, curStep, timerSec, dualPhase, qcReadings, consumoReal, stepDone,
         numBachas, cantBachas, qcExtraBachas,
       }, userName).then(() => setSavedAt(Date.now())).catch(() => {});
     }, 15000);
     return () => { if (ckRef.current) clearInterval(ckRef.current); };
-  }, [item.id, productoNombre, curStep, timerSec, dualPhase, qcReadings, stepDone, loading, error, userName, numBachas, cantBachas, qcExtraBachas]);
+  }, [item.id, productoNombre, curStep, timerSec, dualPhase, qcReadings, consumoReal, stepDone, loading, error, userName, numBachas, cantBachas, qcExtraBachas]);
 
   /* Multi-bacha: cambiar el nº de bachas reparte la cantidad total parejo (el
      operario ajusta después) y descarta el QC de bachas que ya no existen. Tope:
@@ -472,36 +502,49 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
     setSaving(true);
     setError('');
     try {
-      /* 1. Calcular descuentos desde la fórmula original */
+      /* 1. Calcular descuentos. Modelo CONSUMO REAL: descontamos lo que el operador
+         REALMENTE usó (editor: bajó/sustituyó/agregó). Si el editor no cargó (raro),
+         caemos al teórico de la fórmula → sin regresión vs el flujo anterior. */
       const formulasRes = await api.getFormulas();
       const formulasMap = formulasRes?.formulas || formulasRes?.data?.formulas || formulasRes || {};
       const formula = formulasMap[productoNombre];
       if (!formula?.ingredientes) throw new Error(`Fórmula "${productoNombre}" no encontrada`);
       const lotes = item.cantidad || 1;
-      const descuentos = formula.ingredientes.map(ing => ({
-        mp: ing.nombre,
-        cantidad: +((ing.kg19 || 0) * lotes).toFixed(3),
-      }));
 
-      /* FIX D-C3/R5: SUMAR ajustes MP registrados en el wizard a los descuentos.
-         Si Enrique agregó 2 kg de espesante post-molienda, deben descontarse.
-         Si la MP ya está en `descuentos`, sumamos al existente. Si es nueva,
-         agregamos una entrada. Si kgAdicional<=0 o mp vacío, ignorar. */
-      const ajustesLimpios = (ajustesMP || [])
-        .map(a => ({
-          mp: String(a.mp || '').trim(),
-          kg: Number(a.kgAdicional) || 0,
-          motivo: String(a.motivo || '').trim(),
-        }))
-        .filter(a => a.mp && a.kg > 0);
-      ajustesLimpios.forEach(aj => {
-        const idx = descuentos.findIndex(d => d.mp === aj.mp);
-        if (idx >= 0) {
-          descuentos[idx].cantidad = +(descuentos[idx].cantidad + aj.kg).toFixed(3);
-        } else {
-          descuentos.push({ mp: aj.mp, cantidad: aj.kg, _ajuste: true });
-        }
+      const crEfectivo = (Array.isArray(consumoReal) && consumoReal.length)
+        ? consumoReal
+        : formula.ingredientes.filter(ing => ing && ing.nombre).map(ing => {
+            const teo = +((Number(ing.kg19) || 0) * lotes).toFixed(3);
+            return { mp: ing.nombre, teorico: teo, real: teo, sustituyeA: null, esExtra: false, motivo: '' };
+          });
+
+      /* Descuento = REAL por MP (real>0), consolidado por nombre. Una MP con real=0
+         (ej. sustituida) NO se descuenta; el sustituto entra con su real. */
+      const descMap = {};
+      crEfectivo.forEach(r => {
+        const mp = String(r.mp || '').trim();
+        const real = Number(r.real) || 0;
+        if (!mp || real <= 0) return;
+        descMap[mp] = +((descMap[mp] || 0) + real).toFixed(3);
       });
+      const descuentos = Object.entries(descMap).map(([mp, cantidad]) => ({ mp, cantidad }));
+
+      /* Varianzas para auditoría: lo que difiere del teórico + extras + sustituciones.
+         Se persiste como lote.ajustesMP[] (compat) + lote.consumoReal (detalle). */
+      const ajustesLimpios = crEfectivo
+        .map(r => {
+          const teorico = Number(r.teorico) || 0;
+          const real = Number(r.real) || 0;
+          return {
+            mp: String(r.mp || '').trim(),
+            teorico, real,
+            delta: +((real - teorico)).toFixed(3),
+            sustituyeA: r.sustituyeA || null,
+            esExtra: !!r.esExtra,
+            motivo: String(r.motivo || '').trim(),
+          };
+        })
+        .filter(a => a.mp && (a.esExtra || a.sustituyeA || Math.abs(a.delta) > 0.0001));
 
       await api.registrarProduccion({
         descuentos, producto: productoNombre, lotes,
@@ -617,8 +660,9 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           fecha: ahora, usuario: userName,
           sublotes: [],
           qcReadings: qcBacha,
-          /* El ajuste de MP fue del proceso total — se ancla en la bacha 1 para auditoría. */
+          /* El consumo/ajuste fue del proceso total — se ancla en la bacha 1 para auditoría. */
           ajustesMP: b === 1 ? ajustesLimpios : [],
+          consumoReal: b === 1 ? crEfectivo : undefined,
           duracionProduccionMs: divDur,
           tiempoActivoMs: divAct,
           tiempoPausadoMs: divPau,
@@ -716,7 +760,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
     } finally {
       setSaving(false);
     }
-  }, [item, productoNombre, qcReadings, ajustesMP, total, tipo, userName, saving, events, curStep, steps, numBachas, cantBachas, qcExtraBachas]);
+  }, [item, productoNombre, qcReadings, consumoReal, total, tipo, userName, saving, events, curStep, steps, numBachas, cantBachas, qcExtraBachas]);
 
   if (loading) {
     return (
@@ -977,66 +1021,94 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             lo que físicamente entró al batch. */}
         {isAjustes && (
           <>
-            <div style={{ ...S.saction, marginBottom: 14 }}>
-              {step.desc}
+            <div style={{ ...S.saction, marginBottom: 12 }}>
+              {step.desc || 'Consumo real vs fórmula. Ajusta lo que REALMENTE usaste: sube/baja el kg, sustituye una MP por otra del catálogo, o agrega una extra. Si todo fue igual a la fórmula, no toques nada y avanza.'}
             </div>
-            {ajustesMP.length === 0 && (
-              <div style={{
-                padding: 14, background: 'var(--lp-bg-base)', borderRadius: 8,
-                fontSize: 12, color: 'var(--lp-text-tertiary)', textAlign: 'center',
-                marginBottom: 12,
-              }}>
-                Sin ajustes registrados. Si no hubo agregados durante producción, avanza al siguiente paso.
+
+            <datalist id="cr-mp-list">
+              {mpCatalogo.map(n => <option key={n} value={n} />)}
+            </datalist>
+
+            {consumoReal.length === 0 ? (
+              <div style={{ padding: 14, background: 'var(--lp-bg-base)', borderRadius: 8, fontSize: 12, color: 'var(--lp-text-tertiary)', textAlign: 'center', marginBottom: 12 }}>
+                No se pudo cargar la fórmula para el editor — se descontará el teórico. Puedes agregar MP extra abajo.
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 80px auto', gap: 8, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-tertiary)', padding: '0 8px 6px' }}>
+                <span>Materia prima</span><span style={{ textAlign: 'right' }}>Teórico</span><span style={{ textAlign: 'right' }}>Real</span><span />
               </div>
             )}
-            {ajustesMP.map((aj, idx) => (
-              <div key={idx} style={{
-                display: 'grid', gridTemplateColumns: '1fr 90px 1fr auto', gap: 6,
-                alignItems: 'center', marginBottom: 8,
-                padding: 8, background: 'var(--lp-bg-raised)', borderRadius: 8,
-                border: '1px solid var(--lp-border-subtle)',
-              }}>
-                <input
-                  type="text"
-                  placeholder="Nombre MP"
-                  style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', fontSize: 13 }}
-                  value={aj.mp || ''}
-                  onChange={e => setAjustesMP(prev => prev.map((a,i) => i===idx ? {...a, mp: e.target.value} : a))}
-                />
-                <input
-                  type="number" step="0.01" inputMode="decimal"
-                  placeholder="kg"
-                  style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', fontSize: 13 }}
-                  value={aj.kgAdicional ?? ''}
-                  onChange={e => setAjustesMP(prev => prev.map((a,i) => i===idx ? {...a, kgAdicional: e.target.value} : a))}
-                />
-                <input
-                  type="text"
-                  placeholder="Motivo (viscosidad baja, color, etc.)"
-                  style={{ padding: '8px 10px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', fontSize: 13 }}
-                  value={aj.motivo || ''}
-                  onChange={e => setAjustesMP(prev => prev.map((a,i) => i===idx ? {...a, motivo: e.target.value} : a))}
-                />
-                <button
-                  onClick={() => setAjustesMP(prev => prev.filter((_,i) => i !== idx))}
-                  style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', cursor: 'pointer', fontSize: 16 }}
-                  title="Quitar ajuste"
-                ><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
-              </div>
-            ))}
+
+            {consumoReal.map((r, idx) => {
+              const teo = Number(r.teorico) || 0;
+              const real = Number(r.real) || 0;
+              const editable = r.esExtra || r.sustituyeA;
+              const delta = +(real - teo).toFixed(2);
+              const fuera = !editable && Math.abs(delta) > 0.001;
+              return (
+                <div key={idx} style={{
+                  display: 'grid', gridTemplateColumns: '1fr 64px 80px auto', gap: 8, alignItems: 'center',
+                  marginBottom: 6, padding: '8px', background: 'var(--lp-bg-raised)', borderRadius: 8,
+                  border: '1px solid var(--lp-border-subtle)',
+                  ...(r.sustituyeA ? { borderLeft: '3px solid var(--lp-brand-500)' } : {}),
+                }}>
+                  <div style={{ minWidth: 0 }}>
+                    {editable ? (
+                      <input type="text" list="cr-mp-list" placeholder="Buscar MP del catálogo"
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '7px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', fontSize: 13, fontFamily: 'var(--lp-font-mono)' }}
+                        value={r.mp || ''}
+                        onChange={e => setConsumoReal(prev => prev.map((x, i) => i === idx ? { ...x, mp: e.target.value } : x))} />
+                    ) : (
+                      <span style={{ fontSize: 13, fontFamily: 'var(--lp-font-mono)', display: 'block', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.mp}</span>
+                    )}
+                    {r.sustituyeA && <div style={{ fontSize: 10.5, color: 'var(--lp-brand-600)', marginTop: 2 }}>sustituye a {r.sustituyeA}</div>}
+                    {r.esExtra && <div style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>extra (fuera de fórmula)</div>}
+                  </div>
+                  <span style={{ textAlign: 'right', fontSize: 12.5, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{editable ? '—' : teo.toFixed(2)}</span>
+                  <input type="number" step="0.01" min="0" inputMode="decimal"
+                    style={{ textAlign: 'right', width: '100%', boxSizing: 'border-box', padding: '7px 8px', borderRadius: 6, fontSize: 13, fontFamily: 'var(--lp-font-mono)',
+                      border: `1px solid ${fuera ? (delta < 0 ? 'var(--lp-warning-500)' : 'var(--lp-info-500)') : 'var(--lp-border-subtle)'}` }}
+                    value={r.real ?? ''}
+                    onChange={e => setConsumoReal(prev => prev.map((x, i) => i === idx ? { ...x, real: e.target.value } : x))} />
+                  <div>
+                    {!editable ? (
+                      <button title="Sustituir por otra MP del catálogo"
+                        onClick={() => setConsumoReal(prev => {
+                          const o = prev[idx];
+                          const nx = prev.map((x, i) => i === idx ? { ...x, real: 0, motivo: x.motivo || 'sustituida' } : x);
+                          nx.push({ mp: '', teorico: 0, real: o.teorico, sustituyeA: o.mp, esExtra: false, motivo: '' });
+                          return nx;
+                        })}
+                        style={{ padding: '6px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-base)', cursor: 'pointer', fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Sustituir</button>
+                    ) : (
+                      <button title="Quitar" onClick={() => setConsumoReal(prev => prev.filter((_, i) => i !== idx))}
+                        style={{ padding: '6px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', cursor: 'pointer' }}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
             <button
-              onClick={() => setAjustesMP(prev => [...prev, { mp: '', kgAdicional: '', motivo: '' }])}
-              style={{ ...S.btn('ghost'), marginBottom: 12 }}
-            >+ Agregar ajuste</button>
-            {ajustesMP.length > 0 && (
-              <div style={{
-                padding: 10, background: 'var(--lp-warning-100)',
-                color: 'var(--lp-warning-700)', borderRadius: 8, fontSize: 11,
-              }}>
-                Total a descontar: <strong>{ajustesMP.reduce((s,a) => s + (Number(a.kgAdicional) || 0), 0).toFixed(2)} kg</strong>
-                {' '}adicionales sobre el teórico de la fórmula.
-              </div>
-            )}
+              onClick={() => setConsumoReal(prev => [...prev, { mp: '', teorico: 0, real: '', sustituyeA: null, esExtra: true, motivo: '' }])}
+              style={{ ...S.btn('ghost'), marginTop: 4, marginBottom: 12 }}
+            >+ Agregar MP (fuera de fórmula)</button>
+
+            {(() => {
+              const tTeo = consumoReal.reduce((s, r) => s + (Number(r.teorico) || 0), 0);
+              const tReal = consumoReal.reduce((s, r) => s + (Number(r.real) || 0), 0);
+              const cambios = consumoReal.filter(r => r.esExtra || r.sustituyeA || Math.abs((Number(r.real) || 0) - (Number(r.teorico) || 0)) > 0.001).length;
+              const dif = +(tReal - tTeo).toFixed(2);
+              return (
+                <div style={{ padding: 10, background: cambios ? 'var(--lp-info-50)' : 'var(--lp-bg-base)', color: 'var(--lp-text-secondary)', borderRadius: 8, fontSize: 11.5 }}>
+                  Teórico <strong>{tTeo.toFixed(2)} kg</strong> · Real <strong>{tReal.toFixed(2)} kg</strong>
+                  {dif !== 0 && <> · varianza <strong style={{ color: dif < 0 ? 'var(--lp-warning-700)' : 'var(--lp-info-700)' }}>{dif > 0 ? '+' : ''}{dif.toFixed(2)} kg</strong></>}
+                  {cambios > 0 ? ` · ${cambios} cambio(s) — se descontará el REAL` : ' · sin cambios (igual a la fórmula)'}
+                </div>
+              );
+            })()}
             <div style={S.accion}>{step.accion}</div>
           </>
         )}
