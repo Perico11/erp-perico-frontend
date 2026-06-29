@@ -109,6 +109,7 @@ const SECCIONES = [
       { path: '/inventario',   label: 'Stock MP',     icon: ICONS.inv,      perm: 'inventario' },
       { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount' },
       { path: '/transferencias', label: 'Transferencias', icon: ICONS.transfer, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
+      { path: '/ingresos',     label: 'Ingresos',     icon: ICONS.recepcion, perm: 'ingresos', roles: ['admin','tecnico','almacen'] },
       { path: '/devoluciones', label: 'Devoluciones', icon: ICONS.devol,    perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
       { path: '/reportes',     label: 'Reportes',     icon: ICONS.reportes, perm: 'inventario', roles: ['admin','inventario','compras'] },
     ],

@@ -176,6 +176,8 @@ const api = {
   crearOT: (lineas, nota) => request('POST', '/api/transferencias/crear', { lineas, nota }),
   getOTs: (estado) => request('GET', '/api/transferencias' + (estado ? '?estado=' + encodeURIComponent(estado) : '')),
   escanearOT: (otId, accion) => request('POST', '/api/transferencias/scan', { otId, accion }),
+  /* Editar/sustituir las líneas de una OT en 'Solicitada' (admin/almacen/tecnico). */
+  editarOT: (otId, lineas, nota) => request('POST', '/api/transferencias/editar', { otId, lineas, nota }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
      Más seguro que el overwrite completo de POST /api/inventario que es solo admin. */
   /* Ajuste individual de MP (qty + min) con candado: necesita sesión de conteo
@@ -550,6 +552,12 @@ const api = {
   cerrarDevolucionMP: (data) => request('POST', '/api/devoluciones/mp/cerrar', data),
   comprobanteDevolucionMPUrl: (id) =>
     '/api/devoluciones/mp/' + encodeURIComponent(id) + '/comprobante',
+
+  /* ── Ingresos de proveedor (recepción ligera con foto de factura) ── */
+  getIngresos: () => request('GET', '/api/ingresos'),
+  crearIngreso: (data) => request('POST', '/api/ingresos', data),
+  revisarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/revisar', data),
+  ingresoFacturaUrl: (id) => API_BASE + '/api/ingresos/' + encodeURIComponent(id) + '/factura' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
 
   /* ── SAT / CFDI ── */
   satParse: (xmlText) => request('POST', '/api/sat/parse', { xmlText }),
