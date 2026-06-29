@@ -109,19 +109,6 @@ const ESTADO_META = {
   recibida:   { label: 'Recibida', color: 'var(--lp-brand-600)' },
   cancelada:  { label: 'Cancelada', color: 'var(--lp-text-tertiary)' },
 };
-function EstadoBadge({ estado }) {
-  const m = ESTADO_META[estado] || { label: estado || '—', color: 'var(--lp-text-tertiary)' };
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 5,
-      fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
-      background: `color-mix(in srgb, ${m.color} 14%, transparent)`, color: m.color, whiteSpace: 'nowrap',
-    }}>
-      <i style={{ width: 6, height: 6, borderRadius: 999, background: m.color, display: 'inline-block' }} />
-      {m.label}
-    </span>
-  );
-}
 
 /* Tab activa ↔ estado de la OT */
 const TAB_TO_ESTADO = { solicitadas: 'solicitada', transito: 'surtida', recibidas: 'recibida', canceladas: 'cancelada' };
@@ -487,12 +474,33 @@ export default function TransferenciasPage() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Card de OT — visual unificado móvil/escritorio.
-   Layout: folio · estado badge / ruta / líneas (nombre × cantidad) /
-   quién+cuándo / acciones contextuales (Surtir / Recibir / Cancelar) +
-   Imprimir hoja QR.
+   Card de OT — diseño "glass forest" (handoff Pinturas El Perico, jun 2026).
+   Reproduce 1:1 el spec SPEC-CARD-OT: tarjeta glass, chips por tipo, ruta,
+   ítems, meta, nota y acciones. SOLO cambia la presentación; la LÓGICA es la
+   misma (permisos por estado+rol, handlers reales, data-id/data-rol).
    ═══════════════════════════════════════════════════════════════════════════ */
-function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint, onEditar }) {
+/* Chip de tipo de línea — color por categoría (igual que el mockup). */
+const CHIP_TIPO = {
+  pt:     { bg: 'rgba(15,122,90,.12)',  fg: '#0f7a5a' },
+  tapa:   { bg: 'rgba(182,121,29,.12)', fg: '#9a6a13' },
+  envase: { bg: 'rgba(40,116,166,.12)', fg: '#1f6aa6' },
+};
+/* Badge de estado — paleta del diseño (ámbar/azul/verde/gris). */
+const ESTADO_DS = {
+  solicitada: { label: 'Solicitada',  fg: '#9a6a13', bg: 'rgba(182,121,29,.12)', dot: '#B6791D' },
+  surtida:    { label: 'En tránsito', fg: '#1f6aa6', bg: 'rgba(40,116,166,.12)', dot: '#1f6aa6' },
+  recibida:   { label: 'Recibida',    fg: '#0f7a5a', bg: 'rgba(15,122,90,.12)',  dot: '#0f7a5a' },
+  cancelada:  { label: 'Cancelada',   fg: '#5a6b63', bg: 'rgba(90,107,99,.12)',  dot: '#5a6b63' },
+};
+/* Parte "612 pz" / "52 cubetas" / "1 tote · ENVASAR" en [número, resto] para
+   resaltar el número como en el diseño, sin perder la lógica de presentación. */
+function splitCantidad(l) {
+  const s = descLineaCantidad(l);
+  const i = s.indexOf(' ');
+  return i < 0 ? [s, ''] : [s.slice(0, i), s.slice(i + 1)];
+}
+
+function OTCard({ ot, rol, busy, onAccion, onPrint, onEditar }) {
   const lineas = Array.isArray(ot.lineas) ? ot.lineas : [];
 
   /* Acciones contextuales por estado + rol (espejo de la SM en el backend) */
@@ -503,94 +511,141 @@ function OTCard({ ot, rol, busy, isDesktop, onAccion, onPrint, onEditar }) {
   const puedeCancelar =
     (ot.estado === 'solicitada' && (rol === 'admin' || rol === 'almacen' || rol === 'tecnico')) ||
     (ot.estado === 'surtida' && rol === 'admin');
-  /* Editar/sustituir líneas: solo antes de surtir ('Solicitada'), por los mismos
-     roles que crean/operan la OT (admin/almacen/tecnico). */
+  /* Editar líneas: solo antes de surtir ('Solicitada'), por admin/almacen/tecnico. */
   const puedeEditar = ot.estado === 'solicitada' && (rol === 'admin' || rol === 'almacen' || rol === 'tecnico');
 
   const tipoLabel = (l) => l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase';
+  const em = ESTADO_DS[ot.estado] || ESTADO_DS.solicitada;
+
+  /* Botones neutros (Editar / Imprimir): lado a lado (2 columnas). Si solo hay
+     uno presente, ocupa el ancho completo. El nowrap de btnNeutral evita que
+     "Imprimir hoja QR" se parta en dos líneas. */
+  const neutrales = [];
+  if (puedeEditar) neutrales.push('editar');
+  if (ot.estado !== 'cancelada') neutrales.push('imprimir');
+  const neutralFull = neutrales.length === 1 ? { gridColumn: '1 / -1' } : null;
+  const hayAcciones = puedeSurtir || puedeRecibir || neutrales.length > 0 || puedeCancelar || ot.estado === 'recibida';
+
+  const iconNeutral = (icon) => <span style={{ color: '#5a6b63', display: 'inline-flex' }}>{icon}</span>;
 
   return (
-    <div style={S.card}>
-      {/* header: folio + estado */}
-      <div style={S.cardHead}>
-        <span style={S.folio}>{ot.folio}</span>
-        <span style={{ marginLeft: 'auto' }}><EstadoBadge estado={ot.estado} /></span>
+    <div style={C.card}>
+      {/* Header: folio + estado */}
+      <div style={C.head}>
+        <span style={C.folio}>{ot.folio}</span>
+        <span style={C.estado(em)}><i style={C.estadoDot(em)} />{em.label}</span>
       </div>
 
-      {/* ruta Fábrica → Terán */}
-      <div style={S.route}>
-        <b style={S.routeNode}>Fábrica</b>
-        <span style={S.routeArrow}><IconArrow size={16} /></span>
-        <b style={S.routeNode}>Almacén Terán</b>
+      {/* Ruta */}
+      <div style={C.route}>
+        <span style={C.routeFrom}>Fábrica</span>
+        <span style={{ display: 'inline-flex', color: '#0f7a5a' }}><IconArrow size={18} /></span>
+        <span style={C.routeTo}>Almacén Terán</span>
       </div>
 
-      {/* líneas */}
-      <div style={S.lineas}>
-        {lineas.map((l, i) => (
-          <div key={i} style={S.lineaRow}>
-            <span style={S.lineaTipo}>{tipoLabel(l)}</span>
-            <span style={S.lineaNombre}>{l.nombre || l.producto || '—'}</span>
-            <span style={S.lineaCant}>{descLineaCantidad(l)}</span>
-          </div>
-        ))}
+      {/* Ítems */}
+      <div style={C.items}>
+        {lineas.map((l, i) => {
+          const c = CHIP_TIPO[l.tipo] || CHIP_TIPO.envase;
+          const [qn, qr] = splitCantidad(l);
+          return (
+            <div key={i} style={{ ...C.itemRow, ...(i === lineas.length - 1 ? { borderBottom: 'none' } : null) }}>
+              <span style={C.itemTag(c)}>{tipoLabel(l)}</span>
+              <span style={C.itemName}>{l.nombre || l.producto || '—'}</span>
+              <span style={C.itemQty}><b style={C.itemQtyNum}>{qn}</b>{qr ? ' ' + qr : ''}</span>
+            </div>
+          );
+        })}
       </div>
 
-      {/* trazas: quién solicitó / surtió / recibió / canceló */}
-      <div style={S.meta}>
-        {ot.solicitadoPor && <div><span style={S.metaK}>Solicitó</span> <b>{ot.solicitadoPor}</b>{ot.fechaSolicitud ? ` · ${fmtFecha(ot.fechaSolicitud)}` : ''}</div>}
-        {ot.surtidoPor && <div><span style={S.metaK}>Surtió</span> <b>{ot.surtidoPor}</b>{ot.fechaSurtido ? ` · ${fmtFecha(ot.fechaSurtido)}` : ''}</div>}
-        {ot.recibidoPor && <div><span style={S.metaK}>Recibió</span> <b>{ot.recibidoPor}</b>{ot.fechaRecepcion ? ` · ${fmtFecha(ot.fechaRecepcion)}` : ''}</div>}
-        {ot.canceladoPor && <div><span style={S.metaK}>Canceló</span> <b>{ot.canceladoPor}</b>{ot.fechaCancelacion ? ` · ${fmtFecha(ot.fechaCancelacion)}` : ''}</div>}
-        {ot.nota && <div style={S.nota}>{ot.nota}</div>}
+      {/* Meta: quién solicitó / surtió / recibió / canceló */}
+      <div style={C.meta}>
+        {ot.solicitadoPor && <div>Solicitó <b style={C.metaB}>{ot.solicitadoPor}</b>{ot.fechaSolicitud ? ` · ${fmtFecha(ot.fechaSolicitud)}` : ''}</div>}
+        {ot.surtidoPor && <div>Surtió <b style={C.metaB}>{ot.surtidoPor}</b>{ot.fechaSurtido ? ` · ${fmtFecha(ot.fechaSurtido)}` : ''}</div>}
+        {ot.recibidoPor && <div>Recibió <b style={C.metaB}>{ot.recibidoPor}</b>{ot.fechaRecepcion ? ` · ${fmtFecha(ot.fechaRecepcion)}` : ''}</div>}
+        {ot.canceladoPor && <div>Canceló <b style={C.metaB}>{ot.canceladoPor}</b>{ot.fechaCancelacion ? ` · ${fmtFecha(ot.fechaCancelacion)}` : ''}</div>}
       </div>
 
-      {/* acciones */}
-      <div style={isDesktop ? S.actionsDesktop : S.actionsMobile}>
-        {puedeSurtir && (
-          <button style={{ ...(isDesktop ? S.btnDesktop : S.btnMobile), background: 'var(--lp-info-600)', color: '#fff' }}
-            disabled={busy} onClick={() => onAccion('surtir')}
-            data-id="transferencias.btn.surtir" data-rol="tecnico,admin">
-            {busy ? <span aria-hidden="true">…</span> : <><IconTruck size={isDesktop ? 18 : 20} /> Surtir</>}
-          </button>
-        )}
-        {puedeRecibir && (
-          <button style={{ ...(isDesktop ? S.btnDesktop : S.btnMobile), background: 'var(--lp-brand-600)', color: '#fff' }}
-            disabled={busy} onClick={() => onAccion('recibir')}
-            data-id="transferencias.btn.recibir" data-rol="almacen,admin">
-            {busy ? <span aria-hidden="true">…</span> : <><IconCheck size={isDesktop ? 18 : 20} /> Recibir en Terán</>}
-          </button>
-        )}
-        {/* Editar / sustituir líneas — solo 'Solicitada' (antes de surtir) */}
-        {puedeEditar && (
-          <button style={{ ...(isDesktop ? S.btnDesktop : S.btnMobile), ...S.btnGhost }}
-            disabled={busy} onClick={onEditar}
-            data-id="transferencias.btn.editar" data-rol="admin,almacen,tecnico">
-            <IconEdit size={isDesktop ? 16 : 18} /> Editar
-          </button>
-        )}
-        {/* Imprimir hoja QR — disponible mientras la OT siga viva */}
-        {ot.estado !== 'cancelada' && (
-          <button style={{ ...(isDesktop ? S.btnDesktop : S.btnMobile), ...S.btnGhost }}
-            onClick={onPrint}
-            data-id="transferencias.btn.imprimir" data-rol="admin,almacen,inventario,tecnico">
-            <IconPrint size={isDesktop ? 16 : 18} /> Imprimir hoja QR
-          </button>
-        )}
-        {puedeCancelar && (
-          <button style={{ ...(isDesktop ? S.btnDesktop : S.btnMobile), ...S.btnDanger }}
-            disabled={busy} onClick={() => onAccion('cancelar')}
-            data-id="transferencias.btn.cancelar" data-rol="admin,almacen">
-            Cancelar
-          </button>
-        )}
-        {/* Estado terminal sin acción para este rol → chip pasivo */}
-        {ot.estado === 'recibida' && (
-          <div style={S.doneChip}><IconCheck size={16} /> Recibida en Terán</div>
-        )}
-      </div>
+      {/* Nota */}
+      {ot.nota && <div style={C.nota}>{ot.nota}</div>}
+
+      {/* Acciones */}
+      {hayAcciones && (
+        <div style={C.actions}>
+          {puedeSurtir && (
+            <button style={C.btnPrimary} disabled={busy} onClick={() => onAccion('surtir')}
+              data-id="transferencias.btn.surtir" data-rol="tecnico,admin">
+              {busy ? <span aria-hidden="true">…</span> : <><IconTruck size={18} /> Surtir</>}
+            </button>
+          )}
+          {puedeRecibir && (
+            <button style={C.btnPrimary} disabled={busy} onClick={() => onAccion('recibir')}
+              data-id="transferencias.btn.recibir" data-rol="almacen,admin">
+              {busy ? <span aria-hidden="true">…</span> : <><IconCheck size={18} /> Recibir en Terán</>}
+            </button>
+          )}
+          {puedeEditar && (
+            <button style={{ ...C.btnNeutral, ...neutralFull }} disabled={busy} onClick={onEditar}
+              data-id="transferencias.btn.editar" data-rol="admin,almacen,tecnico">
+              {iconNeutral(<IconEdit size={16} />)} Editar
+            </button>
+          )}
+          {ot.estado !== 'cancelada' && (
+            <button style={{ ...C.btnNeutral, ...neutralFull }} onClick={onPrint}
+              data-id="transferencias.btn.imprimir" data-rol="admin,almacen,inventario,tecnico">
+              {iconNeutral(<IconPrint size={16} />)} Imprimir hoja QR
+            </button>
+          )}
+          {puedeCancelar && (
+            <button style={C.btnCancel} disabled={busy} onClick={() => onAccion('cancelar')}
+              data-id="transferencias.btn.cancelar" data-rol="admin,almacen,tecnico">
+              Cancelar
+            </button>
+          )}
+          {/* Estado terminal sin acción para este rol → chip pasivo */}
+          {ot.estado === 'recibida' && (
+            <div style={C.doneChip}><IconCheck size={16} /> Recibida en Terán</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
+/* Estilos de la card "glass forest" — colores hardcodeados del handoff (tema
+   claro forest; es un look deliberado, no usa los tokens var(--lp-*)). */
+const C = {
+  card: {
+    position: 'relative', width: '100%',
+    background: 'rgba(250,253,252,0.72)',
+    backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)',
+    border: '1px solid rgba(255,255,255,0.55)', borderRadius: 24,
+    boxShadow: '0 18px 50px rgba(80,140,110,.20),0 4px 12px rgba(80,140,110,.10)',
+    padding: '22px 22px 20px', display: 'flex', flexDirection: 'column', gap: 16,
+    marginBottom: 14, fontFamily: 'var(--lp-font-sans)',
+  },
+  head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+  folio: { fontSize: 11, fontWeight: 500, color: '#0f7a5a', letterSpacing: '0.04em', background: 'rgba(15,122,90,.10)', borderRadius: 99, padding: '4px 11px', whiteSpace: 'nowrap' },
+  estado: (m) => ({ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: m.fg, background: m.bg, borderRadius: 99, padding: '5px 12px', whiteSpace: 'nowrap' }),
+  estadoDot: (m) => ({ width: 7, height: 7, borderRadius: '50%', background: m.dot, display: 'inline-block' }),
+  route: { display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid rgba(0,0,0,.06)', borderRadius: 14, padding: '13px 16px', boxShadow: '0 1px 2px rgba(0,0,0,.04)', flexWrap: 'wrap' },
+  routeFrom: { fontSize: 14, fontWeight: 500, color: '#16201c' },
+  routeTo: { fontSize: 14, fontWeight: 500, color: '#0f7a5a' },
+  items: { display: 'flex', flexDirection: 'column', gap: 2 },
+  itemRow: { display: 'grid', gridTemplateColumns: '62px 1fr auto', alignItems: 'center', gap: 10, padding: '7px 4px', borderBottom: '1px solid rgba(0,0,0,.05)' },
+  itemTag: (c) => ({ fontSize: 9, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'center', borderRadius: 99, padding: '3px 0', color: c.fg, background: c.bg }),
+  itemName: { fontSize: 13, fontWeight: 500, color: '#16201c', textTransform: 'uppercase', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  itemQty: { fontSize: 12, color: '#5a6b63', whiteSpace: 'nowrap' },
+  itemQtyNum: { color: '#16201c', fontWeight: 500 },
+  meta: { fontSize: 12, color: '#5a6b63', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 2 },
+  metaB: { color: '#16201c', fontWeight: 500 },
+  nota: { background: '#fff', border: '1px solid rgba(0,0,0,.06)', borderRadius: 10, padding: '11px 14px', fontSize: 13, color: '#16201c', boxShadow: '0 1px 2px rgba(0,0,0,.03)', wordBreak: 'break-word' },
+  actions: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  btnPrimary: { gridColumn: '1 / -1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, color: '#fff', background: '#0f7a5a', borderRadius: 99, padding: 13, minHeight: 46, boxShadow: '0 6px 16px rgba(15,122,90,.30)' },
+  btnNeutral: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: '#16201c', background: '#fff', border: '1px solid rgba(0,0,0,.08)', borderRadius: 14, padding: 12, minHeight: 46, boxShadow: '0 1px 2px rgba(0,0,0,.04)', whiteSpace: 'nowrap' },
+  btnCancel: { gridColumn: '1 / -1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: '#b3261e', background: 'rgba(179,38,30,.05)', border: '1px solid rgba(179,38,30,.18)', borderRadius: 14, padding: 12, minHeight: 46 },
+  doneChip: { gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(15,122,90,.08)', border: '1px solid rgba(15,122,90,.18)', color: '#0f7a5a', borderRadius: 14, padding: 12, fontSize: 13, fontWeight: 500 },
+};
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CrearSheet — bottom-sheet (móvil) / modal (escritorio) para armar una OT.
@@ -650,6 +705,7 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
   const [nota, setNota] = useState(isEdit ? (editOT.nota || '') : '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const [editingIdx, setEditingIdx] = useState(null);  // índice de la línea que se está editando (null = agregar nueva)
 
   /* Al cambiar de tipo, limpiar la selección (y resetear presentación si dejamos PT) */
   const onTipo = (t) => { setTipo(t); setSel(''); if (t !== 'pt') { setPtPres('tote'); setEnvasar(false); } };
@@ -684,6 +740,10 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
   const cantNum = Number(cantidad);
   const puedeAgregar = !!(resuelto && resuelto.ok && Number.isFinite(cantNum) && cantNum > 0);
 
+  /* Resetea el builder de línea a su estado vacío (tras agregar/guardar/cancelar). */
+  const resetBuilder = () => { setSel(''); setCantidad(''); setEnvasar(false); setPtPres('tote'); setEditingIdx(null); };
+
+  /* Agregar nueva línea O guardar los cambios de la línea en edición (editingIdx). */
   const agregarLinea = () => {
     if (!puedeAgregar) { setErr('Elige un ítem válido y una cantidad > 0.'); return; }
     setErr('');
@@ -692,11 +752,40 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
     const nueva = tipo === 'pt'
       ? { ...resuelto.linea, presentacion: ptPres, cantidadPresentacion: cantNum, envasar: ptPres !== 'tote' && envasar, cantidad: medidaACubetas(ptPres, cantNum) }
       : { ...resuelto.linea, cantidad: cantNum };
-    setLineas(prev => [...prev, nueva]);
-    setSel(''); setCantidad(''); setEnvasar(false); setPtPres('tote');
+    if (editingIdx != null) {
+      setLineas(prev => prev.map((l, i) => i === editingIdx ? nueva : l));   // reemplaza en su lugar
+    } else {
+      setLineas(prev => [...prev, nueva]);
+    }
+    resetBuilder();
   };
 
-  const quitarLinea = (idx) => setLineas(prev => prev.filter((_, i) => i !== idx));
+  /* Carga una línea existente en el builder para cambiar su ítem y/o cantidad. */
+  const editarLinea = (idx) => {
+    const l = lineas[idx];
+    if (!l) return;
+    setErr('');
+    setTipo(l.tipo);
+    if (l.tipo === 'pt') {
+      setSel(l.producto || l.nombre || '');
+      setPtPres(l.presentacion || 'tote');
+      setEnvasar(!!l.envasar);
+      setCantidad(String(l.cantidadPresentacion != null ? l.cantidadPresentacion : l.cantidad));
+    } else if (l.tipo === 'envase') {
+      setSel((l.catKey || '') + '|||' + (l.subKey || ''));
+      setCantidad(String(l.cantidad));
+    } else {
+      setSel(l.tapaKey || '');
+      setCantidad(String(l.cantidad));
+    }
+    setEditingIdx(idx);
+  };
+
+  const quitarLinea = (idx) => {
+    setLineas(prev => prev.filter((_, i) => i !== idx));
+    if (editingIdx === idx) resetBuilder();
+    else if (editingIdx != null && idx < editingIdx) setEditingIdx(editingIdx - 1);  // mantener el índice apuntando a la misma línea
+  };
 
   const guardar = async () => {
     setErr('');
@@ -826,10 +915,19 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
               <button style={{ ...SH.addBtn, opacity: puedeAgregar ? 1 : 0.5 }}
                 onClick={agregarLinea} disabled={!puedeAgregar}
                 data-id="transferencias.btn.agregar-linea" data-rol="admin,almacen,inventario">
-                <IconPlus size={16} /> Agregar
+                {editingIdx != null ? <><IconCheck size={16} /> Guardar línea</> : <><IconPlus size={16} /> Agregar</>}
               </button>
             </div>
           </div>
+          {editingIdx != null && (
+            <div style={{ ...SH.hint, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span>Editando la línea {editingIdx + 1}.</span>
+              <button type="button" onClick={resetBuilder}
+                style={{ background: 'none', border: 'none', color: 'var(--lp-brand-700)', fontWeight: 700, cursor: 'pointer', padding: 0, fontSize: 11.5 }}>
+                Cancelar edición
+              </button>
+            </div>
+          )}
           {/* PT: equivalencia en vivo (el inventario se mueve en cubeta-equivalente) */}
           {tipo === 'pt' && cantNum > 0 && ptPres !== 'cubeta' && (
             <div style={SH.hint}>= {medidaACubetas(ptPres, cantNum).toLocaleString('es-MX')} cub equivalentes</div>
@@ -846,10 +944,14 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
           ) : (
             <div style={SH.lineasList}>
               {lineas.map((l, i) => (
-                <div key={i} style={SH.lineaChip}>
+                <div key={i} style={{ ...SH.lineaChip, ...(editingIdx === i ? SH.lineaChipEditing : {}) }}>
                   <span style={SH.lineaChipTipo}>{l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Env'}</span>
                   <span style={SH.lineaChipNombre}>{l.nombre}</span>
                   <span style={SH.lineaChipCant}>{descLineaCantidad(l)}</span>
+                  <button style={SH.lineaChipEdit} onClick={() => editarLinea(i)} aria-label="Editar línea"
+                    data-id="transferencias.btn.editar-linea" data-rol="admin,almacen,inventario">
+                    <IconEdit size={13} />
+                  </button>
                   <button style={SH.lineaChipDel} onClick={() => quitarLinea(i)} aria-label="Quitar línea">
                     <IconX size={13} />
                   </button>
@@ -897,13 +999,12 @@ function OTQRPrintModal({ ot, onClose }) {
     const w = window.open('', '_blank', 'width=720,height=900');
     if (!w) { alert('Habilita las ventanas emergentes para imprimir'); return; }
     const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
-    /* Filas con datos reales de la OT + relleno hasta 5 para que la tabla se vea
-       completa y quede espacio para anotar a mano. */
-    const minRows = Math.max(lineas.length, 5);
-    let totalPiezas = 0;
+    /* Filas con datos reales de la OT + relleno hasta 10 (spec) para que la tabla
+       se vea completa y quede espacio para anotar a mano. Sin fila de total. */
+    const minRows = Math.max(lineas.length, 10);
     const filas = Array.from({ length: minRows }, (_, i) => {
       const l = lineas[i];
-      if (!l) return `<tr><td class="num">${i + 1}</td><td></td><td></td><td class="qty"></td><td class="uni"></td></tr>`;
+      if (!l) return `<tr><td class="num">${i + 1}</td><td></td><td class="cod"></td><td class="qty"></td><td class="uni"></td></tr>`;
       const tipo = l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase';
       let cant, uni;
       if (l.tipo === 'pt' && l.presentacion) {
@@ -912,12 +1013,11 @@ function OTQRPrintModal({ ot, onClose }) {
       } else {
         cant = l.cantidad; uni = esc(l.unidad || '');
       }
-      totalPiezas += Number(cant) || 0;
       const env = l.envasar ? ' <span class="env">ENVASAR</span>' : '';
       return `<tr>
         <td class="num">${i + 1}</td>
         <td><span class="desc">${esc(l.nombre || l.producto || '')}</span><span class="tag">${tipo}</span>${env}</td>
-        <td></td>
+        <td class="cod"></td>
         <td class="qty">${esc(cant)}</td>
         <td class="uni">${uni}</td>
       </tr>`;
@@ -940,53 +1040,52 @@ function OTQRPrintModal({ ot, onClose }) {
       <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
       <style>
-        @page { size: letter; margin: 12mm; }
+        @page { size: letter; margin: 0; }
         *{box-sizing:border-box;}
-        body { font-family: 'DM Sans', system-ui, sans-serif; color: #16201c; margin: 0; }
-        .sheet { display:flex; flex-direction:column; min-height: calc(11in - 24mm); }
+        body { font-family: 'DM Sans', system-ui, sans-serif; color: #16201c; margin: 0; background:#fff; }
+        .sheet { width:816px; min-height:1056px; padding:40px 52px 32px; margin:0 auto; display:flex; flex-direction:column; }
         .head { display:flex; align-items:flex-start; justify-content:space-between; border-bottom:2px solid ${G}; padding-bottom:18px; }
         .brand { display:flex; align-items:center; gap:14px; }
-        .brand img { width:52px; height:auto; display:block; }
-        .bname { font-size:19px; font-weight:600; letter-spacing:-.02em; color:${G}; }
+        .brand img { width:56px; height:auto; display:block; }
+        .bname { font-size:19px; font-weight:500; letter-spacing:-.02em; color:${G}; }
         .btag { font-size:10px; color:#5a6b63; letter-spacing:.04em; text-transform:uppercase; }
         .hr { display:flex; align-items:flex-start; gap:16px; }
         .hrtext { display:flex; flex-direction:column; align-items:flex-end; gap:8px; padding-top:2px; }
         .hrtext .ttl { font-size:13px; font-weight:500; color:#16201c; }
         .foliorow { display:flex; align-items:center; gap:8px; }
         .foliolbl { font-size:10px; color:#5a6b63; text-transform:uppercase; letter-spacing:.06em; }
-        .folio { font-size:13px; font-weight:600; color:${G}; border:1px solid ${G}; border-radius:6px; padding:3px 12px; }
+        .folio { font-size:13px; font-weight:500; color:${G}; border:1px solid ${G}; border-radius:6px; padding:3px 12px; }
         .qrbox { border:1px solid rgba(15,122,90,.4); border-radius:10px; padding:7px 7px 5px; display:flex; flex-direction:column; align-items:center; gap:3px; }
         .qr { width:62px; height:62px; display:block; }
         .qrlbl { font-size:8px; letter-spacing:.14em; color:#5a6b63; text-transform:uppercase; }
-        .title { margin-top:18px; text-align:center; }
-        .title .t { font-size:18px; font-weight:600; letter-spacing:-.02em; }
+        .title { margin-top:16px; text-align:center; }
+        .title .t { font-size:18px; font-weight:500; letter-spacing:-.02em; }
         .title .s { font-size:11px; color:#5a6b63; margin-top:3px; }
         .od { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
-        .box { border:1px solid rgba(15,122,90,.25); border-radius:12px; padding:14px 16px; background:rgba(15,122,90,.04); }
-        .box .lbl { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:600; margin-bottom:9px; }
+        .box { border:1px solid rgba(15,122,90,.25); border-radius:12px; padding:12px 16px; background:rgba(15,122,90,.04); }
+        .box .lbl { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:500; margin-bottom:9px; }
         .fld { display:flex; align-items:baseline; gap:8px; font-size:12px; margin-bottom:8px; }
         .fld span { color:#5a6b63; min-width:64px; }
         .fld i { flex:1; border-bottom:1px dotted #b6c2bc; font-style:normal; }
         table { width:100%; border-collapse:collapse; margin-top:16px; border:1px solid rgba(0,0,0,.10); border-radius:12px; overflow:hidden; }
-        thead th { background:${G}; color:#fff; font-size:11px; font-weight:500; padding:10px 8px; text-align:center; }
+        thead th { background:${G}; color:#fff; font-size:11px; font-weight:500; padding:9px 8px; text-align:center; }
         thead th.l { text-align:left; padding-left:12px; }
-        tbody td { font-size:12px; padding:8px; border-top:1px solid rgba(0,0,0,.07); border-left:1px solid rgba(0,0,0,.05); height:30px; }
+        tbody td { font-size:12px; padding:4px 8px; height:24px; border-top:1px solid rgba(0,0,0,.07); border-left:1px solid rgba(0,0,0,.05); }
         tbody td:first-child { border-left:none; }
-        td.num { text-align:center; color:#9aa8a2; width:42px; }
-        td.qty { text-align:right; font-weight:600; width:80px; }
-        td.uni { width:96px; }
-        .tag { display:inline-block; margin-left:6px; font-size:9px; font-weight:600; color:${G}; background:rgba(15,122,90,.10); border-radius:4px; padding:1px 6px; vertical-align:middle; }
-        .env { display:inline-block; margin-left:6px; padding:1px 7px; border:1.5px solid ${G}; border-radius:4px; font-size:10px; font-weight:600; color:${G}; }
-        tfoot td { background:rgba(15,122,90,.05); border-top:2px solid rgba(15,122,90,.3); font-size:12px; padding:10px 8px; }
-        tfoot .lab { text-align:right; font-weight:500; } tfoot .val { text-align:right; font-weight:600; }
-        .obs .lbl { font-size:11px; color:#5a6b63; font-weight:500; margin:16px 0 8px; }
-        .obsbox { border:1px solid rgba(0,0,0,.10); border-radius:10px; min-height:50px; padding:8px 10px; font-size:12px; }
-        .firmas { margin-top:auto; padding-top:24px; }
-        .firmas .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:600; margin-bottom:16px; }
-        .fgrid { display:grid; grid-template-columns:1fr 1fr; gap:24px 40px; }
-        .sg { text-align:center; } .sgline { border-bottom:1px solid #16201c; height:30px; }
-        .sgname { font-size:13px; font-weight:500; color:#16201c; margin-top:6px; } .sgrole { font-size:12px; font-weight:600; color:${G}; margin-top:3px; } .sgplace { font-size:10px; color:#5a6b63; margin-top:1px; }
-        .pie { margin-top:20px; padding-top:10px; border-top:1px solid rgba(0,0,0,.08); display:flex; justify-content:space-between; font-size:9px; color:#9aa8a2; }
+        td.num { text-align:center; color:#9aa8a2; width:48px; }
+        td.cod { width:90px; }
+        td.qty { text-align:right; font-weight:500; width:90px; }
+        td.uni { width:110px; }
+        .tag { display:inline-block; margin-left:6px; font-size:9px; font-weight:500; color:${G}; background:rgba(15,122,90,.10); border-radius:4px; padding:1px 6px; vertical-align:middle; }
+        .env { display:inline-block; margin-left:6px; padding:1px 7px; border:1.5px solid ${G}; border-radius:4px; font-size:10px; font-weight:500; color:${G}; }
+        .obs .lbl { font-size:11px; color:#5a6b63; font-weight:500; margin:14px 0 8px; }
+        .obsbox { border:1px solid rgba(0,0,0,.10); border-radius:10px; min-height:42px; padding:8px 10px; font-size:12px; }
+        .firmas { margin-top:auto; padding-top:12px; }
+        .firmas .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:500; margin-bottom:16px; text-align:center; }
+        .fgrid { display:grid; grid-template-columns:1fr 1fr; gap:16px 40px; }
+        .sg { text-align:center; } .sgline { border-bottom:1px solid #16201c; height:24px; }
+        .sgname { font-size:13px; font-weight:500; color:#16201c; margin-top:6px; } .sgrole { font-size:11px; font-weight:500; color:${G}; margin-top:3px; } .sgplace { font-size:10px; color:#5a6b63; margin-top:1px; }
+        .pie { margin-top:14px; padding-top:10px; border-top:1px solid rgba(0,0,0,.08); display:flex; justify-content:space-between; font-size:9px; color:#9aa8a2; }
       </style></head><body>
       <div class="sheet">
         <div class="head">
@@ -1032,7 +1131,6 @@ function OTQRPrintModal({ ot, onClose }) {
         <table>
           <thead><tr><th>#</th><th class="l">Descripción del producto</th><th>Código</th><th>Cantidad</th><th>Unidad</th></tr></thead>
           <tbody>${filas}</tbody>
-          <tfoot><tr><td class="lab" colspan="3">Total de piezas transferidas</td><td class="val">${totalPiezas}</td><td></td></tr></tfoot>
         </table>
 
         <div class="obs">
@@ -1096,7 +1194,7 @@ function OTQRPrintModal({ ot, onClose }) {
    Estilos — SOLO tokens var(--lp-*). Claro y oscuro salen solos.
    ═══════════════════════════════════════════════════════════════════════════ */
 const S = {
-  wrapMobile: { padding: '4px 16px 110px' },
+  wrapMobile: { padding: '4px 10px 110px' },
   wrapDesktop: { padding: '8px 24px 48px' },
   greet: { fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '2px 2px 12px' },
 
@@ -1155,7 +1253,7 @@ const S = {
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },
 
-  grid: { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' },
+  grid: { display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))' },
 
   card: {
     background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)',
@@ -1273,6 +1371,8 @@ const SH = {
   lineaChipTipo: { fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', letterSpacing: '.04em', flexShrink: 0 },
   lineaChipNombre: { flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase' },
   lineaChipCant: { fontFamily: 'var(--lp-font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--lp-text-secondary)', whiteSpace: 'nowrap' },
+  lineaChipEdit: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--lp-brand-700)', cursor: 'pointer', flexShrink: 0 },
+  lineaChipEditing: { borderColor: 'var(--lp-brand-600)', background: 'color-mix(in srgb, var(--lp-brand-600) 8%, transparent)' },
   lineaChipDel: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--lp-text-tertiary)', cursor: 'pointer', flexShrink: 0 },
 
   err: { background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)', padding: '9px 12px', borderRadius: 8, fontSize: 12, marginTop: 12, whiteSpace: 'pre-line' },
