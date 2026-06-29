@@ -859,61 +859,150 @@ function OTQRPrintModal({ ot, onClose }) {
     const w = window.open('', '_blank', 'width=720,height=900');
     if (!w) { alert('Habilita las ventanas emergentes para imprimir'); return; }
     const esc = (s) => String(s == null ? '' : s).replace(/</g, '&lt;');
-    const filas = lineas.map(l => {
-      /* Cantidad consciente de presentación; resaltar "ENVASAR" (instrucción a Enrique). */
-      let qtyHtml;
+    /* Filas con datos reales de la OT + relleno hasta 8 para que la tabla se vea
+       completa y quede espacio para anotar a mano. */
+    const minRows = Math.max(lineas.length, 8);
+    let totalPiezas = 0;
+    const filas = Array.from({ length: minRows }, (_, i) => {
+      const l = lineas[i];
+      if (!l) return `<tr><td class="num">${i + 1}</td><td></td><td></td><td class="qty"></td><td class="uni"></td></tr>`;
+      const tipo = l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase';
+      let cant, uni;
       if (l.tipo === 'pt' && l.presentacion) {
-        const conteo = l.cantidadPresentacion != null ? l.cantidadPresentacion : l.cantidad;
-        qtyHtml = esc(etiquetaMedida(l.presentacion, conteo))
-          + (l.envasar ? ' <span class="env">ENVASAR</span>' : '');
+        cant = l.cantidadPresentacion != null ? l.cantidadPresentacion : l.cantidad;
+        uni = esc(l.presentacion);
       } else {
-        qtyHtml = esc(l.cantidad) + ' ' + esc(l.unidad || '');
+        cant = l.cantidad; uni = esc(l.unidad || '');
       }
-      return `
-      <tr>
-        <td class="tp">${esc(l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase')}</td>
-        <td>${esc(l.nombre || l.producto || '')}</td>
-        <td class="qty">${qtyHtml}</td>
+      totalPiezas += Number(cant) || 0;
+      const env = l.envasar ? ' <span class="env">ENVASAR</span>' : '';
+      return `<tr>
+        <td class="num">${i + 1}</td>
+        <td><span class="desc">${esc(l.nombre || l.producto || '')}</span><span class="tag">${tipo}</span>${env}</td>
+        <td></td>
+        <td class="qty">${esc(cant)}</td>
+        <td class="uni">${uni}</td>
       </tr>`;
     }).join('');
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>OT ${esc(ot.folio)}</title>
+    const logo = `${location.origin}/logo-perico.svg`;
+    const G = '#0f7a5a';
+    const firmas = [
+      { role: 'Entregado', place: 'Almacén Huertas' },
+      { role: 'Recolectado', place: 'Almacén Huertas' },
+      { role: 'Recibido en almacén', place: 'Almacén Terán' },
+      { role: 'Recibido en recepción', place: 'Recepción Terán' },
+    ].map(f => `
+      <div class="sg">
+        <div class="sgline"></div>
+        <div class="sgname">Nombre y firma</div>
+        <div class="sgrole">${esc(f.role)}</div>
+        <div class="sgplace">${esc(f.place)}</div>
+      </div>`).join('');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Transferencia ${esc(ot.folio)}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
       <style>
-        @page { size: A4; margin: 16mm; }
-        body { font-family: system-ui, -apple-system, sans-serif; color: #111; margin: 0; }
-        .wrap { max-width: 600px; margin: 0 auto; }
-        .head { display: flex; align-items: center; gap: 18px; border-bottom: 2px solid #111; padding-bottom: 14px; }
-        .qr { width: 200px; height: 200px; }
-        h1 { font-size: 20px; margin: 0 0 4px; }
-        .folio { font-family: monospace; font-size: 26px; font-weight: 800; letter-spacing: 1px; }
-        .sub { font-size: 13px; color: #555; margin-top: 6px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
-        th { text-align: left; border-bottom: 1px solid #999; padding: 8px 6px; font-size: 11px; text-transform: uppercase; color: #666; letter-spacing: .04em; }
-        td { padding: 9px 6px; border-bottom: 1px solid #e5e5e5; }
-        td.tp { font-weight: 700; white-space: nowrap; width: 60px; }
-        td.qty { text-align: right; font-family: monospace; font-weight: 700; white-space: nowrap; }
-        .env { display: inline-block; margin-left: 6px; padding: 1px 7px; border: 1.5px solid #111; border-radius: 4px; font-family: system-ui, sans-serif; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
-        .foot { margin-top: 26px; font-size: 12px; color: #555; }
-        .sign { display: flex; gap: 40px; margin-top: 40px; }
-        .sign div { flex: 1; border-top: 1px solid #111; padding-top: 6px; font-size: 11px; color: #444; text-align: center; }
+        @page { size: letter; margin: 12mm; }
+        *{box-sizing:border-box;}
+        body { font-family: 'DM Sans', system-ui, sans-serif; color: #16201c; margin: 0; }
+        .sheet { display:flex; flex-direction:column; min-height: calc(11in - 24mm); }
+        .head { display:flex; align-items:flex-start; justify-content:space-between; border-bottom:2px solid ${G}; padding-bottom:18px; }
+        .brand { display:flex; align-items:center; gap:14px; }
+        .brand img { width:52px; height:auto; display:block; }
+        .bname { font-size:19px; font-weight:600; letter-spacing:-.02em; color:${G}; }
+        .btag { font-size:10px; color:#5a6b63; letter-spacing:.04em; text-transform:uppercase; }
+        .hr { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+        .hr .ttl { font-size:12px; font-weight:500; }
+        .qr { width:100px; height:100px; display:block; }
+        .folio { font-size:12px; font-weight:600; color:${G}; border:1px solid ${G}; border-radius:6px; padding:3px 12px; }
+        .title { margin-top:18px; text-align:center; }
+        .title .t { font-size:18px; font-weight:600; letter-spacing:-.02em; }
+        .title .s { font-size:11px; color:#5a6b63; margin-top:3px; }
+        .od { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+        .box { border:1px solid rgba(15,122,90,.25); border-radius:12px; padding:14px 16px; background:rgba(15,122,90,.04); }
+        .box .lbl { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:600; margin-bottom:9px; }
+        .fld { display:flex; align-items:baseline; gap:8px; font-size:12px; margin-bottom:8px; }
+        .fld span { color:#5a6b63; min-width:64px; }
+        .fld i { flex:1; border-bottom:1px dotted #b6c2bc; font-style:normal; }
+        table { width:100%; border-collapse:collapse; margin-top:16px; border:1px solid rgba(0,0,0,.10); border-radius:12px; overflow:hidden; }
+        thead th { background:${G}; color:#fff; font-size:11px; font-weight:500; padding:10px 8px; text-align:center; }
+        thead th.l { text-align:left; padding-left:12px; }
+        tbody td { font-size:12px; padding:8px; border-top:1px solid rgba(0,0,0,.07); border-left:1px solid rgba(0,0,0,.05); height:30px; }
+        tbody td:first-child { border-left:none; }
+        td.num { text-align:center; color:#9aa8a2; width:42px; }
+        td.qty { text-align:right; font-weight:600; width:80px; }
+        td.uni { width:96px; }
+        .tag { display:inline-block; margin-left:6px; font-size:9px; font-weight:600; color:${G}; background:rgba(15,122,90,.10); border-radius:4px; padding:1px 6px; vertical-align:middle; }
+        .env { display:inline-block; margin-left:6px; padding:1px 7px; border:1.5px solid ${G}; border-radius:4px; font-size:10px; font-weight:600; color:${G}; }
+        tfoot td { background:rgba(15,122,90,.05); border-top:2px solid rgba(15,122,90,.3); font-size:12px; padding:10px 8px; }
+        tfoot .lab { text-align:right; font-weight:500; } tfoot .val { text-align:right; font-weight:600; }
+        .obs .lbl { font-size:11px; color:#5a6b63; font-weight:500; margin:16px 0 8px; }
+        .obsbox { border:1px solid rgba(0,0,0,.10); border-radius:10px; min-height:50px; padding:8px 10px; font-size:12px; }
+        .firmas { margin-top:auto; padding-top:24px; }
+        .firmas .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:600; margin-bottom:16px; }
+        .fgrid { display:grid; grid-template-columns:1fr 1fr; gap:24px 40px; }
+        .sg { text-align:center; } .sgline { border-bottom:1px solid #16201c; height:30px; }
+        .sgname { font-size:10px; color:#9aa8a2; margin-top:4px; } .sgrole { font-size:12px; font-weight:600; color:${G}; margin-top:3px; } .sgplace { font-size:10px; color:#5a6b63; }
+        .pie { margin-top:20px; padding-top:10px; border-top:1px solid rgba(0,0,0,.08); display:flex; justify-content:space-between; font-size:9px; color:#9aa8a2; }
       </style></head><body>
-      <div class="wrap">
+      <div class="sheet">
         <div class="head">
-          <img class="qr" src="${qrPrint}" alt="QR ${esc(ot.folio)}" />
-          <div>
-            <h1>Orden de transferencia</h1>
+          <div class="brand">
+            <img src="${logo}" alt="Pinturas El Perico" onerror="this.style.display='none'" />
+            <div>
+              <div class="bname">Pinturas El Perico</div>
+              <div class="btag">Control de inventario · Logística interna</div>
+            </div>
+          </div>
+          <div class="hr">
+            <div class="ttl">Formato de transferencia</div>
+            <img class="qr" src="${qrPrint}" alt="QR ${esc(ot.folio)}" />
             <div class="folio">${esc(ot.folio)}</div>
-            <div class="sub">Fábrica &rarr; Almacén Terán</div>
-            <div class="sub">Solicitó: ${esc(ot.solicitadoPor || '—')}${ot.nota ? ' · ' + esc(ot.nota) : ''}</div>
           </div>
         </div>
+
+        <div class="title">
+          <div class="t">Transferencia de mercancía entre almacén y tienda</div>
+          <div class="s">Documento de control para entrega, traslado y recepción de producto${ot.solicitadoPor ? ' · Solicitó: ' + esc(ot.solicitadoPor) : ''}</div>
+        </div>
+
+        <div class="od">
+          <div class="box">
+            <div class="lbl">Origen — Almacén Huertas</div>
+            <div class="fld"><span>Fecha</span><i>&nbsp;</i></div>
+            <div class="fld"><span>Hora salida</span><i>&nbsp;</i></div>
+            <div class="fld"><span>Vehículo</span><i>&nbsp;</i></div>
+          </div>
+          <div class="box">
+            <div class="lbl">Destino — Almacén / Tienda Terán</div>
+            <div class="fld"><span>Fecha</span><i>&nbsp;</i></div>
+            <div class="fld"><span>Hora llegada</span><i>&nbsp;</i></div>
+            <div class="fld"><span>Recibe área</span><i>&nbsp;</i></div>
+          </div>
+        </div>
+
         <table>
-          <thead><tr><th>Tipo</th><th>Concepto</th><th style="text-align:right">Cantidad</th></tr></thead>
+          <thead><tr><th>#</th><th class="l">Descripción del producto</th><th>Código</th><th>Cantidad</th><th>Unidad</th></tr></thead>
           <tbody>${filas}</tbody>
+          <tfoot><tr><td class="lab" colspan="3">Total de piezas transferidas</td><td class="val">${totalPiezas}</td><td></td></tr></tfoot>
         </table>
-        <div class="foot">Escanea el QR en Fábrica para surtir y en Terán para recibir.</div>
-        <div class="sign"><div>Surtió (Fábrica)</div><div>Recibió (Terán)</div></div>
+
+        <div class="obs">
+          <div class="lbl">Observaciones</div>
+          <div class="obsbox">${ot.nota ? esc(ot.nota) : ''}</div>
+        </div>
+
+        <div class="firmas">
+          <div class="lbl">Firmas de conformidad</div>
+          <div class="fgrid">${firmas}</div>
+        </div>
+
+        <div class="pie">
+          <span>Pinturas El Perico · Formato de transferencia interna · ${esc(ot.folio)}</span>
+          <span>Conservar copia en origen y destino · Escanea el QR al surtir y al recibir</span>
+        </div>
       </div>
-      <script>setTimeout(() => window.print(), 350);</script>
+      <script>setTimeout(() => window.print(), 450);</script>
       </body></html>`;
     w.document.write(html);
     w.document.close();
@@ -938,7 +1027,7 @@ function OTQRPrintModal({ ot, onClose }) {
           <div style={PM.lineasPrev}>
             {lineas.map((l, i) => (
               <div key={i} style={PM.lineaPrevRow}>
-                <span>{l.nombre || l.producto}</span>
+                <span style={{ textTransform: 'uppercase' }}>{l.nombre || l.producto}</span>
                 <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700 }}>{descLineaCantidad(l)}</span>
               </div>
             ))}
@@ -1043,7 +1132,7 @@ const S = {
     background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', letterSpacing: '.04em',
     flexShrink: 0, textTransform: 'uppercase',
   },
-  lineaNombre: { flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0, letterSpacing: '-.01em' },
+  lineaNombre: { flex: 1, fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0, letterSpacing: '-.01em', textTransform: 'uppercase' },
   lineaCant: { fontFamily: 'var(--lp-font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--lp-text-secondary)', whiteSpace: 'nowrap' },
 
   meta: { fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 12 },
@@ -1134,7 +1223,7 @@ const SH = {
   lineasList: { display: 'flex', flexDirection: 'column', gap: 7 },
   lineaChip: { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 11px', borderRadius: 12, background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)' },
   lineaChipTipo: { fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', letterSpacing: '.04em', flexShrink: 0 },
-  lineaChipNombre: { flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  lineaChipNombre: { flex: 1, fontSize: 13.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textTransform: 'uppercase' },
   lineaChipCant: { fontFamily: 'var(--lp-font-mono)', fontSize: 13, fontWeight: 700, color: 'var(--lp-text-secondary)', whiteSpace: 'nowrap' },
   lineaChipDel: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 28, height: 28, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--lp-text-tertiary)', cursor: 'pointer', flexShrink: 0 },
 
