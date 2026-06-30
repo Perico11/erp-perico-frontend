@@ -195,7 +195,18 @@ export default function AlmacenRecepcionPage() {
   }, []);
 
   const { data: trazaData, loading, reload } = useApiData(() => api.getTrazabilidad(), [], 8000);
-  useRealtimeSync({ onTrazabilidad: () => reload() });
+  /* OTs surtidas pendientes de recibir en Terán — para que Josué las vea aquí
+     mismo (antes solo en la campanita / pantalla Transferencias). */
+  const { data: otsData, reload: reloadOTs } = useApiData(() => api.getOTs('surtida'), [], 8000);
+  const otsPorRecibir = useMemo(() => {
+    const arr = otsData?.data || otsData || [];
+    return (Array.isArray(arr) ? arr : []).filter(o => o && !o.eliminado && o.estado === 'surtida');
+  }, [otsData]);
+  useRealtimeSync({
+    onTrazabilidad: () => reload(),
+    onTransferencias: () => reloadOTs(),
+    onInventario: () => reloadOTs(),
+  });
 
   const lotes = useMemo(() => {
     const arr = trazaData?.data || trazaData || [];
@@ -270,7 +281,7 @@ export default function AlmacenRecepcionPage() {
       setBusy(code);
       try {
         const r = await api.escanearOT(otId, 'recibir');
-        reload();
+        reload(); reloadOTs();
         if (r && r.idempotente) showToast(`${(r.ot && r.ot.folio) || otId}: ${r.aviso || 'sin cambios'}`);
         else showToast(`Transferencia ${(r && r.ot && r.ot.folio) || otId} recibida en Terán ✓`);
       } catch (err) {
@@ -305,7 +316,7 @@ export default function AlmacenRecepcionPage() {
     } finally {
       setBusy(null);
     }
-  }, [reload, showToast, confirm]);
+  }, [reload, reloadOTs, showToast, confirm]);
 
   /* Vaciar TOTE manualmente — DECISIÓN OWNER 10 jun 2026 (revierte la
      auto-merma): el remanente se registra como MERMA solo cuando admin/técnico
@@ -330,6 +341,25 @@ export default function AlmacenRecepcionPage() {
     }
   }, [confirm, reload, showToast]);
 
+  /* Recibir una OT surtida directamente desde el andén (botón) — mismo efecto
+     que escanear su QR: mueve el material tránsito→Terán. */
+  const handleRecibirOT = useCallback(async (ot) => {
+    setBusy(ot.id);
+    try {
+      const r = await api.escanearOT(ot.id, 'recibir');
+      reload(); reloadOTs();
+      if (r && r.idempotente) showToast(`${ot.folio}: ${r.aviso || 'sin cambios'}`);
+      else showToast(`Transferencia ${ot.folio} recibida en Terán ✓`);
+    } catch (err) {
+      showToast('Error: ' + (err?.data?.error || err.message || 'No se pudo recibir la transferencia'), true);
+    } finally { setBusy(null); }
+  }, [reload, reloadOTs, showToast]);
+
+  const otLineaTxt = (l) => {
+    if (l.tipo === 'pt' && l.presentacion) return `${l.nombre || l.producto} · ${l.cantidadPresentacion ?? l.cantidad} ${l.presentacion}${l.envasar ? ' · envasar' : ''}`;
+    return `${l.nombre || l.producto || ''} · ${l.cantidad} ${l.unidad || ''}`;
+  };
+
   /* Gating real: solo admin/almacen reciben en Terán (Enrique está en fábrica). */
   const canAct = rol === 'admin' || rol === 'almacen';
 
@@ -342,7 +372,7 @@ export default function AlmacenRecepcionPage() {
     <div>
       <TopBar title="Recepción Terán" />
       <div style={isDesktop ? S.wrapDesktop : S.wrap}>
-        <div style={S.greet}>Hola {userName} · {totales.enCamino} por recibir</div>
+        <div style={S.greet}>Hola {userName} · {totales.enCamino + otsPorRecibir.length} por recibir</div>
 
         {/* Scan hero — solo roles que pueden recibir.
             Móvil: hero verde ancho completo. Escritorio: barra superior, botón estándar. */}
@@ -404,6 +434,43 @@ export default function AlmacenRecepcionPage() {
                         title={`Registrar los ${(typeof tote.litrosRestante === 'number' ? tote.litrosRestante : Number(tote.lit) || 0).toFixed(2)} L restantes como merma y vaciar el TOTE`}
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, width: 'auto', marginTop: 8, background: 'transparent', color: 'var(--lp-danger-600)', border: '1px solid var(--lp-border-subtle)', padding: '8px 12px', borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', minHeight: 40, opacity: busy === tote.cod ? 0.6 : 1 }}>
                         {busy === tote.cod ? 'Vaciando…' : 'Vaciar TOTE (merma)'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Transferencias (OT) surtidas pendientes de recibir — Josué las recibe
+            aquí mismo (escaneando el QR o con el botón), sin ir a la campanita. */}
+        {otsPorRecibir.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--lp-text-secondary)', margin: '2px 2px 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              {TRUCK_ICON} Transferencias por recibir · {otsPorRecibir.length}
+            </div>
+            <div style={isDesktop ? S.grid : undefined}>
+              {otsPorRecibir.map(ot => {
+                const isBusy = busy === ot.id;
+                return (
+                  <div key={ot.id} style={{ ...(isDesktop ? S.cardDesktop : S.card), ...(isDesktop ? {} : { marginBottom: 10 }) }}>
+                    <div style={S.chead}>
+                      <span style={S.cod}>{ot.folio}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-brand-700)', letterSpacing: '.04em' }}>TRANSFERENCIA</span>
+                      <span style={S.estado({ l: 'Por recibir', bg: 'color-mix(in srgb, var(--lp-warning-600) 14%, transparent)', fg: 'var(--lp-warning-700)' })}>Por recibir</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, margin: '8px 0' }}>
+                      {(ot.lineas || []).map((l, i) => (
+                        <span key={i} style={{ fontSize: 11, background: 'var(--lp-bg-sunken)', borderRadius: 6, padding: '2px 8px', color: 'var(--lp-text-secondary)' }}>{otLineaTxt(l)}</span>
+                      ))}
+                    </div>
+                    <div style={S.from}>{TRUCK_ICON}<span>Surtida por <b style={{ color: 'var(--lp-text-primary)', fontWeight: 600 }}>{ot.surtidoPor || '—'}</b></span></div>
+                    {canAct && (
+                      <button type="button" data-id="recepcion.btn.recibir-ot" data-rol="almacen,admin"
+                        style={{ ...(isDesktop ? S.actDesktop : S.act), ...S.actPrimary, opacity: isBusy ? 0.6 : 1 }} disabled={isBusy}
+                        onClick={() => handleRecibirOT(ot)}>
+                        {isBusy ? 'Recibiendo…' : 'Recibir en Terán'}
                       </button>
                     )}
                   </div>
