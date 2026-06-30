@@ -160,10 +160,17 @@ const api = {
       producto, ubicacion, qty, modo, nota,
       codigoAutorizacion: opts.codigoAutorizacion,
     }),
-  /* Transferencia manual de PT Fábrica→Terán (Josué): mueve N cubetas de
-     inv.pt[X].qty a inv.pt[X].teran (no cambia el total). */
-  transferirPTaTeran: (producto, cantidad, nota) =>
-    request('POST', '/api/inventario/pt/transferir-teran', { producto, cantidad, nota }),
+  /* Transferencia manual de PT Fábrica→Terán (Josué): mueve material de
+     inv.pt[X].qty a inv.pt[X].teran (no cambia el total). Consciente de
+     PRESENTACIÓN: si se pasa `presentacion` (tote/cubeta/galon/litro/
+     atomizador750), `cantidad` es el CONTEO en esa presentación (1 tote mueve 1
+     tote, se rastrea como teranPres.tote, NO se explota a 52 cubetas). Sin
+     `presentacion` → contrato viejo (cantidad en cubetas). */
+  transferirPTaTeran: (producto, cantidad, nota, presentacion) =>
+    request('POST', '/api/inventario/pt/transferir-teran',
+      presentacion
+        ? { producto, presentacion, cantidadPresentacion: cantidad, nota }
+        : { producto, cantidad, nota }),
   /* Reenvasar PT del pool de Terán: convierte `origen` (tote/granel) en `destinos`
      [{tipo,qty,subKey,tapaKey}] consumiendo envases de Terán. No cambia el total. */
   reenvasarPTTeran: (producto, origen, destinos, nota) =>

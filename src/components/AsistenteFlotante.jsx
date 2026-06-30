@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
+import { medidaACubetas, etiquetaMedida } from '../utils/ptMedidas';
 
 /* ════════════════════════════════════════════════════════════════════════
    AsistenteFlotante — botón flotante arrastrable que vive en TODAS las
@@ -178,6 +179,36 @@ const _permDe = (e) => (e.dataId && PERM_GATE[e.dataId]) || PERM_GATE[e.label] |
 /* ── Búsqueda tolerante a errores ── */
 function _norm(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+/* Presentaciones de PT reconocidas en lenguaje natural → key de PT_MEDIDAS. El
+   texto llega ya normalizado (sin acentos, minúsculas, sin signos). Incluye
+   abreviaturas comunes (cub, lt). Regla del dueño: "1 tote" mueve 1 TOTE (no 52
+   cubetas) — la presentación se conserva en teranPres. */
+const _PRES_PT = [
+  { key: 'tote', re: /\btotes?\b/ },
+  { key: 'cubeta', re: /\bcubetas?\b|\bcubs?\b/ },
+  { key: 'galon', re: /\bgalon(?:es)?\b/ },
+  { key: 'litro', re: /\blitros?\b|\blts?\b/ },
+  { key: 'atomizador750', re: /\batomizador(?:es)?\b/ },
+];
+/* Extrae la presentación de un texto de ítem y devuelve el RESTO (nombre del
+   producto sin la palabra de presentación ni un "de/del" colindante).
+   "tote de blanco mate" → { presentacion:'tote', resto:'blanco mate' }.
+   Sin palabra de presentación → { presentacion:null, resto:<texto> }. */
+function _extraerPresentacion(itemText) {
+  const t = ' ' + String(itemText || '') + ' ';
+  for (const p of _PRES_PT) {
+    if (p.re.test(t)) {
+      /* quita la palabra de presentación y un "de/del" colindante que quede al frente */
+      const resto = t.replace(p.re, ' ').replace(/\s+/g, ' ').trim().replace(/^del?\s+/, '');
+      return { presentacion: p.key, resto };
+    }
+  }
+  return { presentacion: null, resto: String(itemText || '').trim() };
+}
+/* Etiqueta legible de un PT por presentación. tote→"1 tote", null→"N cub". */
+function _etqPT(presentacion, n) {
+  return presentacion ? etiquetaMedida(presentacion, n) : `${n} cub`;
 }
 function _lev(a, b) {
   const m = a.length, n = b.length; if (!m) return n; if (!n) return m;
@@ -390,9 +421,14 @@ export default function AsistenteFlotante() {
     });
     return bs > 0 ? best : null;
   }
-  /* Resuelve un texto ("tapas rojas", "blanco mate", "litro premium") al ítem
-     TRANSFERIBLE a Terán: PT (cubetas), envase o tapa — con su `ref` para el backend
-     y el stock disponible en Fábrica. Usa _score (tolera plurales/typos por token). */
+  /* Resuelve un texto ("tapas rojas", "1 tote de blanco mate", "litro premium")
+     al ítem TRANSFERIBLE a Terán: PT, envase o tapa — con su `ref` para el
+     backend, el stock disponible en Fábrica y, para PT, la `presentacion`
+     detectada ("1 tote" → tote). Usa _score (tolera plurales/typos por token).
+
+     Orden: si el texto COMPLETO matchea fuerte un envase/tapa (p. ej. "Litro
+     Premium", que contiene "litro"), gana por piezas (la presentación no
+     aplica). Si no, se extrae la presentación y se resuelve el resto como PT. */
   async function _resolverTransferible(texto) {
     const [invR, envR] = await Promise.all([api.getInventario().catch(() => null), api.getEnvases().catch(() => null)]);
     const inv = invR?.data || invR || {};
@@ -401,9 +437,20 @@ export default function AsistenteFlotante() {
     Object.entries(inv.pt || {}).forEach(([k, v]) => cands.push({ nombre: k, tipo: 'pt', fabrica: +v.qty || 0, ref: { producto: k }, unidad: 'cub' }));
     Object.entries(env.categorias || {}).forEach(([catKey, cat]) => Object.entries((cat && cat.subcategorias) || {}).forEach(([subKey, s]) => { if (s && s.nombre) cands.push({ nombre: s.nombre, tipo: 'envase', fabrica: +s.stock || 0, ref: { tipo: 'envase', catKey, subKey }, unidad: s.unidad || 'pz' }); }));
     Object.entries(env.tapas || {}).forEach(([tapaKey, tp]) => { if (tp && tp.nombre) cands.push({ nombre: tp.nombre, tipo: 'tapa', fabrica: +tp.stock || 0, ref: { tipo: 'tapa', tapaKey }, unidad: tp.unidad || 'pz' }); });
-    let best = null, bs = 0;
-    cands.forEach(c => { const sc = _score(texto, { label: c.nombre }); if (sc > bs) { bs = sc; best = c; } });
-    return bs > 0 ? best : null;
+    const pick = (q, soloPT) => {
+      let best = null, bs = 0;
+      cands.forEach(c => { if (soloPT && c.tipo !== 'pt') return; const sc = _score(q, { label: c.nombre }); if (sc > bs) { bs = sc; best = c; } });
+      return bs > 0 ? { it: best, score: bs } : null;
+    };
+    const { presentacion, resto } = _extraerPresentacion(texto);
+    const full = pick(texto, false);
+    /* Envase/tapa fuerte por el texto completo → transferencia por piezas. */
+    if (full && full.it.tipo !== 'pt' && full.score >= 60) return { ...full.it, presentacion: null };
+    /* PT por el resto (sin la palabra de presentación). */
+    const pt = presentacion ? pick(resto, true) : null;
+    if (pt && (!full || pt.score >= full.score)) return { ...pt.it, presentacion };
+    if (full) return { ...full.it, presentacion: full.it.tipo === 'pt' ? presentacion : null };
+    return null;
   }
   /* Resuelve un texto ("blanco mate", "el pedido de azul rey") al PEDIDO de almacén
      con su id/código/producto/cantidad/estado. Si `soloPendientes`, restringe a los
@@ -451,22 +498,38 @@ export default function AsistenteFlotante() {
     return `Listo: agregué ${n} kg de ${it.k} al stock de Fábrica.`;
   }
   /* Ejecuta la transferencia ya RESUELTA (PT o envase/tapa) → Terán. El descuento
-     real lo hace el backend (mutex + clamp); aquí solo disparamos el endpoint correcto. */
+     real lo hace el backend (mutex + clamp); aquí solo disparamos el endpoint correcto.
+     Para PT pasa la `presentacion` (1 tote = 1 tote, NO 52 cubetas). */
   async function accionTransferir(it, n) {
-    if (it.tipo === 'pt') await api.transferirPTaTeran(it.ref.producto, n, 'Transferido desde el asistente');
-    else await api.transferirEnvaseATeran(it.ref, n, 'Transferido desde el asistente');
+    if (it.tipo === 'pt') {
+      await api.transferirPTaTeran(it.ref.producto, n, 'Transferido desde el asistente', it.presentacion);
+      return `Listo: transferí **${_etqPT(it.presentacion, n)}** de ${it.nombre} de Fábrica a Terán. 📦`;
+    }
+    await api.transferirEnvaseATeran(it.ref, n, 'Transferido desde el asistente');
     return `Listo: transferí **${n} ${it.unidad}** de ${it.nombre} de Fábrica a Terán. 📦`;
   }
-  /* Propone una transferencia a Terán: resuelve el ítem, valida stock y pide
-     CONFIRMACIÓN mostrando el ítem RESUELTO. La usan el comando por patrón y la IA. */
+  /* Propone una transferencia a Terán: resuelve el ítem (con presentación para
+     PT), valida stock y pide CONFIRMACIÓN mostrando el ítem RESUELTO. La usan el
+     comando por patrón y la IA. Para PT el stock se mide en cubeta-equivalente:
+     1 tote = 52 cub; se transfiere el tote ENTERO (no se explota a cubetas). */
   async function _proponerTransferencia(itemText, n, yaHayMensaje) {
     if (!canTransferir) { const msg = 'Las transferencias a Terán las hace **almacén** o admin.'; yaHayMensaje ? reemplazarUltimo(msg) : pushBot(msg); return; }
     if (!yaHayMensaje) pushBot('Buscando…');
-    if (!itemText || !(n > 0)) { reemplazarUltimo('¿Qué y cuánto transferir a Terán? Ej: "transfiere 50 tapas rojas a Terán".'); return; }
+    if (!itemText || !(n > 0)) { reemplazarUltimo('¿Qué y cuánto transferir a Terán? Ej: "transfiere 1 tote de blanco mate a Terán".'); return; }
     const it = await _resolverTransferible(itemText);
     if (!it) { reemplazarUltimo(`No encontré "${itemText}" para transferir. ¿Está bien el nombre?`); return; }
-    if (n > it.fabrica) { reemplazarUltimo(`Solo hay **${it.fabrica} ${it.unidad}** de ${it.nombre} en Fábrica (pediste ${n}). No transfiero de más.`); return; }
-    reemplazarUltimo({ text: `Transferir **${n} ${it.unidad}** de **${it.nombre}** de Fábrica a Terán (quedarían ${it.fabrica - n} en Fábrica). ¿Confirmo?`, confirm: { tipo: 'transferir', it, n } });
+    const esPT = it.tipo === 'pt';
+    /* Cuánto baja de Fábrica: PT con presentación → cub-equiv; si no, n directo. */
+    const reqFab = esPT && it.presentacion ? medidaACubetas(it.presentacion, n) : n;
+    const uFab = esPT ? 'cub' : it.unidad;
+    const etq = esPT ? _etqPT(it.presentacion, n) : `${n} ${it.unidad}`;
+    if (reqFab > it.fabrica) {
+      const extra = esPT && it.presentacion ? ` (pediste ${etq} = ${reqFab} cub)` : ` (pediste ${n})`;
+      reemplazarUltimo(`Solo hay **${it.fabrica} ${uFab}** de ${it.nombre} en Fábrica${extra}. No transfiero de más.`);
+      return;
+    }
+    const quedan = +(it.fabrica - reqFab).toFixed(2);
+    reemplazarUltimo({ text: `Transferir **${etq}** de **${it.nombre}** de Fábrica a Terán (quedarían ${quedan} ${uFab} en Fábrica). ¿Confirmo?`, confirm: { tipo: 'transferir', it, n } });
   }
   async function accionPin(nombreUser, pin) {
     const r = await api.getUsuarios().catch(() => null);
