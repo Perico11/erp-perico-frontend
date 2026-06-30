@@ -255,6 +255,16 @@ function _humanTitulo(s) {
     .trim();
 }
 
+/* Mensaje claro cuando el dictado por voz falla (más común en Safari/iOS). */
+function _mensajeErrorVoz(code) {
+  if (code === 'not-allowed' || code === 'service-not-allowed') {
+    return 'No tengo permiso del micrófono. Actívalo para este sitio (en iPhone: Ajustes → Safari → Micrófono → Permitir) y vuelve a tocar el micro. Mientras, puedes **escribir**.';
+  }
+  if (code === 'audio-capture') return 'No encuentro un micrófono disponible. Puedes **escribir** tu mensaje.';
+  if (code === 'network') return 'El dictado necesita conexión. Intenta de nuevo o **escribe** tu mensaje.';
+  return 'No pude usar el dictado en este navegador. Puedes **escribir** tu mensaje.';
+}
+
 const POS_KEY = 'pp_asistente_pos';
 
 /* Render ligero del texto del bot: **negrita**, viñetas (-, •, 1.) y saltos de
@@ -816,7 +826,15 @@ export default function AsistenteFlotante() {
       }
       setQ((finalText + interim).trim());
     };
-    rec.onerror = () => { setEscuchando(false); };
+    /* Errores (más comunes en Safari/iOS): no fallar en silencio. 'aborted' = lo
+       paramos nosotros al cerrar; 'no-speech' = silencio → no molestar. El resto
+       sí avisa qué pasó y recuerda que se puede escribir. */
+    rec.onerror = (ev) => {
+      setEscuchando(false);
+      const code = ev && ev.error;
+      if (code === 'aborted' || code === 'no-speech') return;
+      pushBot(_mensajeErrorVoz(code));
+    };
     rec.onend = () => {
       setEscuchando(false);
       recRef.current = null;
@@ -825,7 +843,7 @@ export default function AsistenteFlotante() {
     };
     recRef.current = rec;
     setEscuchando(true);
-    try { rec.start(); } catch { setEscuchando(false); recRef.current = null; }
+    try { rec.start(); } catch { setEscuchando(false); recRef.current = null; pushBot(_mensajeErrorVoz('start-fail')); }
   };
 
   const ir = (entry, abrir = false) => {
