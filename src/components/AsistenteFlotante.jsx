@@ -5,6 +5,7 @@ import api from '../services/api';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { medidaACubetas, etiquetaMedida } from '../utils/ptMedidas';
 import { resumirPendientes, fraseProactiva } from '../utils/asistentePendientes';
+import { interpretarConfirmacion } from '../utils/asistenteConfirmacion';
 
 /* ════════════════════════════════════════════════════════════════════════
    AsistenteFlotante — botón flotante arrastrable que vive en TODAS las
@@ -309,6 +310,12 @@ export default function AsistenteFlotante() {
   });
   const dragRef = useRef({ dragging: false, moved: 0, sx: 0, sy: 0, ox: 0, oy: 0 });
   const inputRef = useRef(null);
+  /* Dictado por voz (Web Speech API, es-MX). `escuchando` pinta el micrófono
+     activo. `recRef` = instancia viva; `responderRef` = siempre el `responder`
+     más reciente (los callbacks del reconocimiento se crean una vez). */
+  const [escuchando, setEscuchando] = useState(false);
+  const recRef = useRef(null);
+  const vozSoportada = useMemo(() => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition), []);
 
   useEffect(() => { if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 80); }, [open]);
   /* Saludo al abrir por primera vez. */
@@ -388,6 +395,11 @@ export default function AsistenteFlotante() {
   useEffect(() => { if (open && user) recargarPend(); /* al abrir, al día */
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+  /* Detén el dictado al cerrar el panel; abórtalo al desmontar. */
+  useEffect(() => {
+    if (!open && recRef.current) { try { recRef.current.abort(); } catch { /* ya abortado */ } recRef.current = null; setEscuchando(false); }
+  }, [open]);
+  useEffect(() => () => { if (recRef.current) { try { recRef.current.abort(); } catch { /* ya abortado */ } } }, []);
   const pend = resumirPendientes(pendResumen);
 
   if (!user) return null; /* solo con sesión */
@@ -626,6 +638,27 @@ export default function AsistenteFlotante() {
     if (!t) return;
     setQ('');
     setMensajes(m => [...m, { from: 'user', text: t }]);
+
+    /* CONFIRMACIÓN POR TEXTO O VOZ (jun 2026, pedido dueño): si hay una acción de
+       escritura PENDIENTE (nueva orden/pedido, transferencia…), un "sí" la ejecuta
+       y un "no" la cancela — igual que los botones. Cualquier otra cosa NO resuelve
+       la confirmación (sigue en pie con sus botones) y se procesa normal. */
+    const idxConfirm = mensajes.reduce((acc, m, i) => (m && m.confirm ? i : acc), -1);
+    if (idxConfirm >= 0) {
+      const veredicto = interpretarConfirmacion(t);
+      if (veredicto === 'si') {
+        const acc = mensajes[idxConfirm].confirm;
+        setMensajes(ms => ms.map((x, j) => j === idxConfirm ? { from: 'bot', text: String(x.text || '').replace(' ¿Confirmo?', '') + ' ✓' } : x));
+        await ejecutar(acc);
+        return;
+      }
+      if (veredicto === 'no') {
+        setMensajes(ms => ms.map((x, j) => j === idxConfirm ? { from: 'bot', text: 'Cancelado.' } : x));
+        return;
+      }
+      /* veredicto null → no es sí/no: cae al flujo normal; la confirmación queda viva. */
+    }
+
     /* Pendientes/alertas — lectura directa (sin confirmación), antes de todo. */
     if (/\b(pendientes?|mis\s+alertas|que\s+tengo|que\s+hay\s+pendiente|tareas?)\b/.test(_norm(t))) {
       pushBot('Revisando tus pendientes…');
@@ -759,6 +792,42 @@ export default function AsistenteFlotante() {
     await responderIA();
   };
 
+  /* Dictado por voz: arranca/detiene el reconocimiento (es-MX). Al terminar, manda
+     el texto transcrito como si lo hubieras escrito (manos libres para el piso).
+     Muestra el parcial en vivo en el input. Si el navegador no lo soporta, el
+     botón ni se pinta. `toggleVoz` se recrea cada render → cierra sobre el
+     `responder` vigente (el ciclo del reconocimiento dura segundos). */
+  const toggleVoz = () => {
+    if (!vozSoportada) return;
+    if (escuchando) { try { recRef.current && recRef.current.stop(); } catch { /* ya detenido */ } return; }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let rec;
+    try { rec = new SR(); } catch { return; }
+    rec.lang = 'es-MX';
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    let finalText = '';
+    rec.onresult = (e) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const tr = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalText += tr; else interim += tr;
+      }
+      setQ((finalText + interim).trim());
+    };
+    rec.onerror = () => { setEscuchando(false); };
+    rec.onend = () => {
+      setEscuchando(false);
+      recRef.current = null;
+      const dicho = finalText.trim();
+      if (dicho) { setQ(''); responder(dicho); }
+    };
+    recRef.current = rec;
+    setEscuchando(true);
+    try { rec.start(); } catch { setEscuchando(false); recRef.current = null; }
+  };
+
   const ir = (entry, abrir = false) => {
     setOpen(false); setQ('');
     navigate(entry.ruta);
@@ -853,15 +922,18 @@ export default function AsistenteFlotante() {
                     </div>
                   )}
                   {m.confirm && (
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-                      <button style={S.confirmYes}
-                        onClick={() => { const acc = m.confirm; setMensajes(ms => ms.map((x, j) => j === i ? { from: 'bot', text: x.text.replace(' ¿Confirmo?', '') + ' ✓' } : x)); ejecutar(acc); }}>
-                        Sí, hazlo
-                      </button>
-                      <button style={S.confirmNo}
-                        onClick={() => setMensajes(ms => ms.map((x, j) => j === i ? { from: 'bot', text: 'Cancelado.' } : x))}>
-                        Cancelar
-                      </button>
+                    <div style={{ width: '100%' }}>
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button style={S.confirmYes}
+                          onClick={() => { const acc = m.confirm; setMensajes(ms => ms.map((x, j) => j === i ? { from: 'bot', text: x.text.replace(' ¿Confirmo?', '') + ' ✓' } : x)); ejecutar(acc); }}>
+                          Sí, hazlo
+                        </button>
+                        <button style={S.confirmNo}
+                          onClick={() => setMensajes(ms => ms.map((x, j) => j === i ? { from: 'bot', text: 'Cancelado.' } : x))}>
+                          Cancelar
+                        </button>
+                      </div>
+                      <div style={S.confirmHint}>o responde {vozSoportada ? 'por voz o texto' : 'por texto'}: «sí» / «no»</div>
                     </div>
                   )}
                 </div>
@@ -880,7 +952,7 @@ export default function AsistenteFlotante() {
               <input
                 ref={inputRef}
                 style={S.input}
-                placeholder="Escribe aquí… ej: pendientes, aprobar OC"
+                placeholder={escuchando ? 'Escuchando…' : 'Escribe o dicta… ej: pendientes, transfiere 1 tote'}
                 value={q}
                 autoComplete="off"
                 autoCorrect="off"
@@ -888,6 +960,19 @@ export default function AsistenteFlotante() {
                 onChange={e => setQ(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') responder(q); }}
               />
+              {vozSoportada && (
+                <button
+                  type="button"
+                  style={{ ...S.mic, ...(escuchando ? S.micOn : null) }}
+                  onClick={toggleVoz}
+                  aria-label={escuchando ? 'Detener dictado' : 'Dictar por voz'}
+                  aria-pressed={escuchando}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={escuchando ? '#fff' : 'var(--lp-brand-600)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                  </svg>
+                </button>
+              )}
               <button style={S.send} onClick={() => responder(q)} disabled={!q.trim()} aria-label="Enviar">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg>
               </button>
@@ -962,6 +1047,15 @@ const S = {
     flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: 'none', cursor: 'pointer',
     background: 'var(--lp-brand-600)', display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
+  /* Botón de micrófono (dictado). Activo = rojo pulsante para que se vea que está
+     escuchando (feedback de estado, clave en piso). */
+  mic: {
+    flexShrink: 0, width: 44, height: 44, borderRadius: 12, cursor: 'pointer',
+    border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-base)',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  micOn: { background: '#DC2626', border: '1.5px solid #DC2626', animation: 'ppMicPulse 1.1s ease-in-out infinite' },
+  confirmHint: { marginTop: 5, fontSize: 11, color: 'var(--lp-text-tertiary)', fontStyle: 'italic' },
   confirmYes: { padding: '8px 16px', borderRadius: 10, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' },
   confirmNo: { padding: '8px 16px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
   item: {
