@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { medidaACubetas, etiquetaMedida } from '../utils/ptMedidas';
+import { resumirPendientes, fraseProactiva } from '../utils/asistentePendientes';
 
 /* ════════════════════════════════════════════════════════════════════════
    AsistenteFlotante — botón flotante arrastrable que vive en TODAS las
@@ -299,6 +300,8 @@ export default function AsistenteFlotante() {
   const [q, setQ] = useState('');
   /* Chat (jun 2026): historial de mensajes. Saludo inicial al abrir. */
   const [mensajes, setMensajes] = useState([]);
+  /* Resumen de pendientes (badge proactivo). Se carga de /api/notificaciones. */
+  const [pendResumen, setPendResumen] = useState(null);
   const listRef = useRef(null);
   const [pos, setPos] = useState(() => {
     try { const p = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); if (p && typeof p.x === 'number') return p; } catch {}
@@ -312,7 +315,13 @@ export default function AsistenteFlotante() {
   useEffect(() => {
     if (open && mensajes.length === 0) {
       const nom = user?.nombre ? ', ' + String(user.nombre).split(' ')[0] : '';
-      setMensajes([{ from: 'bot', text: `¡Hola${nom}! ¿Cómo te ayudo? Escríbeme qué quieres hacer o a dónde ir.` }]);
+      /* Saludo PROACTIVO: si hay pendientes, los menciona y ofrece resumirlos
+         inline (chip _accion → corre accionPendientes). Si no, saludo normal. */
+      const fr = fraseProactiva(pendResumen);
+      const msg = fr
+        ? { from: 'bot', text: `¡Hola${nom}! ${fr} ¿Te los muestro o en qué más te ayudo?`, results: [{ label: 'Ver mis pendientes', sub: 'Te los resumo aquí', _accion: 'pendientes' }] }
+        : { from: 'bot', text: `¡Hola${nom}! ¿Cómo te ayudo? Escríbeme qué quieres hacer o a dónde ir.` };
+      setMensajes([msg]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -325,7 +334,7 @@ export default function AsistenteFlotante() {
   useEffect(() => {
     const uid = user?.id ?? user?.nombre ?? null;
     if (lastUidRef.current !== undefined && lastUidRef.current !== uid) {
-      setMensajes([]); setOpen(false); setQ('');
+      setMensajes([]); setOpen(false); setQ(''); setPendResumen(null);
     }
     lastUidRef.current = uid;
   }, [user?.id, user?.nombre]);
@@ -357,6 +366,29 @@ export default function AsistenteFlotante() {
     const rol = user?.rol;
     return INDICE.filter(e => !e.roles || !rol || e.roles.split(',').includes(rol));
   }, [user]);
+
+  /* ── Pendientes PROACTIVOS (jun 2026): badge en el FAB + saludo. Lee el
+     `resumen` de /api/notificaciones (ya filtrado por rol en el server) y lo
+     pinta como un punto con número sobre el botón → el operador VE que tiene
+     trabajo sin tener que preguntar. Refresca al montar, al abrir el panel,
+     cada 90 s y tras ejecutar una acción del bot. Sin WS extra: el componente
+     vive global; un poll liviano de un JSON derivado basta y evita una 2ª
+     conexión persistente y el churn en la pantalla de login. */
+  const recargarPend = useCallback(() => {
+    api.getNotificaciones()
+      .then(r => setPendResumen((r && r.resumen) || null))
+      .catch(() => { /* red caída: conserva el último valor */ });
+  }, []);
+  useEffect(() => {
+    if (!user) return;
+    recargarPend();
+    const id = setInterval(recargarPend, 90000);
+    return () => clearInterval(id);
+  }, [user?.id, user?.nombre, recargarPend]);
+  useEffect(() => { if (open && user) recargarPend(); /* al abrir, al día */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+  const pend = resumirPendientes(pendResumen);
 
   if (!user) return null; /* solo con sesión */
 
@@ -585,6 +617,7 @@ export default function AsistenteFlotante() {
       else r = 'Acción no reconocida.';
     } catch (e) { r = 'No se pudo: ' + (e?.data?.error || e?.message || 'error'); }
     reemplazarUltimo(r);
+    recargarPend(); /* la acción pudo cerrar un pendiente → refresca el badge */
   }
 
   /* Responder a un mensaje del usuario. */
@@ -776,7 +809,7 @@ export default function AsistenteFlotante() {
     <>
       <button
         type="button"
-        aria-label="Asistente: buscar una pantalla o botón"
+        aria-label={pend.mostrar ? `Asistente: tienes ${pend.count} pendiente${pend.count === 1 ? '' : 's'}${pend.critico ? ' (con críticas)' : ''}` : 'Asistente: buscar una pantalla o botón'}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -786,6 +819,9 @@ export default function AsistenteFlotante() {
           <path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" />
           <path d="M19 14l.7 1.9L21.6 16.6l-1.9.7L19 19l-.7-1.7L16.4 16.6l1.9-.7z" />
         </svg>
+        {pend.mostrar && (
+          <span aria-hidden="true" style={{ ...S.badge, background: pend.critico ? '#DC2626' : '#D97706' }}>{pend.badge}</span>
+        )}
       </button>
 
       {open && (
@@ -806,7 +842,7 @@ export default function AsistenteFlotante() {
                   {m.results && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, width: '100%' }}>
                       {m.results.map((e, j) => (
-                        <button key={e.ruta + j} style={S.item} onClick={() => ir(e, true)}>
+                        <button key={(e.ruta || e._accion || e.label) + j} style={S.item} onClick={() => e._accion ? responder(e._accion) : ir(e, true)}>
                           <div>
                             <div style={S.itemLabel}>{e.label}</div>
                             <div style={S.itemSub}>{e.sub}</div>
@@ -870,6 +906,14 @@ const S = {
     background: 'linear-gradient(135deg, var(--lp-brand-600), var(--lp-brand-700))',
     boxShadow: '0 6px 20px rgba(20,36,31,.28)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  /* Badge de pendientes sobre el FAB (rojo=críticas, ámbar=resto). pointerEvents
+     none para no robar el gesto de arrastre/tap del botón. */
+  badge: {
+    position: 'absolute', top: -3, right: -3, minWidth: 19, height: 19, padding: '0 5px',
+    borderRadius: 10, color: '#fff', fontSize: 11, fontWeight: 800, lineHeight: '19px',
+    textAlign: 'center', border: '2px solid var(--lp-bg-base, #fff)',
+    boxShadow: '0 1px 4px rgba(0,0,0,.3)', pointerEvents: 'none', fontFamily: 'var(--lp-font-sans)',
   },
   overlay: {
     /* Alto = viewport VISIBLE (--pp-vvh sigue al teclado en iOS), no el layout
