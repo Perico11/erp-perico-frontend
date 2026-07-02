@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import PageTabs from '../../components/ui/PageTabs';
@@ -536,38 +536,112 @@ function ConfiguracionPanel() {
    SHA256 del Sprint E (`/api/audit/log` + `/api/audit/verify`). Antes leía
    `/api/audit` legacy sin verificación de integridad ni paginación —
    convertía la feature crítica del Sprint E en cosmética. */
+/* ── Registro de acciones: categorías + labels legibles (rediseño jul 2026,
+   pedido dueño: "quién dio de alta qué, quién canceló, quién hizo un pedido —
+   no todo revuelto"). Se filtra CLIENT-SIDE sobre un lote grande (el filtro
+   `usuario` del server usaba el param equivocado y nunca funcionó). ── */
+const AUDIT_CATEGORIAS = [
+  { key: 'todas',    label: 'Todas',            match: () => true },
+  { key: 'altas',    label: 'Altas',            match: a => /^(maestro_alta_mp|ingreso_crear|ingreso_aprobar|ot_crear|oc_solicitud_creada|usuario_creado|produccion_registrada)$/.test(a) },
+  { key: 'bajas',    label: 'Cancelaciones y eliminaciones', match: a => /(_eliminad|_eliminar|_rechazad|_rechazar|_cancelar|cancelad|^maestro_estado$)/.test(a) },
+  { key: 'pedidos',  label: 'Pedidos y órdenes', match: a => /^(pedido_|orden_)/.test(a) },
+  { key: 'prod',     label: 'Producción',       match: a => /^(produccion_|sublote_|lote_|trazabilidad_)/.test(a) },
+  { key: 'inv',      label: 'Inventario',       match: a => /^(ajuste_|inventario_|envase_|tapa_|edicion_pt|transferencia_pt|reenvase_|maestro_campo|maestro_alta_mp|mp_precio)/.test(a) },
+  { key: 'ot',       label: 'Transferencias',   match: a => /^ot_/.test(a) },
+  { key: 'compras',  label: 'Compras e ingresos', match: a => /^(oc_|ingreso_)/.test(a) },
+  { key: 'usuarios', label: 'Usuarios y seguridad', match: a => /^(usuario_|pin_|cambio_pin|permiso_|security_|rate_limit|audit_|test_mode)/.test(a) },
+];
+
+const AUDIT_ACCION_LABEL = {
+  maestro_alta_mp: 'Dio de alta materia prima',
+  maestro_campo: 'Editó el maestro de MP',
+  maestro_estado: 'Cambió estado de una MP',
+  ingreso_crear: 'Registró un ingreso de proveedor',
+  ingreso_aprobar: 'Aprobó un ingreso (sumó al stock)',
+  ingreso_rechazar: 'Rechazó un ingreso',
+  ot_crear: 'Creó una transferencia',
+  ot_editar: 'Editó una transferencia',
+  ot_eliminar: 'Eliminó una transferencia',
+  ot_surtir: 'Surtió una transferencia',
+  ot_recibir: 'Recibió una transferencia en Terán',
+  ot_cancelar: 'Canceló una transferencia',
+  orden_eliminada: 'Eliminó una orden',
+  pedido_rechazado: 'Rechazó un pedido',
+  produccion_registrada: 'Registró una producción',
+  sublote_transicion: 'Movió un sublote',
+  lote_estado_forzado: 'Forzó el estado de un lote',
+  ajuste_mp: 'Ajustó stock de MP',
+  ajuste_pt: 'Ajustó stock de PT',
+  inventario_movimientos: 'Registró movimientos de inventario',
+  envase_stock: 'Ajustó stock de envases',
+  tapa_stock: 'Ajustó stock de tapas',
+  envase_transferir_teran: 'Transfirió envases a Terán',
+  transferencia_pt_teran: 'Transfirió PT a Terán',
+  reenvase_pt_teran: 'Re-envasó PT en Terán',
+  edicion_pt_meta: 'Editó datos de un PT',
+  mp_precio_base: 'Cambió precio base de MP',
+  oc_solicitud_creada: 'Creó solicitud de compra (OC)',
+  oc_aprobada: 'Aprobó una OC',
+  oc_editada: 'Editó una OC',
+  oc_pago_registrado: 'Registró pago de una OC',
+  usuario_creado: 'Creó un usuario',
+  usuario_editado: 'Editó un usuario',
+  usuario_eliminado: 'Eliminó un usuario',
+  pin_cambiado: 'Cambió el PIN de un usuario',
+  cambio_pin_propio: 'Cambió su propio PIN',
+  cambio_pin_intento_fallido: 'Intento fallido de cambio de PIN',
+  permiso_denegado: 'Intentó una acción sin permiso',
+  audit_chain_verified: 'Verificó la cadena de auditoría',
+  rate_limit_endpoint: 'Límite de peticiones alcanzado',
+  test_mode_bypass: 'Bypass de modo prueba',
+};
+function _auditLabel(accion) {
+  if (AUDIT_ACCION_LABEL[accion]) return AUDIT_ACCION_LABEL[accion];
+  if (accion.startsWith('security_')) return 'Evento de seguridad: ' + accion.slice(9).replace(/_/g, ' ');
+  return accion.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+}
+/* Resume el target (objeto libre) a lo que importa al dueño: QUÉ cosa fue. */
+function _auditTarget(t) {
+  if (!t) return '';
+  if (typeof t !== 'object') return String(t).slice(0, 110);
+  const partes = [];
+  const pick = (k, pre = '') => { if (t[k] != null && t[k] !== '') partes.push(pre + String(typeof t[k] === 'object' ? JSON.stringify(t[k]) : t[k]).slice(0, 60)); };
+  pick('mp'); pick('producto'); pick('folio'); pick('codigo'); pick('nombre');
+  pick('estado', 'estado: '); pick('cantidad', 'cant: '); pick('qty', 'cant: ');
+  pick('lineas', 'líneas: '); pick('mutaciones', 'mutaciones: ');
+  if (partes.length === 0) return JSON.stringify(t).slice(0, 110);
+  return partes.slice(0, 4).join(' · ');
+}
+
 function AuditoriaPanel() {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState('');
+  const [cat, setCat] = useState('todas');
   const [filtroUsuario, setFiltroUsuario] = useState('');
-  const [filtroAccion, setFiltroAccion] = useState('');
-  const [limite, setLimite] = useState(100);
+  const [busca, setBusca] = useState('');
+  const [limite, setLimite] = useState(500);
   const [verifying, setVerifying] = useState(false);
   const [verifyResult, setVerifyResult] = useState(null);
 
   const cargar = useCallback(() => {
     setLoading(true);
     setErr('');
-    const params = new URLSearchParams();
-    params.set('limit', String(limite));
-    if (filtroUsuario.trim()) params.set('usuario', filtroUsuario.trim());
-    if (filtroAccion.trim())  params.set('action', filtroAccion.trim());
-    /* Endpoint nuevo (Sprint E E-5) con fallback al legacy /api/audit */
-    api.get('/api/audit/log?' + params.toString())
+    /* Traemos un lote grande y filtramos client-side (categorías + usuario +
+       búsqueda) — así los chips muestran conteos reales del periodo cargado. */
+    api.get('/api/audit/log?limit=' + limite)
       .then(r => {
         const arr = Array.isArray(r) ? r : (r.data || r.logs || r.entries || []);
         setLogs(arr);
       })
       .catch(e => {
-        /* Fallback al endpoint legacy si el nuevo no responde */
         api.get('/api/audit').then(r => {
           const arr = Array.isArray(r) ? r : (r.data || r.logs || r.audit || []);
           setLogs(arr);
         }).catch(e2 => setErr(e2.message || e.message));
       })
       .finally(() => setLoading(false));
-  }, [limite, filtroUsuario, filtroAccion]);
+  }, [limite]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -584,43 +658,100 @@ function AuditoriaPanel() {
     }
   }, []);
 
+  /* Normaliza cada entrada UNA vez (usuario/acción/fecha) para filtros y render */
+  const eventos = useMemo(() => logs.map((l, i) => {
+    const accion = String(l.action || l.accion || l.tipo || 'evento');
+    return {
+      key: l.hash || i,
+      usuario: l.userNombre || l.usuario || l.user || 'sistema',
+      rol: l.userRol || '',
+      accion,
+      label: _auditLabel(accion),
+      fecha: l.timestamp || l.fecha || l.ts || '',
+      target: _auditTarget(l.target),
+      detail: l.detail || '',
+      ip: l.ip || '',
+      isOk: (l.result || 'ok') === 'ok',
+    };
+  }).sort((a, b) => String(b.fecha).localeCompare(String(a.fecha))), [logs]);
+
+  const usuarios = useMemo(() => [...new Set(eventos.map(e => e.usuario))].sort(), [eventos]);
+
+  const conteoPorCat = useMemo(() => {
+    const c = {};
+    AUDIT_CATEGORIAS.forEach(k => { c[k.key] = k.key === 'todas' ? eventos.length : eventos.filter(e => k.match(e.accion)).length; });
+    return c;
+  }, [eventos]);
+
+  const visibles = useMemo(() => {
+    const catDef = AUDIT_CATEGORIAS.find(c => c.key === cat) || AUDIT_CATEGORIAS[0];
+    const q = busca.trim().toLowerCase();
+    return eventos.filter(e =>
+      (cat === 'todas' || catDef.match(e.accion))
+      && (!filtroUsuario || e.usuario === filtroUsuario)
+      && (!q || e.label.toLowerCase().includes(q) || e.target.toLowerCase().includes(q) || e.usuario.toLowerCase().includes(q))
+    );
+  }, [eventos, cat, filtroUsuario, busca]);
+
+  /* Agrupar por día → separadores ("no todo revuelto") */
+  const porDia = useMemo(() => {
+    const grupos = [];
+    let diaActual = null;
+    visibles.forEach(e => {
+      const d = e.fecha ? new Date(e.fecha) : null;
+      const dia = d && !Number.isNaN(d.getTime())
+        ? d.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+        : 'Sin fecha';
+      if (dia !== diaActual) { grupos.push({ dia, items: [] }); diaActual = dia; }
+      grupos[grupos.length - 1].items.push(e);
+    });
+    return grupos;
+  }, [visibles]);
+
+  const chipStyle = (on) => ({
+    padding: '7px 13px', borderRadius: 999, cursor: 'pointer', whiteSpace: 'nowrap',
+    border: '1.5px solid ' + (on ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
+    background: on ? 'var(--lp-brand-600)' : 'transparent',
+    color: on ? '#fff' : 'var(--lp-text-secondary)',
+    fontSize: 12, fontWeight: on ? 700 : 500, fontFamily: 'var(--lp-font-sans)',
+  });
+
   return (
     <div style={S.panel}>
+      {/* Chips de categoría — el "no lo quiero ver todo revuelto" */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
+        {AUDIT_CATEGORIAS.map(c => (
+          <button key={c.key} onClick={() => setCat(c.key)} style={chipStyle(cat === c.key)}>
+            {c.label}{conteoPorCat[c.key] ? ` · ${conteoPorCat[c.key]}` : ''}
+          </button>
+        ))}
+      </div>
+
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 12 }}>
-        <div style={{ flex: 1, minWidth: 160 }}>
+        <div style={{ minWidth: 170 }}>
           <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 }}>Usuario</label>
-          <input
-            type="text" value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)}
-            placeholder="Filtrar por nombre..."
-            style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}
-          />
-        </div>
-        <div style={{ flex: 1, minWidth: 160 }}>
-          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 }}>Acción</label>
-          <input
-            type="text" value={filtroAccion} onChange={e => setFiltroAccion(e.target.value)}
-            placeholder="orden_eliminada, qc_..."
-            style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}
-          />
-        </div>
-        <div>
-          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 }}>Límite</label>
-          <select value={limite} onChange={e => setLimite(Number(e.target.value))} style={{ padding: '8px 10px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 12 }}>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={500}>500</option>
+          <select value={filtroUsuario} onChange={e => setFiltroUsuario(e.target.value)}
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 12, fontFamily: 'var(--lp-font-sans)' }}>
+            <option value="">Todos</option>
+            {usuarios.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
         </div>
-        <button
-          onClick={verificarCadena}
-          disabled={verifying}
-          style={{
-            padding: '10px 16px', fontSize: 12, fontWeight: 700,
-            background: 'var(--lp-brand-600)', color: '#fff',
-            border: 'none', borderRadius: 'var(--lp-radius-sm)',
-            cursor: 'pointer', fontFamily: 'var(--lp-font-sans)',
-          }}
-        >
+        <div style={{ flex: 1, minWidth: 160 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 }}>Buscar</label>
+          <input type="text" value={busca} onChange={e => setBusca(e.target.value)}
+            placeholder="Producto, folio, acción…"
+            style={{ width: '100%', padding: '8px 10px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 12, fontFamily: 'var(--lp-font-sans)' }} />
+        </div>
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', display: 'block', marginBottom: 4 }}>Cargar</label>
+          <select value={limite} onChange={e => setLimite(Number(e.target.value))} style={{ padding: '8px 10px', borderRadius: 'var(--lp-radius-sm)', border: '1.5px solid var(--lp-border-subtle)', fontSize: 12 }}>
+            <option value={200}>200</option>
+            <option value={500}>500</option>
+            <option value={2000}>2000</option>
+          </select>
+        </div>
+        <button onClick={verificarCadena} disabled={verifying}
+          style={{ padding: '10px 16px', fontSize: 12, fontWeight: 700, background: 'var(--lp-brand-600)', color: '#fff', border: 'none', borderRadius: 'var(--lp-radius-sm)', cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>
           {verifying ? 'Verificando…' : 'Verificar cadena'}
         </button>
       </div>
@@ -639,45 +770,37 @@ function AuditoriaPanel() {
         </div>
       )}
 
-      <div style={S.metric}>
-        <div style={S.metricCard}>
-          <div style={S.metricVal}>{logs.length}</div>
-          <div style={S.metricLabel}>Eventos mostrados</div>
-        </div>
-      </div>
-
       {loading && <div style={S.loading}>Cargando auditoría...</div>}
       {err && <div style={S.err}>{err}</div>}
-      {!loading && logs.length === 0 ? (
-        <div style={S.loading}>Sin eventos registrados con esos filtros</div>
+      {!loading && visibles.length === 0 ? (
+        <div style={S.loading}>Sin eventos con esos filtros</div>
       ) : (
         <div style={S.list}>
-          {logs.slice().reverse().map((l, i) => {
-            const usuario = l.userNombre || l.usuario || l.user || 'sistema';
-            const accion = l.action || l.accion || l.tipo || 'evento';
-            const fecha = l.timestamp || l.fecha || l.ts;
-            const target = l.target ? (typeof l.target === 'object' ? JSON.stringify(l.target).slice(0, 120) : String(l.target).slice(0, 120)) : '';
-            const isOk = (l.result || 'ok') === 'ok';
-            return (
-              <div key={l.hash || i} style={S.row}>
-                <div style={S.avatar(isOk ? 'var(--lp-success-600)' : 'var(--lp-danger-600)')}>
-                  {usuario.charAt(0).toUpperCase()}
-                </div>
-                <div style={S.info}>
-                  <div style={S.name}>{accion} {l.userRol && <span style={{ color: 'var(--lp-text-tertiary)', fontWeight: 400 }}>· {l.userRol}</span>}</div>
-                  <div style={S.meta}>
-                    {usuario}
-                    {fecha && ' · ' + new Date(fecha).toLocaleString('es-MX')}
-                    {l.endpoint && ' · ' + l.endpoint}
-                    {l.ip && ' · IP ' + l.ip}
+          {porDia.map(g => (
+            <div key={g.dia}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.06em', padding: '12px 2px 6px' }}>{g.dia}</div>
+              {g.items.map(e => (
+                <div key={e.key} style={S.row}>
+                  <div style={S.avatar(e.isOk ? 'var(--lp-success-600)' : 'var(--lp-danger-600)')}>
+                    {e.usuario.charAt(0).toUpperCase()}
                   </div>
-                  {target && (
-                    <div style={{ ...S.meta, fontFamily: 'var(--lp-font-mono)', fontSize: 10, marginTop: 2, color: 'var(--lp-text-tertiary)' }}>{target}</div>
-                  )}
+                  <div style={S.info}>
+                    <div style={S.name}>
+                      <span style={{ color: 'var(--lp-brand-700)' }}>{e.usuario}</span> — {e.label}
+                    </div>
+                    {(e.target || e.detail) && (
+                      <div style={{ ...S.meta, marginTop: 2 }}>{e.target}{e.detail ? ` · ${e.detail}` : ''}</div>
+                    )}
+                    <div style={{ ...S.meta, fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>
+                      {e.fecha && new Date(e.fecha).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
+                      {e.rol && ' · ' + e.rol}
+                      {e.ip && ' · IP ' + e.ip}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          ))}
         </div>
       )}
     </div>

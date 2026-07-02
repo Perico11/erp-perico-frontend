@@ -12,7 +12,7 @@ import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge from '../../components/ui/PruebaBadge';
-import { ESTADO_ORDEN_LABEL, normEstado } from '../../lib/estados';
+import { ESTADO_ORDEN_LABEL, normEstado, esPedidoFueraDeFabrica } from '../../lib/estados';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 
 /* ── Iconos line (sin emojis) — verde Claude Design ──────────────────────
@@ -540,7 +540,7 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
     if (esPrueba || pedidoOrigen?.esPrueba) { setStockCheck({ skipped: true }); return; }
     let alive = true;
     setStockCheck({ loading: true });
-    api.validarStock(prod, qty).then(r => {
+    api.validarStock(prod, qty, undefined, pedidoOrigen?.id).then(r => {
       if (!alive) return;
       if (r?.ok) {
         setStockCheck({
@@ -1194,8 +1194,13 @@ export default function OrdenesPage() {
 
   const ordenes = useMemo(() => {
     const arr = ordData?.data || (Array.isArray(ordData) ? ordData : []);
-    return Array.isArray(arr) ? arr : [];
-  }, [ordData]);
+    const base = Array.isArray(arr) ? arr : [];
+    /* Regla dueño (jul 2026, espejo de PedidosPage): el trabajo del TÉCNICO
+       termina en la recolección — órdenes ya recogidas (en_camino) o en Terán
+       (en_almacen, tote por reenvasar) salen de su vista; reaparecen en el
+       historial cuando quedan 'entregado'. */
+    return rol === 'tecnico' ? base.filter(o => !esPedidoFueraDeFabrica(o?.estado)) : base;
+  }, [ordData, rol]);
 
   const pedidos = useMemo(() => {
     const arr = pedData?.data || (Array.isArray(pedData) ? pedData : []);

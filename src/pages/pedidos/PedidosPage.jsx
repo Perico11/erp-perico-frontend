@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
@@ -15,11 +15,11 @@ import PedidoLoteActions from '../../components/PedidoLoteActions';
 import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 /* Lenguaje visual del checkpoint (handoff Claude Design jun 2026) */
-import { ETAPAS_PEDIDO, CK_COLOR, CkCheck, injectCkCSS } from '../../components/pipeline/Checkpoint';
+import { CK_COLOR } from '../../components/pipeline/Checkpoint';
 import {
   ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
   ESTADO_PEDIDO_COLOR as ESTADO_COLOR,
-  bucketPedido, esPedidoTerminal, normEstado,
+  bucketPedido, esPedidoTerminal, normEstado, esPedidoFueraDeFabrica,
 } from '../../lib/estados';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 
@@ -262,73 +262,163 @@ function _idxFasePedido(estado) {
   return -1;
 }
 
-/* Componente PipelinePedido — mini timeline horizontal por card.
-   FIX jun 2026 (feedback owner): cuando el pipeline no cabe (móvil / card
-   estrecha), el contenedor scrollea lateral y se AUTO-CENTRA en el checkpoint
-   actual al avanzar — antes el último paso quedaba cortado sin pista visual. */
-function PipelinePedido({ estado }) {
+/* ═══════════════════════════════════════════════════════════════════════
+   Diseño "glass forest" de la card de pedido (handoff Card Progreso Pedido,
+   jun 2026). PC = barra de 7 segmentos + numeral (1b); móvil = línea de tiempo
+   vertical (1c). Colores hardcodeados del handoff (tema claro forest); la
+   LÓGICA (estado→fase, acciones, permisos) queda intacta.
+   ═══════════════════════════════════════════════════════════════════════ */
+const FOREST = '#0f7a5a';
+const F_TXT = '#16201c';
+const F_TXT2 = '#5a6b63';
+const F_TENUE = '#9aa8a2';
+
+/* Iconos por paso, tamaño explícito (paths EXACTOS del mockup). El orden
+   coincide con PIPELINE_FASES: 0 Pedido · 1 Aceptado · 2 Producción ·
+   3 Envasado · 4 En camino · 5 En Terán · 6 Entregado. */
+function PasoIcon({ idx, size = 16, color = 'currentColor' }) {
+  const p = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: color, strokeWidth: 2, strokeLinecap: 'round', strokeLinejoin: 'round', 'aria-hidden': true };
+  switch (idx) {
+    case 0: return (<svg {...p}><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96 12 12.01l8.73-5.05"/><path d="M12 22.08V12"/></svg>);
+    case 1: return (<svg {...p}><circle cx="12" cy="12" r="9"/><path d="m8.5 12 2.5 2.5 4.5-4.5"/></svg>);
+    case 2: return (<svg {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>);
+    case 3: return (<svg {...p}><path d="M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z"/></svg>);
+    case 4: return (<svg {...p}><path d="M1 3h13v11H1z"/><path d="M14 7h4l3 3v4h-7V7z"/><circle cx="5.5" cy="17.5" r="2.2"/><circle cx="17.5" cy="17.5" r="2.2"/></svg>);
+    case 5: return (<svg {...p}><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>);
+    default: return (<svg {...p}><path d="M20 6 9 17l-5-5"/></svg>);
+  }
+}
+
+/* ProgresoPedido — barra de 7 segmentos + iconos (desktop 1b) o línea de
+   tiempo vertical (móvil 1c). Reusa _idxFasePedido + PIPELINE_FASES (misma
+   lógica estado→fase que antes). idx<0 (cancelado/rechazado) → no renderiza. */
+function ProgresoPedido({ estado, isDesktop }) {
   const idx = _idxFasePedido(estado);
-  const wrapRef = useRef(null);
-  useEffect(() => { injectCkCSS(); }, []);
-  useEffect(() => {
-    const wrap = wrapRef.current;
-    if (!wrap || idx < 0) return;
-    if (wrap.scrollWidth <= wrap.clientWidth + 4) return; /* cabe completo */
-    const el = wrap.querySelector('[data-current="1"]');
-    if (!el) return;
-    const elRect = el.getBoundingClientRect();
-    const wrapRect = wrap.getBoundingClientRect();
-    const target = wrap.scrollLeft + (elRect.left - wrapRect.left) - (wrap.clientWidth / 2) + (elRect.width / 2);
-    try { wrap.scrollTo({ left: Math.max(0, target), behavior: 'smooth' }); }
-    catch { wrap.scrollLeft = Math.max(0, target); }
-  }, [idx, estado]);
-  if (idx < 0) return null; /* cancelado/rechazado/eliminado: ocultar */
-  /* (jun 2026, handoff Claude Design) Nodos con el lenguaje ck compartido:
-     icono por fase con su color (solicitud=info, fabricación=verde,
-     logística=ámbar, cierre=verde oscuro), done=✓ relleno, current grande
-     con halo+pulso. esPrueba ya se distingue por el badge de la card. */
-  const nodos = [];
-  PIPELINE_FASES.forEach((fase, i) => {
-    const st = i < idx ? 'done' : i === idx ? 'current' : 'pending';
-    const etapa = ETAPAS_PEDIDO.find(e => e.key === fase.ck) || ETAPAS_PEDIDO[0];
-    const cc = CK_COLOR[etapa.color];
-    const Icon = etapa.Icon;
-    nodos.push(
-      <div key={'s_' + fase.key} data-current={st === 'current' ? '1' : undefined} style={S.pipelineStep}>
-        <div style={S.pipelineDotBox}>
-          <div className={`cknode ${st}`} style={{ '--cc': cc }}>
-            <div className="ckdot">{st === 'done' ? <CkCheck /> : <Icon />}</div>
-          </div>
+  if (idx < 0) return null;
+  const total = PIPELINE_FASES.length;
+
+  if (isDesktop) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12 }}>
+          <span style={{ color: FOREST, fontWeight: 500 }}>Paso {idx + 1} de {total} · {PIPELINE_FASES[idx].label}</span>
+          <span style={{ color: F_TENUE }}>{PIPELINE_FASES[total - 1].label}</span>
         </div>
-        <div style={S.pipelineLabel(st)}>{fase.label}</div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          {PIPELINE_FASES.map((f, i) => (
+            <div key={f.key} style={{ flex: 1, height: 7, borderRadius: 99, background: i <= idx ? FOREST : 'rgba(0,0,0,.10)' }} />
+          ))}
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          {PIPELINE_FASES.map((f, i) => (
+            <div key={f.key} style={{ width: 30, display: 'flex', justifyContent: 'center' }} title={f.label}>
+              <PasoIcon idx={i} size={16} color={i < idx ? FOREST : i === idx ? F_TXT : F_TENUE} />
+            </div>
+          ))}
+        </div>
       </div>
     );
-    if (i < PIPELINE_FASES.length - 1) {
-      nodos.push(
-        <div key={'l_' + fase.key} style={S.pipelineLine(i < idx)} />
-      );
-    }
-  });
-  return <div ref={wrapRef} style={S.pipelineWrap}>{nodos}</div>;
+  }
+
+  /* Móvil 1c — línea de tiempo vertical (línea guía + nodo + etiqueta + "en curso") */
+  return (
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 2, borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: 16 }}>
+      <div style={{ position: 'absolute', left: 18, top: 32, bottom: 14, width: 2, background: 'rgba(0,0,0,.10)' }} />
+      {PIPELINE_FASES.map((f, i) => {
+        const st = i < idx ? 'done' : i === idx ? 'current' : 'pending';
+        const nodeStyle = st === 'current'
+          ? { background: FOREST, color: '#fff', border: 'none', boxShadow: '0 0 0 5px rgba(15,122,90,.15)' }
+          : st === 'done'
+            ? { background: 'color-mix(in srgb, ' + FOREST + ' 14%, transparent)', color: FOREST, border: 'none' }
+            : { background: '#fff', color: F_TENUE, border: '1px solid rgba(0,0,0,.08)' };
+        return (
+          <div key={f.key} style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', gap: 14, padding: '5px 0' }}>
+            <div style={{ width: 38, height: 38, flexShrink: 0, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...nodeStyle }}>
+              <PasoIcon idx={i} size={17} color="currentColor" />
+            </div>
+            <span style={{ fontSize: 14, color: st === 'pending' ? F_TENUE : F_TXT, fontWeight: st === 'current' ? 500 : 400 }}>{f.label}</span>
+            {st === 'current' && (
+              <span style={{ marginLeft: 'auto', fontSize: 11, color: FOREST, background: 'rgba(15,122,90,.10)', borderRadius: 99, padding: '2px 10px' }}>en curso</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
+
+/* Estado del pedido → color del badge en la paleta forest del handoff
+   (pendiente = ÁMBAR como el mockup; el token compartido de lib/estados deja el
+   badge gris/apagado). En-flujo = verde, espera-acción = ámbar, bloqueado =
+   rojo, cerrado = verde oscuro. fg = texto/etiqueta, dot = punto; el fondo es un
+   tinte claro del dot. Espeja la decisión de OrdenesPage (pendiente=ámbar). */
+const ESTADO_BADGE = {
+  pendiente:      { fg: '#9a6a13', dot: '#B6791D' },
+  aceptado:       { fg: '#0f7a5a', dot: '#0f7a5a' },
+  en_proceso:     { fg: '#0f7a5a', dot: '#0f7a5a' },
+  en_produccion:  { fg: '#0f7a5a', dot: '#0f7a5a' },
+  producido:      { fg: '#9a6a13', dot: '#B6791D' },
+  qc_hold:        { fg: '#b3261e', dot: '#b3261e' },
+  qc_aprobado:    { fg: '#9a6a13', dot: '#B6791D' },
+  en_envasado:    { fg: '#0f7a5a', dot: '#0f7a5a' },
+  envasado:       { fg: '#9a6a13', dot: '#B6791D' },
+  en_recoleccion: { fg: '#9a6a13', dot: '#B6791D' },
+  en_camino:      { fg: '#0f7a5a', dot: '#0f7a5a' },
+  en_almacen:     { fg: '#9a6a13', dot: '#B6791D' },
+  entregado:      { fg: '#0f6e56', dot: '#0f6e56' },
+  rechazado:      { fg: '#b3261e', dot: '#b3261e' },
+  cancelado:      { fg: '#b3261e', dot: '#b3261e' },
+};
+const _estadoBadge = (estado) => ESTADO_BADGE[(estado || '').toLowerCase()] || { fg: '#5a6b63', dot: '#9aa8a2' };
+
+/* Estilos "glass forest" de la card de pedido (hardcodeados del handoff). */
+const C = {
+  card: (isDesktop, esPrueba, focus) => ({
+    position: 'relative',
+    background: esPrueba ? 'rgba(182,121,29,.06)' : (isDesktop ? '#fff' : 'rgba(250,253,252,0.72)'),
+    ...(isDesktop ? {} : { backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)' }),
+    border: esPrueba ? '1px solid rgba(182,121,29,.30)' : (isDesktop ? '1px solid rgba(0,0,0,.06)' : '1px solid rgba(255,255,255,0.55)'),
+    borderRadius: 24,
+    boxShadow: isDesktop ? '0 10px 30px rgba(0,0,0,.07)' : '0 18px 50px rgba(80,140,110,.18)',
+    padding: '22px 24px',
+    display: 'flex', flexDirection: 'column', gap: 16,
+    fontFamily: 'var(--lp-font-sans)',
+    ...(focus ? { outline: '2px solid ' + FOREST, outlineOffset: 2, boxShadow: '0 0 0 4px rgba(15,122,90,.18)' } : {}),
+  }),
+  head: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  folio: { fontSize: 13, fontWeight: 500, color: FOREST, letterSpacing: '.02em' },
+  headRight: { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  internaBadge: { fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(0,0,0,.05)', color: F_TXT2, letterSpacing: '.04em', textTransform: 'uppercase' },
+  estadoBadge: (estado) => {
+    const m = _estadoBadge(estado);
+    return { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 500, color: m.fg, background: `color-mix(in srgb, ${m.dot} 15%, transparent)`, borderRadius: 999, padding: '5px 12px', whiteSpace: 'nowrap' };
+  },
+  estadoDot: (estado) => ({ width: 7, height: 7, borderRadius: '50%', background: _estadoBadge(estado).dot, display: 'inline-block', flexShrink: 0 }),
+  title: { fontSize: 21, fontWeight: 500, letterSpacing: '-.01em', color: F_TXT, lineHeight: 1.15 },
+  meta: { fontSize: 13, color: F_TXT2, marginTop: 5, lineHeight: 1.5 },
+  metaB: { color: F_TXT, fontWeight: 500 },
+  numeral: { textAlign: 'center', background: 'rgba(15,122,90,.08)', borderRadius: 16, padding: '10px 16px', flexShrink: 0 },
+  numeralNum: { fontSize: 26, fontWeight: 500, color: FOREST, lineHeight: 1 },
+  numeralUnit: { fontSize: 10, color: F_TXT2, textTransform: 'uppercase', letterSpacing: '.06em', marginTop: 3 },
+  actions: { display: 'flex', gap: 10, flexWrap: 'wrap', borderTop: '1px solid rgba(0,0,0,.06)', paddingTop: 16 },
+  btn: (kind = 'primary') => ({
+    minHeight: 44, padding: '0 16px',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+    fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit',
+    borderRadius: 99,
+    flex: kind === 'danger' ? '0 0 auto' : '1 1 130px',
+    background: kind === 'primary' ? FOREST : kind === 'danger' ? 'rgba(179,38,30,.05)' : '#fff',
+    color: kind === 'primary' ? '#fff' : kind === 'danger' ? '#b3261e' : F_TXT,
+    border: kind === 'primary' ? 'none' : kind === 'danger' ? '1px solid rgba(179,38,30,.18)' : '1px solid rgba(0,0,0,.08)',
+    boxShadow: kind === 'primary' ? '0 6px 16px rgba(15,122,90,.28)' : kind === 'ghost' ? '0 1px 2px rgba(0,0,0,.04)' : 'none',
+  }),
+};
 
 /* X3 (jun 2026): ESTADO_COLOR y ESTADO_LABEL vienen de lib/estados.js. */
 
-/* ── Urgencia visual del pedido → color del riel izquierdo de la card
-   (HANDOFF §4: "riel de color a la izquierda para urgencia").
-   danger    = bloqueado / terminal negativo (qc_hold, rechazado, cancelado)
-   warning   = espera ACCIÓN humana (aceptar, QC, envasar, recolectar,
-               reenvasar TOTE en Terán) — también toda PRUEBA (ámbar global)
-   brand     = fluyendo (alguien ya lo está trabajando)
-   brand-700 = entregado (cerrado OK) ── */
-function urgenciaPedido(p) {
-  if (p?.esPrueba) return 'var(--lp-warning-600)';
-  const e = (p?.estado || '').toLowerCase();
-  if (['qc_hold', 'rechazado', 'cancelado'].includes(e)) return 'var(--lp-danger-600)';
-  if (['pendiente', 'producido', 'qc_aprobado', 'envasado', 'en_recoleccion', 'en_almacen'].includes(e)) return 'var(--lp-warning-600)';
-  if (e === 'entregado') return 'var(--lp-brand-700)';
-  return 'var(--lp-brand-600)'; /* aceptado, en_proceso, en_produccion, en_envasado, en_camino */
-}
+/* (jun 2026) El riel de urgencia se retiró con el rediseño de la card (handoff
+   Card Progreso Pedido): el estado se comunica con el badge + la barra/timeline
+   de progreso. La lógica de acciones por estado+rol queda intacta. */
 
 /* Fecha relativa corta del mockup ("hace 1 h", "ayer 17:55", "2 jun").
    El datetime completo va en title= para no perder precisión. */
@@ -499,8 +589,14 @@ export default function PedidosPage() {
        pero el frontend NO debe mostrarlos en ninguna lista. Sin este filtro
        parecía que "el botón Cancelar no funcionaba" porque el pedido
        seguía visible aunque ya estaba eliminado en JSON. */
-    return arr.filter(p => p && p.id && !p.eliminado && p.estado !== 'eliminado');
-  }, [data]);
+    const base = arr.filter(p => p && p.id && !p.eliminado && p.estado !== 'eliminado');
+    /* Regla dueño (jul 2026): el trabajo del TÉCNICO termina en la recolección.
+       Un pedido que Luis ya recogió (en_camino) o que está en Terán con tote por
+       reenvasar (en_almacen — asunto de Josué) sale de la vista de Enrique; le
+       reaparece SOLO en Historial cuando queda 'entregado'. Filtrar AQUÍ (la
+       fuente) mantiene chips/embudo/conteos consistentes sin re-filtros. */
+    return user?.rol === 'tecnico' ? base.filter(p => !esPedidoFueraDeFabrica(p.estado)) : base;
+  }, [data, user?.rol]);
 
   /* Buckets desde la fuente ÚNICA lib/estados.js (antes inline → derivaba; un
      pedido en 'en_almacen' o variante 'entregada' se caía entre pestañas). */
@@ -747,7 +843,9 @@ export default function PedidosPage() {
     setErr('');
     try {
       setBusyId(p.id);
-      const v = await api.validarStock(p.producto, p.cantidad);
+      /* excluirPedido=p.id: la orden de ESTE pedido ya reserva su MP; sin esto la
+         validación la contaba doble y daba "MP insuficiente" con stock de sobra. */
+      const v = await api.validarStock(p.producto, p.cantidad, undefined, p.id);
       if (v && v.suficiente === false) {
         const falt = (v.faltantes || []).slice(0, 4)
           .map(f => `${f.mp} (faltan ${Number(f.faltanteKg || 0).toFixed(1)} kg)`).join(' · ');
@@ -896,57 +994,75 @@ export default function PedidosPage() {
                orden). Se oculta para esas entradas. */
             const mostrarEliminar = esAdmin && !p._esOrdenInterna;
             const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
+
+            /* Cantidad → número + unidad para el numeral (desktop). */
+            const qtyTxt = etiquetaMedidaReal(p.medida, p.medidaQty, p.cantidad) || `${p.cantidad} cubetas`;
+            const _sp = qtyTxt.indexOf(' ');
+            const qNum = _sp < 0 ? qtyTxt : qtyTxt.slice(0, _sp);
+            const qUnit = _sp < 0 ? '' : qtyTxt.slice(_sp + 1);
+            /* Meta SIN la cantidad (solicitó · fecha · lote · por · producción).
+               Se CONSERVAN todos los extras que el mockup omite. */
+            const metaParts = [];
+            if (p.solicitante) metaParts.push(<>solicitó <b style={C.metaB}>{p.solicitante}</b></>);
+            if (p.fecha) metaParts.push(<span title={new Date(p.fecha).toLocaleString('es-MX')}>{fmtRel(p.fecha)}</span>);
+            if (p.lote) metaParts.push(<>Lote <code style={{ fontFamily: 'var(--lp-font-mono)' }}>{p.lote}</code></>);
+            if (p.creadoPor && p.creadoPor !== p.solicitante) metaParts.push(<>por {p.creadoPor}</>);
+            if (p.estado === 'en_produccion' && p.produccionIniciadaPor) metaParts.push(<>Producción por <b style={C.metaB}>{p.produccionIniciadaPor}</b></>);
+            const metaJoined = metaParts.map((m, i) => <Fragment key={i}>{i > 0 ? ' · ' : ''}{m}</Fragment>);
+            const mostrarProgreso = p.estado !== 'entregado' && !p._esOrdenInterna;
+
             return (
-              <div key={p.id} id={'ped-' + p.id} style={{ ...S.pedidoCard(p.estado, p.esPrueba), ...(p.id === focusId ? { outline: '2px solid var(--lp-brand-600)', outlineOffset: 2, boxShadow: '0 0 0 4px color-mix(in srgb, var(--lp-brand-600) 18%, transparent)' } : {}) }}>
-                {/* Riel izquierdo de urgencia (mockup/HANDOFF §4) */}
-                <span aria-hidden="true" style={S.pedidoRail(urgenciaPedido(p))} />
-                {/* Header: folio + badge estado + prueba + cronómetro */}
-                <div style={S.pedidoHeader}>
-                  <span style={S.pedidoId}>{p._folio || p.id}</span>
-                  <span style={S.estadoBadge(p.estado)}>{ESTADO_LABEL[p.estado] || p.estado}</span>
-                  {p._esOrdenInterna && (
-                    <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-tertiary)', letterSpacing: '.04em', textTransform: 'uppercase' }}>Interna</span>
-                  )}
-                  {p.esPrueba && <PruebaBadge size="sm" />}
-                  {p.estado === 'en_produccion' && p.fechaInicioProduccion && (
-                    <span style={{ marginLeft: 'auto' }}>
+              <div key={p.id} id={'ped-' + p.id} style={C.card(isDesktop, p.esPrueba, p.id === focusId)}>
+                {/* Header: folio + (interna · prueba · cronómetro · estado) */}
+                <div style={C.head}>
+                  <span style={C.folio}>{p._folio || p.id}</span>
+                  <div style={C.headRight}>
+                    {p._esOrdenInterna && <span style={C.internaBadge}>Interna</span>}
+                    {p.esPrueba && <PruebaBadge size="sm" />}
+                    {p.estado === 'en_produccion' && p.fechaInicioProduccion && (
                       <Cronometro desde={p.fechaInicioProduccion} />
-                    </span>
-                  )}
-                </div>
-
-                {/* Mini-pipeline horizontal del estado del pedido. Ayuda visual
-                    rápida — el operario ve la fase de un vistazo. Mockup: las
-                    cards ENTREGADAS (historial) van compactas, sin timeline. */}
-                {p.estado !== 'entregado' && !p._esOrdenInterna && (
-                  <PipelinePedido estado={p.estado} esPrueba={p.esPrueba} />
-                )}
-
-                {/* Cuerpo: título + metadata (mockup: título = producto;
-                    "52 cubetas · solicitó Josué · hace 1 h" en la meta).
-                    Extras que el mockup omite y se CONSERVAN: lote, creadoPor,
-                    quién inició producción. */}
-                <div style={S.pedidoBody}>
-                  <div style={S.pedidoTitle}>{p.producto}</div>
-                  <div style={S.pedidoMeta}>
-                    <span style={S.cantidad}>{etiquetaMedidaReal(p.medida, p.medidaQty, p.cantidad) || `${p.cantidad} cubetas`}</span>
-                    {p.solicitante && <> · solicitó <strong>{p.solicitante}</strong></>}
-                    {p.fecha && <span title={new Date(p.fecha).toLocaleString('es-MX')}> · {fmtRel(p.fecha)}</span>}
-                    {p.lote && <> · Lote <code style={{ fontFamily: 'var(--lp-font-mono)' }}>{p.lote}</code></>}
-                    {p.creadoPor && p.creadoPor !== p.solicitante && <> · por {p.creadoPor}</>}
-                    {p.estado === 'en_produccion' && p.produccionIniciadaPor && (
-                      <> · Producción por <strong>{p.produccionIniciadaPor}</strong></>
                     )}
+                    <span style={C.estadoBadge(p.estado)}>
+                      <i style={C.estadoDot(p.estado)} />{ESTADO_LABEL[p.estado] || p.estado}
+                    </span>
                   </div>
                 </div>
+
+                {/* Cuerpo: título + meta. Desktop añade el numeral (cantidad) a la
+                    derecha; móvil lleva la cantidad inline en la meta. */}
+                {isDesktop ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={C.title}>{p.producto}</div>
+                      {metaParts.length > 0 && <div style={C.meta}>{metaJoined}</div>}
+                    </div>
+                    <div style={C.numeral}>
+                      <div style={C.numeralNum}>{qNum}</div>
+                      {qUnit && <div style={C.numeralUnit}>{qUnit}</div>}
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div style={C.title}>{p.producto}</div>
+                    <div style={C.meta}>
+                      <b style={C.metaB}>{qtyTxt}</b>
+                      {metaParts.length > 0 && ' · '}
+                      {metaJoined}
+                    </div>
+                  </div>
+                )}
+
+                {/* Progreso del pedido — barra+iconos (desktop) / timeline (móvil).
+                    Oculto en entregado (historial compacto) y en órdenes internas. */}
+                {mostrarProgreso && <ProgresoPedido estado={p.estado} isDesktop={isDesktop} />}
 
                 {/* Footer: acciones del pedido por estado. data-id/data-rol del
                     mockup cableados a los handlers reales. */}
                 {tieneAcciones && (
-                  <div style={S.pedidoActions}>
+                  <div style={C.actions}>
                     {mostrarAceptar && (
                       <button
-                        style={S.btn('primary')}
+                        style={C.btn('primary')}
                         data-id="pedidos.btn.aceptar-producir"
                         data-rol="tecnico,admin"
                         disabled={busyId === p.id}
@@ -957,7 +1073,7 @@ export default function PedidosPage() {
                     )}
                     {mostrarIniciar && (
                       <button
-                        style={S.btn('primary')}
+                        style={C.btn('primary')}
                         data-id="pedidos.btn.iniciar-produccion"
                         data-rol="tecnico,admin"
                         disabled={busyId === p.id}
@@ -971,7 +1087,7 @@ export default function PedidosPage() {
                       /* mockup: en_produccion lleva botón GHOST (la acción
                          fuerte ya ocurrió; esto solo navega al wizard) */
                       <button
-                        style={S.btn('ghost')}
+                        style={C.btn('ghost')}
                         data-id="pedidos.btn.ir-produccion"
                         data-rol="tecnico,admin"
                         onClick={() => navigate('/produccion')}
@@ -984,7 +1100,7 @@ export default function PedidosPage() {
                         reversa MP. Técnico: solo motivo → rechazado. */}
                     {mostrarCancelar && (
                       <button
-                        style={S.btn('danger')}
+                        style={C.btn('danger')}
                         data-id={user?.rol === 'admin' ? 'pedidos.btn.cancelar' : 'pedidos.btn.rechazar'}
                         data-rol="tecnico,admin"
                         disabled={busyId === p.id}
@@ -999,7 +1115,7 @@ export default function PedidosPage() {
                     {/* §7: Eliminar pedido — SOLO admin (data-rol="admin"). */}
                     {mostrarEliminar && (
                       <button
-                        style={S.btn('danger')}
+                        style={C.btn('danger')}
                         data-id="pedidos.btn.eliminar"
                         data-rol="admin"
                         disabled={busyId === p.id}

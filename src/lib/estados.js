@@ -16,6 +16,15 @@
 export const ESTADO_PEDIDO_PENDIENTE = ['pendiente'];
 export const ESTADO_PEDIDO_EN_FLUJO = ['pendiente','aceptado','en_proceso','en_produccion','qc_hold','qc_aprobado','en_envasado'];
 export const ESTADO_PEDIDO_LISTO_RECOGER = ['envasado','en_recoleccion'];
+/* "Por entregar" = producto YA terminado en ruta de entrega, aún NO entregado.
+   Complemento de ESTADO_PEDIDO_PENDIENTE ("por preparar"): cubre de envasado
+   (listo) hasta en_almacen (recibido en Terán pero pedido sin cerrar). */
+export const ESTADO_PEDIDO_POR_ENTREGAR = ['envasado','en_recoleccion','en_camino','en_almacen'];
+/* "Fuera de fábrica" (regla dueño jul 2026): Luis ya lo recogió (en_camino) o ya
+   está en Terán (en_almacen — tote por reenvasar, asunto de Josué). El trabajo del
+   TÉCNICO termina en la recolección → estos estados salen de su vista activa y el
+   pedido reaparece SOLO en Historial al quedar 'entregado'. */
+export const ESTADO_PEDIDO_FUERA_FABRICA = ['en_camino','en_almacen'];
 export const ESTADO_PEDIDO_TERMINAL = ['entregado','cancelado','rechazado'];
 
 /* ── ORDENES — espejo del pedido a nivel orden técnico ── */
@@ -66,6 +75,9 @@ export const normEstado = e => {
    suma aparte en PedidosPage desde el ledger (no es estado de pedido). */
 export const esPedidoTerminal  = e => ESTADO_PEDIDO_TERMINAL.includes(normEstado(e));
 export const esPedidoRechazado = e => { const n = normEstado(e); return n === 'rechazado' || n === 'cancelado'; };
+/* Pedido "por entregar": usa normEstado → atrapa variantes (en_stock_teran → en_almacen). */
+export const esPedidoPorEntregar = e => ESTADO_PEDIDO_POR_ENTREGAR.includes(normEstado(e));
+export const esPedidoFueraDeFabrica = e => ESTADO_PEDIDO_FUERA_FABRICA.includes(normEstado(e));
 export const esPedidoHistorial = p => normEstado(p && p.estado) === 'entregado' && !(p && p.esPrueba);
 export function bucketPedido(p) {
   if (!p) return null;
