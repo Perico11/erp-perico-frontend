@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { medidaACubetas, etiquetaMedida } from '../utils/ptMedidas';
-import { resumirPendientes, fraseProactiva } from '../utils/asistentePendientes';
+import { resumirPendientes } from '../utils/asistentePendientes';
 import { interpretarConfirmacion } from '../utils/asistenteConfirmacion';
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -332,19 +332,27 @@ export default function AsistenteFlotante() {
   const [escuchando, setEscuchando] = useState(false);
   const recRef = useRef(null);
   const vozSoportada = useMemo(() => typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition), []);
+  /* Handoff 2b: separador "Hoy · H:MM" fijado al abrir la conversación. */
+  const [horaSesion, setHoraSesion] = useState('');
 
   useEffect(() => { if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 80); }, [open]);
   /* Saludo al abrir por primera vez. */
   useEffect(() => {
     if (open && mensajes.length === 0) {
+      setHoraSesion(new Date().toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' }));
       const nom = user?.nombre ? ', ' + String(user.nombre).split(' ')[0] : '';
-      /* Saludo PROACTIVO: si hay pendientes, los menciona y ofrece resumirlos
-         inline (chip _accion → corre accionPendientes). Si no, saludo normal. */
-      const fr = fraseProactiva(pendResumen);
-      const msg = fr
-        ? { from: 'bot', text: `¡Hola${nom}! ${fr} ¿Te los muestro o en qué más te ayudo?`, results: [{ label: 'Ver mis pendientes', sub: 'Te los resumo aquí', _accion: 'pendientes' }] }
-        : { from: 'bot', text: `¡Hola${nom}! ¿Cómo te ayudo? Escríbeme qué quieres hacer o a dónde ir.` };
-      setMensajes([msg]);
+      /* Saludo PROACTIVO (handoff 2b): si hay pendientes, saludo corto + TARJETA
+         con las cifras reales (pendientes/críticas) y botón "Ver mis pendientes"
+         (corre accionPendientes inline). Si no, saludo normal. */
+      const rp = resumirPendientes(pendResumen);
+      if (rp.mostrar) {
+        setMensajes([
+          { from: 'bot', text: `¡Hola${nom}! Tienes trabajo pendiente. ¿Te lo resumo?` },
+          { from: 'bot', pendCard: { total: rp.count, criticas: Number(pendResumen?.criticas) || 0 } },
+        ]);
+      } else {
+        setMensajes([{ from: 'bot', text: `¡Hola${nom}! ¿Cómo te ayudo? Escríbeme qué quieres hacer o a dónde ir.` }]);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
@@ -940,19 +948,50 @@ export default function AsistenteFlotante() {
 
       {open && (
         <div style={S.overlay} onClick={() => setOpen(false)}>
+          {/* Blobs lavanda del handoff (decorativos, no roban clicks) */}
+          <div aria-hidden="true" style={S.blobA} />
+          <div aria-hidden="true" style={S.blobB} />
           <div style={S.panel} onClick={e => e.stopPropagation()}>
             <div style={S.head}>
               <div style={S.headTitle}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--lp-brand-600)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" /></svg>
-                Asistente
+                <span style={S.avatarGlass} aria-hidden="true">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8C4FB7" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" /><path d="M19 14l.7 1.9L21.6 16.6l-1.9.7L19 19l-.7-1.7L16.4 16.6l1.9-.7z" /></svg>
+                </span>
+                <span>
+                  <span style={S.headName}>Asistente</span>
+                  <span style={S.headSub}>En línea · responde al instante</span>
+                </span>
               </div>
               <button style={S.close} onClick={() => setOpen(false)} aria-label="Cerrar">✕</button>
             </div>
             {/* Conversación */}
             <div style={S.list} ref={listRef} aria-live="polite">
+              {horaSesion && <div style={S.dateDivider}>Hoy · {horaSesion}</div>}
               {mensajes.map((m, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.from === 'user' ? 'flex-end' : 'flex-start' }}>
-                  <div style={m.from === 'user' ? S.bubbleUser : S.bubbleBot}>{m.from === 'user' ? m.text : <BotText text={m.text} />}</div>
+                  {m.pendCard ? (
+                    /* Tarjeta de pendientes (handoff 2b): cifras REALES + acción */
+                    <div style={S.pendCard}>
+                      <div style={S.statRow}>
+                        <div style={{ ...S.statBox, background: 'rgba(140,79,183,0.08)' }}>
+                          <div style={{ ...S.statNum, color: '#6E3B94' }}>{m.pendCard.total}</div>
+                          <div style={S.statLbl}>pendientes</div>
+                        </div>
+                        <div style={{ ...S.statBox, background: 'rgba(180,70,50,0.10)' }}>
+                          <div style={{ ...S.statNum, color: '#b34733' }}>{m.pendCard.criticas}</div>
+                          <div style={S.statLbl}>críticas</div>
+                        </div>
+                      </div>
+                      <button style={S.verPendBtn} onClick={() => responder('pendientes')}>
+                        Ver mis pendientes
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                      </button>
+                    </div>
+                  ) : (
+                    <div style={m.from === 'user' ? S.bubbleUser : S.bubbleBot}>
+                      {m.from === 'user' ? m.text : (esPensando(m.text) ? <Dots /> : <BotText text={m.text} />)}
+                    </div>
+                  )}
                   {m.results && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 6, width: '100%' }}>
                       {m.results.map((e, j) => (
@@ -961,7 +1000,7 @@ export default function AsistenteFlotante() {
                             <div style={S.itemLabel}>{e.label}</div>
                             <div style={S.itemSub}>{e.sub}</div>
                           </div>
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--lp-brand-600)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8C4FB7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
                         </button>
                       ))}
                     </div>
@@ -985,41 +1024,45 @@ export default function AsistenteFlotante() {
               ))}
             </div>
             {/* Chips de arranque (solo con el saludo) */}
-            {mensajes.length <= 1 && sugerencias.length > 0 && (
+            {/* Chips de arranque: visibles hasta el primer mensaje del usuario
+                (el saludo con tarjeta de pendientes ya son 2 mensajes del bot) */}
+            {!mensajes.some(m => m.from === 'user') && sugerencias.length > 0 && (
               <div style={S.chipsRow}>
                 {sugerencias.map((s, i) => (
                   <button key={i} type="button" style={S.chip} onClick={() => usarSugerencia(s)}>{s.t}</button>
                 ))}
               </div>
             )}
-            {/* Entrada */}
+            {/* Entrada (handoff 2b): campo pill con el micrófono DENTRO + enviar circular */}
             <div style={S.inputRow}>
-              <input
-                ref={inputRef}
-                style={S.input}
-                placeholder={escuchando ? 'Escuchando… (haz una pausa para enviar)' : 'Escribe o dicta… ej: pendientes, transfiere 1 tote'}
-                value={q}
-                autoComplete="off"
-                autoCorrect="off"
-                enterKeyHint="send"
-                onChange={e => setQ(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') responder(q); }}
-              />
-              {vozSoportada && (
-                <button
-                  type="button"
-                  style={{ ...S.mic, ...(escuchando ? S.micOn : null) }}
-                  onClick={toggleVoz}
-                  aria-label={escuchando ? 'Detener dictado' : 'Dictar por voz'}
-                  aria-pressed={escuchando}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={escuchando ? '#fff' : 'var(--lp-brand-600)'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
-                  </svg>
-                </button>
-              )}
-              <button style={S.send} onClick={() => responder(q)} disabled={!q.trim()} aria-label="Enviar">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg>
+              <div style={S.inputPill}>
+                <input
+                  ref={inputRef}
+                  style={S.input}
+                  placeholder={escuchando ? 'Escuchando… (haz una pausa para enviar)' : 'Escribe o dicta…'}
+                  value={q}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  enterKeyHint="send"
+                  onChange={e => setQ(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') responder(q); }}
+                />
+                {vozSoportada && (
+                  <button
+                    type="button"
+                    style={{ ...S.mic, ...(escuchando ? S.micOn : null) }}
+                    onClick={toggleVoz}
+                    aria-label={escuchando ? 'Detener dictado' : 'Dictar por voz'}
+                    aria-pressed={escuchando}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={escuchando ? '#fff' : '#8C4FB7'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="2" width="6" height="12" rx="3" /><path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+              <button style={{ ...S.send, opacity: q.trim() ? 1 : 0.55 }} onClick={() => responder(q)} disabled={!q.trim()} aria-label="Enviar">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg>
               </button>
             </div>
           </div>
@@ -1028,6 +1071,17 @@ export default function AsistenteFlotante() {
     </>
   );
 }
+
+/* Burbuja de "pensando" (handoff 2b): puntos animados en vez de texto plano.
+   Cubre los placeholders transitorios que el flujo ya usa. */
+const esPensando = (t) => typeof t === 'string' && /^(Buscando|Pensando|Un momento|Revisando tus pendientes)…$/.test(t);
+const Dots = () => (
+  <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', height: 15 }} role="status" aria-label="El asistente está pensando">
+    {[0, 1, 2].map(i => (
+      <span key={i} style={{ width: 6, height: 6, borderRadius: 99, background: '#8C4FB7', display: 'inline-block', animation: `ppDotBlink 1s ${i * 0.18}s infinite` }} />
+    ))}
+  </span>
+);
 
 const S = {
   fab: {
@@ -1045,70 +1099,115 @@ const S = {
     textAlign: 'center', border: '2px solid var(--lp-bg-base, #fff)',
     boxShadow: '0 1px 4px rgba(0,0,0,.3)', pointerEvents: 'none', fontFamily: 'var(--lp-font-sans)',
   },
+  /* ══ MODO ASISTENTE A PANTALLA COMPLETA (handoff 2b) — tema LAVANDA.
+     El cambio total de paleta verde→lavanda es la señal de que estás en otra
+     pantalla. Solo pesos 400/500 (regla del handoff). El alto usa --pp-vvh
+     (viewport VISIBLE) para que el teclado del móvil no tape el input. ══ */
   overlay: {
-    /* Alto = viewport VISIBLE (--pp-vvh sigue al teclado en iOS), no el layout
-       completo → el panel bottom-aligned queda SIEMPRE por encima del teclado. */
     position: 'fixed', top: 0, left: 0, right: 0, height: 'var(--pp-vvh, 100dvh)',
-    zIndex: 1401, background: 'rgba(10,16,14,.35)',
-    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-    padding: 'calc(12px + env(safe-area-inset-bottom,0px)) 12px 12px', fontFamily: 'var(--lp-font-sans)',
+    zIndex: 1401, overflow: 'hidden',
+    background: 'linear-gradient(140deg, #d8d6e2 0%, #ccc9da 30%, #bfbbd2 60%, #b3aec9 100%)',
+    display: 'flex', alignItems: 'stretch', justifyContent: 'center',
+    fontFamily: 'var(--lp-font-sans)', animation: 'ppAsistFade 450ms cubic-bezier(.22,1,.36,1)',
   },
+  blobA: { position: 'absolute', width: 420, height: 420, left: -140, top: -120, borderRadius: '50%', background: 'radial-gradient(circle, rgba(140,79,183,0.26), transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' },
+  blobB: { position: 'absolute', width: 380, height: 380, right: -140, bottom: -100, borderRadius: '50%', background: 'radial-gradient(circle, rgba(83,74,183,0.18), transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' },
   panel: {
-    width: '100%', maxWidth: 460, background: 'var(--lp-bg-raised)',
-    border: '1.5px solid var(--lp-border-subtle)', borderRadius: 18, padding: 14,
-    boxShadow: '0 14px 44px rgba(20,36,31,.22)',
-    maxHeight: 'min(560px, calc(var(--pp-vvh, 100dvh) - 24px))',
+    position: 'relative', width: '100%', maxWidth: 560, height: '100%',
+    background: 'transparent', border: 'none', borderRadius: 0, boxShadow: 'none',
+    padding: 'calc(10px + env(safe-area-inset-top,0px)) 20px calc(16px + env(safe-area-inset-bottom,0px))',
     display: 'flex', flexDirection: 'column',
+    animation: 'ppAsistIn 450ms cubic-bezier(.22,1,.36,1)',
   },
-  head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 },
-  headTitle: { display: 'flex', alignItems: 'center', gap: 7, fontSize: 14, fontWeight: 800, color: 'var(--lp-text-primary)' },
-  close: { background: 'transparent', border: 'none', fontSize: 16, cursor: 'pointer', color: 'var(--lp-text-tertiary)' },
-  list: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 2px', minHeight: 120 },
+  head: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  headTitle: { display: 'flex', alignItems: 'center', gap: 10 },
+  avatarGlass: {
+    width: 38, height: 38, borderRadius: 99, flexShrink: 0,
+    background: 'rgba(251,250,254,0.82)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+    border: '1px solid rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  headName: { display: 'block', fontSize: 18, fontWeight: 500, letterSpacing: '-0.02em', color: '#1d1830', lineHeight: 1.2 },
+  headSub: { display: 'block', fontSize: 11.5, color: '#6E3B94', marginTop: 1 },
+  close: {
+    width: 36, height: 36, borderRadius: 99, cursor: 'pointer', fontSize: 15, color: '#4a4462',
+    background: 'rgba(251,250,254,0.82)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+    border: '1px solid rgba(255,255,255,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+  },
+  list: { flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 0 6px', minHeight: 120 },
+  dateDivider: { alignSelf: 'center', fontSize: 11.5, color: '#7a748f', margin: '2px 0' },
   bubbleBot: {
-    alignSelf: 'flex-start', maxWidth: '88%', background: 'var(--lp-bg-base)',
-    border: '1px solid var(--lp-border-subtle)', borderRadius: '14px 14px 14px 4px',
-    padding: '9px 12px', fontSize: 13.5, lineHeight: 1.45, color: 'var(--lp-text-primary)',
-    whiteSpace: 'pre-line',
-  },
-  chipsRow: { display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2, paddingLeft: 2 },
-  chip: {
-    padding: '7px 12px', borderRadius: 999, cursor: 'pointer', fontFamily: 'inherit',
-    fontSize: 12.5, fontWeight: 600, color: 'var(--lp-brand-700)',
-    background: 'color-mix(in srgb, var(--lp-brand-600) 9%, transparent)',
-    border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)',
-    minHeight: 36,
+    alignSelf: 'flex-start', maxWidth: '86%',
+    background: 'rgba(251,250,254,0.92)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+    border: '1px solid rgba(255,255,255,0.55)', borderRadius: '16px 16px 16px 4px',
+    padding: '14px 16px', fontSize: 14.5, lineHeight: 1.5, color: '#1d1830',
+    boxShadow: '0 3px 12px rgba(60,40,100,0.10)', whiteSpace: 'pre-line',
   },
   bubbleUser: {
-    alignSelf: 'flex-end', maxWidth: '88%', background: 'var(--lp-brand-600)', color: '#fff',
-    borderRadius: '14px 14px 4px 14px', padding: '9px 12px', fontSize: 13.5, lineHeight: 1.45,
+    alignSelf: 'flex-end', maxWidth: '70%', background: 'rgba(140,79,183,0.14)', color: '#1d1830',
+    borderRadius: '16px 16px 4px 16px', padding: '12px 16px', fontSize: 14.5, lineHeight: 1.5,
+  },
+  /* Tarjeta de pendientes del saludo (estilo burbuja glass del handoff) */
+  pendCard: {
+    alignSelf: 'flex-start', width: '86%', boxSizing: 'border-box',
+    background: 'rgba(251,250,254,0.92)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+    border: '1px solid rgba(255,255,255,0.55)', borderRadius: '16px 16px 16px 4px',
+    padding: 16, display: 'flex', flexDirection: 'column', gap: 12,
+    boxShadow: '0 3px 12px rgba(60,40,100,0.10)',
+  },
+  statRow: { display: 'flex', gap: 8 },
+  statBox: { flex: 1, borderRadius: 14, padding: '10px 12px' },
+  statNum: { fontSize: 24, fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1.15 },
+  statLbl: { fontSize: 11.5, color: '#4a4462', marginTop: 1 },
+  verPendBtn: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, width: '100%',
+    background: '#8C4FB7', color: '#fff', fontSize: 14.5, fontWeight: 500, fontFamily: 'inherit',
+    padding: '12px 20px', minHeight: 46, borderRadius: 99, border: 'none', cursor: 'pointer',
+    boxShadow: '0 8px 24px rgba(140,79,183,0.35)',
+  },
+  chipsRow: { display: 'flex', flexWrap: 'nowrap', gap: 8, marginTop: 10, overflowX: 'auto', paddingBottom: 2, WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none' },
+  chip: {
+    padding: '8px 14px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 13, fontWeight: 500, color: '#6E3B94', whiteSpace: 'nowrap', flexShrink: 0, minHeight: 36,
+    background: 'rgba(251,250,254,0.82)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
+    border: '1px solid rgba(255,255,255,0.55)',
   },
   inputRow: { display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 },
+  /* Campo pill con el micrófono DENTRO (handoff): sólido #FEFEFE, borde índigo suave */
+  inputPill: {
+    flex: 1, display: 'flex', alignItems: 'center', minHeight: 48, boxSizing: 'border-box',
+    background: '#FEFEFE', border: '1px solid rgba(83,74,183,0.14)', borderRadius: 99,
+    padding: '4px 6px 4px 16px', boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+  },
   input: {
-    flex: 1, boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12,
-    border: '1.5px solid var(--lp-border-subtle)', fontSize: 14, fontFamily: 'inherit',
-    background: 'var(--lp-bg-base)', outline: 'none', color: 'var(--lp-text-primary)',
+    flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'transparent',
+    fontSize: 14.5, fontFamily: 'inherit', color: '#1d1830', padding: '10px 0',
   },
   send: {
-    flexShrink: 0, width: 44, height: 44, borderRadius: 12, border: 'none', cursor: 'pointer',
-    background: 'var(--lp-brand-600)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  /* Botón de micrófono (dictado). Activo = rojo pulsante para que se vea que está
-     escuchando (feedback de estado, clave en piso). */
-  mic: {
-    flexShrink: 0, width: 44, height: 44, borderRadius: 12, cursor: 'pointer',
-    border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-base)',
+    flexShrink: 0, width: 48, height: 48, borderRadius: 99, border: 'none', cursor: 'pointer',
+    background: '#8C4FB7', boxShadow: '0 8px 24px rgba(140,79,183,0.35)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
   },
-  micOn: { background: '#DC2626', border: '1.5px solid #DC2626', animation: 'ppMicPulse 1.1s ease-in-out infinite' },
-  confirmHint: { marginTop: 5, fontSize: 11, color: 'var(--lp-text-tertiary)', fontStyle: 'italic' },
-  confirmYes: { padding: '8px 16px', borderRadius: 10, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' },
-  confirmNo: { padding: '8px 16px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' },
+  /* Micrófono dentro del pill. Activo = rojo pulsante (feedback clave en piso). */
+  mic: {
+    flexShrink: 0, width: 40, height: 40, borderRadius: 99, cursor: 'pointer',
+    border: 'none', background: 'transparent',
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  micOn: { background: '#DC2626', animation: 'ppMicPulse 1.1s ease-in-out infinite' },
+  confirmHint: { marginTop: 5, fontSize: 11, color: '#7a748f', fontStyle: 'italic' },
+  confirmYes: { padding: '10px 18px', minHeight: 40, borderRadius: 99, border: 'none', background: '#8C4FB7', color: '#fff', fontSize: 13, fontWeight: 500, cursor: 'pointer', fontFamily: 'inherit', boxShadow: '0 8px 24px rgba(140,79,183,0.35)' },
+  confirmNo: {
+    padding: '10px 18px', minHeight: 40, borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+    border: '1px solid rgba(255,255,255,0.55)', background: 'rgba(251,250,254,0.82)',
+    backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', color: '#4a4462', fontSize: 13, fontWeight: 500,
+  },
   item: {
     display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-    width: '100%', textAlign: 'left', padding: '11px 12px', borderRadius: 12,
-    border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-base)',
+    width: '100%', textAlign: 'left', padding: '12px 14px', borderRadius: 14,
+    border: '1px solid rgba(255,255,255,0.55)', background: 'rgba(251,250,254,0.82)',
+    backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)',
     cursor: 'pointer', fontFamily: 'inherit',
   },
-  itemLabel: { fontSize: 13.5, fontWeight: 700, color: 'var(--lp-text-primary)' },
-  itemSub: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 1 },
+  itemLabel: { fontSize: 13.5, fontWeight: 500, color: '#1d1830' },
+  itemSub: { fontSize: 11.5, color: '#7a748f', marginTop: 1 },
 };
