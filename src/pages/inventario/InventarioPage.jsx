@@ -598,6 +598,23 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
         <TransitoBadge transito={item.transito} unidad={u} />
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
+      {/* Lote(s) del color (jul 2026, pedido dueño). Solo PT. Chip con el código;
+          si hay stock pero NO hay lote, se marca "sin lote" (candidato a crearle uno). */}
+      {!item._env && Array.isArray(item.lotes) && item.lotes.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 8 }}>
+          {item.lotes.map((l, i) => (
+            <span key={(l.codigoLote || '') + i} title={'Lote ' + (l.codigoLote || '') + (l.estado ? ' · ' + l.estado : '')}
+              style={{ fontSize: 10.5, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-700)',
+                background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)',
+                border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)', borderRadius: 6, padding: '1px 6px' }}>
+              {l.codigoLote}
+            </span>
+          ))}
+        </div>
+      )}
+      {!item._env && qty > 0 && (!Array.isArray(item.lotes) || item.lotes.length === 0) && (
+        <div style={{ marginTop: 8, fontSize: 10.5, fontStyle: 'italic', color: '#B45309' }}>sin lote</div>
+      )}
       {/* Sprint Y2 (jun 2026): transferir envase/tapa de Fábrica → Terán (espeja el
           botón de PT Fábrica). Solo se pasa onTransferir en la sub-vista 'fabrica'. */}
       {onTransferir && (
@@ -1057,6 +1074,22 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {/* Desglose Fábrica/Terán cuando hay stock en Terán (vista Total, jun 2026) */}
                   {tipo === 'pt' && (Number(it.teranQty) || 0) > 0 && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· Fáb {Math.round(it.fabQty)} · Terán {Math.round(it.teranQty)}</span>
+                  )}
+                  {/* Lote(s) del color (jul 2026, pedido dueño). */}
+                  {tipo === 'pt' && Array.isArray(it.lotes) && it.lotes.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 5 }}>
+                      {it.lotes.map((l, i) => (
+                        <span key={(l.codigoLote || '') + i} title={'Lote ' + (l.codigoLote || '') + (l.estado ? ' · ' + l.estado : '')}
+                          style={{ fontSize: 10.5, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-700)',
+                            background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)',
+                            border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)', borderRadius: 6, padding: '1px 6px' }}>
+                          {l.codigoLote}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  {tipo === 'pt' && qty > 0 && (!Array.isArray(it.lotes) || it.lotes.length === 0) && (
+                    <div style={{ marginTop: 5, fontSize: 10.5, fontStyle: 'italic', color: '#B45309' }}>sin lote</div>
                   )}
                 </td>
                 <td style={S.td}>
@@ -1684,6 +1717,9 @@ export default function InventarioPage() {
   const valuation = (valuationData && (valuationData.data || valuationData)) || null;
   /* W3: stock PT desglosado por ubicación física (desde trazabilidad) */
   const { data: ptUbiData, reload: reloadPtUbi } = useApiData(() => api.getPTPorUbicacion(), [], 15000);
+  /* Lotes por producto (jul 2026, pedido dueño: "mostrar el lote de cada color").
+     Se listan los lotes ACTIVOS (con stock) de cada PT bajo su nombre en la tarjeta. */
+  const { data: trazaData, reload: reloadTraza } = useApiData(() => api.getTrazabilidad(), null, 30000);
   /* Sprint X: stock MP desglosado por almacén (fábrica/Terán) — inv.mp[X].ubic */
   const { data: mpUbiData, reload: reloadMpUbi } = useApiData(() => api.getMPPorUbicacion(), [], 15000);
   /* Cola de aprobación de ajustes (propuestas pendientes). */
@@ -1698,6 +1734,22 @@ export default function InventarioPage() {
     return Array.isArray(arr) ? arr.map(x => x && x.nombre).filter(Boolean) : [];
   }, [formSummaryData]);
   const pendientes = pendData?.pendientes || [];
+  /* Lotes ACTIVOS agrupados por producto (nombre en MAYÚSCULAS). Excluye
+     terminales (entregado/cancelado/rechazado), eliminados y pruebas — solo lo
+     que representa stock vivo. Se adjunta a cada item PT para mostrar su código. */
+  const lotesPorProducto = useMemo(() => {
+    const arr = trazaData?.data || trazaData?.lotes || (Array.isArray(trazaData) ? trazaData : []);
+    const OCULTOS = new Set(['entregado', 'cancelado', 'rechazado', 'eliminado']);
+    const map = {};
+    (Array.isArray(arr) ? arr : []).forEach(l => {
+      if (!l || l.eliminado || l.esPrueba || l.cancelado) return;
+      if (OCULTOS.has(String(l.estado || '').toLowerCase())) return;
+      const prod = String(l.producto || '').trim().toUpperCase();
+      if (!prod) return;
+      (map[prod] = map[prod] || []).push({ codigoLote: l.codigoLote || l.id, estado: l.estado });
+    });
+    return map;
+  }, [trazaData]);
 
   /* FIX jun 2026 (K1): InventarioPage solo polleaba cada 8s. Cualquier
      movimiento (recepción MP, ajuste por conteo, descuento por producción)
@@ -1706,7 +1758,7 @@ export default function InventarioPage() {
     onInventario:   () => { reloadInv(); reloadPtUbi(); reloadMpUbi(); reloadPendientes(); },
     onEnvases:      () => reloadEnv(),
     onPrecios:      () => reloadInv(),
-    onTrazabilidad: () => reloadPtUbi(), /* W3: sublotes mueven ubicación → refrescar tabla */
+    onTrazabilidad: () => { reloadPtUbi(); reloadTraza(); }, /* W3: sublotes mueven ubicación + lotes por producto */
   });
 
   const inventory = invData?.data || {};
@@ -1832,10 +1884,10 @@ export default function InventarioPage() {
         /* OT (jun 2026): expone `transito` al nivel del item (igual que envItems)
            para que PTRow/InvTable pinten el badge "en tránsito: N". El inv.pt del
            backend OT lleva { qty, transito, teran, min }. */
-        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty };
+        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty, lotes: lotesPorProducto[nombre.toUpperCase()] || [] };
       })
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [activeTab, inventory.pt, ptCatalogo]);
+  }, [activeTab, inventory.pt, ptCatalogo, lotesPorProducto]);
 
   /* ── Filter by KPI click ── */
   const filterFn = useCallback((items, getQty, getPct) => {
