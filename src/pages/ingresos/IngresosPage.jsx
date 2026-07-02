@@ -31,6 +31,27 @@ const IconPlus = () => (
     <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
   </svg>
 );
+const IconDoc = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+  </svg>
+);
+const IconInbox = () => (
+  <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--lp-text-tertiary,#8a948f)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 10 }}>
+    <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+    <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+  </svg>
+);
+
+/* "30 jun" en vez de "2026-06-30" — el año solo si es distinto al actual. */
+const fechaHumana = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso).slice(0, 10);
+  const conAnio = d.getFullYear() !== new Date().getFullYear();
+  return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', ...(conAnio ? { year: 'numeric' } : {}) });
+};
+const MONO = '"JetBrains Mono", ui-monospace, monospace';
 const ESTADO_META = {
   por_revisar: { label: 'Por revisar', color: '#92610A', bg: '#FEF3C7' },
   recibido:    { label: 'Recibido',    color: '#0F6E56', bg: 'rgba(15,122,90,.12)' },
@@ -194,7 +215,7 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
     <div style={S.overlay} onClick={onClose}>
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetHead}>
-          <div style={{ fontSize: 16, fontWeight: 600 }}>Nuevo ingreso</div>
+          <div style={{ fontSize: 17, fontWeight: 650 }}>Nuevo ingreso</div>
           <button onClick={onClose} style={S.x}>✕</button>
         </div>
         <div style={S.sheetBody}>
@@ -264,8 +285,8 @@ function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetHead}>
           <div>
-            <div style={{ fontSize: 16, fontWeight: 600 }}>Revisar {ing.folio}</div>
-            <div style={{ fontSize: 12, color: 'var(--lp-text-secondary,#5a6b63)' }}>{ing.proveedor} · subió {ing.usuario}</div>
+            <div style={{ fontSize: 17, fontWeight: 650 }}>Revisar <span style={{ fontFamily: MONO, fontSize: 15 }}>{ing.folio}</span></div>
+            <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 2 }}>{ing.proveedor} · subió {ing.usuario}</div>
           </div>
           <button onClick={onClose} style={S.x}>✕</button>
         </div>
@@ -374,9 +395,9 @@ export default function IngresosPage() {
     <div style={{ maxWidth: 860, margin: '0 auto', padding: isDesktop ? '4px 2px 80px' : '4px 2px 150px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
         <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Ingresos de proveedor</h1>
-          <div style={{ fontSize: 13, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 2 }}>
-            {isAdmin ? 'Revisa lo que llegó (foto de factura) y súmalo al stock.' : 'Da de alta lo que llega con la foto de la factura.'}
+          <h1 style={{ fontSize: isDesktop ? 22 : 20, fontWeight: 650, margin: 0, letterSpacing: '-0.3px', color: 'var(--lp-text-primary,#16201c)' }}>Ingresos de proveedor</h1>
+          <div style={{ fontSize: 14, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 3, lineHeight: 1.45, maxWidth: 520 }}>
+            {isAdmin ? 'Revisa lo que llegó y súmalo al stock.' : 'Cuando llegue material, regístralo con la foto de la factura.'}
           </div>
         </div>
         {/* En móvil la acción principal vive ABAJO (FAB al alcance del pulgar);
@@ -401,7 +422,15 @@ export default function IngresosPage() {
         <div style={S.empty}>Cargando…</div>
       ) : filtrados.length === 0 ? (
         <div style={S.empty}>
-          {isAdmin ? 'No hay ingresos en esta vista.' : 'Aún no has registrado ingresos. Toca "+ Nuevo ingreso".'}
+          <IconInbox />
+          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--lp-text-primary,#16201c)' }}>
+            {isAdmin ? 'No hay ingresos en esta vista' : 'Aún no has registrado ingresos'}
+          </div>
+          <div style={{ fontSize: 13.5, marginTop: 4, lineHeight: 1.5, maxWidth: 320 }}>
+            {isAdmin
+              ? 'Cuando alguien registre lo que llegó del proveedor, aparecerá aquí para revisarlo.'
+              : `Cuando llegue material del proveedor, toca "Nuevo ingreso" ${isDesktop ? 'arriba' : 'aquí abajo'}.`}
+          </div>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -409,42 +438,52 @@ export default function IngresosPage() {
             const em = ESTADO_META[ing.estado] || { label: ing.estado, color: '#555', bg: '#eee' };
             const nL = Array.isArray(ing.lineas) ? ing.lineas.length : 0;
             return (
-              <div key={ing.id} style={S.card}>
+              <div key={ing.id} style={{ ...S.card, padding: isDesktop ? '16px 20px' : '14px 16px' }}>
+                {/* El PROVEEDOR manda (es lo que se busca al escanear la lista);
+                    folio y estado son secundarios. Fecha humana, sin jerga. */}
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600 }}>{ing.folio}</span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: isDesktop ? 15.5 : 16, fontWeight: 650, color: 'var(--lp-text-primary,#16201c)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ing.proveedor}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 5, flexWrap: 'wrap' }}>
+                      <span style={S.folio}>{ing.folio}</span>
                       <span style={{ ...S.badge, color: em.color, background: em.bg }}>{em.label}</span>
                     </div>
-                    <div style={{ fontSize: 13, color: 'var(--lp-text-primary,#16201c)', marginTop: 3 }}>{ing.proveedor}</div>
-                    <div style={{ fontSize: 12, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 2 }}>
-                      {nL ? `${nL} línea(s)` : 'sin líneas'} · {ing.usuario} · {(ing.fechaCreacion || '').slice(0, 10)}
-                      {ing.numFactura ? ` · #${ing.numFactura}` : ''}
-                    </div>
                   </div>
-                  <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer" style={S.verFactura}>Ver factura</a>
+                  {Number(ing.monto) > 0 && <div style={S.monto}>${fmt(ing.monto)}</div>}
+                </div>
+
+                <div style={S.meta}>
+                  {fechaHumana(ing.fechaCreacion)} · {ing.usuario}
+                  {ing.numFactura ? ` · Factura #${ing.numFactura}` : ''}
+                  {nL === 0 ? ' · sin partidas aún' : ''}
                 </div>
 
                 {nL > 0 && (
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
                     {ing.lineas.map((l, i) => (
-                      <span key={i} style={S.miniLine}>{l.nombre} · {fmt(l.cantidad)} {l.unidad}</span>
+                      <span key={i} style={S.miniLine}>{l.nombre} · <span style={{ fontWeight: 650 }}>{fmt(l.cantidad)} {l.unidad}</span></span>
                     ))}
                   </div>
                 )}
 
                 {ing.estado === 'recibido' && ing.revisadoPor && (
-                  <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 8 }}>Sumado al stock por {ing.revisadoPor}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 9 }}>Sumado al stock por {ing.revisadoPor}</div>
                 )}
                 {ing.estado === 'rechazado' && (
-                  <div style={{ fontSize: 11, color: '#B91C1C', marginTop: 8 }}>Rechazado{ing.notaRevision ? `: ${ing.notaRevision}` : ''}</div>
+                  <div style={{ fontSize: 12.5, color: '#B91C1C', marginTop: 9 }}>Rechazado{ing.notaRevision ? `: ${ing.notaRevision}` : ''}</div>
                 )}
 
-                {isAdmin && ing.estado === 'por_revisar' && (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
+                {/* Acciones con área táctil real (la liga diminuta de antes era intocable) */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 11 }}>
+                  <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer" style={S.verFacturaBtn}>
+                    <IconDoc /> Ver factura
+                  </a>
+                  {isAdmin && ing.estado === 'por_revisar' && (
                     <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             );
           })}
@@ -484,11 +523,16 @@ export default function IngresosPage() {
 /* ─── estilos ────────────────────────────────────────────────────────────── */
 const BRAND = 'var(--lp-brand-700,#0f7a5a)';
 const S = {
-  card: { background: 'var(--lp-surface,#fff)', border: '1px solid var(--lp-border,rgba(0,0,0,.1))', borderRadius: 14, padding: '14px 16px' },
-  badge: { fontSize: 11, fontWeight: 600, padding: '2px 9px', borderRadius: 20 },
-  miniLine: { fontSize: 11, background: 'var(--lp-bg-base,#f5f6f4)', border: '1px solid var(--lp-border,rgba(0,0,0,.08))', borderRadius: 6, padding: '2px 8px' },
-  verFactura: { fontSize: 12, fontWeight: 600, color: BRAND, whiteSpace: 'nowrap', textDecoration: 'none' },
-  empty: { textAlign: 'center', color: 'var(--lp-text-secondary,#5a6b63)', padding: '48px 16px', fontSize: 14 },
+  card: { background: 'var(--lp-surface,#fff)', border: '1px solid var(--lp-border,rgba(0,0,0,.1))', borderRadius: 16, padding: '14px 16px' },
+  badge: { fontSize: 11.5, fontWeight: 600, padding: '3px 10px', borderRadius: 20 },
+  miniLine: { fontSize: 12, background: 'var(--lp-bg-base,#f5f6f4)', border: '1px solid var(--lp-border,rgba(0,0,0,.08))', borderRadius: 7, padding: '3px 9px' },
+  /* Jerarquía de card: proveedor manda; folio en mono (código), monto en mono. */
+  folio: { fontFamily: MONO, fontSize: 12, color: 'var(--lp-text-secondary,#5a6b63)', letterSpacing: '0.2px' },
+  monto: { fontFamily: MONO, fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary,#16201c)', whiteSpace: 'nowrap' },
+  meta: { fontSize: 13, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 8, lineHeight: 1.45 },
+  /* "Ver factura" con área táctil real (antes era una liga de 12px) */
+  verFacturaBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: BRAND, padding: '9px 14px', minHeight: 40, borderRadius: 9, border: '1px solid rgba(15,122,90,.28)', background: 'rgba(15,122,90,.06)', textDecoration: 'none', whiteSpace: 'nowrap', boxSizing: 'border-box' },
+  empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', color: 'var(--lp-text-secondary,#5a6b63)', padding: '52px 16px', fontSize: 14 },
   tab: { fontSize: 13, fontWeight: 500, padding: '6px 14px', borderRadius: 20, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
   tabActive: { background: BRAND, color: '#fff', borderColor: BRAND },
   btnPrimary: { fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 10, border: 'none', background: BRAND, color: '#fff', cursor: 'pointer' },
@@ -500,21 +544,23 @@ const S = {
   sheetBody: { padding: '14px 18px', overflowY: 'auto', display: 'flex', flexDirection: 'column' },
   sheetFoot: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 18px', borderTop: '1px solid var(--lp-border,rgba(0,0,0,.08))' },
   x: { border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: 'var(--lp-text-secondary,#5a6b63)' },
-  lbl: { fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary,#5a6b63)', margin: '10px 0 5px' },
-  input: { width: '100%', fontSize: 14, padding: '9px 11px', borderRadius: 9, border: '1px solid var(--lp-border,rgba(0,0,0,.15))', background: 'var(--lp-surface,#fff)', color: 'var(--lp-text-primary,#16201c)', boxSizing: 'border-box' },
+  lbl: { fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-secondary,#5a6b63)', margin: '12px 0 5px' },
+  /* 16px EXACTOS: con menos, iOS hace zoom automático al enfocar el input
+     (una de las quejas de legibilidad en móvil). También se lee mejor en PC. */
+  input: { width: '100%', fontSize: 16, padding: '10px 12px', borderRadius: 9, border: '1px solid var(--lp-border,rgba(0,0,0,.15))', background: 'var(--lp-surface,#fff)', color: 'var(--lp-text-primary,#16201c)', boxSizing: 'border-box' },
   fotoBtn: { fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 10, border: '1.5px dashed ' + BRAND, background: 'rgba(15,122,90,.05)', color: BRAND, cursor: 'pointer', width: '100%' },
   preview: { width: '100%', maxHeight: 260, objectFit: 'contain', borderRadius: 10, border: '1px solid var(--lp-border,rgba(0,0,0,.1))', marginTop: 8, background: '#fafafa', display: 'block' },
   pdfOk: { fontSize: 13, color: BRAND, fontWeight: 600, marginTop: 8 },
   notaBox: { fontSize: 13, fontStyle: 'italic', color: 'var(--lp-text-secondary,#5a6b63)', background: 'var(--lp-bg-base,#f5f6f4)', borderRadius: 8, padding: '8px 10px', margin: '4px 0 2px' },
-  err: { fontSize: 13, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '8px 10px', marginTop: 10 },
-  lineChip: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '7px 10px', borderRadius: 8, border: '1px solid var(--lp-border,rgba(0,0,0,.1))', background: 'var(--lp-bg-base,#f7f8f6)' },
+  err: { fontSize: 13.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 11px', marginTop: 10, lineHeight: 1.4 },
+  lineChip: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '8px 11px', borderRadius: 8, border: '1px solid var(--lp-border,rgba(0,0,0,.1))', background: 'var(--lp-bg-base,#f7f8f6)' },
   lineTipo: { fontSize: 10, fontWeight: 700, color: BRAND, background: 'rgba(15,122,90,.1)', borderRadius: 5, padding: '1px 6px' },
   chipDel: { border: 'none', background: 'transparent', color: '#B91C1C', cursor: 'pointer', fontSize: 13 },
   lineForm: { display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, border: '1px dashed var(--lp-border,rgba(0,0,0,.15))' },
-  seg: { flex: 1, fontSize: 12, fontWeight: 600, padding: '6px', borderRadius: 7, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
+  seg: { flex: 1, fontSize: 12.5, fontWeight: 600, padding: '6px', minHeight: 36, borderRadius: 7, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
   segActive: { background: BRAND, color: '#fff', borderColor: BRAND },
   addBtn: { fontSize: 13, fontWeight: 600, padding: '10px 12px', minHeight: 40, borderRadius: 8, border: 'none', background: BRAND, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' },
-  toast: { position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#16201c', color: '#fff', fontSize: 13, padding: '10px 18px', borderRadius: 10, zIndex: 1200, maxWidth: '90vw', textAlign: 'center' },
+  toast: { position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#16201c', color: '#fff', fontSize: 14, padding: '11px 18px', borderRadius: 10, zIndex: 1200, maxWidth: '90vw', textAlign: 'center' },
   /* FAB móvil (pill extendida): arriba del bottom-nav, zIndex < overlay (1100)
      para que los sheets lo cubran. Offset = convención de la app. */
   fab: { position: 'fixed', right: 16, bottom: 'calc(74px + env(safe-area-inset-bottom, 0px))', zIndex: 45, display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 52, padding: '0 22px', borderRadius: 28, border: 'none', background: BRAND, color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 6px 20px rgba(15,122,90,.35)' },
