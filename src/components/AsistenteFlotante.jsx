@@ -5,6 +5,7 @@ import api from '../services/api';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { medidaACubetas, etiquetaMedida } from '../utils/ptMedidas';
 import { resumirPendientes } from '../utils/asistentePendientes';
+import useIsDesktop from '../hooks/useIsDesktop';
 import { interpretarConfirmacion } from '../utils/asistenteConfirmacion';
 
 /* ════════════════════════════════════════════════════════════════════════
@@ -376,6 +377,17 @@ export default function AsistenteFlotante() {
      los modales — el scroller real es #root) y publica --pp-vvh para que el
      teclado del móvil no tape el input. */
   useBodyScrollLock(open);
+
+  /* Desktop = drawer 4b; móvil = pantalla completa 2b (breakpoint 880 de la app;
+     el handoff pide ceder a móvil bajo ~900). */
+  const isDesktop = useIsDesktop();
+  /* Cerrar con Esc (handoff 4b) — aplica en ambos modos. */
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
 
   /* Si la ventana cambia de tamaño (rotación, redimensionar), re-encaja el FAB
      dentro de la pantalla y lo vuelve a pegar al borde más cercano — si no, una
@@ -947,42 +959,58 @@ export default function AsistenteFlotante() {
       </button>
 
       {open && (
-        <div style={S.overlay} onClick={() => setOpen(false)}>
-          {/* Blobs lavanda del handoff (decorativos, no roban clicks) */}
-          <div aria-hidden="true" style={S.blobA} />
-          <div aria-hidden="true" style={S.blobB} />
-          <div style={S.panel} onClick={e => e.stopPropagation()}>
+        <div style={isDesktop ? S.overlayDesk : S.overlay} onClick={() => setOpen(false)}>
+          {/* Blobs lavanda (solo móvil 2b; el drawer 4b lleva gradiente propio) */}
+          {!isDesktop && <div aria-hidden="true" style={S.blobA} />}
+          {!isDesktop && <div aria-hidden="true" style={S.blobB} />}
+          <div style={isDesktop ? S.panelDesk : S.panel} onClick={e => e.stopPropagation()}>
             <div style={S.head}>
               <div style={S.headTitle}>
-                <span style={S.avatarGlass} aria-hidden="true">
+                <span style={isDesktop ? S.avatarDesk : S.avatarGlass} aria-hidden="true">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8C4FB7" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3l1.6 4.4L18 9l-4.4 1.6L12 15l-1.6-4.4L6 9l4.4-1.6z" /><path d="M19 14l.7 1.9L21.6 16.6l-1.9.7L19 19l-.7-1.7L16.4 16.6l1.9-.7z" /></svg>
                 </span>
                 <span>
-                  <span style={S.headName}>Asistente</span>
-                  <span style={S.headSub}>En línea · responde al instante</span>
+                  <span style={{ ...S.headName, ...(isDesktop ? { fontSize: 16 } : {}) }}>Asistente</span>
+                  <span style={S.headSub}>{isDesktop ? 'Sigues viendo tu trabajo al lado' : 'En línea · responde al instante'}</span>
                 </span>
               </div>
-              <button style={S.close} onClick={() => setOpen(false)} aria-label="Cerrar">✕</button>
+              <button style={isDesktop ? S.closeDesk : S.close} onClick={() => setOpen(false)} aria-label="Cerrar">✕</button>
             </div>
             {/* Conversación */}
             <div style={S.list} ref={listRef} aria-live="polite">
-              {horaSesion && <div style={S.dateDivider}>Hoy · {horaSesion}</div>}
+              {!isDesktop && horaSesion && <div style={S.dateDivider}>Hoy · {horaSesion}</div>}
               {mensajes.map((m, i) => (
                 <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: m.from === 'user' ? 'flex-end' : 'flex-start' }}>
                   {m.pendCard ? (
-                    /* Tarjeta de pendientes (handoff 2b): cifras REALES + acción */
+                    /* Tarjeta de pendientes: cifras REALES + acción. Desktop (4b) =
+                       fila baseline "48 pendientes [16 críticas]"; móvil (2b) = 2 cajas. */
                     <div style={S.pendCard}>
-                      <div style={S.statRow}>
-                        <div style={{ ...S.statBox, background: 'rgba(140,79,183,0.08)' }}>
-                          <div style={{ ...S.statNum, color: '#6E3B94' }}>{m.pendCard.total}</div>
-                          <div style={S.statLbl}>pendientes</div>
+                      {isDesktop ? (
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: 30, fontWeight: 500, letterSpacing: '-0.02em', color: '#1d1830', lineHeight: 1.1 }}>{m.pendCard.total}</span>
+                          <span style={{ fontSize: 13, color: '#4a4462' }}>pendientes</span>
+                          {m.pendCard.criticas > 0 && (
+                            <span style={{ fontSize: 11.5, fontWeight: 500, color: '#b34733', background: 'rgba(180,70,50,0.12)', borderRadius: 99, padding: '3px 10px' }}>{m.pendCard.criticas} críticas</span>
+                          )}
                         </div>
-                        <div style={{ ...S.statBox, background: 'rgba(180,70,50,0.10)' }}>
-                          <div style={{ ...S.statNum, color: '#b34733' }}>{m.pendCard.criticas}</div>
-                          <div style={S.statLbl}>críticas</div>
+                      ) : (
+                        <div style={S.statRow}>
+                          <div style={{ ...S.statBox, background: 'rgba(140,79,183,0.08)' }}>
+                            <div style={{ ...S.statNum, color: '#6E3B94' }}>{m.pendCard.total}</div>
+                            <div style={S.statLbl}>pendientes</div>
+                          </div>
+                          <div style={{ ...S.statBox, background: 'rgba(180,70,50,0.10)' }}>
+                            <div style={{ ...S.statNum, color: '#b34733' }}>{m.pendCard.criticas}</div>
+                            <div style={S.statLbl}>críticas</div>
+                          </div>
                         </div>
-                      </div>
-                      <button style={S.verPendBtn} onClick={() => responder('pendientes')}>
+                      )}
+                      {/* Desktop (spec 4b): navega la app DETRÁS a /notificaciones y el
+                          drawer permanece abierto. Móvil: resumen inline en el chat. */}
+                      <button
+                        style={{ ...S.verPendBtn, ...(isDesktop ? { padding: '11px 18px', minHeight: 42 } : {}) }}
+                        onClick={() => { if (isDesktop) navigate('/notificaciones'); else responder('pendientes'); }}
+                      >
                         Ver mis pendientes
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6" /></svg>
                       </button>
@@ -1024,14 +1052,25 @@ export default function AsistenteFlotante() {
               ))}
             </div>
             {/* Chips de arranque (solo con el saludo) */}
-            {/* Chips de arranque: visibles hasta el primer mensaje del usuario
-                (el saludo con tarjeta de pendientes ya son 2 mensajes del bot) */}
+            {/* Chips de arranque: visibles hasta el primer mensaje del usuario.
+                Desktop (4b) = sección "Atajos" con wrap; móvil (2b) = fila scroll. */}
             {!mensajes.some(m => m.from === 'user') && sugerencias.length > 0 && (
-              <div style={S.chipsRow}>
-                {sugerencias.map((s, i) => (
-                  <button key={i} type="button" style={S.chip} onClick={() => usarSugerencia(s)}>{s.t}</button>
-                ))}
-              </div>
+              isDesktop ? (
+                <div style={{ marginTop: 10 }}>
+                  <div style={S.atajosLbl}>Atajos</div>
+                  <div style={S.chipsRowDesk}>
+                    {sugerencias.map((s, i) => (
+                      <button key={i} type="button" style={S.chipDesk} onClick={() => usarSugerencia(s)}>{s.t}</button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div style={S.chipsRow}>
+                  {sugerencias.map((s, i) => (
+                    <button key={i} type="button" style={S.chip} onClick={() => usarSugerencia(s)}>{s.t}</button>
+                  ))}
+                </div>
+              )
             )}
             {/* Entrada (handoff 2b): campo pill con el micrófono DENTRO + enviar circular */}
             <div style={S.inputRow}>
@@ -1061,7 +1100,7 @@ export default function AsistenteFlotante() {
                   </button>
                 )}
               </div>
-              <button style={{ ...S.send, opacity: q.trim() ? 1 : 0.55 }} onClick={() => responder(q)} disabled={!q.trim()} aria-label="Enviar">
+              <button style={{ ...S.send, ...(isDesktop ? { width: 46, height: 46 } : {}), opacity: q.trim() ? 1 : 0.55 }} onClick={() => responder(q)} disabled={!q.trim()} aria-label="Enviar">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z" /></svg>
               </button>
             </div>
@@ -1112,6 +1151,31 @@ const S = {
   },
   blobA: { position: 'absolute', width: 420, height: 420, left: -140, top: -120, borderRadius: '50%', background: 'radial-gradient(circle, rgba(140,79,183,0.26), transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' },
   blobB: { position: 'absolute', width: 380, height: 380, right: -140, bottom: -100, borderRadius: '50%', background: 'radial-gradient(circle, rgba(83,74,183,0.18), transparent 70%)', filter: 'blur(40px)', pointerEvents: 'none' },
+  /* ── Desktop 4b: DRAWER lateral 420px sobre la app (el móvil 2b queda intacto).
+     Scrim morado-tinta 20% (click cierra); el drawer trae su propio gradiente. ── */
+  overlayDesk: {
+    position: 'fixed', top: 0, left: 0, right: 0, height: 'var(--pp-vvh, 100dvh)',
+    zIndex: 1401, background: 'rgba(29,24,48,0.20)',
+    display: 'flex', alignItems: 'stretch', justifyContent: 'flex-end',
+    fontFamily: 'var(--lp-font-sans)', animation: 'ppAsistFade 450ms cubic-bezier(.22,1,.36,1)',
+  },
+  panelDesk: {
+    position: 'relative', width: 420, maxWidth: '92vw', height: '100%', boxSizing: 'border-box',
+    background: 'linear-gradient(160deg, #ece9f4 0%, #ddd9ea 60%, #d2cde3 100%)',
+    borderLeft: '1px solid rgba(255,255,255,0.55)', borderRadius: 0,
+    boxShadow: '-20px 0 60px rgba(29,24,48,0.30)',
+    padding: '16px 20px 20px', display: 'flex', flexDirection: 'column',
+    animation: 'ppAsistInRight 450ms cubic-bezier(.22,1,.36,1)',
+  },
+  avatarDesk: { width: 38, height: 38, borderRadius: 99, flexShrink: 0, background: 'rgba(140,79,183,0.14)', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  closeDesk: { width: 34, height: 34, borderRadius: 99, cursor: 'pointer', fontSize: 15, color: '#4a4462', background: 'rgba(83,74,183,0.06)', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  atajosLbl: { fontSize: 11.5, fontWeight: 500, color: '#7a748f', marginBottom: 6 },
+  chipsRowDesk: { display: 'flex', flexWrap: 'wrap', gap: 8 },
+  chipDesk: {
+    padding: '8px 14px', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit',
+    fontSize: 13, fontWeight: 500, color: '#6E3B94', minHeight: 36,
+    background: 'rgba(140,79,183,0.08)', border: '1px solid rgba(140,79,183,0.14)',
+  },
   panel: {
     position: 'relative', width: '100%', maxWidth: 560, height: '100%',
     background: 'transparent', border: 'none', borderRadius: 0, boxShadow: 'none',
