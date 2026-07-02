@@ -33,6 +33,7 @@ const INDICE = [
   { label: 'Inventario MP · Terán', sub: 'Materia prima en almacén Terán', ruta: '/inventario?tab=mp&mp=teran', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'inventario materia prima mp en teran almacen teran stock de teran' },
   { label: 'Agregar producto terminado', sub: 'Inventario → PT → Agregar PT', ruta: '/inventario?tab=pt', roles: 'admin,inventario', keywords: 'agregar pt producto terminado nuevo dar de alta' },
   { label: 'Inventario · Envases', sub: 'Envases, tapas, importar/exportar', ruta: '/inventario?tab=env', roles: 'admin,tecnico,compras,almacen,inventario', keywords: 'envases tapas botes cubetas presentaciones importar exportar imprimir' },
+  { label: 'Ingresos de proveedor', sub: 'Dar de alta lo que llega del proveedor (MP, envases o tapas) con foto de factura — propuesta que aprueba admin', ruta: '/ingresos', roles: 'admin,tecnico,almacen', keywords: 'ingresos ingreso proveedor factura dar de alta alta llego llegaron llegó material envases tapas mp materia prima recibir pedido de envases registrar entrada' },
   { label: 'Ajustar mínimos de stock', sub: 'En cada fila: botón Ajustar', ruta: '/inventario', roles: 'admin,inventario', keywords: 'ajustar minimo minimos existencia stock corregir conteo' },
 
   { label: 'Compras / Órdenes de compra', sub: 'Aprobar, pagar, recibir OC', ruta: '/compras', roles: 'admin,compras', keywords: 'compras oc orden de compra aprobar pagar recibir proveedor arely comprobante credito' },
