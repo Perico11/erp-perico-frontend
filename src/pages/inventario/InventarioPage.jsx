@@ -797,7 +797,7 @@ function EstadoBadge({ qty, pct }) {
 
 /* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
    Conserva el candado: el onSave del padre pasa por ajustarConCandado. */
-function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = false, puedeRenombrarMP = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
+function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = false, puedeRenombrarMP = false, motivoOpcional = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
@@ -843,8 +843,10 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const minValido = !canEditMin || (min !== '' && !isNaN(minNum) && minNum >= 0);
   /* El motivo solo es obligatorio cuando se mueve STOCK (MP/PT con candado).
      Envases no usan candado → no exigen motivo. */
+  /* El motivo es obligatorio (≥3) al mover stock, SALVO envases (sin candado) y
+     cuando motivoOpcional (admin ajustando MP directo) — ahí es opcional. */
   const puedeGuardar = stockChanged
-    ? ((esEnv || motivo.trim().length >= 3) && qtyValida && minValido)
+    ? ((esEnv || motivoOpcional || motivo.trim().length >= 3) && qtyValida && minValido)
     : (metaChanged && qtyValida && minValido);
 
   const handleSave = async () => {
@@ -959,7 +961,7 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
           </>
         )}
         {!esEnv && (<>
-        <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste{stockChanged ? '' : ' (solo si mueves stock)'}</label>
+        <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del ajuste{motivoOpcional ? ' (opcional)' : stockChanged ? '' : ' (solo si mueves stock)'}</label>
         <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, merma, corrección"
           value={motivo} onChange={e => setMotivo(e.target.value)} />
         </>)}
@@ -1646,6 +1648,7 @@ export default function InventarioPage() {
   const [aSheetOpen, setASheetOpen] = useState(false);
   const { query, debouncedQuery, setQuery } = useSearch(200);
   const [showRecepcion, setShowRecepcion] = useState(false);
+  const [showAltaMP, setShowAltaMP] = useState(false);
   const [showAgregarPT, setShowAgregarPT] = useState(false);
   const [showAgregarEnv, setShowAgregarEnv] = useState(false);
   const [toastMsg, setToastMsg] = useState('');
@@ -1685,6 +1688,15 @@ export default function InventarioPage() {
   const { data: mpUbiData, reload: reloadMpUbi } = useApiData(() => api.getMPPorUbicacion(), [], 15000);
   /* Cola de aprobación de ajustes (propuestas pendientes). */
   const { data: pendData, reload: reloadPendientes } = useApiData(() => api.getAjustesPendientes(), null, 25000);
+  /* Catálogo de PRODUCTOS TERMINADOS (todas las fórmulas) — para que Inventario
+     PT liste TODOS los productos aunque tengan 0 stock (pedido dueño jun 2026:
+     "no aparece ni con stock ni sin stock"). Antes solo se mostraban los que ya
+     tenían fila en inv.pt (producidos / dados de alta). */
+  const { data: formSummaryData } = useApiData(() => api.getFormulasSummary(), null, 60000);
+  const ptCatalogo = useMemo(() => {
+    const arr = formSummaryData?.data?.summary || formSummaryData?.summary || [];
+    return Array.isArray(arr) ? arr.map(x => x && x.nombre).filter(Boolean) : [];
+  }, [formSummaryData]);
   const pendientes = pendData?.pendientes || [];
 
   /* FIX jun 2026 (K1): InventarioPage solo polleaba cada 8s. Cualquier
@@ -1721,6 +1733,9 @@ export default function InventarioPage() {
   const canDeleteMP = can('eliminarMP');
   /* §8: +Recepción MP gateado por permiso `recibirMP` (almacen/compras/admin). */
   const canRecibirMP = can('recibirMP');
+  /* Dar de alta MP nueva (crea en maestro+inventario y dispersa) — permiso propio
+     `altaMP` (tecnico/admin/compras/inventario). Acotado: NO es editarInventario. */
+  const canAltaMP = can('altaMP');
   /* Conteo físico (rol inventario/Burgos): su acción real en la columna Acción. */
   const canContar = can('conteoFisico');
   /* Editar mínimos (política de reorden) — permiso propio, separado de editarInventario. */
@@ -1801,8 +1816,13 @@ export default function InventarioPage() {
   const ptItems = useMemo(() => {
     if (activeTab !== 'pt') return [];
     const ptInv = inventory.pt || {};
-    return Object.entries(ptInv)
-      .map(([nombre, inv]) => {
+    /* UNIÓN: los productos con fila en inv.pt + TODOS los del catálogo de
+       fórmulas. Los que no tienen fila se muestran a 0 (qty 0, sin mínimo). Así
+       cada producto aparece aunque nunca se haya producido/dado de alta. */
+    const nombres = Array.from(new Set([...Object.keys(ptInv), ...ptCatalogo]));
+    return nombres
+      .map((nombre) => {
+        const inv = ptInv[nombre] || { qty: 0, min: 0 };
         /* Vista "Total" = Fábrica (qty) + Terán (teran). Antes mostraba solo qty
            (Fábrica) pese a que el hint promete "Suma fábrica + Terán" (fix jun 2026). */
         const fabQty = Number(inv.qty) || 0;
@@ -1815,7 +1835,7 @@ export default function InventarioPage() {
         return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty };
       })
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [activeTab, inventory.pt]);
+  }, [activeTab, inventory.pt, ptCatalogo]);
 
   /* ── Filter by KPI click ── */
   const filterFn = useCallback((items, getQty, getPct) => {
@@ -2344,6 +2364,9 @@ export default function InventarioPage() {
                   {canRecibirMP && isDesktop && (
                     <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
                   )}
+                  {canAltaMP && isDesktop && (
+                    <button style={S.btnAdd} data-id="inventario.btn.alta-mp" data-rol="tecnico,admin,compras,inventario" onClick={() => setShowAltaMP(true)}>+ Dar de alta MP</button>
+                  )}
                   {isDesktop && (
                     <ImportExportPrint
                       exportUrl={() => api.urlExportInv('mp', activeFilter)}
@@ -2621,6 +2644,19 @@ export default function InventarioPage() {
         />
       )}
 
+      {/* ── Dar de alta MP Modal ── */}
+      {showAltaMP && (
+        <AltaMPModal
+          onClose={() => setShowAltaMP(false)}
+          onSaved={(msg) => {
+            setShowAltaMP(false);
+            setToastMsg(msg);
+            reloadInv();
+            setTimeout(() => setToastMsg(''), 4000);
+          }}
+        />
+      )}
+
       {/* ── Sprint X: Agregar MP a almacén (fábrica/Terán) Modal ── */}
       {agregarMpUbic && (
         <AgregarMPUbicacionModal
@@ -2740,6 +2776,12 @@ export default function InventarioPage() {
               onClick: () => setShowRecepcion(true),
               icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="M3.27 6.96 12 12.01l8.73-5.05" /></svg>,
             }] : []),
+            ...(activeTab === 'mp' && canAltaMP ? [{
+              key: 'alta-mp', label: 'Dar de alta MP', desc: 'Registrar una materia prima nueva',
+              dataId: 'inventario.btn.alta-mp', dataRol: 'tecnico,admin,compras,inventario',
+              onClick: () => setShowAltaMP(true),
+              icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>,
+            }] : []),
             ...(activeTab === 'pt' && canEditMP ? [{
               key: 'agregarpt', label: 'Agregar PT', desc: 'Inventario inicial de producto terminado',
               dataId: 'inventario.btn.agregar-pt', dataRol: 'admin',
@@ -2795,6 +2837,7 @@ export default function InventarioPage() {
           canEditMin={ajusteItem.tipo === 'env' ? true : canEditMinimos}
           modoPropuesta={ajusteItem.tipo === 'env' ? false : esProponente}
           puedeRenombrarMP={esAdmin}
+          motivoOpcional={esAdmin}
           onClose={() => setAjusteItem(null)}
           onSave={handleAjusteSave}
           onPedir={ajusteItem.tipo === 'pt' && canPedirPT && (ajusteItem.qty <= 0 || (ajusteItem.min > 0 && ajusteItem.qty <= ajusteItem.min))
@@ -3824,6 +3867,102 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
 /* ── Modal "Agregar envase" (presentación nueva) — Sprint Y jun 2026.
    Crea una subcategoría en /api/envases/subcategoria y, si hay stock inicial,
    lo fija con /api/envases/stock. Ventana emergente igual que MP/PT. ── */
+/* ── Modal "Dar de alta MP" — crea una materia prima NUEVA en maestro + inventario
+   y la dispersa a todas las vistas (broadcast). Gate frontend: canAltaMP. ── */
+function AltaMPModal({ onClose, onSaved }) {
+  useBodyScrollLock();
+  const cats = Object.keys(MP_CATEGORIES);
+  const [nombre, setNombre] = useState('');
+  const [categoria, setCategoria] = useState(cats[0] || '');
+  const [unidad, setUnidad] = useState('kg');
+  const [stock, setStock] = useState('');
+  const [min, setMin] = useState('');
+  const [costo, setCosto] = useState('');
+  const [proveedor, setProveedor] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
+
+  const handleSubmit = async () => {
+    const nom = nombre.trim();
+    if (!nom) return setError('Escribe el nombre de la materia prima');
+    if (!categoria) return setError('Selecciona una categoría');
+    setSaving(true); setError('');
+    try {
+      await api.crearMP({
+        nombre: nom, categoria, unidad: unidad.trim() || 'kg',
+        stockInicial: Number(stock) || 0, min: Number(min) || 0,
+        costoKg: Number(costo) || 0, proveedor: proveedor.trim() || undefined,
+      });
+      onSaved(`Materia prima "${nom}" dada de alta`);
+    } catch (e) {
+      setError(e?.data?.error || e?.message || 'No se pudo dar de alta');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={S.modal}>
+        <div style={S.modalHeader}>
+          <span style={S.modalTitle}>Dar de alta materia prima</span>
+          <button style={S.modalClose} onClick={onClose} aria-label="Cerrar">✕</button>
+        </div>
+        <div style={S.modalBody}>
+          <div>
+            <label style={S.fieldLabel}>Nombre *</label>
+            <input ref={inputRef} type="text" style={S.fieldInput} placeholder="Ej. DIOXIDO TITANIO R-902" maxLength={120}
+              value={nombre} onChange={e => setNombre(e.target.value)} />
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Categoría *</label>
+            <select style={S.fieldInput} value={categoria} onChange={e => setCategoria(e.target.value)}>
+              {cats.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={S.fieldLabel}>Unidad</label>
+              <input type="text" style={S.fieldInput} placeholder="kg" maxLength={16}
+                value={unidad} onChange={e => setUnidad(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.fieldLabel}>Existencia inicial</label>
+              <input type="number" inputMode="decimal" min="0" style={S.fieldInput} placeholder="0"
+                value={stock} onChange={e => setStock(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.fieldLabel}>Mínimo</label>
+              <input type="number" inputMode="decimal" min="0" style={S.fieldInput} placeholder="0"
+                value={min} onChange={e => setMin(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ flex: 1 }}>
+              <label style={S.fieldLabel}>Costo/kg (opcional)</label>
+              <input type="number" inputMode="decimal" min="0" style={S.fieldInput} placeholder="0"
+                value={costo} onChange={e => setCosto(e.target.value)} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.fieldLabel}>Proveedor (opcional)</label>
+              <input type="text" style={S.fieldInput} placeholder="Ej. LIMPLAST" maxLength={80}
+                value={proveedor} onChange={e => setProveedor(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }} />
+            </div>
+          </div>
+          {error && <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>{error}</div>}
+        </div>
+        <div style={S.modalFooter}>
+          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
+          <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
+            {saving ? 'Guardando...' : 'Dar de alta'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AgregarEnvaseModal({ categorias, onClose, onSaved }) {
   useBodyScrollLock();
   const [categoria, setCategoria] = useState(categorias[0] || '');

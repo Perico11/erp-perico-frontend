@@ -252,6 +252,8 @@ const api = {
   urlExportCycleCount: (sesionId) => API_BASE + '/api/cycle-count/' + encodeURIComponent(sesionId) + '/export-xlsx' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
   urlPrintCycleCount: (sesionId) => API_BASE + '/api/cycle-count/' + encodeURIComponent(sesionId) + '/hoja-impresion' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
   getMaestroMP: () => request('GET', '/api/maestro-mp'),
+  /* Dar de alta una MP nueva → se crea en maestro + inventario y se dispersa. */
+  crearMP: (data) => request('POST', '/api/maestro-mp/crear', data),
   /* Editar el PRECIO BASE (sin flete) de una MP desde el catálogo de compras.
      Propaga a costos_mp.json + maestro y, vía paso 1, al costo de fórmulas/PT. */
   setPrecioBaseMP: (mp, precioBase) =>
@@ -343,11 +345,12 @@ const api = {
 
   /* Validar disponibilidad de MP antes de aceptar/lanzar orden.
      Devuelve {ok, suficiente, faltantes:[{mp, requeridoKg, libreKg, faltanteKg, leadTimeDias}]}. */
-  validarStock: (formula, cantidad, excluirOrden) => {
+  validarStock: (formula, cantidad, excluirOrden, excluirPedido) => {
     const qs = new URLSearchParams({
       formula: String(formula),
       cantidad: String(cantidad),
       ...(excluirOrden ? { excluirOrden } : {}),
+      ...(excluirPedido ? { excluirPedido } : {}),
     }).toString();
     return request('GET', `/api/ordenes/validar-stock?${qs}`);
   },
