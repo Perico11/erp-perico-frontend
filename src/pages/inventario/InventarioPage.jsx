@@ -2362,7 +2362,7 @@ export default function InventarioPage() {
                 <div style={S.actionsCluster(isDesktop)}>
                   {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
                   {canRecibirMP && isDesktop && (
-                    <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
+                    <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin,tecnico" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
                   )}
                   {canAltaMP && isDesktop && (
                     <button style={S.btnAdd} data-id="inventario.btn.alta-mp" data-rol="tecnico,admin,compras,inventario" onClick={() => setShowAltaMP(true)}>+ Dar de alta MP</button>
@@ -2772,7 +2772,7 @@ export default function InventarioPage() {
           rows={[
             ...(activeTab === 'mp' && canRecibirMP ? [{
               key: 'recepcion', label: 'Recepción MP', desc: 'Captura entrada de materia prima',
-              dataId: 'inventario.btn.recepcion-mp', dataRol: 'almacen,compras,admin',
+              dataId: 'inventario.btn.recepcion-mp', dataRol: 'almacen,compras,admin,tecnico',
               onClick: () => setShowRecepcion(true),
               icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="M3.27 6.96 12 12.01l8.73-5.05" /></svg>,
             }] : []),
@@ -3897,7 +3897,9 @@ function AltaMPModal({ onClose, onSaved }) {
       });
       onSaved(`Materia prima "${nom}" dada de alta`);
     } catch (e) {
-      setError(e?.data?.error || e?.message || 'No se pudo dar de alta');
+      /* 409 = ya existe → orientar al flujo correcto: sumar stock es "+ Recepción MP" */
+      const msg = e?.data?.error || e?.message || 'No se pudo dar de alta';
+      setError(e?.status === 409 ? msg + ' — para sumarle stock usa "+ Recepción MP".' : msg);
     } finally { setSaving(false); }
   };
 
