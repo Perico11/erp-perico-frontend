@@ -48,7 +48,7 @@ const NAV_ITEMS = [
   /* Órdenes de Transferencia (OT): movimiento formal Fábrica↔Terán con escaneo. */
   { key: 'transferencias', label: 'Transferencias', path: '/transferencias', icon: icons.transferencias, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
   /* Ingresos: Enrique da de alta pedidos del proveedor con foto de factura; admin revisa y suma stock. */
-  { key: 'ingresos',     label: 'Ingresos',     path: '/ingresos',      icon: icons.pedidos,      perm: 'ingresos',    roles: ['admin','tecnico','almacen'] },
+  { key: 'ingresos',     label: 'Ingresos proveedor', path: '/ingresos',  icon: icons.pedidos,      perm: 'ingresos',    roles: ['admin','tecnico','almacen'] },
   /* "Flujo" retirado del menú (jun 2026, censo duplicados — decisión owner):
      Pedidos absorbe el ciclo completo (misma card, mismas acciones). La ruta
      /flujo queda viva como respaldo. */
