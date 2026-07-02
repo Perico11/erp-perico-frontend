@@ -52,6 +52,47 @@ const fechaHumana = (iso) => {
   return d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', ...(conAnio ? { year: 'numeric' } : {}) });
 };
 const MONO = '"JetBrains Mono", ui-monospace, monospace';
+
+/* "hoy 9:12" / "ayer 16:40" / "28 jun" — como pide el handoff 1c. */
+const fechaRelativa = (iso) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso).slice(0, 10);
+  const hh = d.toLocaleTimeString('es-MX', { hour: 'numeric', minute: '2-digit' });
+  const hoy = new Date();
+  const ayer = new Date(); ayer.setDate(hoy.getDate() - 1);
+  const mismo = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  if (mismo(d, hoy)) return 'hoy ' + hh;
+  if (mismo(d, ayer)) return 'ayer ' + hh;
+  return fechaHumana(iso);
+};
+
+/* Avatar de proveedor: iniciales + tinte determinístico (paleta del handoff). */
+const iniciales = (n) => {
+  const w = String(n || '?').trim().split(/\s+/).filter(Boolean);
+  return (w.length >= 2 ? w[0][0] + w[1][0] : String(w[0] || '?').slice(0, 2)).toUpperCase();
+};
+const TINTES = [
+  { bg: 'rgba(29,158,117,0.15)', fg: '#0F6E56' },
+  { bg: 'rgba(83,74,183,0.12)', fg: '#534AB7' },
+  { bg: 'rgba(239,159,39,0.15)', fg: '#854F0B' },
+  { bg: 'rgba(29,86,216,0.10)', fg: '#1e3a8a' },
+];
+const tinte = (n) => { let h = 0; const s = String(n || ''); for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return TINTES[h % TINTES.length]; };
+
+const Vacio = ({ isAdmin, isDesktop }) => (
+  <div style={S.empty}>
+    <IconInbox />
+    <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--lp-text-primary,#16201c)' }}>
+      {isAdmin ? 'No hay ingresos en esta vista' : 'Aún no has registrado ingresos'}
+    </div>
+    <div style={{ fontSize: 13.5, marginTop: 4, lineHeight: 1.5, maxWidth: 320 }}>
+      {isAdmin
+        ? 'Cuando alguien registre lo que llegó del proveedor, aparecerá aquí para revisarlo.'
+        : `Cuando llegue material del proveedor, toca "Nuevo ingreso" ${isDesktop ? 'arriba' : 'aquí abajo'}.`}
+    </div>
+  </div>
+);
 const ESTADO_META = {
   por_revisar: { label: 'Por revisar', color: '#92610A', bg: '#FEF3C7' },
   recibido:    { label: 'Recibido',    color: '#0F6E56', bg: 'rgba(15,122,90,.12)' },
@@ -334,6 +375,10 @@ export default function IngresosPage() {
   const [revisar, setRevisar] = useState(null);
   const [toast, setToast] = useState(null);
   const [catalogs, setCatalogs] = useState({ mpNames: [], envaseOpts: [], tapaOpts: [] });
+  /* Handoff 1c: vista segmentada + acordeón por proveedor + filtro de historial */
+  const [vista, setVista] = useState('recientes');       /* 'recientes' | 'proveedor' */
+  const [expandido, setExpandido] = useState(null);      /* key del grupo abierto */
+  const [filtroProveedor, setFiltroProveedor] = useState(null);
 
   const showToast = useCallback((msg, isErr = false) => {
     setToast({ msg, isErr });
@@ -381,14 +426,45 @@ export default function IngresosPage() {
   }, []);
 
   const filtrados = useMemo(() => {
-    if (isAdmin && tab !== 'todos') return items.filter(x => x.estado === tab);
-    return items;
-  }, [items, tab, isAdmin]);
+    let arr = items;
+    if (filtroProveedor) arr = arr.filter(x => String(x.proveedor || '').trim().toLowerCase() === filtroProveedor.trim().toLowerCase());
+    if (isAdmin && tab !== 'todos') arr = arr.filter(x => x.estado === tab);
+    return arr;
+  }, [items, tab, isAdmin, filtroProveedor]);
 
   const conteo = useMemo(() => {
     const c = { por_revisar: 0, recibido: 0, rechazado: 0 };
     items.forEach(x => { if (c[x.estado] != null) c[x.estado]++; });
     return c;
+  }, [items]);
+
+  /* Hero del handoff: cifras del MES en curso, derivadas de los ingresos reales. */
+  const kpis = useMemo(() => {
+    const hoy = new Date(); const y = hoy.getFullYear(), m = hoy.getMonth();
+    const delMes = items.filter(x => { const d = new Date(x.fechaCreacion || ''); return !isNaN(d) && d.getFullYear() === y && d.getMonth() === m; });
+    let materiales = 0;
+    delMes.forEach(x => (Array.isArray(x.lineas) ? x.lineas : []).forEach(l => { materiales += Number(l.cantidad) || 0; }));
+    return {
+      ingresos: delMes.length,
+      materiales: Math.round(materiales),
+      proveedores: new Set(delMes.map(x => String(x.proveedor || '').trim().toLowerCase()).filter(Boolean)).size,
+      mes: hoy.toLocaleDateString('es-MX', { month: 'long' }),
+    };
+  }, [items]);
+
+  /* Agrupado por proveedor: total de ingresos + el ÚLTIMO (sus partidas y factura). */
+  const grupos = useMemo(() => {
+    const map = new Map();
+    items.forEach(x => {
+      const key = String(x.proveedor || '').trim().toLowerCase();
+      if (!key) return;
+      const g = map.get(key) || { key, nombre: String(x.proveedor).trim(), count: 0, ultimo: null, fechaUltima: '' };
+      g.count++;
+      const f = x.fechaCreacion || '';
+      if (!g.ultimo || f > g.fechaUltima) { g.ultimo = x; g.fechaUltima = f; }
+      map.set(key, g);
+    });
+    return [...map.values()].sort((a, b) => (b.fechaUltima || '').localeCompare(a.fechaUltima || ''));
   }, [items]);
 
   return (
@@ -405,8 +481,32 @@ export default function IngresosPage() {
         {isDesktop && <button onClick={() => setCrear(true)} style={S.btnPrimary}>+ Nuevo ingreso</button>}
       </div>
 
-      {isAdmin && (
-        <div style={{ display: 'flex', gap: 6, margin: '14px 0 10px', flexWrap: 'wrap' }}>
+      {/* Hero del mes (handoff 1c). KPIs ACCIONABLES, no números muertos:
+          ingresos → Recientes · materiales → Recientes · proveedores → Por proveedor */}
+      <div style={S.hero}>
+        <button onClick={() => { setVista('recientes'); setFiltroProveedor(null); }} style={S.kpiCell}>
+          <div style={{ ...S.kpiNum, color: '#0F6E56' }}>{kpis.ingresos}</div>
+          <div style={S.kpiLbl}>ingresos en {kpis.mes}</div>
+        </button>
+        <button onClick={() => { setVista('recientes'); setFiltroProveedor(null); }} style={{ ...S.kpiCell, borderLeft: '1px solid rgba(0,0,0,0.06)', borderRight: '1px solid rgba(0,0,0,0.06)', borderRadius: 0 }}>
+          <div style={S.kpiNum}>{kpis.materiales}</div>
+          <div style={S.kpiLbl}>materiales</div>
+        </button>
+        <button onClick={() => { setVista('proveedor'); setFiltroProveedor(null); }} style={S.kpiCell}>
+          <div style={S.kpiNum}>{kpis.proveedores}</div>
+          <div style={S.kpiLbl}>proveedores</div>
+        </button>
+      </div>
+
+      {/* Segmentado Recientes | Por proveedor (handoff 1c) */}
+      <div style={S.segmented}>
+        {[['recientes', 'Recientes'], ['proveedor', 'Por proveedor']].map(([k, lbl]) => (
+          <button key={k} onClick={() => setVista(k)} style={{ ...S.segmentedBtn, ...(vista === k ? S.segmentedActive : {}) }}>{lbl}</button>
+        ))}
+      </div>
+
+      {isAdmin && vista === 'recientes' && (
+        <div style={{ display: 'flex', gap: 6, margin: '12px 0 0', flexWrap: 'wrap' }}>
           {[
             ['por_revisar', `Por revisar${conteo.por_revisar ? ` (${conteo.por_revisar})` : ''}`],
             ['recibido', 'Recibidos'],
@@ -418,22 +518,70 @@ export default function IngresosPage() {
         </div>
       )}
 
+      {/* Chip de filtro que deja "Historial completo": todos los ingresos de UN proveedor */}
+      {vista === 'recientes' && filtroProveedor && (
+        <div style={{ margin: '12px 0 0' }}>
+          <button onClick={() => setFiltroProveedor(null)} style={S.filtroChip} aria-label={`Quitar filtro de ${filtroProveedor}`}>
+            Proveedor: {filtroProveedor} <span aria-hidden="true" style={{ fontWeight: 500 }}>✕</span>
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div style={S.empty}>Cargando…</div>
+      ) : vista === 'proveedor' ? (
+        grupos.length === 0 ? <Vacio isAdmin={isAdmin} isDesktop={isDesktop} /> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
+            {grupos.map(g => {
+              const t = tinte(g.nombre);
+              const abierto = expandido === g.key;
+              const ult = g.ultimo;
+              const lineasUlt = ult && Array.isArray(ult.lineas) ? ult.lineas : [];
+              return (
+                <div key={g.key} style={S.grupoCard}>
+                  {/* Header = acordeón (un grupo abierto a la vez, chevron 260ms) */}
+                  <button onClick={() => setExpandido(abierto ? null : g.key)} style={S.grupoHead} aria-expanded={abierto}>
+                    <span style={{ ...S.avatar, background: t.bg, color: t.fg }}>{iniciales(g.nombre)}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={S.grupoNombre}>{g.nombre}</div>
+                      <div style={S.grupoMeta}>{g.count} ingreso{g.count === 1 ? '' : 's'} · último {fechaRelativa(g.fechaUltima)}</div>
+                    </div>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#6b8a78" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      style={{ transform: abierto ? 'rotate(180deg)' : 'none', transition: 'transform 260ms cubic-bezier(.22,1,.36,1)', flexShrink: 0 }}>
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </button>
+                  {abierto && (
+                    <div style={S.grupoBody}>
+                      {lineasUlt.length > 0 ? lineasUlt.map((l, i) => (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 13, color: 'var(--lp-text-secondary,#3d5a4a)' }}>
+                          <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</span>
+                          <span style={{ fontWeight: 500, color: 'var(--lp-text-primary,#0d2320)', whiteSpace: 'nowrap' }}>× {fmt(l.cantidad)}{l.unidad && l.unidad !== 'pz' ? ` ${l.unidad}` : ''}</span>
+                        </div>
+                      )) : (
+                        <div style={{ fontSize: 13, color: 'var(--lp-text-tertiary,#6b8a78)' }}>El último ingreso no trae partidas registradas.</div>
+                      )}
+                      <div style={{ display: 'flex', gap: 8, marginTop: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                        {ult && (
+                          <a href={api.ingresoFacturaUrl(ult.id)} target="_blank" rel="noreferrer" style={S.facturaPill}>
+                            <IconDoc /> Ver factura
+                          </a>
+                        )}
+                        <button onClick={() => { setFiltroProveedor(g.nombre); setVista('recientes'); }} style={S.histBtn}>
+                          Historial completo
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
       ) : filtrados.length === 0 ? (
-        <div style={S.empty}>
-          <IconInbox />
-          <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--lp-text-primary,#16201c)' }}>
-            {isAdmin ? 'No hay ingresos en esta vista' : 'Aún no has registrado ingresos'}
-          </div>
-          <div style={{ fontSize: 13.5, marginTop: 4, lineHeight: 1.5, maxWidth: 320 }}>
-            {isAdmin
-              ? 'Cuando alguien registre lo que llegó del proveedor, aparecerá aquí para revisarlo.'
-              : `Cuando llegue material del proveedor, toca "Nuevo ingreso" ${isDesktop ? 'arriba' : 'aquí abajo'}.`}
-          </div>
-        </div>
+        <Vacio isAdmin={isAdmin} isDesktop={isDesktop} />
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 14 }}>
           {filtrados.map(ing => {
             const em = ESTADO_META[ing.estado] || { label: ing.estado, color: '#555', bg: '#eee' };
             const nL = Array.isArray(ing.lineas) ? ing.lineas.length : 0;
@@ -568,4 +716,21 @@ const S = {
   sheetFootMobile: { paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' },
   btnMobilePrimary: { flex: 1, minHeight: 48, fontSize: 15 },
   btnMobileGhost: { minHeight: 48, padding: '9px 18px' },
+  /* ── Handoff 1c: hero, segmentado y grupos por proveedor ────────────────── */
+  hero: { margin: '14px 0 0', background: 'rgba(252,254,253,0.82)', backdropFilter: 'blur(24px)', WebkitBackdropFilter: 'blur(24px)', border: '1px solid rgba(255,255,255,0.55)', borderRadius: 24, padding: '16px 6px', boxShadow: '0 8px 24px rgba(80,140,110,0.14)', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', textAlign: 'center' },
+  kpiCell: { background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', fontFamily: 'inherit', color: 'inherit', minHeight: 56 },
+  kpiNum: { fontSize: 30, fontWeight: 500, letterSpacing: '-0.02em', color: 'var(--lp-text-primary,#0d2320)', lineHeight: 1.15 },
+  kpiLbl: { fontSize: 11.5, color: 'var(--lp-text-tertiary,#6b8a78)', marginTop: 2 },
+  segmented: { margin: '14px 0 0', background: 'rgba(0,0,0,0.04)', borderRadius: 99, padding: 4, display: 'grid', gridTemplateColumns: '1fr 1fr' },
+  segmentedBtn: { textAlign: 'center', fontSize: 13, color: 'var(--lp-text-secondary,#3d5a4a)', padding: '8px 0', minHeight: 36, background: 'none', border: 'none', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 260ms cubic-bezier(.22,1,.36,1)' },
+  segmentedActive: { fontWeight: 500, color: 'var(--lp-text-primary,#0d2320)', background: 'var(--lp-surface,#FEFEFE)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' },
+  grupoCard: { background: 'var(--lp-surface,#FEFEFE)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden' },
+  grupoHead: { width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', minHeight: 62, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', color: 'inherit' },
+  avatar: { width: 34, height: 34, borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, flexShrink: 0 },
+  grupoNombre: { fontSize: 14.5, fontWeight: 500, color: 'var(--lp-text-primary,#0d2320)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  grupoMeta: { fontSize: 11.5, color: 'var(--lp-text-tertiary,#6b8a78)', marginTop: 1 },
+  grupoBody: { borderTop: '1px solid rgba(0,0,0,0.04)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(29,158,117,0.04)' },
+  facturaPill: { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-surface,#FEFEFE)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 99, padding: '8px 14px', minHeight: 36, fontSize: 12, fontWeight: 500, color: '#0F6E56', textDecoration: 'none', boxSizing: 'border-box' },
+  histBtn: { background: 'none', border: 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, color: 'var(--lp-text-secondary,#3d5a4a)', cursor: 'pointer', padding: '8px 10px', minHeight: 36 },
+  filtroChip: { display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(15,122,90,.08)', border: '1px solid rgba(15,122,90,.25)', borderRadius: 99, padding: '7px 14px', minHeight: 36, fontSize: 13, fontWeight: 500, color: BRAND, cursor: 'pointer', fontFamily: 'inherit' },
 };
