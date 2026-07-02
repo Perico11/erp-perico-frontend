@@ -15,8 +15,22 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import useIsDesktop from '../../hooks/useIsDesktop';
 
 const TIPO_LABEL = { mp: 'MP', envase: 'Envase', tapa: 'Tapa' };
+
+/* Iconos SVG line (regla del proyecto: sin emojis) */
+const IconCam = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: '-3px', marginRight: 7 }}>
+    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+    <circle cx="12" cy="13" r="4" />
+  </svg>
+);
+const IconPlus = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+    <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+  </svg>
+);
 const ESTADO_META = {
   por_revisar: { label: 'Por revisar', color: '#92610A', bg: '#FEF3C7' },
   recibido:    { label: 'Recibido',    color: '#0F6E56', bg: 'rgba(15,122,90,.12)' },
@@ -133,7 +147,7 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
 }
 
 /* ─── Sheet: nuevo ingreso (técnico/almacén/admin) ─────────────────────────── */
-function CrearSheet({ catalogs, onClose, onSaved }) {
+function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
   const [proveedor, setProveedor] = useState('');
   const [numFactura, setNumFactura] = useState('');
   const [monto, setMonto] = useState('');
@@ -201,7 +215,7 @@ function CrearSheet({ catalogs, onClose, onSaved }) {
           <label style={S.lbl}>Foto de la factura *</label>
           <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={onFile} style={{ display: 'none' }} />
           <button onClick={() => fileRef.current && fileRef.current.click()} style={S.fotoBtn}>
-            {facturaData ? '📷 Cambiar foto' : '📷 Tomar / adjuntar factura'}
+            <IconCam />{facturaData ? 'Cambiar foto' : 'Tomar / adjuntar factura'}
           </button>
           {facturaPreview && <img src={facturaPreview} alt="Factura" style={S.preview} />}
           {esPdf && <div style={S.pdfOk}>PDF adjunto ✓</div>}
@@ -214,9 +228,9 @@ function CrearSheet({ catalogs, onClose, onSaved }) {
 
           {err && <div style={S.err}>{err}</div>}
         </div>
-        <div style={S.sheetFoot}>
-          <button onClick={onClose} disabled={saving} style={S.btnGhost}>Cancelar</button>
-          <button onClick={guardar} disabled={saving} style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }}>
+        <div style={{ ...S.sheetFoot, ...(isDesktop ? {} : S.sheetFootMobile) }}>
+          <button onClick={onClose} disabled={saving} style={{ ...S.btnGhost, ...(isDesktop ? {} : S.btnMobileGhost) }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={{ ...S.btnPrimary, ...(isDesktop ? {} : S.btnMobilePrimary), opacity: saving ? 0.6 : 1 }}>
             {saving ? 'Guardando…' : 'Registrar ingreso'}
           </button>
         </div>
@@ -226,7 +240,7 @@ function CrearSheet({ catalogs, onClose, onSaved }) {
 }
 
 /* ─── Sheet: revisar (admin) → aprobar (suma stock) / rechazar ─────────────── */
-function RevisarSheet({ ing, catalogs, onClose, onDone }) {
+function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
   const [lineas, setLineas] = useState(() => (ing.lineas || []).map(l => ({ ...l })));
   const [notaRevision, setNotaRevision] = useState('');
   const [busy, setBusy] = useState('');
@@ -274,11 +288,11 @@ function RevisarSheet({ ing, catalogs, onClose, onDone }) {
 
           {err && <div style={S.err}>{err}</div>}
         </div>
-        <div style={S.sheetFoot}>
-          <button onClick={() => revisar('rechazar')} disabled={!!busy} style={S.btnDanger}>
+        <div style={{ ...S.sheetFoot, ...(isDesktop ? {} : S.sheetFootMobile) }}>
+          <button onClick={() => revisar('rechazar')} disabled={!!busy} style={{ ...S.btnDanger, ...(isDesktop ? {} : S.btnMobileGhost) }}>
             {busy === 'rechazar' ? '…' : 'Rechazar'}
           </button>
-          <button onClick={() => revisar('aprobar')} disabled={!!busy} style={{ ...S.btnPrimary, opacity: busy ? 0.6 : 1 }}>
+          <button onClick={() => revisar('aprobar')} disabled={!!busy} style={{ ...S.btnPrimary, ...(isDesktop ? {} : S.btnMobilePrimary), opacity: busy ? 0.6 : 1 }}>
             {busy === 'aprobar' ? 'Sumando…' : 'Aprobar y sumar al stock'}
           </button>
         </div>
@@ -290,6 +304,7 @@ function RevisarSheet({ ing, catalogs, onClose, onDone }) {
 /* ─── Página ───────────────────────────────────────────────────────────────── */
 export default function IngresosPage() {
   const { user } = useAuth();
+  const isDesktop = useIsDesktop();
   const isAdmin = user?.rol === 'admin';
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -356,7 +371,7 @@ export default function IngresosPage() {
   }, [items]);
 
   return (
-    <div style={{ maxWidth: 860, margin: '0 auto', padding: '4px 2px 80px' }}>
+    <div style={{ maxWidth: 860, margin: '0 auto', padding: isDesktop ? '4px 2px 80px' : '4px 2px 150px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 4 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600, margin: 0 }}>Ingresos de proveedor</h1>
@@ -364,7 +379,9 @@ export default function IngresosPage() {
             {isAdmin ? 'Revisa lo que llegó (foto de factura) y súmalo al stock.' : 'Da de alta lo que llega con la foto de la factura.'}
           </div>
         </div>
-        <button onClick={() => setCrear(true)} style={S.btnPrimary}>+ Nuevo ingreso</button>
+        {/* En móvil la acción principal vive ABAJO (FAB al alcance del pulgar);
+            arriba solo estorbaba y casi no se podía tocar. */}
+        {isDesktop && <button onClick={() => setCrear(true)} style={S.btnPrimary}>+ Nuevo ingreso</button>}
       </div>
 
       {isAdmin && (
@@ -375,7 +392,7 @@ export default function IngresosPage() {
             ['rechazado', 'Rechazados'],
             ['todos', 'Todos'],
           ].map(([k, lbl]) => (
-            <button key={k} onClick={() => setTab(k)} style={{ ...S.tab, ...(tab === k ? S.tabActive : {}) }}>{lbl}</button>
+            <button key={k} onClick={() => setTab(k)} style={{ ...S.tab, ...(isDesktop ? {} : { minHeight: 38, padding: '8px 16px' }), ...(tab === k ? S.tabActive : {}) }}>{lbl}</button>
           ))}
         </div>
       )}
@@ -425,7 +442,7 @@ export default function IngresosPage() {
 
                 {isAdmin && ing.estado === 'por_revisar' && (
                   <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}>
-                    <button onClick={() => setRevisar(ing)} style={S.btnPrimary}>Revisar</button>
+                    <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
                   </div>
                 )}
               </div>
@@ -434,12 +451,20 @@ export default function IngresosPage() {
         </div>
       )}
 
+      {/* FAB móvil: la acción principal SIEMPRE al alcance del pulgar, arriba
+          del bottom-nav (misma convención de offset que Compras/Forecast). */}
+      {!isDesktop && !crear && !revisar && (
+        <button onClick={() => setCrear(true)} style={S.fab} aria-label="Nuevo ingreso">
+          <IconPlus /> Nuevo ingreso
+        </button>
+      )}
+
       {crear && (
-        <CrearSheet catalogs={catalogs} onClose={() => setCrear(false)}
+        <CrearSheet catalogs={catalogs} isDesktop={isDesktop} onClose={() => setCrear(false)}
           onSaved={(ing) => { setCrear(false); showToast(`Ingreso ${ing.folio} registrado · queda por revisar`); load(); }} />
       )}
       {revisar && (
-        <RevisarSheet ing={revisar} catalogs={catalogs} onClose={() => setRevisar(null)}
+        <RevisarSheet ing={revisar} catalogs={catalogs} isDesktop={isDesktop} onClose={() => setRevisar(null)}
           onDone={(ing, decision, muts) => {
             setRevisar(null);
             showToast(decision === 'aprobar'
@@ -488,6 +513,13 @@ const S = {
   lineForm: { display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, border: '1px dashed var(--lp-border,rgba(0,0,0,.15))' },
   seg: { flex: 1, fontSize: 12, fontWeight: 600, padding: '6px', borderRadius: 7, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
   segActive: { background: BRAND, color: '#fff', borderColor: BRAND },
-  addBtn: { fontSize: 13, fontWeight: 600, padding: '0 12px', borderRadius: 8, border: 'none', background: BRAND, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' },
+  addBtn: { fontSize: 13, fontWeight: 600, padding: '10px 12px', minHeight: 40, borderRadius: 8, border: 'none', background: BRAND, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' },
   toast: { position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#16201c', color: '#fff', fontSize: 13, padding: '10px 18px', borderRadius: 10, zIndex: 1200, maxWidth: '90vw', textAlign: 'center' },
+  /* FAB móvil (pill extendida): arriba del bottom-nav, zIndex < overlay (1100)
+     para que los sheets lo cubran. Offset = convención de la app. */
+  fab: { position: 'fixed', right: 16, bottom: 'calc(74px + env(safe-area-inset-bottom, 0px))', zIndex: 45, display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 52, padding: '0 22px', borderRadius: 28, border: 'none', background: BRAND, color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', boxShadow: '0 6px 20px rgba(15,122,90,.35)' },
+  /* Footer de sheet en móvil: botones grandes (≥48px) + safe-area inferior */
+  sheetFootMobile: { paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))' },
+  btnMobilePrimary: { flex: 1, minHeight: 48, fontSize: 15 },
+  btnMobileGhost: { minHeight: 48, padding: '9px 18px' },
 };
