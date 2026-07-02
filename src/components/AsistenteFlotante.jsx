@@ -266,6 +266,11 @@ function _mensajeErrorVoz(code) {
 }
 
 const POS_KEY = 'pp_asistente_pos';
+/* Dictado por voz: la Web Speech API no siempre corta sola → hacemos el
+   "endpointing" a mano. Tras VOZ_SILENCIO_MS sin oír nada nuevo, cerramos y
+   mandamos lo dicho; VOZ_MAX_MS es un tope duro para que nunca se congele. */
+const VOZ_SILENCIO_MS = 1500;
+const VOZ_MAX_MS = 12000;
 
 /* Render ligero del texto del bot: **negrita**, viñetas (-, •, 1.) y saltos de
    línea. Solo texto + <strong> (sin HTML peligroso). Evita que se vean los
@@ -809,33 +814,50 @@ export default function AsistenteFlotante() {
      `responder` vigente (el ciclo del reconocimiento dura segundos). */
   const toggleVoz = () => {
     if (!vozSoportada) return;
+    /* Segundo tap = terminar y mandar lo dicho (stop dispara onend). */
     if (escuchando) { try { recRef.current && recRef.current.stop(); } catch { /* ya detenido */ } return; }
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     let rec;
     try { rec = new SR(); } catch { return; }
     rec.lang = 'es-MX';
     rec.interimResults = true;
-    rec.continuous = false;
+    rec.continuous = true;   /* no cortar solo; el corte lo decidimos por silencio */
     rec.maxAlternatives = 1;
     let finalText = '';
+    /* Endpointing manual: cada vez que oye algo, reinicia el contador; si pasan
+       VOZ_SILENCIO_MS sin novedad, cierra. VOZ_MAX_MS = tope duro anti-congelado.
+       Los timers viven en la instancia para poder limpiarlos desde cualquier lado. */
+    const armarSilencio = () => {
+      if (rec._sil) clearTimeout(rec._sil);
+      rec._sil = setTimeout(() => { try { rec.stop(); } catch { /* noop */ } }, VOZ_SILENCIO_MS);
+    };
+    const limpiarTimers = () => {
+      if (rec._sil) clearTimeout(rec._sil);
+      if (rec._hard) clearTimeout(rec._hard);
+      rec._sil = null; rec._hard = null;
+    };
     rec.onresult = (e) => {
       let interim = '';
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      finalText = '';
+      for (let i = 0; i < e.results.length; i++) {
         const tr = e.results[i][0].transcript;
         if (e.results[i].isFinal) finalText += tr; else interim += tr;
       }
       setQ((finalText + interim).trim());
+      armarSilencio();   /* hubo voz → reinicia la cuenta de silencio */
     };
     /* Errores (más comunes en Safari/iOS): no fallar en silencio. 'aborted' = lo
        paramos nosotros al cerrar; 'no-speech' = silencio → no molestar. El resto
        sí avisa qué pasó y recuerda que se puede escribir. */
     rec.onerror = (ev) => {
+      limpiarTimers();
       setEscuchando(false);
       const code = ev && ev.error;
       if (code === 'aborted' || code === 'no-speech') return;
       pushBot(_mensajeErrorVoz(code));
     };
     rec.onend = () => {
+      limpiarTimers();
       setEscuchando(false);
       recRef.current = null;
       const dicho = finalText.trim();
@@ -843,7 +865,11 @@ export default function AsistenteFlotante() {
     };
     recRef.current = rec;
     setEscuchando(true);
-    try { rec.start(); } catch { setEscuchando(false); recRef.current = null; pushBot(_mensajeErrorVoz('start-fail')); }
+    try {
+      rec.start();
+      /* Tope duro: pase lo que pase, a los VOZ_MAX_MS se cierra (nunca congelado). */
+      rec._hard = setTimeout(() => { try { rec.stop(); } catch { /* noop */ } }, VOZ_MAX_MS);
+    } catch { limpiarTimers(); setEscuchando(false); recRef.current = null; pushBot(_mensajeErrorVoz('start-fail')); }
   };
 
   const ir = (entry, abrir = false) => {
@@ -970,7 +996,7 @@ export default function AsistenteFlotante() {
               <input
                 ref={inputRef}
                 style={S.input}
-                placeholder={escuchando ? 'Escuchando…' : 'Escribe o dicta… ej: pendientes, transfiere 1 tote'}
+                placeholder={escuchando ? 'Escuchando… (haz una pausa para enviar)' : 'Escribe o dicta… ej: pendientes, transfiere 1 tote'}
                 value={q}
                 autoComplete="off"
                 autoCorrect="off"
