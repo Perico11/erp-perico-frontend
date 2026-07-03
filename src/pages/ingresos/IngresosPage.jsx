@@ -142,6 +142,7 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
   const [sel, setSel] = useState('');
   const [cant, setCant] = useState('');
   const [uni, setUni] = useState('kg');
+  const [lote, setLote] = useState(''); /* lote OPCIONAL de la MP (jul 2026) */
 
   const opts = tipo === 'mp' ? mpNames.map(n => ({ value: n, label: n }))
     : tipo === 'envase' ? envaseOpts
@@ -151,8 +152,10 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
     const c = Number(cant);
     if (!sel || !(c > 0)) return;
     let linea;
-    if (tipo === 'mp') linea = { tipo: 'mp', mp: sel, nombre: sel, cantidad: c, unidad: uni || 'kg' };
-    else if (tipo === 'envase') {
+    if (tipo === 'mp') {
+      const lt = lote.trim();
+      linea = { tipo: 'mp', mp: sel, nombre: lt ? `${sel} · Lote ${lt}` : sel, cantidad: c, unidad: uni || 'kg', ...(lt ? { lote: lt } : {}) };
+    } else if (tipo === 'envase') {
       const o = envaseOpts.find(x => x.value === sel);
       if (!o) return;
       linea = { tipo: 'envase', catKey: o.catKey, subKey: o.subKey, nombre: o.nombre, cantidad: c, unidad: uni || 'pz' };
@@ -162,7 +165,7 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
       linea = { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, cantidad: c, unidad: uni || 'pz' };
     }
     setLineas([...(lineas || []), linea]);
-    setSel(''); setCant('');
+    setSel(''); setCant(''); setLote('');
   };
 
   const quitar = (i) => setLineas(lineas.filter((_, idx) => idx !== i));
@@ -187,12 +190,16 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
         <div style={S.lineForm}>
           <div style={{ display: 'flex', gap: 6 }}>
             {['mp', 'envase', 'tapa'].map(t => (
-              <button key={t} onClick={() => { setTipo(t); setSel(''); setUni(t === 'mp' ? 'kg' : 'pz'); }}
+              <button key={t} onClick={() => { setTipo(t); setSel(''); setUni(t === 'mp' ? 'kg' : 'pz'); setLote(''); }}
                 style={{ ...S.seg, ...(tipo === t ? S.segActive : {}) }}>{TIPO_LABEL[t]}</button>
             ))}
           </div>
           <input list="ing-opts" value={sel} onChange={e => setSel(e.target.value)}
             placeholder={tipo === 'mp' ? 'Materia prima…' : tipo === 'envase' ? 'Envase…' : 'Tapa…'} style={S.input} />
+          {/* Lote OPCIONAL de la MP (jul 2026, pedido dueño). Solo para MP. */}
+          {tipo === 'mp' && (
+            <input value={lote} onChange={e => setLote(e.target.value)} placeholder="Lote de la MP (opcional)" style={{ ...S.input, marginTop: 6 }} />
+          )}
           <datalist id="ing-opts">
             {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </datalist>
