@@ -158,7 +158,7 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
      lo que estabas escribiendo → cambiar de sub-pestaña YA NO borra la info del
      anterior. Antes era un solo estado compartido que se reseteaba al cambiar. */
   const [draft, setDraft] = useState({
-    mp:     { sel: '', cant: '', uni: 'kg', lote: '' },
+    mp:     { sel: '', cant: '', uni: 'kg', lote: '', costoKg: '' },
     envase: { sel: '', cant: '', uni: 'pz' },
     tapa:   { sel: '', cant: '', uni: 'pz' },
   });
@@ -175,7 +175,9 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
     let linea;
     if (tipo === 'mp') {
       const lt = (d.lote || '').trim();
-      linea = { tipo: 'mp', mp: d.sel, nombre: lt ? `${d.sel} · Lote ${lt}` : d.sel, cantidad: c, unidad: d.uni || 'kg', ...(lt ? { lote: lt } : {}) };
+      const ck = Number(d.costoKg) > 0 ? +Number(d.costoKg).toFixed(4) : null;
+      const nombre = `${d.sel}${lt ? ` · Lote ${lt}` : ''}${ck ? ` · $${ck}/kg` : ''}`;
+      linea = { tipo: 'mp', mp: d.sel, nombre, cantidad: c, unidad: d.uni || 'kg', ...(lt ? { lote: lt } : {}), ...(ck ? { costoKg: ck } : {}) };
     } else if (tipo === 'envase') {
       const o = envaseOpts.find(x => x.value === d.sel);
       if (!o) return;
@@ -186,7 +188,7 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
       linea = { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, cantidad: c, unidad: d.uni || 'pz' };
     }
     setLineas([...(lineas || []), linea]);
-    setD({ sel: '', cant: '', lote: '' }); /* limpia SOLO esta pestaña tras agregar */
+    setD({ sel: '', cant: '', lote: '', costoKg: '' }); /* limpia SOLO esta pestaña tras agregar */
   };
 
   const quitar = (i) => setLineas(lineas.filter((_, idx) => idx !== i));
@@ -217,9 +219,13 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
           </div>
           <input list="ing-opts" value={d.sel} onChange={e => setD({ sel: e.target.value })}
             placeholder={tipo === 'mp' ? 'Materia prima…' : tipo === 'envase' ? 'Envase…' : 'Tapa…'} style={S.input} />
-          {/* Lote OPCIONAL de la MP (jul 2026, pedido dueño). Solo para MP. */}
+          {/* Lote + costo/kg OPCIONALES de la MP (jul 2026, pedido dueño). Solo MP.
+              El costo/kg alimenta el promedio ponderado del costo del sistema. */}
           {tipo === 'mp' && (
             <input value={d.lote || ''} onChange={e => setD({ lote: e.target.value })} placeholder="Lote de la MP (opcional)" style={{ ...S.input, marginTop: 6 }} />
+          )}
+          {tipo === 'mp' && (
+            <input type="number" inputMode="decimal" min="0" value={d.costoKg || ''} onChange={e => setD({ costoKg: e.target.value })} placeholder="Costo por kg de esta factura (opcional)" style={{ ...S.input, marginTop: 6 }} />
           )}
           <datalist id="ing-opts">
             {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -407,7 +413,14 @@ function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
   const [facturaData, setFacturaData] = useState(null);   /* solo si SE CAMBIA */
   const [facturaPreview, setFacturaPreview] = useState(null);
   const [esPdf, setEsPdf] = useState(false);
-  const [lineas, setLineas] = useState(() => (ing.lineas || []).map(l => ({ ...l })));
+  /* Pre-llena las partidas SIN el costo/kg previo: el promedio ponderado es
+     forward-only, así que re-guardar una edición NO debe re-mezclar el costo.
+     El costo solo se (re)aplica si el admin teclea uno nuevo en una partida. */
+  const [lineas, setLineas] = useState(() => (ing.lineas || []).map(l => {
+    const { costoKg, ...rest } = l;
+    if (rest.nombre) rest.nombre = String(rest.nombre).replace(/\s·\s\$[\d.]+\/kg$/, '');
+    return rest;
+  }));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const fileRef = useRef(null);
