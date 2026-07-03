@@ -139,33 +139,39 @@ const fmt = (n) => (Number(n) || 0).toLocaleString('es-MX');
 /* ─── Editor de líneas (lo que llegó) — compartido crear/revisar ───────────── */
 function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOnly }) {
   const [tipo, setTipo] = useState('mp');
-  const [sel, setSel] = useState('');
-  const [cant, setCant] = useState('');
-  const [uni, setUni] = useState('kg');
-  const [lote, setLote] = useState(''); /* lote OPCIONAL de la MP (jul 2026) */
+  /* Borrador POR PESTAÑA (fix crítico jul 2026): cada tipo (mp/envase/tapa) recuerda
+     lo que estabas escribiendo → cambiar de sub-pestaña YA NO borra la info del
+     anterior. Antes era un solo estado compartido que se reseteaba al cambiar. */
+  const [draft, setDraft] = useState({
+    mp:     { sel: '', cant: '', uni: 'kg', lote: '' },
+    envase: { sel: '', cant: '', uni: 'pz' },
+    tapa:   { sel: '', cant: '', uni: 'pz' },
+  });
+  const d = draft[tipo];
+  const setD = (patch) => setDraft(prev => ({ ...prev, [tipo]: { ...prev[tipo], ...patch } }));
 
   const opts = tipo === 'mp' ? mpNames.map(n => ({ value: n, label: n }))
     : tipo === 'envase' ? envaseOpts
     : tapaOpts;
 
   const agregar = () => {
-    const c = Number(cant);
-    if (!sel || !(c > 0)) return;
+    const c = Number(d.cant);
+    if (!d.sel || !(c > 0)) return;
     let linea;
     if (tipo === 'mp') {
-      const lt = lote.trim();
-      linea = { tipo: 'mp', mp: sel, nombre: lt ? `${sel} · Lote ${lt}` : sel, cantidad: c, unidad: uni || 'kg', ...(lt ? { lote: lt } : {}) };
+      const lt = (d.lote || '').trim();
+      linea = { tipo: 'mp', mp: d.sel, nombre: lt ? `${d.sel} · Lote ${lt}` : d.sel, cantidad: c, unidad: d.uni || 'kg', ...(lt ? { lote: lt } : {}) };
     } else if (tipo === 'envase') {
-      const o = envaseOpts.find(x => x.value === sel);
+      const o = envaseOpts.find(x => x.value === d.sel);
       if (!o) return;
-      linea = { tipo: 'envase', catKey: o.catKey, subKey: o.subKey, nombre: o.nombre, cantidad: c, unidad: uni || 'pz' };
+      linea = { tipo: 'envase', catKey: o.catKey, subKey: o.subKey, nombre: o.nombre, cantidad: c, unidad: d.uni || 'pz' };
     } else {
-      const o = tapaOpts.find(x => x.value === sel);
+      const o = tapaOpts.find(x => x.value === d.sel);
       if (!o) return;
-      linea = { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, cantidad: c, unidad: uni || 'pz' };
+      linea = { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, cantidad: c, unidad: d.uni || 'pz' };
     }
     setLineas([...(lineas || []), linea]);
-    setSel(''); setCant(''); setLote('');
+    setD({ sel: '', cant: '', lote: '' }); /* limpia SOLO esta pestaña tras agregar */
   };
 
   const quitar = (i) => setLineas(lineas.filter((_, idx) => idx !== i));
@@ -190,24 +196,24 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
         <div style={S.lineForm}>
           <div style={{ display: 'flex', gap: 6 }}>
             {['mp', 'envase', 'tapa'].map(t => (
-              <button key={t} onClick={() => { setTipo(t); setSel(''); setUni(t === 'mp' ? 'kg' : 'pz'); setLote(''); }}
+              <button key={t} onClick={() => setTipo(t)} /* solo cambia de pestaña; el borrador se conserva */
                 style={{ ...S.seg, ...(tipo === t ? S.segActive : {}) }}>{TIPO_LABEL[t]}</button>
             ))}
           </div>
-          <input list="ing-opts" value={sel} onChange={e => setSel(e.target.value)}
+          <input list="ing-opts" value={d.sel} onChange={e => setD({ sel: e.target.value })}
             placeholder={tipo === 'mp' ? 'Materia prima…' : tipo === 'envase' ? 'Envase…' : 'Tapa…'} style={S.input} />
           {/* Lote OPCIONAL de la MP (jul 2026, pedido dueño). Solo para MP. */}
           {tipo === 'mp' && (
-            <input value={lote} onChange={e => setLote(e.target.value)} placeholder="Lote de la MP (opcional)" style={{ ...S.input, marginTop: 6 }} />
+            <input value={d.lote || ''} onChange={e => setD({ lote: e.target.value })} placeholder="Lote de la MP (opcional)" style={{ ...S.input, marginTop: 6 }} />
           )}
           <datalist id="ing-opts">
             {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </datalist>
           <div style={{ display: 'flex', gap: 6 }}>
-            <input type="number" inputMode="decimal" min="0" value={cant} onChange={e => setCant(e.target.value)}
+            <input type="number" inputMode="decimal" min="0" value={d.cant} onChange={e => setD({ cant: e.target.value })}
               placeholder="Cantidad" style={{ ...S.input, flex: 2 }} />
-            <input value={uni} onChange={e => setUni(e.target.value)} placeholder="Unidad" style={{ ...S.input, flex: 1 }} />
-            <button onClick={agregar} disabled={!sel || !(Number(cant) > 0)} style={{ ...S.addBtn, opacity: (!sel || !(Number(cant) > 0)) ? 0.5 : 1 }}>+ Agregar</button>
+            <input value={d.uni} onChange={e => setD({ uni: e.target.value })} placeholder="Unidad" style={{ ...S.input, flex: 1 }} />
+            <button onClick={agregar} disabled={!d.sel || !(Number(d.cant) > 0)} style={{ ...S.addBtn, opacity: (!d.sel || !(Number(d.cant) > 0)) ? 0.5 : 1 }}>+ Agregar</button>
           </div>
         </div>
       )}
