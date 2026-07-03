@@ -238,6 +238,10 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
     setErr('');
     if (!proveedor.trim()) return setErr('Escribe el proveedor');
     if (!facturaData) return setErr('Toma o adjunta la foto de la factura');
+    /* Renglón OBLIGATORIO (pedido dueño jul 2026): quien registra captura QUÉ y
+       CUÁNTO llegó → al revisar ya viene cargado y el admin SOLO aprueba (no
+       recaptura). Sin línea el admin veía el editor vacío = confusión. */
+    if (!lineas.length) return setErr('Agrega al menos un producto: qué llegó y cuánto (el admin solo lo aprueba)');
     setSaving(true);
     try {
       const r = await api.crearIngreso({
@@ -282,7 +286,7 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
           {facturaPreview && <img src={facturaPreview} alt="Factura" style={S.preview} />}
           {esPdf && <div style={S.pdfOk}>PDF adjunto ✓</div>}
 
-          <label style={S.lbl}>¿Qué llegó? <span style={{ color: 'var(--lp-text-tertiary,#8a948f)', fontWeight: 400 }}>(opcional — el admin lo confirma al revisar)</span></label>
+          <label style={S.lbl}>¿Qué llegó? * <span style={{ color: 'var(--lp-text-tertiary,#8a948f)', fontWeight: 400 }}>(producto y cantidad — así el admin solo aprueba)</span></label>
           <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} />
 
           <label style={S.lbl}>Nota</label>
