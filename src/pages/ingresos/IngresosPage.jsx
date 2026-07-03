@@ -42,6 +42,21 @@ const IconInbox = () => (
     <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
   </svg>
 );
+const IconDots = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <circle cx="12" cy="5" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="12" cy="19" r="1.9" />
+  </svg>
+);
+const IconEdit = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4z" />
+  </svg>
+);
+const IconTrash = () => (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
 
 /* "30 jun" en vez de "2026-06-30" — el año solo si es distinto al actual. */
 const fechaHumana = (iso) => {
@@ -380,6 +395,155 @@ function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
   );
 }
 
+/* ─── Sheet: editar (admin) — corrige un ingreso ya registrado ─────────────────
+   Pedido dueño (jul 2026): Emmanuel edita proveedor / # factura / monto / nota /
+   PARTIDAS y —opcional— reemplaza la foto. Si el ingreso ya sumó al stock
+   ('recibido'), el backend revierte lo anterior y aplica lo nuevo (ajuste neto). */
+function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
+  const [proveedor, setProveedor] = useState(ing.proveedor || '');
+  const [numFactura, setNumFactura] = useState(ing.numFactura || '');
+  const [monto, setMonto] = useState(ing.monto != null ? String(ing.monto) : '');
+  const [nota, setNota] = useState(ing.nota || '');
+  const [facturaData, setFacturaData] = useState(null);   /* solo si SE CAMBIA */
+  const [facturaPreview, setFacturaPreview] = useState(null);
+  const [esPdf, setEsPdf] = useState(false);
+  const [lineas, setLineas] = useState(() => (ing.lineas || []).map(l => ({ ...l })));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const fileRef = useRef(null);
+  const eraRecibido = ing.estado === 'recibido';
+
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setErr('');
+    try {
+      const b64 = await fileToFacturaBase64(file);
+      setFacturaData(b64);
+      setEsPdf(file.type === 'application/pdf');
+      setFacturaPreview(file.type === 'application/pdf' ? null : b64);
+    } catch (e2) { setErr('No se pudo procesar la foto: ' + (e2?.message || '')); }
+  };
+
+  const guardar = async () => {
+    setErr('');
+    if (!proveedor.trim()) return setErr('Escribe el proveedor');
+    if (!lineas.length) return setErr('Agrega al menos una partida (MP, envase o tapa)');
+    setSaving(true);
+    try {
+      const payload = {
+        proveedor: proveedor.trim(), numFactura: numFactura.trim(),
+        monto: Number(monto) > 0 ? Number(monto) : null,
+        nota: nota.trim(), lineas,
+      };
+      if (facturaData) payload.facturaBase64 = facturaData; /* solo si cambió la foto */
+      const r = await api.editarIngreso(ing.id, payload);
+      if (r && r.ok) onSaved(r.ingreso, r);
+      else setErr((r && r.error) || 'No se pudo guardar');
+    } catch (e2) {
+      setErr(e2?.data?.error || e2?.message || 'No se pudo guardar los cambios');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={S.overlay} onClick={onClose}>
+      <div style={S.sheet} onClick={e => e.stopPropagation()}>
+        <div style={S.sheetHead}>
+          <div style={{ fontSize: 17, fontWeight: 650 }}>Editar <span style={{ fontFamily: MONO, fontSize: 15 }}>{ing.folio}</span></div>
+          <button onClick={onClose} style={S.x}>✕</button>
+        </div>
+        <div style={S.sheetBody}>
+          {eraRecibido && (
+            <div style={{ fontSize: 12.5, color: '#92610A', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 11px', marginBottom: 4, lineHeight: 1.45 }}>
+              Este ingreso ya sumó al stock. Si cambias las partidas, el inventario se
+              ajusta solo: se revierte lo anterior y se aplica lo nuevo.
+            </div>
+          )}
+          <label style={S.lbl}>Proveedor *</label>
+          <input value={proveedor} onChange={e => setProveedor(e.target.value)} placeholder="Ej. Limplast, NRW Chemie…" style={S.input} />
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ flex: 1 }}>
+              <label style={S.lbl}># Factura</label>
+              <input value={numFactura} onChange={e => setNumFactura(e.target.value)} placeholder="Opcional" style={S.input} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={S.lbl}>Monto</label>
+              <input type="number" inputMode="decimal" min="0" value={monto} onChange={e => setMonto(e.target.value)} placeholder="Opcional" style={S.input} />
+            </div>
+          </div>
+
+          <label style={S.lbl}>Foto de la factura</label>
+          {!facturaPreview && !esPdf && ing.facturaArchivo && (
+            <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer">
+              <img src={api.ingresoFacturaUrl(ing.id)} alt="Factura actual" style={S.preview}
+                onError={(e) => { e.target.style.display = 'none'; }} />
+            </a>
+          )}
+          <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={onFile} style={{ display: 'none' }} />
+          <button onClick={() => fileRef.current && fileRef.current.click()} style={S.fotoBtn}>
+            <IconCam />{facturaData ? 'Cambiar foto' : 'Reemplazar factura (opcional)'}
+          </button>
+          {facturaPreview && <img src={facturaPreview} alt="Factura nueva" style={S.preview} />}
+          {esPdf && <div style={S.pdfOk}>PDF nuevo adjunto ✓</div>}
+
+          <label style={S.lbl}>¿Qué llegó? *</label>
+          <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} />
+
+          <label style={S.lbl}>Nota</label>
+          <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} placeholder="Observaciones…" style={{ ...S.input, resize: 'vertical' }} />
+
+          {err && <div style={S.err}>{err}</div>}
+        </div>
+        <div style={{ ...S.sheetFoot, ...(isDesktop ? {} : S.sheetFootMobile) }}>
+          <button onClick={onClose} disabled={saving} style={{ ...S.btnGhost, ...(isDesktop ? {} : S.btnMobileGhost) }}>Cancelar</button>
+          <button onClick={guardar} disabled={saving} style={{ ...S.btnPrimary, ...(isDesktop ? {} : S.btnMobilePrimary), opacity: saving ? 0.6 : 1 }}>
+            {saving ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Menú "⋯" de acciones de la tarjeta (admin): Ver factura · Editar · Eliminar
+   ── Reemplaza los botones sueltos por un kebab que agrupa las 3 acciones. */
+function AccionesMenu({ ing, onEditar, onEliminar, eliminando, isDesktop }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const cerrar = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', cerrar);
+    document.addEventListener('touchstart', cerrar);
+    return () => { document.removeEventListener('mousedown', cerrar); document.removeEventListener('touchstart', cerrar); };
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} aria-label="Más acciones" aria-haspopup="true" aria-expanded={open}
+        style={{ ...S.kebabBtn, ...(isDesktop ? {} : { minHeight: 44, minWidth: 44 }) }}>
+        <IconDots />
+      </button>
+      {open && (
+        <div style={S.menu} role="menu">
+          <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer" role="menuitem"
+            style={{ ...S.menuItem, color: BRAND }} onClick={() => setOpen(false)}>
+            <IconDoc /> Ver factura
+          </a>
+          <button role="menuitem" style={S.menuItem} onClick={() => { setOpen(false); onEditar(); }}>
+            <IconEdit /> Editar
+          </button>
+          <button role="menuitem" disabled={eliminando} style={{ ...S.menuItem, color: '#B91C1C', opacity: eliminando ? 0.6 : 1 }}
+            onClick={() => { setOpen(false); onEliminar(); }}>
+            <IconTrash /> {eliminando ? 'Eliminando…' : 'Eliminar'}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ─── Página ───────────────────────────────────────────────────────────────── */
 export default function IngresosPage() {
   const { user } = useAuth();
@@ -390,6 +554,7 @@ export default function IngresosPage() {
   const [tab, setTab] = useState('por_revisar');
   const [crear, setCrear] = useState(false);
   const [revisar, setRevisar] = useState(null);
+  const [editar, setEditar] = useState(null); /* ingreso en edición (admin) */
   const [eliminando, setEliminando] = useState(null); /* id del ingreso que se está borrando */
   const [toast, setToast] = useState(null);
   const [catalogs, setCatalogs] = useState({ mpNames: [], envaseOpts: [], tapaOpts: [] });
@@ -660,20 +825,22 @@ export default function IngresosPage() {
                   <div style={{ fontSize: 12.5, color: '#B91C1C', marginTop: 9 }}>Rechazado{ing.notaRevision ? `: ${ing.notaRevision}` : ''}</div>
                 )}
 
-                {/* Acciones con área táctil real (la liga diminuta de antes era intocable) */}
+                {/* Acciones. Admin: la principal (Revisar, si aplica) queda visible y
+                    Ver factura · Editar · Eliminar se agrupan en el menú "⋯".
+                    No-admin (ve solo lo suyo): la liga simple a la factura. */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 11 }}>
-                  <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer" style={S.verFacturaBtn}>
-                    <IconDoc /> Ver factura
-                  </a>
-                  {isAdmin && ing.estado === 'por_revisar' && (
-                    <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
-                  )}
-                  {/* Eliminar (admin, cualquier estado): borra de raíz + revierte inventario. */}
-                  {isAdmin && (
-                    <button onClick={() => eliminarIngreso(ing)} disabled={eliminando === ing.id}
-                      style={{ ...S.btnDanger, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 16px' }), opacity: eliminando === ing.id ? 0.6 : 1 }}>
-                      {eliminando === ing.id ? 'Eliminando…' : 'Eliminar'}
-                    </button>
+                  {isAdmin ? (
+                    <>
+                      {ing.estado === 'por_revisar' && (
+                        <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
+                      )}
+                      <AccionesMenu ing={ing} isDesktop={isDesktop} eliminando={eliminando === ing.id}
+                        onEditar={() => setEditar(ing)} onEliminar={() => eliminarIngreso(ing)} />
+                    </>
+                  ) : (
+                    <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer" style={S.verFacturaBtn}>
+                      <IconDoc /> Ver factura
+                    </a>
                   )}
                 </div>
               </div>
@@ -701,6 +868,15 @@ export default function IngresosPage() {
             showToast(decision === 'aprobar'
               ? `${ing.folio}: sumado al stock (${muts.length} ítem(s)) ✓`
               : `${ing.folio}: rechazado`);
+            load();
+          }} />
+      )}
+      {editar && (
+        <EditSheet ing={editar} catalogs={catalogs} isDesktop={isDesktop} onClose={() => setEditar(null)}
+          onSaved={(ing, r) => {
+            setEditar(null);
+            const ajuste = r && ((r.reverts && r.reverts.length) || (r.mutaciones && r.mutaciones.length));
+            showToast(`${ing.folio} actualizado` + (ajuste ? ' · stock ajustado' : ''));
             load();
           }} />
       )}
@@ -777,4 +953,8 @@ const S = {
   facturaPill: { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-surface,#FEFEFE)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 99, padding: '8px 14px', minHeight: 36, fontSize: 12, fontWeight: 500, color: '#0F6E56', textDecoration: 'none', boxSizing: 'border-box' },
   histBtn: { background: 'none', border: 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, color: 'var(--lp-text-secondary,#3d5a4a)', cursor: 'pointer', padding: '8px 10px', minHeight: 36 },
   filtroChip: { display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(15,122,90,.08)', border: '1px solid rgba(15,122,90,.25)', borderRadius: 99, padding: '7px 14px', minHeight: 36, fontSize: 13, fontWeight: 500, color: BRAND, cursor: 'pointer', fontFamily: 'inherit' },
+  /* Menú "⋯" de la tarjeta (admin): botón kebab + dropdown con las 3 acciones */
+  kebabBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 10, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'var(--lp-surface,#fff)', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer', boxSizing: 'border-box' },
+  menu: { position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 172, background: 'var(--lp-surface,#fff)', border: '1px solid var(--lp-border,rgba(0,0,0,.1))', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,.16)', padding: 6, zIndex: 60, display: 'flex', flexDirection: 'column', gap: 2 },
+  menuItem: { display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', fontSize: 14, fontWeight: 500, color: 'var(--lp-text-primary,#16201c)', background: 'none', border: 'none', borderRadius: 8, padding: '10px 12px', minHeight: 42, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', boxSizing: 'border-box' },
 };

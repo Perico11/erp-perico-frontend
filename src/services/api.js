@@ -570,6 +570,10 @@ const api = {
   /* Eliminar ingreso (admin): borra el registro + foto + movimientos y REVIERTE
      lo que se sumó al inventario si estaba 'recibido'. */
   eliminarIngreso: (id) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/eliminar', {}),
+  /* Editar ingreso (admin): corrige proveedor / # factura / monto / nota / partidas
+     y —opcional— reemplaza la foto. Si ya estaba 'recibido', el backend revierte lo
+     anterior y aplica lo nuevo (ajusta el stock automáticamente). */
+  editarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/editar', data),
   ingresoFacturaUrl: (id) => API_BASE + '/api/ingresos/' + encodeURIComponent(id) + '/factura' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
 
   /* ── SAT / CFDI ── */
