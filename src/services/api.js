@@ -567,6 +567,9 @@ const api = {
   getIngresos: () => request('GET', '/api/ingresos'),
   crearIngreso: (data) => request('POST', '/api/ingresos', data),
   revisarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/revisar', data),
+  /* Eliminar ingreso (admin): borra el registro + foto + movimientos y REVIERTE
+     lo que se sumó al inventario si estaba 'recibido'. */
+  eliminarIngreso: (id) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/eliminar', {}),
   ingresoFacturaUrl: (id) => API_BASE + '/api/ingresos/' + encodeURIComponent(id) + '/factura' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
 
   /* ── SAT / CFDI ── */

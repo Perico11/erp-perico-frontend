@@ -377,6 +377,7 @@ export default function IngresosPage() {
   const [tab, setTab] = useState('por_revisar');
   const [crear, setCrear] = useState(false);
   const [revisar, setRevisar] = useState(null);
+  const [eliminando, setEliminando] = useState(null); /* id del ingreso que se está borrando */
   const [toast, setToast] = useState(null);
   const [catalogs, setCatalogs] = useState({ mpNames: [], envaseOpts: [], tapaOpts: [] });
   /* Handoff 1c: vista segmentada + acordeón por proveedor + filtro de historial */
@@ -470,6 +471,25 @@ export default function IngresosPage() {
     });
     return [...map.values()].sort((a, b) => (b.fechaUltima || '').localeCompare(a.fechaUltima || ''));
   }, [items]);
+
+  /* Eliminar ingreso (admin): confirma, avisa si REVIERTE inventario (estado
+     'recibido'), llama el endpoint y recarga. Borra registro + foto + movimientos. */
+  const eliminarIngreso = async (ing) => {
+    const revierte = ing.estado === 'recibido';
+    const msg = `¿Eliminar el ingreso ${ing.folio} de "${ing.proveedor}"?\n\n`
+      + (revierte
+        ? 'Ya fue aprobado: se RESTARÁ del inventario lo que sumó y se borrará todo rastro (registro, foto, movimientos). No se puede deshacer.'
+        : 'Se borrará el registro y su foto. No se puede deshacer.');
+    if (!window.confirm(msg)) return;
+    setEliminando(ing.id);
+    try {
+      const r = await api.eliminarIngreso(ing.id);
+      showToast(`${ing.folio} eliminado` + (r && r.reverts && r.reverts.length ? ` · revertido del stock (${r.reverts.length})` : ''));
+      load();
+    } catch (e) {
+      showToast('No se pudo eliminar: ' + (e?.data?.error || e?.message || 'error'), true);
+    } finally { setEliminando(null); }
+  };
 
   return (
     <div style={{ maxWidth: 860, margin: '0 auto', padding: isDesktop ? '4px 2px 80px' : '4px 2px 150px' }}>
@@ -634,6 +654,13 @@ export default function IngresosPage() {
                   </a>
                   {isAdmin && ing.estado === 'por_revisar' && (
                     <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
+                  )}
+                  {/* Eliminar (admin, cualquier estado): borra de raíz + revierte inventario. */}
+                  {isAdmin && (
+                    <button onClick={() => eliminarIngreso(ing)} disabled={eliminando === ing.id}
+                      style={{ ...S.btnDanger, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 16px' }), opacity: eliminando === ing.id ? 0.6 : 1 }}>
+                      {eliminando === ing.id ? 'Eliminando…' : 'Eliminar'}
+                    </button>
                   )}
                 </div>
               </div>
