@@ -23,7 +23,9 @@
   /* Texto */
   --lp-text-primary: #16241F;
   --lp-text-secondary: #5C7268;
-  --lp-text-tertiary: #8A988F;
+  /* AUDIT UX 16-jul (U6): #8A988F daba 2.8:1 sobre #F6F7F4 (ilegible en piso
+     de fábrica con sol); #66756C ≈ 4.6:1 manteniendo la jerarquía. */
+  --lp-text-tertiary: #66756C;
   --lp-text-disabled: #A9B5AD;
   /* Bordes (hairlines translúcidos) */
   --lp-border-subtle: rgba(20,36,31,.08);

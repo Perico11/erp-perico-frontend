@@ -12,7 +12,8 @@ import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
   overlay: {
-    position: 'fixed', inset: 0, zIndex: 1000,
+    /* ≥1100: sobre el bottom-nav (regla proyecto, jul 2026) */
+    position: 'fixed', inset: 0, zIndex: 1100,
     background: 'rgba(15, 12, 8, 0.6)',
     backdropFilter: 'blur(3px)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
@@ -205,7 +206,7 @@ export default function AgregarPTModal({ onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.header}>
           <h3 style={S.title}>Agregar inventario inicial PT</h3>

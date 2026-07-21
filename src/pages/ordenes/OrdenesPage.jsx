@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
@@ -531,6 +531,17 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
      stockCheck: { loading, suficiente, ingredientes, faltantes, error } | null */
   const [stockCheck, setStockCheck] = useState(null);
   const [confirm, ConfirmEl] = useConfirm();
+  /* AUDIT UX 16-jul (U18): si la validación confirma stock suficiente, "Iniciar
+     producción" arranca marcado (default inteligente). Si el usuario ya tocó el
+     checkbox, su elección manda y no se pisa en revalidaciones. Sin validación
+     (prueba/skipped/error) se queda como estaba: manual, default OFF. */
+  const lanzarTouched = useRef(false);
+  useEffect(() => {
+    if (lanzarTouched.current) return;
+    if (stockCheck && !stockCheck.loading && !stockCheck.skipped && !stockCheck.error) {
+      setLanzarAhora(stockCheck.suficiente === true);
+    }
+  }, [stockCheck]);
 
   /* Llamar validar-stock cuando hay (producto, cantidad) y no es prueba */
   useEffect(() => {
@@ -633,7 +644,7 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
   };
 
   return (
-    <div style={sheet.overlay} onClick={onClose}>
+    <div style={sheet.overlay}>
       <div style={sheet.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>
@@ -757,7 +768,8 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
                   type="checkbox"
                   checked={lanzarAhora}
                   disabled={stockCheck && stockCheck.suficiente === false && !pedidoOrigen?.esPrueba}
-                  onChange={e => setLanzarAhora(e.target.checked)}
+                  /* AUDIT UX 16-jul (U18): marcar que el usuario decidió a mano */
+                  onChange={e => { lanzarTouched.current = true; setLanzarAhora(e.target.checked); }}
                 />
                 <span style={{ fontSize: 13, color: 'var(--lp-text-primary)' }}>
                   Iniciar producción inmediatamente
@@ -2201,7 +2213,7 @@ function SolicitudMPModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div style={sheet.overlay} onClick={onClose}>
+    <div style={sheet.overlay}>
       <div style={{ ...sheet.modal, ...(sheet.isDesktop ? { maxWidth: 560 } : {}) }} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>

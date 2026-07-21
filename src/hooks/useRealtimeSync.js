@@ -12,8 +12,13 @@ import { dispatchPushFromEvent, getCurrentRol } from '../utils/pushNotifications
  *     onPermisos: () => recargarPermisos(),
  *   });
  *
- * Eventos disponibles:
- *   trazabilidad, inventario, ordenes, pedidos, oc, precios, permisos, usuarios, envasado
+ * Eventos disponibles (canal backend → handler):
+ *   trazabilidad, inventario, ordenes, pedidos, oc, precios, permisos,
+ *   usuarios, envasado, costos, sat, lab, formulas, devolucion, cycle-count,
+ *   transferencias, inventario-canonico, ...
+ * El mapeo es GENÉRICO: cualquier evento se despacha a on<CamelCase>. Los
+ * nombres kebab se camelizan: 'cycle-count' → onCycleCount,
+ * 'inventario-canonico' → onInventarioCanonico.
  *
  * También maneja reconexión exponencial automática si la conexión se cae.
  */

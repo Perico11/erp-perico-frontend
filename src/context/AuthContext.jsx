@@ -16,6 +16,10 @@ const AuthContext = createContext(null);
    permisos_roles.json esté corrupto.
    ═══════════════════════════════════════════════════════════════════ */
 const ROLE_PERMISSIONS_FALLBACK = {
+  /* AUDIT 15-jul-2026: sincronizado con PERMISOS_DEFAULT de lib/permisos.js —
+     el fallback no conocía `transferencias`/`ingresos`/`altaMP` para NINGÚN rol
+     (ni admin): si /api/permisos/me tardaba o fallaba, Transferencias e
+     Ingresos desaparecían del nav para todos. Mantener AMBOS archivos a la par. */
   admin: {
     dashboard: true, formulas: true, inventario: true, ordenes: true,
     produccion: true, envasado: true, stockFabrica: true, recoleccion: true, compras: true,
@@ -26,12 +30,14 @@ const ROLE_PERMISSIONS_FALLBACK = {
     imprimirEtiquetas: true, conteoFisico: true,
     crearUsuarios: true, editarPermisos: true, eliminarMP: true,
     laboratorio: true, devoluciones: true,
+    transferencias: true, ingresos: true, altaMP: true,
   },
   tecnico: {
     dashboard: true, produccion: true, ordenes: true, envasado: true, stockFabrica: true,
-    inventario: true, trazabilidad: true,
+    inventario: true, trazabilidad: true, formulas: true,
     editarInventario: true, registrarQC: true, recibirMP: true,
     laboratorio: true, devoluciones: true,
+    transferencias: true, ingresos: true, altaMP: true,
   },
   compras: {
     /* FIX jun 2026 (K11): Arely (compras) NO debe ver fórmulas — son
@@ -47,15 +53,17 @@ const ROLE_PERMISSIONS_FALLBACK = {
        Antes solo admin+tecnico tenían recibirMP → Arely dependía de otro
        para recibir físicamente. */
     recibirMP: true,
+    altaMP: true,
   },
   almacen: {
     dashboard: true, ordenes: true, envasado: true, stockFabrica: true, recoleccion: true,
     trazabilidad: true, inventario: true,
     crearPedidos: true, imprimirEtiquetas: true,
     devoluciones: true,
+    transferencias: true, ingresos: true,
   },
   recolector: {
-    recoleccion: true, trazabilidad: true,
+    dashboard: true, recoleccion: true, trazabilidad: true,
   },
   inventario: {
     dashboard: true, inventario: true, cycleCount: true,
@@ -66,6 +74,7 @@ const ROLE_PERMISSIONS_FALLBACK = {
     editarInventario: true,
     editarMinimos: true,
     conteoFisico: true,
+    transferencias: true, altaMP: true,
   },
 };
 

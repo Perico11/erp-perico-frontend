@@ -12,6 +12,7 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { QRScanner } from '../../components/QRModal';
 import { qrDataUrl } from '../../lib/qrGenerator';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { PT_MEDIDAS, ptMedidaDef, medidaACubetas, etiquetaMedida } from '../../utils/ptMedidas';
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -215,7 +216,8 @@ export default function TransferenciasPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const { data, loading, reload } = useApiData(() => api.getOTs(), [], 8000);
+  /* AUDIT UX 16-jul (U19): 8s → 30s; respaldo; el WS empuja (onTransferencias) */
+  const { data, loading, reload } = useApiData(() => api.getOTs(), [], 30000);
   /* Inventario + envases para el autocompletar del sheet de crear (cargados una
      vez; sin polling — son catálogos relativamente estables). */
   const { data: invData } = useApiData(() => api.getInventario(), null, 0);
@@ -285,7 +287,10 @@ export default function TransferenciasPage() {
       if (r?.idempotente) showToast(`${ot.folio}: ${r.aviso || 'sin cambios'}`);
       else showToast(`${ot.folio}: ${label.toLowerCase()} ✓`);
     } catch (err) {
-      showToast('Error: ' + (err?.data?.error || err.message || 'No se pudo actualizar'), true);
+      showToast(humanizeError(err), true); /* AUDIT UX 16-jul (U4) */
+      /* El 409 de la state machine ("La OT está en estado…") = otro teléfono
+         ya la movió — refrescamos para que la card salte a su tab real. */
+      if (err?.status === 409) reload();
     } finally {
       setBusy(null);
     }
@@ -461,7 +466,8 @@ export default function TransferenciasPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>
+        /* AUDIT UX 16-jul (U20): anunciar el toast a lectores de pantalla */
+        <div role="status" aria-live="polite" style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>
           {toast.isErr
             ? <span style={{ display: 'inline-flex' }} aria-hidden="true"><IconX size={14} /></span>
             : <IconCheck size={16} />}
@@ -561,7 +567,8 @@ function OTCard({ ot, rol, busy, onAccion, onPrint, onEditar }) {
       {/* Meta: quién solicitó / surtió / recibió / canceló */}
       <div style={C.meta}>
         {ot.solicitadoPor && <div>Solicitó <b style={C.metaB}>{ot.solicitadoPor}</b>{ot.fechaSolicitud ? ` · ${fmtFecha(ot.fechaSolicitud)}` : ''}</div>}
-        {ot.surtidoPor && <div>Surtió <b style={C.metaB}>{ot.surtidoPor}</b>{ot.fechaSurtido ? ` · ${fmtFecha(ot.fechaSurtido)}` : ''}</div>}
+        {ot.surtidoPor && <div>Surtió y entregó <b style={C.metaB}>{ot.surtidoPor}</b>{ot.fechaSurtido ? ` · ${fmtFecha(ot.fechaSurtido)}` : ''}</div>}
+        {ot.estado === 'surtida' && !ot.recibidoPor && <div style={C.metaPend}>Por recibir en Terán · pendiente (escaneo de almacén)</div>}
         {ot.recibidoPor && <div>Recibió <b style={C.metaB}>{ot.recibidoPor}</b>{ot.fechaRecepcion ? ` · ${fmtFecha(ot.fechaRecepcion)}` : ''}</div>}
         {ot.canceladoPor && <div>Canceló <b style={C.metaB}>{ot.canceladoPor}</b>{ot.fechaCancelacion ? ` · ${fmtFecha(ot.fechaCancelacion)}` : ''}</div>}
       </div>
@@ -639,6 +646,7 @@ const C = {
   itemQtyNum: { color: '#16201c', fontWeight: 500 },
   meta: { fontSize: 12, color: '#5a6b63', lineHeight: 1.6, display: 'flex', flexDirection: 'column', gap: 2 },
   metaB: { color: '#16201c', fontWeight: 500 },
+  metaPend: { color: '#94a39b', fontStyle: 'italic' },
   nota: { background: '#fff', border: '1px solid rgba(0,0,0,.06)', borderRadius: 10, padding: '11px 14px', fontSize: 13, color: '#16201c', boxShadow: '0 1px 2px rgba(0,0,0,.03)', wordBreak: 'break-word' },
   actions: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
   btnPrimary: { gridColumn: '1 / -1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, fontWeight: 500, color: '#fff', background: '#0f7a5a', borderRadius: 99, padding: 13, minHeight: 46, boxShadow: '0 6px 16px rgba(15,122,90,.30)' },
@@ -737,21 +745,76 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
     return null;
   }, [tipo, sel, invPt, envaseOpts, tapaOpts, ptPres, envasar]);
 
+  /* Al elegir/cambiar el PT, autoselecciona una presentación CON stock envasado
+     (la de mayor disponible) y apaga "envasar" si el nuevo producto no tiene
+     granel. Evita quedar en 'tote' deshabilitado cuando el producto solo tiene
+     cubetas, etc. */
+  useEffect(() => {
+    if (tipo !== 'pt' || !(resuelto && resuelto.ok)) return;
+    const dispOf = (k) => Number(fabricaPres[PRES_COL[k]] || 0);
+    const granel = dispOf('tote');
+    const env = granel > 0 ? envasar : false;
+    if (granel <= 0 && envasar) setEnvasar(false);
+    if (env || dispOf(ptPres) > 0) return;
+    const best = PT_MEDIDAS.map(m => m.key).sort((a, b) => dispOf(b) - dispOf(a))[0];
+    if (best && dispOf(best) > 0 && best !== ptPres) setPtPres(best);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sel, tipo]);
+
   const cantNum = Number(cantidad);
-  const puedeAgregar = !!(resuelto && resuelto.ok && Number.isFinite(cantNum) && cantNum > 0);
+  /* Presentación válida: 'tote' requiere totes; otra medida requiere stock
+     envasado O el flag envasar (se envasará desde granel). Bloquea el caso
+     "pedir cubetas sin cubetas y sin envasar" que dejaba OTs descuadradas. */
+  const presDispActual = tipo === 'pt' ? Number(fabricaPres[PRES_COL[ptPres]] || 0) : 1;
+  const presValida = tipo !== 'pt'
+    ? true
+    : (ptPres === 'tote' ? presDispActual > 0 : (presDispActual > 0 || envasar));
+  /* Tope de Fábrica: una OT solo mueve lo que hay. No permitir pedir más del stock
+     en Fábrica (cub-equiv para PT). Suma lo ya agregado en ESTA solicitud del mismo
+     ítem (excluye la línea en edición) para que dos líneas no evadan el tope. */
+  const cantEnStock = tipo === 'pt' ? medidaACubetas(ptPres, cantNum) : cantNum;
+  const keyActual = resuelto && resuelto.ok
+    ? (tipo === 'pt' ? 'pt:' + (resuelto.linea.producto || resuelto.nombre)
+       : tipo === 'envase' ? 'env:' + resuelto.linea.catKey + '/' + resuelto.linea.subKey
+       : 'tap:' + resuelto.linea.tapaKey)
+    : null;
+  const yaEnOT = keyActual ? lineas.reduce((s, l, i) => {
+    if (i === editingIdx) return s;
+    const k = l.tipo === 'pt' ? 'pt:' + (l.producto || l.nombre)
+      : l.tipo === 'envase' ? 'env:' + l.catKey + '/' + l.subKey
+      : 'tap:' + l.tapaKey;
+    return k === keyActual ? s + (Number(l.cantidad) || 0) : s;
+  }, 0) : 0;
+  const excedeFabrica = !!(resuelto && resuelto.ok && resuelto.stock != null
+    && Number.isFinite(cantEnStock) && (cantEnStock + yaEnOT) > resuelto.stock + 0.001);
+  const puedeAgregar = !!(resuelto && resuelto.ok && Number.isFinite(cantNum) && cantNum > 0 && presValida && !excedeFabrica);
 
   /* Resetea el builder de línea a su estado vacío (tras agregar/guardar/cancelar). */
   const resetBuilder = () => { setSel(''); setCantidad(''); setEnvasar(false); setPtPres('tote'); setEditingIdx(null); };
 
-  /* Agregar nueva línea O guardar los cambios de la línea en edición (editingIdx). */
-  const agregarLinea = () => {
-    if (!puedeAgregar) { setErr('Elige un ítem válido y una cantidad > 0.'); return; }
-    setErr('');
+  /* Construye la línea canónica desde el estado ACTUAL del builder, o null si no es
+     válida (ítem no resuelto, cantidad ≤ 0, presentación inválida o excede Fábrica).
+     Compartida por "Guardar línea" y por el submit (para auto-confirmar una edición en
+     curso que el usuario no confirmó explícitamente). */
+  const construirLineaActual = () => {
+    if (!puedeAgregar) return null;
     /* PT: cantidad = cubeta-equivalente (medidaACubetas), conserva el conteo en la
        presentación + flag envasar. Envase/tapa: cantidad cruda como siempre. */
-    const nueva = tipo === 'pt'
+    return tipo === 'pt'
       ? { ...resuelto.linea, presentacion: ptPres, cantidadPresentacion: cantNum, envasar: ptPres !== 'tote' && envasar, cantidad: medidaACubetas(ptPres, cantNum) }
       : { ...resuelto.linea, cantidad: cantNum };
+  };
+
+  /* Agregar nueva línea O guardar los cambios de la línea en edición (editingIdx). */
+  const agregarLinea = () => {
+    const nueva = construirLineaActual();
+    if (!nueva) {
+      setErr(excedeFabrica
+        ? `No puedes pedir más de lo que hay en Fábrica (${resuelto?.stock?.toLocaleString('es-MX')} ${resuelto?.unidad || ''}).`
+        : 'Elige un ítem válido y una cantidad > 0.');
+      return;
+    }
+    setErr('');
     if (editingIdx != null) {
       setLineas(prev => prev.map((l, i) => i === editingIdx ? nueva : l));   // reemplaza en su lugar
     } else {
@@ -789,15 +852,30 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
 
   const guardar = async () => {
     setErr('');
-    if (lineas.length === 0) { setErr('Agrega al menos una línea a la solicitud.'); return; }
+    /* Auto-confirmar la línea EN EDICIÓN que el usuario no confirmó con "Guardar línea"
+       (trampa de UX: cambiar la cantidad y pulsar "Guardar cambios" directo enviaba el
+       valor viejo). Si esa línea es inválida/excede Fábrica, bloquea con mensaje claro
+       en lugar de mandar el valor anterior en silencio. */
+    let lineasFinal = lineas;
+    if (editingIdx != null) {
+      const pend = construirLineaActual();
+      if (!pend) {
+        setErr(excedeFabrica
+          ? `La línea en edición excede lo disponible en Fábrica (${resuelto?.stock?.toLocaleString('es-MX')} ${resuelto?.unidad || ''}). Corrígela o cancela la edición antes de guardar.`
+          : 'Tienes una línea a medio editar. Confírmala con “Guardar línea” o cancela la edición antes de guardar.');
+        return;
+      }
+      lineasFinal = lineas.map((l, i) => i === editingIdx ? pend : l);
+    }
+    if (lineasFinal.length === 0) { setErr('Agrega al menos una línea a la solicitud.'); return; }
     setSaving(true);
     try {
       const res = isEdit
-        ? await api.editarOT(editOT.id, lineas, nota.trim() || undefined)
-        : await api.crearOT(lineas, nota.trim() || undefined);
+        ? await api.editarOT(editOT.id, lineasFinal, nota.trim() || undefined)
+        : await api.crearOT(lineasFinal, nota.trim() || undefined);
       onSaved && onSaved(res);
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al crear la solicitud');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }
@@ -806,7 +884,7 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
   const datalistId = 'ot-pt-list';
 
   return (
-    <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={SH.overlay(isDesktop)}>
       <div style={SH.sheet(isDesktop)}>
         <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
           <div style={SH.h}>{isEdit ? `Editar solicitud ${editOT.folio}` : 'Nueva solicitud de transferencia'}</div>
@@ -859,7 +937,7 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
           )}
 
           {resuelto && resuelto.ok && resuelto.stock != null && (
-            <div style={SH.hint}>Stock en Fábrica: {resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad} (total cub-equiv.)</div>
+            <div style={SH.hint}>Stock en Fábrica: {resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad} (contado en cubetas equivalentes)</div>
           )}
           {tipo === 'pt' && sel.trim() && resuelto && !resuelto.ok && (
             <div style={SH.hint}>Ese producto no está en inventario; elígelo de la lista.</div>
@@ -869,39 +947,57 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
               El PT suele venir a granel en tote; aquí se elige CÓMO se pide:
               tote / cubeta / galón / litro / atomizador. El movimiento de inventario
               siempre es cubeta-equivalente; esto es la forma física pedida. */}
-          {tipo === 'pt' && resuelto && resuelto.ok && (
+          {tipo === 'pt' && resuelto && resuelto.ok && (() => {
+            const granelDisp = Number(fabricaPres[PRES_COL.tote] || 0);
+            const puedeEnvasar = granelDisp > 0;   /* se envasa DESDE granel (tote) */
+            return (
             <>
+              {/* Envasar desde granel — DESBLOQUEA pedir una presentación SIN stock
+                  envasado. Regla (dueño jun 2026): por defecto solo puedes pedir lo
+                  que YA está envasado; para otra medida hay que envasar desde el tote.
+                  Sin este gate, Josué pidió cubetas de un producto que estaba en tote
+                  → OT descuadrada y pedido sin cerrar. */}
+              <label style={{ ...SH.checkRow, marginTop: 14, opacity: puedeEnvasar ? 1 : 0.45 }}
+                data-id="transferencias.check.envasar" data-rol="admin,almacen,inventario"
+                title={puedeEnvasar ? '' : 'No hay granel (tote) en Fábrica para envasar'}>
+                <input type="checkbox" style={SH.check} checked={envasar} disabled={!puedeEnvasar}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setEnvasar(on);
+                    /* al apagar envasar, si la presentación actual no tiene stock, vuelve a tote */
+                    if (!on && ptPres !== 'tote' && Number(fabricaPres[PRES_COL[ptPres]] || 0) <= 0) setPtPres('tote');
+                  }} />
+                <span>Envasar desde <b>granel (tote)</b> — permite pedir una presentación sin stock envasado</span>
+              </label>
+
               <label style={SH.lbl}>Presentación pedida</label>
               <div style={SH.presWrap} data-id="transferencias.select.presentacion" data-rol="admin,almacen,inventario">
                 {PT_MEDIDAS.map(m => {
                   const disp = Number(fabricaPres[PRES_COL[m.key]] || 0);
+                  const esTote = m.key === 'tote';
+                  /* habilitada: tote solo si hay totes; otra medida si hay stock
+                     envasado O si "envasar" está activo (se envasará desde granel). */
+                  const habilitada = esTote ? disp > 0 : (disp > 0 || envasar);
                   const active = ptPres === m.key;
                   return (
                     <button
                       key={m.key}
                       type="button"
-                      onClick={() => { setPtPres(m.key); if (m.key === 'tote') setEnvasar(false); }}
-                      style={{ ...SH.presPill, ...(active ? SH.presPillOn : {}) }}>
+                      disabled={!habilitada}
+                      onClick={() => { if (!habilitada) return; setPtPres(m.key); if (esTote) setEnvasar(false); }}
+                      title={habilitada ? '' : (esTote ? 'Sin totes en Fábrica' : 'Sin stock envasado — activa “Envasar desde granel” para pedir esta medida')}
+                      style={{ ...SH.presPill, ...(active ? SH.presPillOn : {}), ...(habilitada ? {} : SH.presPillOff) }}>
                       <span style={SH.presPillLabel}>{m.label}</span>
                       <span style={{ ...SH.presPillDisp, ...(active ? SH.presPillDispOn : {}) }}>
-                        {disp.toLocaleString('es-MX')} disp.
+                        {disp.toLocaleString('es-MX')} disp.{(!esTote && disp <= 0 && envasar) ? ' · envasar' : ''}
                       </span>
                     </button>
                   );
                 })}
               </div>
-
-              {/* Envasar desde granel — solo aplica si NO es tote */}
-              {ptPres !== 'tote' && (
-                <label style={SH.checkRow}
-                  data-id="transferencias.check.envasar" data-rol="admin,almacen,inventario">
-                  <input type="checkbox" style={SH.check} checked={envasar}
-                    onChange={(e) => setEnvasar(e.target.checked)} />
-                  <span>Pedir <b>envasada</b> en {ptMedidaDef(ptPres)?.label?.toLowerCase()} desde granel</span>
-                </label>
-              )}
             </>
-          )}
+            );
+          })()}
 
           <div style={SH.row2}>
             <div style={{ flex: 2 }}>
@@ -932,9 +1028,16 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
           {tipo === 'pt' && cantNum > 0 && ptPres !== 'cubeta' && (
             <div style={SH.hint}>= {medidaACubetas(ptPres, cantNum).toLocaleString('es-MX')} cub equivalentes</div>
           )}
-          {resuelto && resuelto.ok && resuelto.stock != null
-            && (tipo === 'pt' ? medidaACubetas(ptPres, cantNum) : cantNum) > resuelto.stock && (
-            <div style={SH.hint}>Excede el stock en Fábrica ({resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad}); el surtido se rechazará si no alcanza.</div>
+          {/* Guard de presentación: sin stock envasado y sin "envasar" → no se puede pedir */}
+          {tipo === 'pt' && resuelto && resuelto.ok && !presValida && (
+            <div style={{ ...SH.hint, color: 'var(--lp-warning-700)' }}>
+              Sin stock envasado en {ptMedidaDef(ptPres)?.label?.toLowerCase() || 'esa medida'}. Activa “Envasar desde granel” para pedir esta presentación.
+            </div>
+          )}
+          {excedeFabrica && (
+            <div style={{ ...SH.hint, color: 'var(--lp-danger-700, #B42318)', fontWeight: 600 }}>
+              Excede el stock en Fábrica ({resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad}{yaEnOT > 0 ? ` · ${yaEnOT.toLocaleString('es-MX')} ya en esta solicitud` : ''}). Una transferencia solo mueve lo que hay en Fábrica.
+            </div>
           )}
 
           {/* ── Líneas agregadas ── */}
@@ -1163,7 +1266,7 @@ function OTQRPrintModal({ ot, onClose }) {
   };
 
   return (
-    <div style={PM.overlay} onClick={onClose}>
+    <div style={PM.overlay}>
       <div style={PM.modal} onClick={(e) => e.stopPropagation()}>
         <div style={PM.header}>
           <div>
@@ -1362,6 +1465,7 @@ const SH = {
     background: 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)',
     borderColor: 'var(--lp-brand-600)',
   },
+  presPillOff: { opacity: .42, cursor: 'not-allowed', borderStyle: 'dashed' },
   presPillLabel: { fontSize: 13, fontWeight: 700, color: 'var(--lp-text-primary)' },
   presPillDisp: { fontSize: 10.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' },
   presPillDispOn: { color: 'var(--lp-brand-700)' },

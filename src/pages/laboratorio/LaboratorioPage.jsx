@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import TopBar from '../../components/layout/TopBar';
 import PruebasTab from './PruebasTab';
 import MateriasTab from './MateriasTab';
@@ -48,6 +49,10 @@ export default function LaboratorioPage() {
 
   const { data: materiasData, loading: matLoading, reload: reloadMaterias } = useApiData(fetchMaterias, [], 0);
   const { data: pruebasData,  loading: prLoading,  reload: reloadPruebas }  = useApiData(fetchPruebas,  [], 0);
+
+  /* Realtime (T3 jul 2026): canal 'lab' — pruebas/materias creadas en otra
+     sesión aparecen sin F5 (esta página no tiene polling: refreshInterval 0). */
+  useRealtimeSync({ onLab: () => { reloadMaterias(); reloadPruebas(); } });
 
   const maestro = materiasData?.data?.maestro || [];
   const labMPs  = materiasData?.data?.lab || [];

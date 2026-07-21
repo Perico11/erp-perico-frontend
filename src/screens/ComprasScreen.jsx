@@ -122,6 +122,9 @@ export default function ComprasScreen({
                   {o.pago === 'contado' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.ok), color: C.ok }}>Contado</span>}
                   {/* FALTANTE: la OC se recibió con menos kg de los pedidos. */}
                   {o.faltante && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: tint(C.danger), color: C.danger, letterSpacing: '.03em' }}>FALTANTE</span>}
+                  {/* P2 21-jul-2026: recordatorio de vincular el CFDI — recibida
+                      sin factura registrada en SAT/CFDI. */}
+                  {o.faltaCfdi && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: tint(C.amber), color: C.amber, letterSpacing: '.03em' }} title="La OC está recibida pero no tiene CFDI vinculado — regístralo en SAT/CFDI">Falta CFDI</span>}
                 </div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>{o.mp}</div>
                 {o.qty && <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{o.qty}</div>}
@@ -147,7 +150,9 @@ export default function ComprasScreen({
                     {can('compras') && <button data-id="compras.btn.editar-oc" data-rol={role} onClick={() => onEditarOC?.(o.cod)} style={btn('ghost')}>Editar</button>}
                     {/* #2 ver comprobante adjunto */}
                     {o.comp && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver comprobante adjunto" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
-                    {can('compras') && <button data-id="compras.btn.imprimir-oc" data-rol={role} title="Imprimir OC" onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}><Ico d={I_PRINT} s={17} /></button>}
+                    {/* AUDIT 15-jul-2026: data-id desambiguado — este botón ABRE el overlay de
+                        impresión; el que imprime de verdad es compras.btn.imprimir-oc (PrintOCOverlay). */}
+                    {can('compras') && <button data-id="compras.btn.abrir-imprimir-oc" data-rol={role} title="Imprimir OC" onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}><Ico d={I_PRINT} s={17} /></button>}
                     {/* #1 cancelar/eliminar OC activa (admin) */}
                     {can('eliminarOC') && <button data-id="compras.btn.eliminar-oc" data-rol="admin" title="Cancelar OC (solo admin)" onClick={() => onEliminarOC?.(o.cod)} style={btn('danger')}>Eliminar</button>}
                   </>}
@@ -160,7 +165,7 @@ export default function ComprasScreen({
                         botón solo vivía en 'activa' → al recibir desaparecía. */}
                     {!o.eliminada && o.pago === 'credito' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} title="Registrar el pago del crédito (sube comprobante)" onClick={() => onRegistrarPago?.(o.cod)} style={btn('primary')}>Registrar pago</button>}
                     {!o.eliminada && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver recepción, firma, factura y pago" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
-                    {!o.eliminada && can('compras') && <button data-id="compras.btn.imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
+                    {!o.eliminada && can('compras') && <button data-id="compras.btn.abrir-imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
                   </>}
                 </div>
               </div>

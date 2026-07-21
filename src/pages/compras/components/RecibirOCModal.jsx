@@ -9,8 +9,8 @@ const S = {
   label: { display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6 },
   input: { width: '100%', padding: '10px 12px', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, fontSize: 13, fontFamily: 'var(--lp-font-sans)', boxSizing: 'border-box' },
   fieldGroup: { marginBottom: 14 },
-  itemHeader: { display: 'grid', gridTemplateColumns: '2fr 80px 100px', gap: 10, alignItems: 'center', fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid var(--lp-border-subtle)' },
-  itemRow: { display: 'grid', gridTemplateColumns: '2fr 80px 100px', gap: 10, alignItems: 'center', padding: '6px 0', fontSize: 12 },
+  itemHeader: { display: 'grid', gridTemplateColumns: '2fr 64px 84px 84px', gap: 8, alignItems: 'center', fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6, paddingBottom: 6, borderBottom: '1px solid var(--lp-border-subtle)' },
+  itemRow: { display: 'grid', gridTemplateColumns: '2fr 64px 84px 84px', gap: 8, alignItems: 'center', padding: '6px 0', fontSize: 12 },
   small: { padding: '6px 8px', fontSize: 11, border: '1px solid var(--lp-border-subtle)', borderRadius: 6, fontFamily: 'var(--lp-font-mono)', boxSizing: 'border-box', width: '100%', textAlign: 'right' },
   itemsBox: { background: 'var(--lp-bg-sunken)', borderRadius: 8, padding: 12, marginBottom: 14 },
   diff: (val) => ({ fontSize: 11, fontWeight: 600, color: val < 0 ? 'var(--lp-danger-700)' : val > 0 ? 'var(--lp-warning-700)' : 'var(--lp-success-700)' }),
@@ -30,6 +30,10 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
       mp: i.mp,
       kg: Number(i.kg) || 0,
       kg_recibidos: i.kg_recibidos != null ? Number(i.kg_recibidos) : Number(i.kg) || 0,
+      /* P1 costeo unificado (20-jul-2026): costo/kg landed de ESTA factura
+         (opcional). Con valor, el backend actualiza el costo del sistema por
+         promedio ponderado — igual que Ingresos de proveedor. */
+      costoKg: '',
     }))
   );
   const [recibidoPor, setRecibidoPor] = useState('');
@@ -67,6 +71,9 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
     const v = val === '' ? 0 : Number(val);
     setConfirmFaltante(false); /* cambió la cantidad → re-confirmar el faltante */
     setItems(items.map((it, i) => i === idx ? { ...it, kg_recibidos: v } : it));
+  };
+  const updateCostoKg = (idx, val) => {
+    setItems(items.map((it, i) => i === idx ? { ...it, costoKg: val } : it));
   };
 
   const startDraw = (e) => {
@@ -126,7 +133,12 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
       const qcMP = { calidadOk, notas: qcNotas.trim() };
       await api.recibirOC(
         oc.id,
-        items.map(i => ({ mp: i.mp, kg_recibidos: Number(i.kg_recibidos) || 0 })),
+        items.map(i => ({
+          mp: i.mp,
+          kg_recibidos: Number(i.kg_recibidos) || 0,
+          /* opcional: solo viaja si Arely lo capturó */
+          ...(Number(i.costoKg) > 0 ? { costoKg: Number(i.costoKg) } : {}),
+        })),
         firma,
         recibidoPor.trim(),
         qcMP
@@ -141,7 +153,7 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.title}>Recibir OC — {oc.codigo}</div>
         <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', marginBottom: 14 }}>
@@ -162,6 +174,7 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
               <span>Materia Prima</span>
               <span style={{ textAlign: 'right' }}>Pedido</span>
               <span style={{ textAlign: 'right' }}>Recibido</span>
+              <span style={{ textAlign: 'right' }}>$/kg (opc.)</span>
             </div>
             {items.map((it, idx) => {
               const diff = (Number(it.kg_recibidos) || 0) - it.kg;
@@ -177,9 +190,21 @@ export default function RecibirOCModal({ oc, onClose, onSaved }) {
                     value={it.kg_recibidos}
                     onChange={(e) => updateRecibido(idx, e.target.value)}
                   />
+                  <input
+                    style={S.small}
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="$/kg"
+                    value={it.costoKg}
+                    onChange={(e) => updateCostoKg(idx, e.target.value)}
+                  />
                 </div>
               );
             })}
+            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 6, lineHeight: 1.45 }}>
+              Con $/kg capturado, el costo del sistema se actualiza por promedio ponderado (como en Ingresos). Vacío = no cambia.
+            </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--lp-border-subtle)', fontSize: 12, fontWeight: 700 }}>
               <span>Total</span>
               <span style={{ fontFamily: 'var(--lp-font-mono)' }}>

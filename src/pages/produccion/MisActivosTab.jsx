@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PruebaBadge from '../../components/ui/PruebaBadge';
+import { ESTADO_PEDIDO_TERMINAL, ESTADO_LOTE_INTERNO_OCULTO } from '../../lib/estados';
 
 /* Icono SVG line (sin glyphs) */
 const IcoPlay = () => (
@@ -180,7 +181,7 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
     /* 1. Pedidos activos (no terminales, no eliminados) */
     (pedidos || []).forEach(p => {
       if (!p || p.eliminado) return;
-      if (['entregado', 'cancelado', 'rechazado'].includes(p.estado)) return;
+      if (ESTADO_PEDIDO_TERMINAL.includes(p.estado)) return;
       const lote = loteByPedido[p.id];
       const orden = ordenByPedido[p.id];
       /* El estado "real" más actualizado es el del lote si existe */
@@ -204,7 +205,7 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
     (lotes || []).forEach(l => {
       if (!l || l.eliminado) return;
       if (l.pedidoId) return; /* ya está arriba via pedido */
-      if (['entregado', 'cancelado'].includes(l.estado)) return;
+      if (ESTADO_LOTE_INTERNO_OCULTO.includes(l.estado)) return;
       result.push({
         id: l.id,
         codigo: l.codigo || l.id,

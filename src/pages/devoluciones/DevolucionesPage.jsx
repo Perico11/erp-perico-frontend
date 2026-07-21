@@ -7,6 +7,7 @@ import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ═══════════════════════════════════════════════════════════════════════
    DevolucionesPage — Devoluciones de PRODUCTO TERMINADO (cliente → fábrica).
@@ -255,14 +256,14 @@ function DevolucionSheet({ isDesktop, onClose, onSaved }) {
       onSaved && onSaved();
       onClose && onClose();
     } catch (e) {
-      setErr(e.message || 'Error al guardar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()} data-id="devoluciones.sheet.registrar" data-rol="admin,tecnico,almacen,compras">
         <div style={S.sheetHeader}>
           <div style={S.sheetTitle}>Registrar devolución</div>
@@ -375,7 +376,7 @@ export default function DevolucionesPage() {
     setLoading(true);
     api.getDevoluciones()
       .then(r => setDevs(Array.isArray(r) ? r : (r.data || [])))
-      .catch(e => setErr(e.message))
+      .catch(e => setErr(humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoading(false));
   }, []);
 
@@ -414,7 +415,7 @@ export default function DevolucionesPage() {
       await api.recibirDevolucion(dev.id, user?.nombre, null, null);
       cargar();
     } catch (e) {
-      setErr(e.message || 'No se pudo registrar la recepción');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   }, [cargar, confirm, user]);
 
@@ -439,7 +440,7 @@ export default function DevolucionesPage() {
       await api.disponerDevolucion(dev.id, disposicion, String(nota || ''));
       cargar();
     } catch (e) {
-      setErr(e.message || 'No se pudo registrar la disposición');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   }, [cargar, confirm]);
 
@@ -458,7 +459,7 @@ export default function DevolucionesPage() {
       await api.emitirReembolso(dev.id, String(folio).trim() || dev.notaCredito || '', dev.montoDevuelto || 0, '');
       cargar();
     } catch (e) {
-      setErr(e.message || 'No se pudo emitir el reembolso');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   }, [cargar, confirm]);
 

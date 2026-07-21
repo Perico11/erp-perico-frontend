@@ -9,6 +9,8 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import { EliminarMPModal, SustituirMPModal, MPActionsMenu } from './MPActions';
 import AgregarPTModal from './AgregarPTModal';
+import StkAmericanoView from '../stk-americano/StkAmericanoView';
+import { SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import CostosMPPanel from '../admin/CostosMPPanel';
 import MaestroMPInline from './MaestroMPInline';
 import HelpHint from '../../components/HelpHint';
@@ -17,6 +19,7 @@ import ImportExportPrint from '../../components/ui/ImportExportPrint';
 import CanonicoCard from './CanonicoCard';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import { ESTADO_LOTE_OCULTO_INVENTARIO, ESTADO_LOTE_UBICACION_TERAN } from '../../lib/estados';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
    Iconos abreviados estilo "tag" de 2 letras (sin emojis para consistencia
@@ -345,128 +348,11 @@ const S = {
   }),
 };
 
-/* ── Modal Recepción MP ── */
-function RecepcionModal({ mpList, onClose, onSuccess }) {
-  const [mp, setMp] = useState('');
-  const [cantidad, setCantidad] = useState('');
-  const [proveedor, setProveedor] = useState('');
-  const [nota, setNota] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const inputRef = useRef(null);
-
-  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
-
-  const filteredMPs = useMemo(() => {
-    if (!search) return mpList;
-    const q = search.toLowerCase();
-    return mpList.filter(m => m.toLowerCase().includes(q));
-  }, [mpList, search]);
-
-  const handleSubmit = async () => {
-    if (!mp) return setError('Selecciona una materia prima');
-    const qty = parseFloat(cantidad);
-    if (!qty || qty <= 0) return setError('Cantidad debe ser mayor a 0');
-    setSaving(true);
-    setError('');
-    try {
-      await api.recepcionMP(mp, qty, proveedor || undefined, nota || undefined);
-      onSuccess(mp, qty);
-    } catch (e) {
-      setError(e.message || 'Error al registrar');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={S.modal}>
-        <div style={S.modalHeader}>
-          <span style={S.modalTitle}>Recepción de Materia Prima</span>
-          <button style={S.modalClose} onClick={onClose} aria-label="Cerrar">✕</button>
-        </div>
-        <div style={S.modalBody}>
-          {/* MP selector with search */}
-          <div>
-            <label style={S.fieldLabel}>Materia Prima *</label>
-            <input
-              ref={inputRef}
-              type="text" style={S.fieldInput}
-              placeholder="Buscar MP..." value={mp || search}
-              onChange={e => { setSearch(e.target.value); setMp(''); }}
-            />
-            {search && !mp && filteredMPs.length > 0 && (
-              <div style={{
-                maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)',
-                borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)',
-              }}>
-                {filteredMPs.slice(0, 15).map(m => (
-                  <div key={m} onClick={() => { setMp(m); setSearch(''); }}
-                    style={{
-                      padding: '8px 14px', fontSize: 12, cursor: 'pointer',
-                      borderBottom: '1px solid var(--lp-border-subtle)',
-                      color: 'var(--lp-text-primary)', fontWeight: 500,
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-bg-sunken)'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-                  >{m}</div>
-                ))}
-              </div>
-            )}
-            {mp && (
-              <div style={{
-                marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12,
-                fontWeight: 600, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)',
-                display: 'inline-flex', gap: 6, alignItems: 'center',
-              }}>
-                {mp}
-                <span style={{ cursor: 'pointer', fontSize: 14 }} onClick={() => { setMp(''); setSearch(''); }}>✕</span>
-              </div>
-            )}
-          </div>
-
-          {/* Cantidad */}
-          <div>
-            <label style={S.fieldLabel}>Cantidad (kg) *</label>
-            <input type="number" inputMode="decimal" step="0.1" min="0" style={S.fieldInput}
-              placeholder="Ej: 25.0" value={cantidad}
-              onChange={e => setCantidad(e.target.value)} />
-          </div>
-
-          {/* Proveedor (opcional) */}
-          <div>
-            <label style={S.fieldLabel}>Proveedor (opcional)</label>
-            <input type="text" style={S.fieldInput}
-              placeholder="Nombre del proveedor" value={proveedor}
-              onChange={e => setProveedor(e.target.value)} />
-          </div>
-
-          {/* Nota (opcional) */}
-          <div>
-            <label style={S.fieldLabel}>Nota (opcional)</label>
-            <input type="text" style={S.fieldInput}
-              placeholder="Factura, OC, comentario..." value={nota}
-              onChange={e => setNota(e.target.value)} />
-          </div>
-
-          {error && (
-            <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>
-              {error}
-            </div>
-          )}
-        </div>
-        <div style={S.modalFooter}>
-          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Guardando...' : 'Registrar Recepción'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ── Modal Recepción MP: ELIMINADO (P1 auditoría 20-jul-2026) ──
+   La MP entra por UNA puerta: Recibir OC (Compras, cuando hay OC) o Ingresos
+   de proveedor (/ingresos, con foto de factura). El endpoint suelto
+   /api/inventario/recepcion-mp quedó admin-only en el backend. El botón
+   "Recepción MP" de esta página ahora navega a /ingresos. */
 
 /* ── MP Row component (with optional editing) ── */
 /* AD1 (jun 2026): resalta coincidencias del buscador en un texto */
@@ -569,7 +455,9 @@ function TransitoBadge({ transito, unidad }) {
   );
 }
 
-function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir }) {
+function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir, onOcultar }) {
+  /* Regla proyecto: botones NUNCA 100% width en PC (bp 880, igual que la página). */
+  const isDesktop = useIsDesktop();
   const { nombre, inv, pct } = item;
   /* PT vista "Total": item.displayQty = Fábrica + Terán. Env/MP no lo traen → qty real. */
   const qty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
@@ -581,8 +469,24 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
       role={clickable ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
       <div style={S.mTop}>
         <span style={S.mName}>{resaltar(nombre, query)}</span>
+        {item.oculto && (
+          <span style={{
+            fontSize: 10, fontWeight: 800, letterSpacing: 0.5, padding: '2px 7px',
+            borderRadius: 10, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)',
+          }}>OCULTO</span>
+        )}
         <EstadoBadge qty={qty} pct={pct} />
         {canEdit && <PencilIcon />}
+        {/* PT ocultos (jul 2026): menú ⋮ con Ocultar/Mostrar (solo admin) */}
+        {onOcultar && (
+          <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+            <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
+              label: item.oculto ? 'Mostrar' : 'Ocultar',
+              color: item.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
+              onClick: () => onOcultar(item),
+            }]} />
+          </span>
+        )}
       </div>
       <div style={S.sevBar}><div style={S.sevFill(barPctOf(qty, inv.min || 0), sev.color)} /></div>
       <div style={S.mNums}>
@@ -603,7 +507,7 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
       {onTransferir && (
         <button type="button" data-id="inventario.btn.transferir-env" data-rol="admin,almacen,inventario"
           onClick={(e) => { e.stopPropagation(); onTransferir(); }}
-          style={{ ...S.btnGhost, marginTop: 10, width: '100%', color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>
+          style={{ ...S.btnGhost, marginTop: 10, width: isDesktop ? 'auto' : '100%', color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>
           → Terán
         </button>
       )}
@@ -874,7 +778,7 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Ajustar existencia</div>
         <div style={S.shS}>{item.nombre}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
@@ -1010,13 +914,14 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
 }
 
 /* ── Tabla de inventario (escritorio) ── */
-function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir }) {
+function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir, onOcultar }) {
   /* La columna "Acción" solo se muestra si el rol tiene ALGUNA acción posible en
      esta tabla. Antes el header "Acción" se pintaba siempre y dejaba celdas vacías
      para roles sin acciones (p.ej. inventario/Burgos: sin editarInventario) → columna
      fantasma. Ahora: si no hay acción, no se pinta la columna.
-     onTransferir (envases en sub-vista Fábrica): añade el botón "→ Terán" por fila. */
-  const showActionCol = canEdit || canContar || !!onTransferir || (tipo === 'mp' ? canDelete : canPedir);
+     onTransferir (envases en sub-vista Fábrica): añade el botón "→ Terán" por fila.
+     onOcultar (PT ocultos, jul 2026): menú ⋯ por fila PT con Ocultar/Mostrar (admin). */
+  const showActionCol = canEdit || canContar || !!onTransferir || !!onOcultar || (tipo === 'mp' ? canDelete : canPedir);
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -1045,6 +950,13 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
               <tr key={nombre} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
                 <td style={S.td}>
                   <span style={{ fontWeight: 600 }}>{resaltar(nombre, query)}</span>
+                  {it.oculto && (
+                    <span style={{
+                      marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                      padding: '2px 7px', borderRadius: 10, verticalAlign: 'middle',
+                      background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)',
+                    }}>OCULTO</span>
+                  )}
                   {prov && <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· {prov}</span>}
                   {tipo === 'pt' && it.inv.sku && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline', fontFamily: 'var(--lp-font-mono)' }}>· {it.inv.sku}</span>
@@ -1107,6 +1019,16 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {tipo === 'mp' && canDelete && (
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
                       <MPActionsMenu mp={nombre} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
+                    </span>
+                  )}
+                  {/* PT ocultos (jul 2026): menú ⋯ con Ocultar/Mostrar (solo admin) */}
+                  {tipo === 'pt' && onOcultar && (
+                    <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
+                      <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
+                        label: it.oculto ? 'Mostrar' : 'Ocultar',
+                        color: it.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
+                        onClick: () => onOcultar(it),
+                      }]} />
                     </span>
                   )}
                 </td>
@@ -1204,7 +1126,7 @@ function VistaFiltrosSheet({ activeTab, activeFilter, onFilter, mpSubtab, onMpSu
   const row = { display: 'flex', gap: 8, flexWrap: 'wrap' };
   const FILTS = [['todos', 'Todos', null], ['sin', 'Crítico', 'var(--lp-danger-600)'], ['bajo', 'Bajo', 'var(--lp-warning-600)']];
   return (
-    <div style={S.sheetOverlay(false)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(false)}>
       <div style={S.sheet(false)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Vista y filtros</div>
         <div style={S.shS}>Ajusta qué ves del inventario.</div>
@@ -1252,7 +1174,7 @@ function VistaFiltrosSheet({ activeTab, activeFilter, onFilter, mpSubtab, onMpSu
 /* Hoja "Acciones" móvil (mockup .asheet, la abre el FAB) — acciones REALES */
 function AccionesSheet({ rows, importExportNode, onClose }) {
   return (
-    <div style={S.sheetOverlay(false)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(false)}>
       <div style={S.sheet(false)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Acciones</div>
         <div style={S.shS}>Operaciones sobre el inventario.</div>
@@ -1427,7 +1349,7 @@ function ImportPreviewModal({ data, onClose, onConfirmed, modoPropuesta = false 
   const td = { padding: '6px 8px', fontSize: 12, borderTop: '1px solid var(--lp-border-subtle)' };
 
   return (
-    <div style={ov} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={ov}>
       <div style={box} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 18px 10px' }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>Revisar importación · {esPT ? 'Producto terminado' : 'Materia prima'}</div>
@@ -1512,7 +1434,7 @@ function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
   const box = { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)', border: '1px solid var(--lp-border-subtle)', width: '100%', maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' };
   const lbl = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', fontWeight: 600 };
   return (
-    <div style={ov} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={ov}>
       <div style={box} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 18px 8px' }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>Ajustes por aprobar</div>
@@ -1597,9 +1519,9 @@ export default function InventarioPage() {
        envase → { tipo:'envase', catKey, subKey, nombre, unidad:'pz' }
        tapa   → { tipo:'tapa',   tapaKey, nombre, unidad:'pz' }
      La pantalla de OT (TransferenciasPage) lee este query y pre-abre el sheet
-     "Nueva OT" con esa línea. Mantenemos los modales instantáneos
-     (TransferirPTTeranModal / TransferirEnvaseTeranModal) montados pero el
-     flujo NORMAL del botón es la OT. */
+     "Nueva OT" con esa línea. (Limpieza 21-jul-2026: los modales instantáneos
+     TransferirPTTeranModal/TransferirEnvaseTeranModal se ELIMINARON — llevaban
+     semanas inalcanzables; el transfer directo del pool vive en el bot.) */
   const irASolicitudOT = useCallback((linea) => {
     navigate('/transferencias?nueva=' + encodeURIComponent(JSON.stringify(linea)));
   }, [navigate]);
@@ -1617,12 +1539,10 @@ export default function InventarioPage() {
   const [agregarMpUbic, setAgregarMpUbic] = useState(null);
   /* Sprint X: modal "Agregar PT a almacén" (fábrica = qty / Terán = pool manual). { ubicacion } */
   const [agregarPtUbic, setAgregarPtUbic] = useState(null);
-  /* Parte B (jun 2026): transferencia manual PT Fábrica→Terán. { producto } */
-  const [transferirPt, setTransferirPt] = useState(null);
   const [reenvasarTeran, setReenvasarTeran] = useState(null); /* { producto, scalar } */
-  /* Sprint Y2 (jun 2026): transferencia manual de ENVASE/TAPA Fábrica→Terán.
-     Guarda el item completo de envItems (trae item._env para el contrato del backend). */
-  const [transferirEnv, setTransferirEnv] = useState(null);
+  /* Cola de QRs de la tanda recién envasada en Terán (jul 2026): tras envasar,
+     se abre el print modal por cada sublote hijo creado — igual que Americano. */
+  const [printTeranQR, setPrintTeranQR] = useState([]);
   /* Entrada de envases (suma a stock): { ubic:'fabrica'|'teran' } o null. Fábrica =
      llegada de proveedor (Enrique); Terán = envases que llegan directo a Terán. */
   const [agregarEnv, setAgregarEnv] = useState(null);
@@ -1647,7 +1567,6 @@ export default function InventarioPage() {
   const [vSheetOpen, setVSheetOpen] = useState(false);
   const [aSheetOpen, setASheetOpen] = useState(false);
   const { query, debouncedQuery, setQuery } = useSearch(200);
-  const [showRecepcion, setShowRecepcion] = useState(false);
   const [showAltaMP, setShowAltaMP] = useState(false);
   const [showAgregarPT, setShowAgregarPT] = useState(false);
   const [showAgregarEnv, setShowAgregarEnv] = useState(false);
@@ -1696,6 +1615,19 @@ export default function InventarioPage() {
      "no aparece ni con stock ni sin stock"). Antes solo se mostraban los que ya
      tenían fila en inv.pt (producidos / dados de alta). */
   const { data: formSummaryData } = useApiData(() => api.getFormulasSummary(), null, 60000);
+  /* STK AMERICANO (jul 2026): inventario SEPARADO del PT nacional — totes de 1000 L
+     importados de EE.UU. Sub-pestaña para quienes gestionan almacén (admin/almacén/
+     inventario). Dato GLOBAL vía WS 'stk-americano'. Fetch condicional por rol. */
+  const canSeeStkAmericano = ['admin', 'almacen', 'inventario'].includes(user?.rol);
+  const { data: stkResp, reload: reloadStk } = useApiData(
+    () => (canSeeStkAmericano ? api.getStkAmericano('1') : Promise.resolve(null)),
+    [user?.rol], 12000
+  );
+  /* Almacén 2 (segundo patio): mismo modelo, datos separados. */
+  const { data: stkResp2, reload: reloadStk2 } = useApiData(
+    () => (canSeeStkAmericano ? api.getStkAmericano('2') : Promise.resolve(null)),
+    [user?.rol], 12000
+  );
   const ptCatalogo = useMemo(() => {
     const arr = formSummaryData?.data?.summary || formSummaryData?.summary || [];
     return Array.isArray(arr) ? arr.map(x => x && x.nombre).filter(Boolean) : [];
@@ -1708,8 +1640,9 @@ export default function InventarioPage() {
      estado (en_almacen/en_stock_teran… → Terán; envasado/producido → Fábrica). */
   const lotesPorProductoUbic = useMemo(() => {
     const arr = trazaData?.data || trazaData?.lotes || (Array.isArray(trazaData) ? trazaData : []);
-    const OCULTOS = new Set(['entregado', 'cancelado', 'rechazado', 'eliminado']);
-    const TERAN_EST = new Set(['en_stock_teran', 'recibido_teran', 'reenvasado', 'en_almacen']);
+    /* AUDIT 15-jul-2026: buckets desde lib/estados (fuente única, anti-drift). */
+    const OCULTOS = new Set(ESTADO_LOTE_OCULTO_INVENTARIO);
+    const TERAN_EST = new Set(ESTADO_LOTE_UBICACION_TERAN);
     const map = {};
     const add = (prod, ubic, cod, estado) => {
       map[prod] = map[prod] || { fabrica: [], teran: [] };
@@ -1743,6 +1676,7 @@ export default function InventarioPage() {
     onEnvases:      () => reloadEnv(),
     onPrecios:      () => reloadInv(),
     onTrazabilidad: () => { reloadPtUbi(); reloadTraza(); }, /* W3: sublotes mueven ubicación + lotes por producto */
+    onStkAmericano: () => { reloadStk(); reloadStk2(); }, /* jul 2026: stock americano (2 almacenes) */
   });
 
   const inventory = invData?.data || {};
@@ -1804,8 +1738,13 @@ export default function InventarioPage() {
     if (!hideMP) t.push({ id: 'mp', label: 'Materia Prima' });
     if (!hidePT) t.push({ id: 'pt', label: 'Producto Terminado' });
     t.push({ id: 'env', label: 'Envases' });
+    /* STK AMERICANO: sub-pestañas (totes de EE.UU.), separado del PT nacional.
+       Decisión dueño 16-jul: el americano vive AQUÍ (no en pestañas del menú);
+       nombres reales de las bodegas: 1 = Terán, 2 = Almacén 2. */
+    if (canSeeStkAmericano) t.push({ id: 'stkAmericano', label: 'Americano Terán' });
+    if (canSeeStkAmericano) t.push({ id: 'stkAmericano2', label: 'Americano Alm. 2' });
     return t;
-  }, [hideMP, hidePT]);
+  }, [hideMP, hidePT, canSeeStkAmericano]);
 
   /* Sync tab from URL params */
   useEffect(() => {
@@ -1848,6 +1787,25 @@ export default function InventarioPage() {
     return items;
   }, [activeTab, inventory.mp, maestro]);
 
+  /* PT ocultos (jul 2026): descontinuados fuera de la lista (su stock sigue
+     contando en valuación/reportes). Admin: menú ⋯ por fila → Ocultar/Mostrar,
+     y botón "Mostrar ocultos" para verlos con badge. */
+  const [ptOcultos, setPtOcultos] = useState({});
+  const [verOcultosPT, setVerOcultosPT] = useState(false);
+  useEffect(() => {
+    if (activeTab !== 'pt') return;
+    api.getPTOcultos?.().then(r => setPtOcultos(r?.data?.ocultos || r?.ocultos || {})).catch(() => {});
+  }, [activeTab]);
+  const handleOcultarPT = useCallback(async (item) => {
+    const nombre = item.nombre;
+    const nuevo = !ptOcultos[nombre];
+    try {
+      const r = await api.setPTOculto(nombre, nuevo);
+      setPtOcultos(r?.ocultos || (() => { const cp = { ...ptOcultos }; if (nuevo) cp[nombre] = true; else delete cp[nombre]; return cp; })());
+    } catch (e) { alert('Error: ' + (e.message || 'no se pudo cambiar')); }
+  }, [ptOcultos]);
+  const numOcultosPT = Object.keys(ptOcultos).length;
+
   /* ── Build PT items ── */
   const ptItems = useMemo(() => {
     if (activeTab !== 'pt') return [];
@@ -1855,7 +1813,8 @@ export default function InventarioPage() {
     /* UNIÓN: los productos con fila en inv.pt + TODOS los del catálogo de
        fórmulas. Los que no tienen fila se muestran a 0 (qty 0, sin mínimo). Así
        cada producto aparece aunque nunca se haya producido/dado de alta. */
-    const nombres = Array.from(new Set([...Object.keys(ptInv), ...ptCatalogo]));
+    const nombres = Array.from(new Set([...Object.keys(ptInv), ...ptCatalogo]))
+      .filter(n => verOcultosPT || !ptOcultos[n]);
     return nombres
       .map((nombre) => {
         const inv = ptInv[nombre] || { qty: 0, min: 0 };
@@ -1868,10 +1827,10 @@ export default function InventarioPage() {
         /* OT (jun 2026): expone `transito` al nivel del item (igual que envItems)
            para que PTRow/InvTable pinten el badge "en tránsito: N". El inv.pt del
            backend OT lleva { qty, transito, teran, min }. */
-        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty };
+        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty, oculto: !!ptOcultos[nombre] };
       })
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [activeTab, inventory.pt, ptCatalogo]);
+  }, [activeTab, inventory.pt, ptCatalogo, ptOcultos, verOcultosPT]);
 
   /* ── Filter by KPI click ── */
   const filterFn = useCallback((items, getQty, getPct) => {
@@ -2267,7 +2226,7 @@ export default function InventarioPage() {
         {/* Toolbar (mockup): fila buscador prominente + fila segmented MP/PT con
             chips de severidad a la derecha. En móvil se apilan igual que el mockup. */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
-          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }) }}>
+          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }), ...(activeTab === 'stkAmericano' || activeTab === 'stkAmericano2' ? { display: 'none' } : {}) }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query}
               onChange={e => setQuery(e.target.value)}
@@ -2282,7 +2241,7 @@ export default function InventarioPage() {
             <div style={S.segWrap}>
               {tabs.map(t => (
                 <button key={t.id} type="button" data-id={`inventario.tab.${t.id}`} style={S.segBtn(activeTab === t.id)} onClick={() => handleTabChange(t.id)}>
-                  {t.id === 'mp' ? 'MP' : t.id === 'pt' ? 'PT' : 'Envases'}
+                  {t.id === 'mp' ? 'MP' : t.id === 'pt' ? 'PT' : t.id === 'env' ? 'Envases' : t.label}
                 </button>
               ))}
             </div>
@@ -2293,7 +2252,7 @@ export default function InventarioPage() {
                 <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
               </div>
             )}
-            {!isDesktop && (
+            {!isDesktop && activeTab !== 'stkAmericano' && activeTab !== 'stkAmericano2' && (
               <div style={{ marginLeft: 'auto' }}>
                 <MFiltBtn
                   active={activeFilter !== 'todos' || (activeTab === 'mp' && mpSubtab !== 'stock') || (activeTab === 'pt' && ptSubtab !== 'total')}
@@ -2397,8 +2356,11 @@ export default function InventarioPage() {
               {mpSubtab === 'stock' && (
                 <div style={S.actionsCluster(isDesktop)}>
                   {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
-                  {canRecibirMP && isDesktop && (
-                    <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin,tecnico" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
+                  {/* P1 (20-jul-2026): la entrada de MP vive en /ingresos (foto de
+                      factura) o en Compras > Recibir OC. compras no tiene /ingresos:
+                      su puerta es la OC, así que no ve este botón. */}
+                  {canRecibirMP && user?.rol !== 'compras' && isDesktop && (
+                    <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,admin,tecnico" onClick={() => navigate('/ingresos')}>+ Ingreso de proveedor</button>
                   )}
                   {canAltaMP && isDesktop && (
                     <button style={S.btnAdd} data-id="inventario.btn.alta-mp" data-rol="tecnico,admin,compras,inventario" onClick={() => setShowAltaMP(true)}>+ Dar de alta MP</button>
@@ -2524,15 +2486,32 @@ export default function InventarioPage() {
                 </div>
               ) : (
                 <>
-                  <div style={S.countLbl}>{filteredPT.length} de {ptItems.length} productos terminados</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={S.countLbl}>{filteredPT.length} de {ptItems.length} productos terminados</div>
+                    {/* PT ocultos (jul 2026): alternar visibilidad de descontinuados (solo admin) */}
+                    {user?.rol === 'admin' && numOcultosPT > 0 && (
+                      <button type="button" data-id="inventario.btn.ver-ocultos-pt" data-rol="admin"
+                        onClick={() => setVerOcultosPT(v => !v)}
+                        style={{
+                          ...S.btnGhost, marginBottom: 8,
+                          color: verOcultosPT ? 'var(--lp-warning-700)' : 'var(--lp-text-secondary)',
+                          borderColor: verOcultosPT ? 'var(--lp-warning-700)' : 'var(--lp-border-subtle)',
+                          background: verOcultosPT ? 'var(--lp-warning-100)' : 'transparent',
+                        }}>
+                        {verOcultosPT ? 'Ocultar de nuevo' : `Mostrar ocultos (${numOcultosPT})`}
+                      </button>
+                    )}
+                  </div>
                   {isDesktop ? (
                     <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
                       canContar={canContar} onContar={handleContar}
+                      onOcultar={user?.rol === 'admin' ? handleOcultarPT : null}
                       onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
                   ) : (
                     <div>
                       {filteredPT.map(item => (
-                        <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery} />
+                        <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery}
+                          onOcultar={user?.rol === 'admin' ? handleOcultarPT : null} />
                       ))}
                     </div>
                   )}
@@ -2636,6 +2615,30 @@ export default function InventarioPage() {
             ))}
           </>
         )}
+
+        {/* ════════ TAB: STK AMERICANO (PT importado de EE.UU., totes de 1000 L) ════════ */}
+        {activeTab === 'stkAmericano' && (
+          <StkAmericanoView
+            data={stkResp?.data || null}
+            loading={!stkResp}
+            reload={reloadStk}
+            canEdit={rol === 'admin' || rol === 'almacen'}
+            canDelete={rol === 'admin'}
+            almacen="1"
+            embedded
+          />
+        )}
+        {activeTab === 'stkAmericano2' && (
+          <StkAmericanoView
+            data={stkResp2?.data || null}
+            loading={!stkResp2}
+            reload={reloadStk2}
+            canEdit={rol === 'admin' || rol === 'almacen'}
+            canDelete={rol === 'admin'}
+            almacen="2"
+            embedded
+          />
+        )}
       </div>
 
       {/* Modal de confirmación con PIN (override candado de ajuste) */}
@@ -2667,19 +2670,8 @@ export default function InventarioPage() {
         />
       )}
 
-      {/* ── Recepción MP Modal ── */}
-      {showRecepcion && (
-        <RecepcionModal
-          mpList={mpItems.map(it => it.mp)}
-          onClose={() => setShowRecepcion(false)}
-          onSuccess={(msg) => {
-            setShowRecepcion(false);
-            setToastMsg(msg);
-            reloadInv();
-            setTimeout(() => setToastMsg(''), 4000);
-          }}
-        />
-      )}
+      {/* ── Recepción MP Modal: ELIMINADO (P1 20-jul-2026) — la entrada de MP
+          es Compras > Recibir OC o /ingresos (foto de factura). ── */}
 
       {/* ── Dar de alta MP Modal ── */}
       {showAltaMP && (
@@ -2726,21 +2718,10 @@ export default function InventarioPage() {
         />
       )}
 
-      {/* ── Parte B: Transferir PT Fábrica → Terán (Josué) ── */}
-      {transferirPt && (
-        <TransferirPTTeranModal
-          producto={transferirPt.producto}
-          isDesktop={isDesktop}
-          onClose={() => setTransferirPt(null)}
-          onDone={(r) => {
-            setTransferirPt(null);
-            setToastMsg(`${r.producto}: ${r.transferido} cub → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
-            reloadInv();
-            reloadPtUbi();
-            setTimeout(() => setToastMsg(''), 4500);
-          }}
-        />
-      )}
+      {/* ── Transferir PT/Envase a Terán: los modales instantáneos se ELIMINARON
+          (limpieza 21-jul-2026, llevaban semanas inalcanzables) — los botones
+          "→ Terán" navegan al flujo OT (irASolicitudOT); el transfer directo
+          del pool vive solo en el AsistenteFlotante (decisión del dueño). ── */}
 
       {/* ── Reenvasar PT en Terán (tote/granel → cubetas/galones) ── */}
       {reenvasarTeran && (
@@ -2752,27 +2733,32 @@ export default function InventarioPage() {
           onClose={() => setReenvasarTeran(null)}
           onDone={(r) => {
             setReenvasarTeran(null);
-            setToastMsg(`${r.producto} reenvasado en Terán`);
+            setToastMsg(`${r.producto} envasado en Terán`);
             reloadInv();
             reloadPtUbi();
             reloadEnv();
             setTimeout(() => setToastMsg(''), 4500);
+            /* Imprimir QR de la tanda (igual que Americano): un print modal por
+               cada sublote hijo que el backend creó en trazabilidad (FEFO). */
+            const hijos = (r && r.espejo && Array.isArray(r.espejo.hijos)) ? r.espejo.hijos : [];
+            if (hijos.length) {
+              setPrintTeranQR(hijos.map(h => ({
+                /* env: null → el modal usa `tipo` como presentación (label bonita) */
+                sublotes: [{ cod: h.cod, qrPayload: h.qrPayload, qty: h.qty, env: null, marca: null }],
+                lote: { producto: h.producto || r.producto, codigoLote: h.codigoLote },
+                isTote: false, q: h.qty, tipo: (REENV_TIPO_LBL[h.tipo] || h.tipo), desdeTote: h.fromTote,
+              })));
+            }
           }}
         />
       )}
 
-      {/* ── Sprint Y2: Transferir Envase/Tapa Fábrica → Terán (Josué) ── */}
-      {transferirEnv && (
-        <TransferirEnvaseTeranModal
-          item={transferirEnv}
-          isDesktop={isDesktop}
-          onClose={() => setTransferirEnv(null)}
-          onDone={(r) => {
-            setTransferirEnv(null);
-            setToastMsg(`${r.item}: ${r.transferido} ${r.unidad || 'pz'} → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
-            reloadEnv();
-            setTimeout(() => setToastMsg(''), 4500);
-          }}
+      {/* QR del sublote recién envasado en Terán — imprimir y pegar al envase.
+          Cola: si el FEFO cruzó varios lotes, se imprime uno por uno. */}
+      {printTeranQR.length > 0 && (
+        <SubloteQRPrintModal
+          payload={printTeranQR[0]}
+          onClose={() => setPrintTeranQR(q => q.slice(1))}
         />
       )}
 
@@ -2807,10 +2793,10 @@ export default function InventarioPage() {
         <AccionesSheet
           onClose={() => setASheetOpen(false)}
           rows={[
-            ...(activeTab === 'mp' && canRecibirMP ? [{
-              key: 'recepcion', label: 'Recepción MP', desc: 'Captura entrada de materia prima',
-              dataId: 'inventario.btn.recepcion-mp', dataRol: 'almacen,compras,admin,tecnico',
-              onClick: () => setShowRecepcion(true),
+            ...(activeTab === 'mp' && canRecibirMP && user?.rol !== 'compras' ? [{
+              key: 'recepcion', label: 'Ingreso de proveedor', desc: 'Registra la llegada con foto de factura',
+              dataId: 'inventario.btn.recepcion-mp', dataRol: 'almacen,admin,tecnico',
+              onClick: () => navigate('/ingresos'),
               icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="M3.27 6.96 12 12.01l8.73-5.05" /></svg>,
             }] : []),
             ...(activeTab === 'mp' && canAltaMP ? [{
@@ -2929,89 +2915,9 @@ export default function InventarioPage() {
    Datos vienen de /api/inventario/pt-por-ubicacion calculado server-side
    desde trazabilidad.json (fuente de verdad para ubicación física).
    ═══════════════════════════════════════════════════════════════════ */
-/* Parte B (jun 2026, pedido dueño): modal de transferencia PT Fábrica→Terán.
-   Mueve cubetas de inv.pt[X].qty a inv.pt[X].teran (no cambia el total). */
-function TransferirPTTeranModal({ producto, isDesktop, onClose, onDone }) {
-  const [cant, setCant] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-  const inputRef = useRef(null);
-  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 120); return () => clearTimeout(t); }, []);
-  const n = parseInt(cant, 10);
-  const valido = !isNaN(n) && n > 0;
-  const submit = async () => {
-    if (!valido || saving) return;
-    setSaving(true); setErr('');
-    try { const r = await api.transferirPTaTeran(producto, n); onDone(r); }
-    catch (e) { setErr(e?.data?.error || e.message || 'No se pudo transferir'); setSaving(false); }
-  };
-  return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
-        <div style={S.shH}>Transferir a Terán</div>
-        <div style={S.shS}>{producto}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Mueve cubetas del stock de <strong>Fábrica</strong> al de <strong>Terán</strong>. No cambia el total — solo dónde está el producto.
-        </div>
-        <label style={S.flbl}>Cubetas a transferir</label>
-        <input ref={inputRef} style={S.finQty} type="number" inputMode="numeric" step="1" min="1"
-          value={cant} onChange={e => setCant(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
-        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
-        <div style={S.shActs}>
-          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
-            {saving ? 'Transfiriendo…' : 'Transferir a Terán'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* Sprint Y2 (jun 2026, pedido dueño): modal de transferencia de ENVASE/TAPA
-   Fábrica→Terán. ESPEJO de TransferirPTTeranModal: mueve N piezas de `stock`
-   (Fábrica) a `teran` (Terán) en envases.json — no cambia el total.
-   item._env = { tipo:'envase', catKey, subKey, fabrica, teran } | { tipo:'tapa', tapaKey, fabrica, teran }. */
-function TransferirEnvaseTeranModal({ item, isDesktop, onClose, onDone }) {
-  const [cant, setCant] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-  const inputRef = useRef(null);
-  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 120); return () => clearTimeout(t); }, []);
-  const disponible = Number(item?._env?.fabrica) || 0; /* lo que hay en Fábrica para mover */
-  const unidad = item?.unidad || 'pz';
-  const n = parseInt(cant, 10);
-  const valido = !isNaN(n) && n > 0 && n <= disponible;
-  const submit = async () => {
-    if (!valido || saving) return;
-    setSaving(true); setErr('');
-    try { const r = await api.transferirEnvaseATeran(item._env, n); onDone(r); }
-    catch (e) { setErr(e?.data?.error || e.message || 'No se pudo transferir'); setSaving(false); }
-  };
-  return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
-        <div style={S.shH}>Transferir a Terán</div>
-        <div style={S.shS}>{item?.nombre}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Mueve piezas del stock de <strong>Fábrica</strong> al de <strong>Terán</strong>. No cambia el total — solo dónde están los envases. Disponible en Fábrica: <strong>{disponible.toLocaleString('es-MX')} {unidad}</strong>.
-        </div>
-        <label style={S.flbl}>Piezas a transferir</label>
-        <input ref={inputRef} style={S.finQty} type="number" inputMode="numeric" step="1" min="1" max={disponible}
-          value={cant} onChange={e => setCant(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
-        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
-        <div style={S.shActs}>
-          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
-            {saving ? 'Transfiriendo…' : 'Transferir a Terán'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* (Limpieza 21-jul-2026: TransferirPTTeranModal y TransferirEnvaseTeranModal
+   ELIMINADOS — inalcanzables desde jun-2026; el botón "→ Terán" navega a la OT
+   y el transfer directo del pool vive solo en el AsistenteFlotante.) */
 
 /* Entrada de envases/tapas (SUMA al stock de Fábrica o Terán). Fábrica = llegada
    de proveedor (Enrique/técnico); Terán = envases que llegan directo a Terán.
@@ -3052,7 +2958,7 @@ function EntradaEnvaseModal({ ubic, envData, isDesktop, onClose, onDone }) {
   };
   const selStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)' };
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Agregar a {lugar}</div>
         <div style={S.shS}>{esTeran ? 'Envases/tapas que llegaron directo a Terán' : 'Entrada de envases/tapas (llegada de proveedor)'}</div>
@@ -3126,12 +3032,12 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   const selStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)' };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
-        <div style={S.shH}>Reenvasar en Terán</div>
+        <div style={S.shH}>Envasar en Terán</div>
         <div style={S.shS}>{producto}</div>
         <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Convierte un <strong>tote</strong> (o granel) en cubetas/galones. No cambia el total de pintura — solo su forma. Consume envases vacíos del stock de <strong>Terán</strong>; lo que sobra de un tote abierto queda <strong>a granel</strong>.
+          Convierte un <strong>tote</strong> (o granel) en cubetas/galones. No cambia el total de pintura — solo su forma. Consume envases vacíos del stock de <strong>Terán</strong>; lo que sobra de un tote abierto queda <strong>a granel</strong>. Al terminar se abre la <strong>etiqueta QR</strong> de la tanda para imprimir.
         </div>
 
         <label style={S.flbl}>Origen</label>
@@ -3179,7 +3085,7 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
-            {saving ? 'Reenvasando…' : 'Reenvasar'}
+            {saving ? 'Envasando…' : 'Envasar'}
           </button>
         </div>
       </div>
@@ -3393,13 +3299,15 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
                       style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
                     >→ Terán</button>
                   )}
-                  {/* Reenvasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán). */}
+                  {/* Envasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán)
+                      + imprime el QR de la tanda (paridad Americano 1/2, jul 2026). */}
                   {reenvasable(d) && (
                     <button
+                      type="button" data-id="inventario.btn.reenvasar-teran" data-rol="admin,tecnico,almacen"
                       onClick={() => onReenvasar(nombre, d.teranPresScalar)}
-                      title="Reenvasar: convertir tote/granel en cubetas o galones (consume envases de Terán)"
+                      title="Envasar: convertir tote/granel en cubetas o galones (consume envases de Terán) e imprimir etiqueta QR"
                       style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
-                    >Reenvasar</button>
+                    >Envasar</button>
                   )}
                   {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
                   {!esFabrica && canEdit && onEliminarTeran && (Number(d.manual) || 0) > 0 && (
@@ -3704,7 +3612,7 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Agregar MP a {esFabrica ? 'Fábrica' : 'Terán'}</span>
@@ -3824,7 +3732,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Agregar PT a {esFabrica ? 'Fábrica' : 'Terán'}</span>
@@ -3946,14 +3854,15 @@ function AltaMPModal({ onClose, onSaved }) {
       });
       onSaved(`Materia prima "${nom}" dada de alta`);
     } catch (e) {
-      /* 409 = ya existe → orientar al flujo correcto: sumar stock es "+ Recepción MP" */
+      /* 409 = ya existe → orientar al flujo correcto: sumar stock es un Ingreso
+         de proveedor (/ingresos) o Recibir OC en Compras (P1 20-jul-2026). */
       const msg = e?.data?.error || e?.message || 'No se pudo dar de alta';
-      setError(e?.status === 409 ? msg + ' — para sumarle stock usa "+ Recepción MP".' : msg);
+      setError(e?.status === 409 ? msg + ' — para sumarle stock usa "Ingreso de proveedor" (o Recibir OC en Compras).' : msg);
     } finally { setSaving(false); }
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Dar de alta materia prima</span>
@@ -4045,7 +3954,7 @@ function AgregarEnvaseModal({ categorias, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Agregar envase</span>

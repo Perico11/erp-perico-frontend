@@ -45,7 +45,11 @@ const INDICE = [
   { label: 'Órdenes de producción', sub: 'Crear y seguir órdenes', ruta: '/ordenes', roles: 'admin,tecnico', keywords: 'ordenes orden produccion nueva orden destino teran fabrica enrique' },
   { label: 'Producción', sub: 'Fabricar y QC', ruta: '/produccion', roles: 'admin,tecnico', keywords: 'produccion fabricar producir lote completar paso terminar' },
   { label: 'Control de calidad (QC)', sub: 'Producción → Calidad', ruta: '/produccion?tab=calidad', roles: 'admin,tecnico', keywords: 'qc calidad control retener hold liberar viscosidad ph' },
-  { label: 'Stock de Fábrica / Envasado', sub: 'Envasar, transferir, QR', ruta: '/stock-fabrica', roles: 'admin,tecnico,almacen', keywords: 'stock fabrica envasado envasar sublote transferir qr etiqueta tote' },
+  { label: 'Almacén · En fábrica (Stock Fábrica)', sub: 'Envasar, transferir, QR', ruta: '/almacen?vista=fabrica', roles: 'admin,tecnico,almacen', keywords: 'stock fabrica envasado envasar sublote transferir qr etiqueta tote almacen' },
+  /* AUDIT 15-jul-2026: pantallas de jul 2026 que el bot no conocía. */
+  { label: 'Transferencias (OT)', sub: 'Órdenes de transferencia Fábrica→Terán con QR y 2 escaneos', ruta: '/transferencias', roles: 'admin,almacen,inventario,tecnico', keywords: 'transferencias transferencia ot orden de transferencia surtir recibir transito llevar a teran mover stock qr escanear cancelar' },
+  { label: 'Americano · Almacén Terán', sub: 'Inventarios → Americano Terán (PT importado de EE.UU.: cubetas, galones y totes)', ruta: '/inventario?tab=stkAmericano', roles: 'admin,almacen,inventario', keywords: 'stk americano stock americano teran importado usa eeuu tote totes 1000 litros producto americano llego tote americano salida litros bodega' },
+  { label: 'Americano · Almacén 2', sub: 'Inventarios → Americano Alm. 2 (PT importado de EE.UU., inventario aparte)', ruta: '/inventario?tab=stkAmericano2', roles: 'admin,almacen,inventario', keywords: 'stk americano 2 almacen 2 stock americano importado usa eeuu tote totes producto americano segunda bodega' },
   { label: 'Fórmulas', sub: 'Recetas y costos', ruta: '/formulas', roles: 'admin,tecnico,compras', keywords: 'formulas recetas formula costo comparar ingredientes' },
   { label: 'Laboratorio', sub: 'Pruebas de laboratorio', ruta: '/laboratorio', roles: 'admin,tecnico', keywords: 'laboratorio lab pruebas ensayo' },
 
@@ -104,7 +108,12 @@ const INDICE = [
   { label: 'Inventario Canónico', sub: 'Admin → fuente de verdad inicial (protegido)', ruta: '/admin?section=canonico', roles: 'admin', keywords: 'canonico inventario inicial fuente de verdad base reset stock protegido' },
   { label: 'Google Authenticator (código)', sub: 'Admin → configurar/regenerar el código de 6 dígitos', ruta: '/admin?section=totp', roles: 'admin', keywords: 'google authenticator totp codigo de 6 digitos doble factor 2fa candado seguridad regenerar qr autenticacion' },
   /* Botones específicos (resaltado; no se auto-abren) */
-  { label: 'Botón: Generar QR del lote', sub: 'Stock Fábrica → en la tarjeta del lote', ruta: '/stock-fabrica', roles: 'admin,tecnico,almacen', dataId: 'stock.btn.qr', keywords: 'qr codigo generar etiqueta imprimir lote ticket stock fabrica' },
+  { label: 'Botón: Generar QR del lote', sub: 'Almacén → En fábrica → en la tarjeta del lote', ruta: '/almacen?vista=fabrica', roles: 'admin,tecnico,almacen', dataId: 'stock.btn.qr', keywords: 'qr codigo generar etiqueta imprimir lote ticket stock fabrica' },
+  /* ── Re-envasar (jul 2026): la MISMA operación vive en 3 pantallas — el bot
+     las ofrece TODAS como opciones y deja elegir (pedido dueño). ── */
+  { label: 'Botón: Re-envasar tote (En fábrica)', sub: 'Almacén → En fábrica → Transferidos → en la tarjeta del lote', ruta: '/almacen?vista=fabrica&tab=transferidos', roles: 'admin,tecnico,almacen', dataId: 'stock.btn.reenvasar-tote', keywords: 'reenvasar reenvase reenvasado tote a cubetas convertir tote envases finales lote' },
+  { label: 'Botón: Re-envasar (Recepción Terán)', sub: 'Recepción Terán → TOTEs por re-envasar', ruta: '/almacen', roles: 'admin,almacen', dataId: 'recepcion.btn.reenvasar', keywords: 'reenvasar reenvase reenvasado tote teran recepcion buffer josue' },
+  { label: 'Botón: Reenvasar (Inventario · PT Terán)', sub: 'Inventario → PT → Terán → botón Reenvasar del producto', ruta: '/inventario?tab=pt&pt=teran', roles: 'admin,tecnico,almacen', dataId: 'inventario.btn.reenvasar-teran', keywords: 'reenvasar reenvase reenvasado pool teran tote granel a cubetas galones inventario producto' },
   { label: 'Botón: Recibir MP (Órdenes)', sub: 'Órdenes → recibir materia prima solicitada', ruta: '/ordenes', roles: 'admin,tecnico', dataId: 'ordenes.btn.recibir-mp', keywords: 'recibir materia prima mp solicitud orden entrada llego el material' },
 
   /* ── Sub-pestañas deep-linkables (jun 2026): el bot entra DIRECTO a la sub-vista
@@ -132,7 +141,7 @@ const INDICE = [
   { label: 'Pedidos · Rechazados', sub: 'Pedidos rechazados', ruta: '/pedidos?tab=rechazados', roles: 'admin,almacen,tecnico', keywords: 'pedidos rechazados rechazo no aceptados' },
   { label: 'Pedidos · Historial', sub: 'Pedidos completados', ruta: '/pedidos?tab=historial', roles: 'admin,almacen,tecnico', keywords: 'pedidos historial completados viejos pasados' },
   /* Stock Fábrica (estados) */
-  { label: 'Stock Fábrica · Transferidos', sub: 'Lotes transferidos a Terán', ruta: '/stock-fabrica?tab=transferidos', roles: 'admin,tecnico,almacen', keywords: 'transferidos lotes enviados a teran ya movidos' },
+  { label: 'Almacén · En fábrica · Transferidos', sub: 'Lotes transferidos a Terán', ruta: '/almacen?vista=fabrica&tab=transferidos', roles: 'admin,tecnico,almacen', keywords: 'transferidos lotes enviados a teran ya movidos stock fabrica' },
   /* Recolección (estados) */
   { label: 'Recolección · En camino', sub: 'Lotes en camino', ruta: '/recoleccion?tab=enCamino', roles: 'admin,recolector,almacen', keywords: 'en camino recoleccion llevando transporte que va en camino' },
   { label: 'Recolección · Entregados', sub: 'Lotes entregados', ruta: '/recoleccion?tab=entregados', roles: 'admin,recolector,almacen', keywords: 'entregados recoleccion ya entregue completados' },
@@ -220,16 +229,21 @@ function _lev(a, b) {
   for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; }
   return prev[n];
 }
+/* Stopwords de pregunta: palabras de relleno ("¿dónde puedo encontrar el…?")
+   que NO deben sumar puntos — antes inflaban entradas ajenas cuyo sub contiene
+   "de/la/en" y ensuciaban el ranking (jul 2026). */
+const _STOP = new Set(['el', 'la', 'los', 'las', 'de', 'del', 'al', 'a', 'en', 'un', 'una', 'y', 'o', 'u', 'que', 'cual', 'cuales', 'donde', 'como', 'cuando', 'quien', 'se', 'me', 'te', 'le', 'lo', 'mi', 'mis', 'su', 'sus', 'esta', 'estan', 'esta', 'hay', 'para', 'por', 'con', 'sin', 'es', 'son', 'puedo', 'puede', 'quiero', 'encontrar', 'encuentro', 'encuentra', 'buscar', 'busco', 'ver']);
 function _score(query, entry) {
   const q = _norm(query); if (!q) return 0;
   const texto = _norm(entry.label + ' ' + (entry.sub || '') + ' ' + (entry.keywords || ''));
   if (texto.includes(q)) return 100;                              /* frase completa */
-  const qToks = q.split(' ').filter(Boolean);
+  const qToks = q.split(' ').filter(w => w && !_STOP.has(w));
   const tToks = texto.split(' ');
   let s = 0;
   for (const qt of qToks) {
     if (tToks.includes(qt)) { s += 30; continue; }
     if (tToks.some(t => t.startsWith(qt) && qt.length >= 3)) { s += 20; continue; }
+    if (tToks.some(t => t.length >= 4 && qt.length >= 4 && _lev(qt, t) <= 1)) { s += 25; continue; } /* typo de 1 letra */
     if (tToks.some(t => t.length >= 4 && qt.length >= 4 && _lev(qt, t) <= 2)) { s += 12; continue; } /* typo */
   }
   return s;
@@ -795,31 +809,59 @@ export default function AsistenteFlotante() {
       pushBot({ text: `Vas a ${acc.desc}. ¿Confirmo?`, confirm: acc });
       return;
     }
-    /* CEREBRO OFFLINE (gratis, sin IA): si hay un match CLARO resuelve solo —
-       sin permiso → lo dice + alternativas; pregunta → pasos + botón; navegar/
-       crear → va directo (y abre el formulario si aplica). Lo ambiguo o
-       conversacional cae a la IA (que entiende frase libre y da más detalle). */
+    /* CEREBRO OFFLINE (gratis, sin IA) — REGLA jul 2026 (pedido dueño): el bot
+       NUNCA se lleva al usuario sin preguntar. Si la opción vive en VARIOS
+       lugares, los lista TODOS como botones y el usuario elige; si es UNO,
+       pregunta "¿quieres que te abra la pantalla?" con su botón. Solo navega
+       directo cuando el usuario lo ORDENA con verbo explícito ("llévame",
+       "ábreme", "quiero crear…"). Lo ambiguo/conversacional cae a la IA. */
     const off = visibles.map(e => ({ e, s: _score(t, e) })).filter(r => r.s > 0).sort((a, b) => b.s - a.s);
     const top = off[0];
-    if (top && top.s >= 55 && (off.length === 1 || top.s > (off[1] ? off[1].s : 0) + 10)) {
-      const e = top.e;
-      const limpio = e.label.replace(/^Botón:\s*/, '');
-      const perm = _permDe(e);
-      if (perm && !can(perm)) {
-        const alt = off.filter(r => r.e !== e && (!_permDe(r.e) || can(_permDe(r.e)))).slice(0, 3).map(r => r.e);
+    if (top && top.s >= 55) {
+      /* Matches fuertes (cercanos al mejor), con permiso y sin duplicar destino. */
+      const grupo = [];
+      const vistos = new Set();
+      for (const r of off) {
+        if (r.s < Math.max(55, top.s - 20)) break;
+        const perm = _permDe(r.e);
+        if (perm && !can(perm)) continue;
+        const k = r.e.ruta + '|' + (r.e.dataId || '');
+        if (vistos.has(k)) continue;
+        vistos.add(k);
+        grupo.push(r.e);
+        if (grupo.length >= 4) break;
+      }
+      if (grupo.length === 0) {
+        /* El match es claro pero el permiso no alcanza → decirlo + alternativas. */
+        const limpio = top.e.label.replace(/^Botón:\s*/, '');
+        const alt = off.filter(r => !_permDe(r.e) || can(_permDe(r.e))).slice(0, 3).map(r => r.e);
         pushBot(alt.length
           ? { text: `No tienes permiso para "${limpio}". Lo que sí puedes:`, results: alt }
           : `No tienes permiso para "${limpio}".`);
         return;
       }
       const norm = _norm(t);
-      const esPregunta = /\?\s*$/.test(t) || /\b(como|cuales|cual|donde|que pasos|para que|se puede|puedo|necesito saber)\b/.test(norm);
-      if (esPregunta) {
-        pushBot({ text: e.sub ? `Para eso ve a: ${e.sub}` : 'Aquí lo haces:', results: [e] });
-      } else {
-        const abrir = /\b(abre|abreme|crear|nuevo|nueva|registrar|levantar|hazme|quiero)\b/.test(norm);
-        pushBot(`Listo, te llevo a ${limpio}.`);
+      const quiereIr = /\b(llevame|llevarme|abre|abreme|abrir|ve a|ir a|vamos|entrar?|crear|nuevo|nueva|registrar|levantar|hazme|quiero)\b/.test(norm);
+      if (quiereIr && grupo.length === 1) {
+        /* ORDEN explícita con destino único → sí va directo (y abre si aplica). */
+        const e = grupo[0];
+        const abrir = /\b(abre|abreme|abrir|crear|nuevo|nueva|registrar|levantar|hazme|quiero)\b/.test(norm);
+        pushBot(`Listo, te llevo a ${e.label.replace(/^Botón:\s*/, '')}.`);
         setTimeout(() => ir(e, abrir), 350);
+        return;
+      }
+      if (grupo.length > 1) {
+        pushBot({
+          text: `Esa opción está en **${grupo.length} lugares** — elige a cuál te llevo:`,
+          results: grupo,
+        });
+      } else {
+        const e = grupo[0];
+        const limpio = e.label.replace(/^Botón:\s*/, '');
+        pushBot({
+          text: (e.sub ? `**${limpio}** está en: ${e.sub}.` : `Encontré **${limpio}**.`) + ' ¿Quieres que te abra la pantalla?',
+          results: [e],
+        });
       }
       return;
     }

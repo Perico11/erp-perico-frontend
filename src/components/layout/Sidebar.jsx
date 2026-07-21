@@ -29,6 +29,8 @@ const icons = {
   pronostico:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
   sat:          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>,
   posAliases:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
+  stkAmericano: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M6 7v12M10 7v12M14 7v12M18 7v12"/></svg>,
+  entregas:     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
 };
 
 /* Sprint F (jun 2026): campo `roles` opcional para restringir adicionalmente
@@ -61,11 +63,16 @@ const NAV_ITEMS = [
      Fábrica y el ENVASAR ya está en Producción ▸ En envasado. Josué conserva la
      pantalla para reenvasar totes y transferir a Terán (lo único que solo vive
      aquí). Mismo patrón roles[] que "Recepción Terán". */
-  { key: 'stockFabrica', label: 'Stock Fábrica',path: '/stock-fabrica', icon: icons.stockFabrica, perm: 'stockFabrica', roles: ['admin','almacen'] },
+  /* P2 (21-jul-2026): "Almacén" FUSIONA Stock Fábrica + Recepción Terán en una
+     sola entrada (2 vistas internas: En fábrica / Recepción). Cero acciones
+     perdidas — los dos componentes viven completos dentro de AlmacenPage. */
+  { key: 'almacen',      label: 'Almacén',      path: '/almacen',       icon: icons.stockFabrica, perm: 'stockFabrica', roles: ['admin','almacen'] },
   { key: 'recoleccion',  label: 'Recolección',  path: '/recoleccion',   icon: icons.recoleccion,  perm: 'recoleccion' },
-  /* FIX jun 2026 (censo menú): la pantalla PRINCIPAL de Josué no existía en el
-     sidebar — solo se llegaba por card del Dashboard o el sheet móvil (roto). */
-  { key: 'recepcion',    label: 'Recepción Terán', path: '/almacen',    icon: icons.recepcion,    perm: 'stockFabrica', roles: ['admin','almacen'] },
+  /* STK AMERICANO (jul 2026): PT importado de EE.UU. en totes de 1000 L. Inventario
+     aparte del PT nacional. Pantalla propia de Josué (almacén) + admin. */
+  /* STK Americano SIN pestaña propia (decisión dueño 16-jul): vive en
+     Inventarios > Americano Terán / Americano Alm. 2. Las rutas viejas
+     /stk-americano(-2) redirigen allá (App.jsx). */
   { key: 'compras',      label: 'Compras',      path: '/compras',       icon: icons.compras,      perm: 'compras' },
   /* Capa Pronóstico (§9): inteligencia de compras separada. */
   { key: 'pronostico',   label: 'Pronóstico',   path: '/pronostico',    icon: icons.pronostico,   perm: 'compras',     roles: ['admin','compras'] },
@@ -81,6 +88,8 @@ const NAV_ITEMS = [
   { key: 'devoluciones', label: 'Devoluciones', path: '/devoluciones',  icon: icons.devoluciones, perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
   /* Devoluciones de MP a proveedor (Capa 3, Arely / compras). */
   { key: 'devolucionesMp', label: 'Devol. a proveedor', path: '/devoluciones-mp', icon: icons.devoluciones, perm: 'devoluciones', roles: ['admin','compras'] },
+  /* Entregas a tiendas (jul 2026): la BAJA del CEDIS al entregar (Josué + admin). */
+  { key: 'entregas',     label: 'Entregas',     path: '/entregas',      icon: icons.entregas,     perm: 'inventario',  roles: ['admin','almacen'] },
   /* Capa Pronóstico (§9): SAT/CFDI y POS Aliases salen a pantalla propia (compras+admin). */
   { key: 'sat',          label: 'SAT / CFDI',   path: '/sat',           icon: icons.sat,          perm: 'compras',     roles: ['admin','compras'] },
   { key: 'posAliases',   label: 'POS Aliases',  path: '/pos-aliases',   icon: icons.posAliases,   perm: 'compras',     roles: ['admin','compras'] },
@@ -221,6 +230,23 @@ export default function Sidebar() {
                 </svg>
                 Cambiar PIN
               </button>
+              {/* AUDIT 15-jul-2026: /seguridad (TOTP personal) era pantalla huérfana —
+                  solo el asistente la conocía. Vive aquí porque es config PERSONAL
+                  (como cambiar PIN), no una pantalla de trabajo. Mismos roles que
+                  su RoleRoute en App.jsx. */}
+              {['admin', 'tecnico', 'inventario', 'almacen'].includes(user?.rol) && (
+                <button
+                  style={S.menuItem}
+                  onClick={() => { setMenuOpen(false); navigate('/seguridad'); }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--lp-brand-50)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  Seguridad (Authenticator)
+                </button>
+              )}
               <button
                 style={{ ...S.menuItem, color: 'var(--lp-danger-600)' }}
                 onClick={() => { setMenuOpen(false); logout(); }}

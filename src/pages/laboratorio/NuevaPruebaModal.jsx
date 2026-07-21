@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ── Colores por categoría ── (tokens var(--lp-*), sin hardcodes ni morado
    del skin viejo; auto-adaptan a claro/oscuro. La etiqueta de texto distingue
@@ -23,7 +24,8 @@ const CAT_ORDER = [
 
 const S = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
+    /* ≥1100: sobre el bottom-nav (regla proyecto, jul 2026) */
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1100,
     display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '24px 16px',
     overflowY: 'auto',
     /* MÓVIL: el overlay es el scroller (alignItems flex-start + padding). --pp-vvh
@@ -55,6 +57,8 @@ const S = {
   btnPrimary: { background: 'var(--lp-brand-600)', color: '#fff' },
   btnSecondary: { background: 'var(--lp-bg-base)', border: '1.5px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)' },
   actions: { display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24 },
+  /* AUDIT UX 16-jul (U7): error inline en vez de alert() nativo (precedente IngresosPage) */
+  err: { fontSize: 13.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 11px', marginTop: 10, lineHeight: 1.4 },
   /* Ingredientes table */
   ingTable: { width: '100%', borderCollapse: 'collapse', fontSize: 12 },
   ingTh: { textAlign: 'left', padding: '6px 8px', fontWeight: 700, color: 'var(--lp-text-tertiary)', borderBottom: '1.5px solid var(--lp-border-subtle)', fontSize: 11 },
@@ -168,6 +172,7 @@ export default function NuevaPruebaModal({ prueba, maestro, labMPs, onClose, onS
   const [ingredientes, setIngredientes] = useState(prueba?.ingredientes || []);
   const [pasos, setPasos] = useState(prueba?.pasos || []);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(''); /* AUDIT UX 16-jul (U7): error inline en vez de alert() */
   const [mpSearch, setMpSearch] = useState('');
 
   /* MÓVIL: congela el scroll del fondo y publica --pp-vvh (alto visible que sigue
@@ -267,7 +272,8 @@ export default function NuevaPruebaModal({ prueba, maestro, labMPs, onClose, onS
   const removePaso = (idx) => setPasos(pasos.filter((_, i) => i !== idx));
 
   const handleSubmit = async () => {
-    if (!nombre.trim()) return alert('Nombre de prueba requerido');
+    if (!nombre.trim()) return setErr('Nombre de prueba requerido'); /* AUDIT UX 16-jul (U7) */
+    setErr('');
     setSaving(true);
     try {
       await onSave({
@@ -284,12 +290,12 @@ export default function NuevaPruebaModal({ prueba, maestro, labMPs, onClose, onS
         creadoEn: prueba?.creadoEn,
       });
       onClose();
-    } catch (e) { alert(e.message); }
+    } catch (e) { setErr(humanizeError(e)); } /* AUDIT UX 16-jul (U4+U7) */
     finally { setSaving(false); }
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.title}>{isEdit ? 'Editar Prueba' : 'Nueva Prueba de Laboratorio'}</div>
 
@@ -454,6 +460,9 @@ export default function NuevaPruebaModal({ prueba, maestro, labMPs, onClose, onS
             </div>
           ))}
         </div>
+
+        {/* AUDIT UX 16-jul (U7): error inline en vez de alert() bloqueante */}
+        {err && <div style={S.err} role="alert">{err}</div>}
 
         {/* ── Acciones ── */}
         <div style={S.actions}>

@@ -41,7 +41,7 @@ function FreezeModal({ onClose, onDone }) {
     }
   };
   return (
-    <div style={S.ov} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.ov}>
       <div style={{ ...S.box, padding: '18px 20px 16px', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ fontSize: 17, fontWeight: 700 }}>Congelar inventario inicial</div>
         <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 6, lineHeight: 1.45 }}>
@@ -91,7 +91,7 @@ function DeltaModal({ onClose }) {
     </div>
   );
   return (
-    <div style={S.ov} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.ov}>
       <div style={S.box} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 18px 8px' }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>Delta vs inventario inicial</div>

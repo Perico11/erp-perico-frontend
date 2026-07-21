@@ -69,7 +69,7 @@ export default function LoteDetalleModal({ lote, onClose, onVerTrazabilidad }) {
   ].filter(([, v]) => v != null && v !== '');
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={{ ...S.sheet, ...(isDesktop ? S.sheetDesktop : S.sheetMobile) }} onClick={e => e.stopPropagation()}>
         {/* ── Header ── */}
         <div style={S.head}>

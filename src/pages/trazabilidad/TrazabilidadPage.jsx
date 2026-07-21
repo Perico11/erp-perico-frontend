@@ -5,6 +5,7 @@ import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { ESTADO_LOTE_LABEL } from '../../lib/loteTransiciones';
+import { ESTADO_LOTE_FILTRO_ENVASADO } from '../../lib/estados';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import QRModal, { QRScanner } from '../../components/QRModal';
 import { useAuth } from '../../context/AuthContext';
@@ -590,7 +591,7 @@ export default function TrazabilidadPage() {
     let arr = lotes;
     if (filter !== 'todos') {
       if (filter === 'en_envasado') {
-        arr = arr.filter(l => l.estado === 'en_envasado' || l.estado === 'envasado');
+        arr = arr.filter(l => ESTADO_LOTE_FILTRO_ENVASADO.includes(l.estado));
       } else {
         arr = arr.filter(l => l.estado === filter);
       }

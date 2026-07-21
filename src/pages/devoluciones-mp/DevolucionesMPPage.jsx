@@ -9,6 +9,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useAuth } from '../../context/AuthContext';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* DevolucionesMPPage — Capa 3 (Arely / rol compras).
    Devoluciones de MATERIA PRIMA al proveedor. Flujo SEPARADO del de PT.
@@ -160,7 +161,7 @@ export default function DevolucionesMPPage() {
 
           <div style={S.toolbarRow}>
             <PageTabs tabs={tabs} activeTab={tab} onChange={setTab} />
-            <button style={{ ...S.newBtn, margin: 0, marginLeft: 'auto' }} data-id="devoluciones.btn.nueva" data-rol="compras,admin" onClick={() => setCrear(true)}>
+            <button style={{ ...S.newBtn, margin: 0, marginLeft: 'auto' }} data-id="devoluciones-mp.btn.nueva" data-rol="compras,admin" onClick={() => setCrear(true)}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
               Nueva devolución
             </button>
@@ -205,7 +206,7 @@ export default function DevolucionesMPPage() {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
           <button
-            data-id="devoluciones.btn.nueva"
+            data-id="devoluciones-mp.btn.nueva"
             data-rol="compras,admin"
             style={{ height: 44, padding: '0 16px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-brand-600)', color: '#fff' }}
             onClick={() => setCrear(true)}
@@ -287,11 +288,11 @@ function DevTable({ devs, onCerrar }) {
                   {d.estado === 'por_gestionar' && (
                     /* Mockup: NC primario + Reembolso secundario, mismos dos caminos */
                     <span style={{ display: 'inline-flex', gap: 6 }}>
-                      <button type="button" data-id="devoluciones.btn.registrar-nc" data-rol="admin,compras"
+                      <button type="button" data-id="devoluciones-mp.btn.registrar-nc" data-rol="admin,compras"
                         style={S.actBtn} onClick={() => onCerrar(d, 'nota_credito')}>
                         Nota de crédito
                       </button>
-                      <button type="button" data-id="devoluciones.btn.reembolso" data-rol="admin,compras"
+                      <button type="button" data-id="devoluciones-mp.btn.reembolso" data-rol="admin,compras"
                         style={{ ...S.actBtn, background: 'transparent', border: '1px solid var(--lp-border-default)', color: 'var(--lp-text-secondary)' }}
                         onClick={() => onCerrar(d, 'reembolso')}>
                         Reembolso
@@ -347,12 +348,12 @@ function DevCard({ d, onCerrar }) {
           {/* Mockup: dos caminos de cierre auditables, lado a lado */}
           <div style={S.actRow}>
             <button style={{ ...S.act, ...S.actPrimary, flex: 1, width: 'auto' }}
-              data-id="devoluciones.btn.registrar-nc" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.registrar-nc" data-rol="compras,admin"
               onClick={() => onCerrar('nota_credito')}>
               Nota de crédito
             </button>
             <button style={{ ...S.act, ...S.actGhost, flex: 1, width: 'auto' }}
-              data-id="devoluciones.btn.reembolso" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.reembolso" data-rol="compras,admin"
               onClick={() => onCerrar('reembolso')}>
               Reembolso
             </button>
@@ -469,12 +470,12 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
       });
       onSaved && onSaved();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al crear la devolución');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally { setSaving(false); }
   };
 
   return (
-    <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={SH.overlay(isDesktop)}>
       <div style={SH.sheet(isDesktop)}>
         <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
           <div style={SH.h}>Nueva devolución de MP</div>
@@ -484,7 +485,7 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
         <div style={SH.body}>
           <label style={SH.lbl}>Materia prima</label>
           <input style={SH.input} list="mp-list" value={mp} onChange={(e) => onMp(e.target.value)}
-            data-id="devoluciones.input.mp" data-rol="compras,admin" placeholder="Escribe o elige una MP" />
+            data-id="devoluciones-mp.input.mp" data-rol="compras,admin" placeholder="Escribe o elige una MP" />
           <datalist id="mp-list">{mpList.map(m => <option key={m} value={m} />)}</datalist>
           {mp && stock != null && <div style={SH.hint}>Stock actual: {stock.toLocaleString('es-MX')} {unidad}</div>}
 
@@ -509,7 +510,7 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
           <textarea style={SH.area} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. Humedad fuera de especificación, no pasó QC de entrada…" />
 
           <label style={SH.lbl}>Disposición</label>
-          <div data-id="devoluciones.select.disposicion" data-rol="compras,admin">
+          <div data-id="devoluciones-mp.select.disposicion" data-rol="compras,admin">
             <SegmentedControl
               options={[{ value: 'devolver', label: 'Devolver a proveedor' }, { value: 'descartar', label: 'Descartar (merma)' }]}
               value={disposicion} onChange={setDisposicion}
@@ -533,7 +534,7 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
           <div style={SH.acts}>
             <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
             <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
-              data-id="devoluciones.btn.crear" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.crear" data-rol="compras,admin"
               onClick={guardar} disabled={!puede || saving}>
               {saving ? 'Creando…' : 'Crear devolución'}
             </button>
@@ -591,12 +592,12 @@ function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
       });
       onSaved && onSaved();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al cerrar la devolución');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally { setSaving(false); }
   };
 
   return (
-    <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={SH.overlay(isDesktop)}>
       <div style={SH.sheet(isDesktop)}>
         <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
           <div style={SH.h}>Cerrar {dev.codigo || 'devolución'}</div>
@@ -617,7 +618,7 @@ function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
           ) : (
             <>
               <label style={SH.lbl}>Comprobante del reembolso · obligatorio</label>
-              <label style={SH.drop(!!fileB64)} data-id="devoluciones.btn.adjuntar-comprobante" data-rol="compras,admin">
+              <label style={SH.drop(!!fileB64)} data-id="devoluciones-mp.btn.adjuntar-comprobante" data-rol="compras,admin">
                 {fileB64 ? IFile : ICloud}
                 {fileB64
                   ? <div style={SH.fn}>{fileName}</div>
@@ -642,7 +643,7 @@ function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
           <div style={SH.acts}>
             <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
             <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
-              data-id="devoluciones.btn.confirmar-cierre" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.confirmar-cierre" data-rol="compras,admin"
               onClick={guardar} disabled={!puede || saving}>
               {saving ? 'Guardando…' : 'Confirmar cierre'}
             </button>

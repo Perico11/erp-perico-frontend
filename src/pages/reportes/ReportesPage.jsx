@@ -881,7 +881,7 @@ function SeccionesSheet({ active, onPick, onClose }) {
      que el contenedor tenga overflow interno scrolleable (mismo fix que Modal.jsx). */
   useBodyScrollLock(true);
   return (
-    <div style={S.sheetOverlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay}>
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetGrab} />
         <div style={S.sheetTitle}>Secciones de reportes</div>

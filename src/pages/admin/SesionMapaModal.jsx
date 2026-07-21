@@ -108,7 +108,7 @@ export default function SesionMapaModal({ sesion, onClose }) {
 
   if (lat == null || lng == null) {
     return (
-      <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+      <div style={S.overlay}>
         <div style={S.modal}>
           <div style={S.header}>
             <div style={S.title}>Sin coordenadas GPS</div>
@@ -134,7 +134,7 @@ export default function SesionMapaModal({ sesion, onClose }) {
   const gmapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.header}>
           <div style={S.title}>Ubicacion · {sesion.usuario}</div>

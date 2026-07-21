@@ -7,6 +7,12 @@ import tailwindcss from '@tailwindcss/vite'
    Para dev local sigue siendo "/" */
 const BASE_PATH = process.env.VITE_BASE_PATH || '/'
 
+/* Backend del proxy dev configurable: en máquinas donde Windows reserva el
+   puerto 3000 (rango excluido del OS) el backend local corre en 3100 —
+   VITE_API_TARGET=http://localhost:3100 npm run dev. Solo afecta dev. */
+const API_TARGET = process.env.VITE_API_TARGET || 'http://localhost:3000'
+const WS_TARGET = API_TARGET.replace(/^http/, 'ws')
+
 /* Inyectar fecha-hora del build como variable global accesible desde JS.
    Permite verificar en consola del navegador qué versión se está sirviendo. */
 const BUILD_TIME = new Date().toISOString();
@@ -28,7 +34,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: API_TARGET,
         changeOrigin: true
       },
       /* WebSocket realtime: useRealtimeSync conecta a ws://<host>/ws con
@@ -36,15 +42,15 @@ export default defineConfig({
          moría y nada realtime (banners inbound, sync cruzado) era
          verificable en preview — solo en producción. */
       '/ws': {
-        target: 'ws://localhost:3000',
+        target: WS_TARGET,
         ws: true
       },
       '/static': {
-        target: 'http://localhost:3000',
+        target: API_TARGET,
         changeOrigin: true
       },
       '/logo.png': {
-        target: 'http://localhost:3000',
+        target: API_TARGET,
         changeOrigin: true
       }
     }

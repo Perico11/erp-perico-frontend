@@ -8,6 +8,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    Conteo / Cycle Count — reskin Claude Design (verde).
@@ -20,6 +21,12 @@ import ImportExportPrint from '../../components/ui/ImportExportPrint';
      useConfirm, firma PIN al abrir/cerrar, causa raíz obligatoria, modales.
      Gating: contar/finalizar = inventario; aprobar varianza = admin.
    ════════════════════════════════════════════════════════════════════════════ */
+
+/* AUDIT UX 16-jul (U14): autoFocus solo en dispositivos con puntero fino
+   (mouse/trackpad). En móvil el foco automático abre el teclado encima del
+   sheet y tapa los botones — regla del proyecto. */
+const FINE_POINTER = typeof window !== 'undefined' && window.matchMedia
+  && window.matchMedia('(pointer: fine)').matches;
 
 /* ── Iconos line SVG (sin emojis) ── */
 const Icon = {
@@ -238,7 +245,7 @@ function StartModal({ onStart, onClose, loading, isDesktop }) {
      mientras vive. Congela el fondo (anti scroll-chaining) y publica --pp-vvh. */
   useBodyScrollLock(true);
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Iniciar sesión de conteo</div>
         <div style={S.shS}>Elige qué contar y el alcance. Firmarás con tu PIN para abrir.</div>
@@ -296,17 +303,19 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
     setErr('');
     setSaving(true);
     try {
+      /* AUDIT UX 16-jul (U11): el padre decide qué sigue (auto-avanza al
+         siguiente pendiente o cierra si ya no hay) — antes onClose() aquí
+         obligaba a Burgos a buscar el siguiente ítem a mano ~66 veces. */
       await onRegistrar(item.key, f);
-      onClose();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al registrar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Conteo físico</div>
         <div style={S.shS}>{item.nombre}{item.ubicacion ? ' · ' + item.ubicacion : ''}</div>
@@ -317,10 +326,12 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
         </div>
 
         <label style={S.flbl}>¿Cuánto contaste físicamente?</label>
+        {/* AUDIT UX 16-jul (U14): autoFocus solo con puntero fino (mouse) —
+            en el teléfono el teclado brincaba y tapaba los botones del sheet. */}
         <input style={S.finQty} type="number" inputMode="decimal" min="0" step="0.01"
-          value={val} autoFocus placeholder="0"
+          value={val} autoFocus={FINE_POINTER} placeholder="0"
           onChange={(e) => setVal(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('cc-sheet-pin')?.focus(); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }}
           data-id="conteo.input.fisico" data-rol="inventario,admin" />
 
         {showVar && (
@@ -336,13 +347,9 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
           </div>
         )}
 
-        <label style={{ ...S.flbl, marginTop: 14 }}>Firma del contador (PIN)</label>
-        <input id="cc-sheet-pin" style={S.finPin} type="password" inputMode="numeric" maxLength={6}
-          placeholder="••••" data-id="conteo.input.pin-firma" data-rol="inventario,admin"
-          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} />
-        <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 5 }}>
-          Tu PIN se valida al finalizar la sesión — queda registrado que TÚ contaste.
-        </div>
+        {/* AUDIT UX 16-jul (U3): campo "Firma del contador (PIN)" ELIMINADO —
+            era decorativo: guardar() nunca lo enviaba y Burgos lo tecleaba ~66
+            veces por sesión. La firma REAL es el PIN al abrir y al finalizar. */}
 
         {err && <div style={{ ...S.err, marginTop: 12, marginBottom: 0 }}>{err}</div>}
 
@@ -375,7 +382,7 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading, isDesktop }) {
   useEffect(() => {
     api.getCausasVarianza()
       .then(r => setCausas((r.data?.causas || []).filter(c => c.activo)))
-      .catch(e => setErr('Error catálogo: ' + e.message))
+      .catch(e => setErr('Error catálogo: ' + humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoadingCat(false));
   }, []);
 
@@ -389,11 +396,11 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading, isDesktop }) {
     if (!todasAsignadas) { setErr('Asigna causa a TODOS los items'); return; }
     setErr('');
     try { await onAprobar(asignaciones); }
-    catch (e) { setErr(e?.data?.error || e.message || 'Error al aprobar'); }
+    catch (e) { setErr(humanizeError(e)); } /* AUDIT UX 16-jul (U4) */
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={{ ...S.sheet(isDesktop), maxWidth: 720, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Asignar causa raíz</div>
         <div style={{ ...S.shS, marginBottom: 14 }}>
@@ -574,7 +581,7 @@ function AddMPModal({ onAdd, onClose, loading, isDesktop }) {
     if (stockFisico === '' || isNaN(sf) || sf < 0) { setErr('Stock físico inválido'); return; }
     setErr('');
     try { await onAdd(n, sf, unidad); }
-    catch (e) { setErr(e.message || 'Error al agregar'); }
+    catch (e) { setErr(humanizeError(e)); } /* AUDIT UX 16-jul (U4) */
   };
 
   const inp = {
@@ -584,7 +591,7 @@ function AddMPModal({ onAdd, onClose, loading, isDesktop }) {
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Agregar MP nueva al conteo</div>
         <div style={S.shS}>La MP se creará en el inventario sólo cuando admin apruebe la sesión.</div>
@@ -642,7 +649,7 @@ function varianzaColor(item) {
 }
 function estadoDeItem(item) {
   const contado = item.stockFisico !== null && item.stockFisico !== undefined;
-  if (!contado) return { key: 'pendiente', label: 'Programado', color: 'var(--lp-warning-600)' };
+  if (!contado) return { key: 'pendiente', label: 'Por contar', color: 'var(--lp-warning-600)' };
   if (item.flagged) return { key: 'flagged', label: 'A aprobación admin', color: 'var(--lp-danger-600)' };
   return { key: 'contado', label: 'Contado', color: 'var(--lp-success-600)' };
 }
@@ -812,9 +819,9 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
         <SegmentedControl value={filter} onChange={setFilter}
           options={[
             { value: 'todos', label: 'Todos' },
-            { value: 'pendientes', label: `Programados · ${nProg}` },
+            { value: 'pendientes', label: `Por contar · ${nProg}` },
             { value: 'contados', label: `Contados · ${nCont}` },
-            { value: 'flaggeados', label: `Flaggeados · ${nFlag}` },
+            { value: 'flaggeados', label: `Con varianza · ${nFlag}` },
           ]} color="brand" />
         {sesion.categoria === 'mp' && onAgregarMP && (
           <button style={S.btnPrimary} onClick={onAgregarMP} title="Agregar una MP que no está en el inventario"
@@ -1008,7 +1015,7 @@ export default function CycleCountPage() {
     const p = api.getCalendarioConteos?.();
     if (!p || typeof p.then !== 'function') { setCalLoading(false); return; }
     p.then(r => { setCalData(r.data); setCalErr(''); })
-      .catch(e => setCalErr(e.message))
+      .catch(e => setCalErr(humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setCalLoading(false));
   }, []);
 
@@ -1019,7 +1026,7 @@ export default function CycleCountPage() {
         const arr = Array.isArray(r) ? r : (r.data || []);
         setSesiones(arr);
       })
-      .catch(e => setErr(e.message))
+      .catch(e => setErr(humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoading(false));
   }, []);
 
@@ -1060,7 +1067,7 @@ export default function CycleCountPage() {
       setShowStart(false);
       cargar();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al iniciar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setStarting(false);
     }
@@ -1082,7 +1089,7 @@ export default function CycleCountPage() {
         : 'Conteo registrado');
       setTimeout(() => setToast(''), 3000);
     } catch (e) {
-      setToast('Error: ' + e.message);
+      setToast(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
       setTimeout(() => setToast(''), 3000);
       throw e;
     }
@@ -1104,7 +1111,7 @@ export default function CycleCountPage() {
       await api.cycleCountFinalizar(sesionId, pin);
       cargar();
     } catch (e) {
-      setErr(e.message || 'Error al finalizar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   };
 
@@ -1134,7 +1141,7 @@ export default function CycleCountPage() {
         await api.cycleCountAprobar(sesionId, {});
         cargar();
       } catch (e) {
-        setErr(e?.data?.error || e.message || 'Error al aprobar');
+        setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
       }
     } else {
       /* Hay varianzas >umbral — abrir modal de causas obligatorio (admin). */
@@ -1150,7 +1157,7 @@ export default function CycleCountPage() {
       setSesionParaAprobar(null);
       cargar();
     } catch (e) {
-      const msg = e?.data?.error || e.message || 'Error al aprobar';
+      const msg = humanizeError(e); /* AUDIT UX 16-jul (U4) */
       throw new Error(msg, { cause: e });
     } finally {
       setAprobandoConCausas(false);
@@ -1192,7 +1199,7 @@ export default function CycleCountPage() {
         <div style={S.h1}>Conteo</div>
         {/* Subtítulo del mockup: "Hola Burgos · 2 vencidos" */}
         <div style={S.psub}>
-          {user?.nombre ? `Hola ${user.nombre}` : 'Cycle count'}
+          {user?.nombre ? `Hola ${user.nombre}` : 'Conteo físico'}
           {nVencidos != null ? ` · ${nVencidos} vencido${nVencidos === 1 ? '' : 's'}` : ''}
         </div>
 
@@ -1272,10 +1279,17 @@ export default function CycleCountPage() {
         {showAddMP && <AddMPModal onAdd={handleAgregarMP} onClose={() => setShowAddMP(false)} loading={addingMP} isDesktop={isDesktop} />}
         {itemParaContar && sesionActiva && (
           <CountSheet
+            key={itemParaContar.key}
             item={itemParaContar}
             isDesktop={isDesktop}
             onClose={() => setItemParaContar(null)}
-            onRegistrar={(itemKey, stockFisico) => handleRegistrar(sesionActiva.id, itemKey, stockFisico)}
+            onRegistrar={async (itemKey, stockFisico) => {
+              await handleRegistrar(sesionActiva.id, itemKey, stockFisico);
+              /* AUDIT UX 16-jul (U11): auto-avanzar al siguiente ítem SIN contar
+                 — antes volvía a la lista y Burgos buscaba el siguiente a mano. */
+              const next = (sesionActiva.items || []).find(i => i && i.stockFisico == null && i.key !== itemKey);
+              setItemParaContar(next || null);
+            }}
           />
         )}
         {sesionParaAprobar && (

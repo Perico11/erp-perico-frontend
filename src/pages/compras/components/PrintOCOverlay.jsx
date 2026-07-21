@@ -62,7 +62,7 @@ export default function PrintOCOverlay({ oc, onClose }) {
   const autorizo = oc.aprobadaPor || oc.aprobadoPor || 'Compras';
 
   return (
-    <div className="lp-printov" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div className="lp-printov">
       {/* CSS del documento + aislamiento @media print (scoped a esta clase) */}
       <style>{`
         .lp-printov{ position:fixed; inset:0; background:rgba(10,16,14,.55); display:flex; flex-direction:column;

@@ -9,6 +9,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import api from '../../services/api';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 import SecureView from '../../components/SecureView';
 import PruebaBadge from '../../components/ui/PruebaBadge';
@@ -298,7 +299,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           }
         } catch { /* fórmula/catálogo opcional */ }
       } catch (e) {
-        if (!cancel) setError(e.message || 'Error al cargar pasos');
+        if (!cancel) setError(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -756,7 +757,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           : `Lote ${folios[0]} producido: ${productoNombre} x${lotes}${sufijoMsg}`,
       });
     } catch (e) {
-      setError(e.message || 'Error al finalizar producción');
+      setError(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }

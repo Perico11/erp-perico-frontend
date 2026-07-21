@@ -46,6 +46,62 @@ export const ESTADO_LOTE_ACTIVO = [
 ];
 export const ESTADO_LOTE_TERMINAL = ['entregado','cancelado','rechazado'];
 
+/* ── Buckets POR PANTALLA (migración jul 2026 — fuente única) ──────────────
+   Listas que vivían hardcodeadas en cada pantalla. Se migran AQUÍ tal cual
+   (comportamiento idéntico); las diferencias entre pantallas son comportamiento
+   real decidido en su momento — NO unificar sin decisión del dueño. */
+
+/* MisLotesPipeline (dashboard, rol recolector): lo listo para recoger o en ruta.
+   Incluye 'en_proceso' (roll-up tras recolección parcial — fix K10). */
+export const ESTADO_LOTE_VISTA_RECOLECTOR = [...ESTADO_LOTE_RECOLECCION, ...ESTADO_LOTE_EN_CAMINO, ...ESTADO_LOTE_EN_PROCESO];
+
+/* RecoleccionPage (sub-pestaña "En proceso"): lotes en fabricación aún sin envasar. */
+export const ESTADO_LOTE_EN_FABRICACION = ['producido', 'qc_aprobado', 'qc_hold'];
+
+/* RecoleccionPage (sub-pestaña "En proceso"): órdenes produciéndose que aún no
+   crearon lote (recién arrancadas). Subconjunto de ESTADO_ORDEN_PENDIENTE. */
+export const ESTADO_ORDEN_PRODUCIENDO = ['en_proceso', 'en_produccion'];
+
+/* AlmacenRecepcionPage: fallback legacy — un sublote SIN estado propio cuenta
+   como "en camino" si su lote padre ya salió de fábrica. */
+export const ESTADO_LOTE_EN_RUTA_LEGACY = ['en_camino', 'en_recoleccion'];
+
+/* TrazabilidadPage: la pill de filtro "Envasado" agrupa parcial y terminado. */
+export const ESTADO_LOTE_FILTRO_ENVASADO = ['en_envasado', 'envasado'];
+
+/* StockFabricaPage (tab "En Fábrica"): lote visible en fábrica. La variante
+   CON_PROCESO añade 'en_proceso' (legacy/compat) y la usa SOLO el tab de
+   activos reales; el tab de pruebas usa la base (comportamiento histórico). */
+export const ESTADO_LOTE_EN_FABRICA = ['producido', 'qc_aprobado', 'en_envasado', 'envasado'];
+export const ESTADO_LOTE_EN_FABRICA_CON_PROCESO = [...ESTADO_LOTE_EN_FABRICA, 'en_proceso'];
+
+/* StockFabricaPage (tab "Transferidos"): lote que ya salió de fábrica.
+   La variante O_ENTREGADO la usa el auto-cambio de tab vía ?lote=. */
+export const ESTADO_LOTE_TRANSFERIDO = ['en_recoleccion', 'en_camino', 'en_almacen', 'reenvasado'];
+export const ESTADO_LOTE_TRANSFERIDO_O_ENTREGADO = [...ESTADO_LOTE_TRANSFERIDO, 'entregado'];
+
+/* StockFabricaPage: botón "Enviar a recolectar" — 'en_proceso' incluido para
+   no perder el botón tras un despacho parcial (auditoría #8). */
+export const ESTADO_LOTE_DESPACHABLE = ['envasado', 'en_proceso'];
+
+/* FlujoPage: pedidos/órdenes activos que AÚN no crearon lote (pre-lote). */
+export const ESTADO_FUENTE_SIN_LOTE = ['pendiente', 'aceptado', 'en_produccion'];
+
+/* MisActivosTab (producción): lotes internos (sin pedido) que se OCULTAN de la
+   vista activa. OJO: NO incluye 'rechazado' — comportamiento histórico distinto
+   del filtro de pedidos (que usa ESTADO_PEDIDO_TERMINAL). */
+export const ESTADO_LOTE_INTERNO_OCULTO = ['entregado', 'cancelado'];
+
+/* ProduccionPage (tab producción): lotes post-producción que AÚN no completan
+   su envasado — la card vive ahí hasta llegar a 'envasado'. (AUDIT 15-jul-2026) */
+export const ESTADO_LOTE_POST_PRODUCCION = ['producido', 'qc_hold', 'qc_aprobado', 'en_envasado'];
+
+/* InventarioPage (lote por PT, vistas Fábrica/Terán): estados que OCULTAN el
+   lote (ciclo cerrado) y estados header-only que lo ubican en Terán.
+   (AUDIT 15-jul-2026 — antes listas locales en la página) */
+export const ESTADO_LOTE_OCULTO_INVENTARIO = ['entregado', 'cancelado', 'rechazado', 'eliminado'];
+export const ESTADO_LOTE_UBICACION_TERAN = ['en_stock_teran', 'recibido_teran', 'reenvasado', 'en_almacen'];
+
 /* Helpers explicit (más legible que .includes y permite cambiar la lógica) */
 export const esPedidoPendiente = e => ESTADO_PEDIDO_PENDIENTE.includes(String(e || '').toLowerCase());
 export const esOrdenPendiente  = e => ESTADO_ORDEN_PENDIENTE.includes(String(e || '').toLowerCase());

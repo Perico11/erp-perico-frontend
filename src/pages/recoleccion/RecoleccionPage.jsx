@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import PageTabs from '../../components/ui/PageTabs';
@@ -8,14 +8,20 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { QRScanner } from '../../components/QRModal';
+import { despacharScanSublote, extraerCodigoScan, resumenBulk } from '../../lib/scanSublote';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
 import {
-  ESTADO_SUBLOTE_LABEL,
-  ESTADO_SUBLOTE_COLOR,
   getAccionesSublote,
   LABELS_ACCION_SUBLOTE,
 } from '../../lib/loteTransiciones';
+import {
+  ESTADO_LOTE_RECOLECCION,
+  ESTADO_LOTE_EN_CAMINO,
+  ESTADO_LOTE_EN_FABRICACION,
+  ESTADO_ORDEN_PRODUCIENDO,
+} from '../../lib/estados';
 
 /* ──────────────────────────────────────────────────────────────────── */
 /* RecoleccionPage — reskin Design System verde (Claude Design)         */
@@ -82,33 +88,6 @@ function IconCheck({ size = 18 }) {
   );
 }
 
-/* Pill de estado — espejo del .estado del mockup (Recolección.html):
-   bucket pendientes → "Listo" (verde) · enCamino → "En camino" (info) ·
-   entregados → "Entregado" (muted). Sin bolita (el mockup no la trae).
-   Para Luis el detalle envasado/en_recoleccion es lo mismo: "Listo".
-   Fallback: label/color canónico si el sublote cae fuera de bucket. */
-function EstadoBadge({ sublote }) {
-  const bucket = bucketOfSublote(sublote);
-  const MAP = {
-    pendientes: { label: 'Listo',     color: 'var(--lp-brand-600)' },
-    enCamino:   { label: 'En camino', color: 'var(--lp-info-600)' },
-    entregados: { label: 'Entregado', color: 'var(--lp-text-tertiary)' },
-  };
-  const m = MAP[bucket] || {
-    label: ESTADO_SUBLOTE_LABEL[sublote?.estado] || sublote?.estado || '—',
-    color: ESTADO_SUBLOTE_COLOR[sublote?.estado] || 'var(--lp-text-tertiary)',
-  };
-  return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center',
-      fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999,
-      background: `color-mix(in srgb, ${m.color} 14%, transparent)`, color: m.color,
-    }}>
-      {m.label}
-    </span>
-  );
-}
-
 /* Mapa de acción → presentación del botón (verbo del mockup + icono + color).
    La disponibilidad real la decide getAccionesSublote(s, rol) — esto es solo
    la capa visual + los data-id/data-rol del mockup (Recolección.html). */
@@ -143,8 +122,8 @@ const ACCION_BTN = {
    Exportada para reuso en la pantalla unificada /flujo. */
 export function bucketOfSublote(s) {
   const e = s?.estado;
-  if (e === 'envasado' || e === 'en_recoleccion') return 'pendientes';
-  if (e === 'en_camino') return 'enCamino';
+  if (ESTADO_LOTE_RECOLECCION.includes(e)) return 'pendientes';
+  if (ESTADO_LOTE_EN_CAMINO.includes(e)) return 'enCamino';
   if (e === 'en_stock_teran') return 'entregados';
   if (e === 'tote_vaciado' || e === 'cancelado') return null;
   /* Retro-compat: TOTE en tote_activo pero aún en fábrica = pendiente de recoger.
@@ -176,7 +155,7 @@ export default function RecoleccionPage() {
   /* Pestaña activa deep-linkeable vía ?tab= (p.ej. /recoleccion?tab=enCamino
      desde el asistente). Inicializa y re-sincroniza desde la URL validada. */
   const [searchParams] = useSearchParams();
-  const TABS_VALIDOS = ['pendientes', 'enCamino', 'entregados'];
+  const TABS_VALIDOS = ['enProceso', 'pendientes', 'enCamino', 'entregados'];
   const [activeTab, setActiveTab] = useState(() => {
     const t = searchParams.get('tab');
     return (t && TABS_VALIDOS.includes(t)) ? t : 'pendientes';
@@ -199,13 +178,21 @@ export default function RecoleccionPage() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const { data: trazData, loading, reload } = useApiData(() => api.getTrazabilidad(), [], 5000);
+  /* AUDIT UX 16-jul (U19): polling 5s/8s → 30s/45s; respaldo; el WS empuja
+     (onTrazabilidad/onOrdenes abajo). El polling agresivo drenaba la batería
+     del teléfono de Luis sin aportar frescura real. */
+  const { data: trazData, loading, reload } = useApiData(() => api.getTrazabilidad(), [], 30000);
+  /* Órdenes — para la sub-pestaña "En proceso": Josué VIGILA lo que fábrica está
+     produciendo (incluye órdenes que aún no crearon lote, p.ej. recién arrancadas
+     en el asistente). Solo lectura. Polling moderado + WS. */
+  const { data: ordData, reload: reloadOrd } = useApiData(() => api.getOrdenes(), [], 45000);
 
   /* FIX jun 2026 (K1): Luis necesita ver INSTANTÁNEAMENTE cuando un nuevo
      sublote se marca como listo para recolectar. 5s de polling = pierde
      turnos contra otros recolectores en futuro. Realtime cierra el gap. */
   useRealtimeSync({
     onTrazabilidad: () => reload(),
+    onOrdenes: () => reloadOrd(),
   });
 
   const allLotes = useMemo(() => {
@@ -235,6 +222,54 @@ export default function RecoleccionPage() {
   const pendientes = useMemo(() => allSublotes.filter(s => bucketOfSublote(s) === 'pendientes'), [allSublotes]);
   const enCamino   = useMemo(() => allSublotes.filter(s => bucketOfSublote(s) === 'enCamino'),   [allSublotes]);
   const entregados = useMemo(() => allSublotes.filter(s => bucketOfSublote(s) === 'entregados'), [allSublotes]);
+
+  /* "En proceso" (solo lectura) — lo que fábrica está produciendo, ANTES de que
+     un sublote esté listo para recolectar. Cuando se envase, sus sublotes pasan a
+     "Por recoger". Excluye pruebas. Dos fuentes:
+       · LOTES en fabricación (producido / QC), aún sin envasar.
+       · ÓRDENES en producción que TODAVÍA no crearon lote (recién arrancadas). */
+  const allOrdenes = useMemo(() => {
+    const arr = ordData?.data || ordData || [];
+    return Array.isArray(arr) ? arr.filter(o => o && !o.eliminado) : [];
+  }, [ordData]);
+
+  const enProceso = useMemo(() => {
+    const out = [];
+    const LOTE_PROC = ESTADO_LOTE_EN_FABRICACION; /* fuente única: lib/estados */
+    allLotes.forEach(l => {
+      if (l.esPrueba || !LOTE_PROC.includes(l.estado)) return;
+      out.push({
+        key: 'L_' + (l.codigoLote || l.codigo || l.id),
+        codigo: l.codigoLote || l.codigo || l.id,
+        producto: l.producto || l.nombre || l.formula || '—',
+        detalle: Number(l.litrosTotal) ? `${Number(l.litrosTotal).toLocaleString('es-MX')} L` : (l.cantidad ? `${l.cantidad} cub` : ''),
+        quien: l.usuario || l.creadoPor || l.produccionIniciadaPor || '',
+        estado: l.estado, tipo: 'lote',
+      });
+    });
+    /* Órdenes en producción que aún NO tienen lote (si ya hay lote, se muestra arriba). */
+    const conLote = new Set();
+    allLotes.forEach(l => { [l.ordenId, l.ordenCodigo, l.pedidoId].forEach(k => k && conLote.add(k)); });
+    allOrdenes.forEach(o => {
+      if (o.esPrueba || !ESTADO_ORDEN_PRODUCIENDO.includes(o.estado)) return;
+      if (conLote.has(o.id) || conLote.has(o.codigo) || (o.pedidoId && conLote.has(o.pedidoId))) return;
+      out.push({
+        key: 'O_' + (o.codigo || o.id),
+        codigo: o.codigo || o.id,
+        producto: o.producto || o.formula || '—',
+        detalle: o.cantidad ? `${o.cantidad} cub` : '',
+        quien: o.usuario || o.creadoPor || '',
+        estado: o.estado, tipo: 'orden',
+      });
+    });
+    return out;
+  }, [allLotes, allOrdenes]);
+
+  const enProcesoFiltrado = useMemo(() => {
+    if (!searchQ) return enProceso;
+    const q = searchQ.toLowerCase();
+    return enProceso.filter(x => (x.producto || '').toLowerCase().includes(q) || (x.codigo || '').toLowerCase().includes(q));
+  }, [enProceso, searchQ]);
 
   /* Filtrado por tab + búsqueda */
   const filtered = useMemo(() => {
@@ -269,8 +304,10 @@ export default function RecoleccionPage() {
       return;
     }
     const label = LABELS_ACCION_SUBLOTE[accion] || accion;
-    const ok = await confirm(`¿${label}: ${sublote.cod}?`, { confirmText: label });
-    if (!ok) return;
+    /* AUDIT UX 16-jul (U10): confirm ELIMINADO — el propio comentario de arriba
+       dice que el tap en la card YA es la confirmación visual del sublote
+       elegido; el diálogo duplicaba el gesto (2 taps) en la tarea más
+       repetitiva de Luis. El toast de abajo confirma el resultado. */
     setBusy(sublote.cod);
     try {
       const payload = { usuario: userName };
@@ -279,7 +316,7 @@ export default function RecoleccionPage() {
       reload();
       showToast(`${sublote.cod}: ${label.toLowerCase()}`);
     } catch (err) {
-      showToast('Error: ' + (err.message || 'No se pudo actualizar'), true);
+      showToast(humanizeError(err), true); /* AUDIT UX 16-jul (U4) */
     } finally {
       setBusy(null);
     }
@@ -344,9 +381,11 @@ export default function RecoleccionPage() {
      backend devuelve 409 con matchTipo='lote_no_sublote' y un loteId. En ese
      caso ofrecemos al usuario procesar TODOS los sublotes elegibles del lote
      en una sola operación (bulk scan). */
+  /* P2 (21-jul-2026): despacho vía protocolo compartido lib/scanSublote —
+     la presentación (toasts, haptic) sigue siendo de esta pantalla. */
   const handleScan = useCallback(async (result) => {
     setScannerOpen(false);
-    const code = result?.cod || result?.raw || '';
+    const code = extraerCodigoScan(result);
     if (!code) { feedbackScanError(); return showToast('QR no reconocido', true); }
 
     /* Acción: la del botón que abrió el escáner (scanIntent), o la default por
@@ -357,40 +396,17 @@ export default function RecoleccionPage() {
     if (!accion) { feedbackScanError(); return showToast('No tienes permisos para recoger (solo recolector/admin)', true); }
 
     setBusy(code);
-    try {
-      const r = await api.escanearSublote(code, accion);
-      reload();
-      const subloteCod = r?.sublote?.cod || code;
-      feedbackScanOK();
-      showToast(`Recogido: ${subloteCod}`);
-    } catch (err) {
-      /* Caso especial: era QR de LOTE → ofrecer bulk */
-      const data = err?.data;
-      if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
-        const ok = await confirm(
-          `Escaneaste el QR del LOTE ${data.codigoLote}. ¿Tomar TODOS los sublotes elegibles del lote en una sola acción?`,
-          { confirmText: 'Tomar todo el lote' }
-        );
-        if (ok) {
-          try {
-            const r = await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion, scanCod: code });
-            reload();
-            const n = r?.procesados?.length || 0;
-            const omit = r?.omitidos?.length || 0;
-            feedbackScanOK();
-            showToast(`Lote completo recogido: ${n} sublote(s)${omit ? ` · ${omit} omitido(s)` : ''}`);
-          } catch (e2) {
-            feedbackScanError();
-            showToast('Error: ' + (e2.message || 'Bulk scan falló'), true);
-          }
-        }
-      } else {
-        feedbackScanError();
-        showToast('Error: ' + (err.message || 'Scan falló'), true);
-      }
-    } finally {
-      setBusy(null);
-    }
+    await despacharScanSublote({
+      code, accion, confirm,
+      bulk: {
+        pregunta: (d) => `Escaneaste el QR del LOTE ${d.codigoLote}. ¿Tomar TODOS los sublotes elegibles del lote en una sola acción?`,
+        confirmText: 'Tomar todo el lote',
+      },
+      onSublote: (r) => { reload(); feedbackScanOK(); showToast(`Recogido: ${r?.sublote?.cod || code}`); },
+      onBulk: (r2) => { reload(); feedbackScanOK(); showToast(`Lote completo recogido: ${resumenBulk(r2)}`); },
+      onError: (err) => { feedbackScanError(); showToast(humanizeError(err), true); },
+    });
+    setBusy(null);
   }, [rol, reload, showToast, confirm, feedbackScanOK, feedbackScanError, scanIntent]);
 
   /* canScan: quién puede usar el hero "Leer QR" (handleScan gatea por rol).
@@ -408,6 +424,7 @@ export default function RecoleccionPage() {
 
   /* Lista de tabs (compartida móvil/escritorio) */
   const TABS = [
+    { id: 'enProceso',  label: `En proceso · ${enProceso.length}` },
     { id: 'pendientes', label: `Por recoger · ${pendientes.length}` },
     { id: 'enCamino',   label: `En camino · ${enCamino.length}` },
     { id: 'entregados', label: `Entregados · ${entregados.length}` },
@@ -475,7 +492,24 @@ export default function RecoleccionPage() {
         )}
 
         {/* LISTA / GRID de cards */}
-        {filteredSublotes.length === 0 ? (
+        {activeTab === 'enProceso' ? (
+          /* "En proceso" — solo lectura: Josué vigila la producción en curso. */
+          enProcesoFiltrado.length === 0 ? (
+            <div style={S.empty}>
+              <IconCheck size={40} />
+              <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}>{searchQ ? 'Sin resultados' : 'Nada en producción ahora.'}</div>
+              {!searchQ && (
+                <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--lp-text-tertiary)' }}>
+                  Aquí ves lo que fábrica está produciendo. Cuando se envase, pasará a “Por recoger”.
+                </div>
+              )}
+            </div>
+          ) : (
+            <div style={isDesktop ? S.grid3 : undefined}>
+              {enProcesoFiltrado.map(it => <ProcesoCard key={it.key} item={it} />)}
+            </div>
+          )
+        ) : filteredSublotes.length === 0 ? (
           <div style={S.empty}>
             <IconCheck size={40} />
             <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.5 }}>{emptyCopy}</div>
@@ -494,7 +528,6 @@ export default function RecoleccionPage() {
                 rol={rol}
                 busy={busy === s.cod}
                 onAccion={doTransicion}
-                isDesktop={isDesktop}
               />
             ))}
           </div>
@@ -511,7 +544,8 @@ export default function RecoleccionPage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>
+        /* AUDIT UX 16-jul (U20): anunciar el toast a lectores de pantalla */
+        <div role="status" aria-live="polite" style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>
           {toast.isErr
             ? <span style={{ display: 'inline-flex' }} aria-hidden="true">✕</span>
             : <IconCheck size={16} />}
@@ -524,91 +558,158 @@ export default function RecoleccionPage() {
 }
 
 /* ═══════════════════════════════════════════════════════════════════ */
-/* Card de sublote — visual unificado móvil/escritorio                  */
-/*                                                                     */
-/* Layout (espejo de Recolección.html y SCREENS.recoleccion):           */
-/*   ┌ folio · estado badge ────────────────────┐                      */
-/*   │ Producto 19L                              │                      │
-/*   │ 40 cubetas · 760 L                        │                      │
-/*   │ [Fábrica] → [Almacén Terán]               │                      │
-/*   │ [ Voy por él / Entregar en Terán ]        │                      │
-/*   └────────────────────────────────────────────┘                    │
-/*                                                                     */
-/* Acciones gateadas por la state machine real (getAccionesSublote).    */
-/* Los data-id/data-rol vienen del mockup; cada botón está cableado a    */
-/* doTransicion (api.transicionSublote) — la acción REAL.               */
+/* Card de sublote — diseño "glass forest" con banda de estado (handoff  */
+/* Card Tote Listo 3a, jun 2026). Misma card en escritorio y móvil.      */
+/*   ┌ banda tinte: ✓ "Listo para recolectar" ........ folio ┐          */
+/*   │ Producto (22/500)                                      │          */
+/*   │ 1 tote · 988 L · LP-…                                  │          │
+/*   │ [ Fábrica  →  Almacén Terán ]  (panel blanco)          │          │
+/*   │ [ Voy por él ]  (pill verde, camión)                   │          │
+/*   └─────────────────────────────────────────────────────────┘        │
+/* La LÓGICA se conserva (acciones state-machine, scan, buckets,         */
+/* esPrueba); solo cambia la presentación. La banda cambia color/label/  */
+/* icono por bucket (Listo/En camino/Entregado). */
 /* ═══════════════════════════════════════════════════════════════════ */
-function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
+const RC_FOREST = '#0f7a5a', RC_TXT = '#16201c', RC_TXT2 = '#5a6b63';
+
+/* Banda de estado por bucket (color forest / azul en-camino). */
+function bandMeta(bucket) {
+  if (bucket === 'enCamino') return { label: 'En camino', fg: '#1f6aa6', icon: 'truck' };
+  if (bucket === 'entregados') return { label: 'Entregado en Terán', fg: RC_FOREST, icon: 'check' };
+  return { label: 'Listo para recolectar', fg: RC_FOREST, icon: 'check' };
+}
+
+const RC = {
+  card: { background: 'rgba(250,253,252,0.72)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)', border: '1px solid rgba(255,255,255,0.55)', borderRadius: 24, boxShadow: '0 18px 50px rgba(80,140,110,.20),0 4px 12px rgba(80,140,110,.10)', overflow: 'hidden', display: 'flex', flexDirection: 'column', marginBottom: 12, fontFamily: 'var(--lp-font-sans)' },
+  band: (fg) => ({ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 24px', background: `color-mix(in srgb, ${fg} 10%, transparent)`, borderBottom: `1px solid color-mix(in srgb, ${fg} 12%, transparent)` }),
+  bandIcon: (fg) => ({ width: 26, height: 26, borderRadius: '50%', background: fg, color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }),
+  bandLabel: (fg) => ({ fontSize: 14, fontWeight: 500, color: fg }),
+  bandFolio: (fg) => ({ marginLeft: 'auto', fontSize: 12, fontWeight: 500, color: fg, letterSpacing: '.02em', fontFamily: 'var(--lp-font-mono)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '45%' }),
+  body: { padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 18 },
+  titleRow: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  title: { fontSize: 22, fontWeight: 500, letterSpacing: '-.01em', color: RC_TXT, lineHeight: 1.2 },
+  meta: { fontSize: 13, color: RC_TXT2, marginTop: 4, lineHeight: 1.5 },
+  metaB: { color: RC_TXT, fontWeight: 500 },
+  route: { display: 'flex', alignItems: 'center', gap: 10, background: '#fff', border: '1px solid rgba(0,0,0,.06)', borderRadius: 14, padding: '13px 16px', boxShadow: '0 1px 2px rgba(0,0,0,.04)', flexWrap: 'wrap' },
+  routeFrom: { fontSize: 14, fontWeight: 500, color: RC_TXT },
+  routeTo: { fontSize: 14, fontWeight: 500, color: RC_FOREST },
+  btnPrimary: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 9, cursor: 'pointer', fontFamily: 'inherit', fontSize: 15, fontWeight: 500, color: '#fff', background: RC_FOREST, border: 'none', borderRadius: 99, padding: 14, minHeight: 50, boxShadow: '0 8px 18px rgba(15,122,90,.30)' },
+  doneHint: { fontSize: 12.5, color: RC_TXT2, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 },
+  pruebaNote: { padding: '10px 12px', background: 'rgba(182,121,29,.10)', border: '1px solid rgba(182,121,29,.35)', borderRadius: 12, fontSize: 12.5, color: '#9a6a13', lineHeight: 1.4 },
+};
+
+function BandIcon({ kind }) {
+  if (kind === 'truck') return <IconTruck size={15} />;
+  if (kind === 'flask') return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 3h6M10 3v6.5L4.5 19a1.5 1.5 0 0 0 1.3 2.3h12.4a1.5 1.5 0 0 0 1.3-2.3L14 9.5V3" /><path d="M7 15h10" /></svg>
+  );
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+  );
+}
+
+/* ProcesoCard — card de SOLO LECTURA para la sub-pestaña "En proceso": Josué
+   vigila lo que fábrica produce. Sin acciones; al envasarse pasa a "Por recoger". */
+function faseProceso(estado) {
+  if (estado === 'qc_hold') return { label: 'QC retenido', fg: '#b3261e' };
+  if (estado === 'qc_aprobado') return { label: 'QC aprobado', fg: '#0f7a5a' };
+  if (estado === 'producido') return { label: 'Producido — por envasar', fg: '#9a6a13' };
+  return { label: 'En producción', fg: '#1f6aa6' };
+}
+function ProcesoCard({ item }) {
+  const f = faseProceso(item.estado);
+  return (
+    <div style={RC.card}>
+      <div style={RC.band(f.fg)}>
+        <span style={RC.bandIcon(f.fg)}><BandIcon kind="flask" /></span>
+        <span style={RC.bandLabel(f.fg)}>{f.label}</span>
+        <span style={RC.bandFolio(f.fg)}>{item.codigo}</span>
+      </div>
+      <div style={RC.body}>
+        <div>
+          <div style={RC.title}>{item.producto}</div>
+          <div style={RC.meta}>
+            {item.detalle && <b style={RC.metaB}>{item.detalle}</b>}
+            {item.quien ? `${item.detalle ? ' · ' : ''}produce ${item.quien}` : ''}
+          </div>
+        </div>
+        <div style={RC.doneHint}>
+          <BandIcon kind="flask" /> En fábrica — aparecerá en “Por recoger” al envasarse
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SubloteCard({ sublote: s, rol, busy, onAccion }) {
   const lote = s._lote || {};
   const esLotePrueba = esPrueba(lote);
   const esSublotePrueba = esPrueba(s);
   const producto = lote.producto || lote.formula || lote.nombre || '—';
   const codLote = lote.codigoLote || lote.codigo || lote.id;
-  const litros = s.lit ? `${s.lit} L` : '';
-  const qtyTxt = [
-    s.qty != null ? `${s.qty} ${s.tipo || 'cubetas'}` : null,
-    litros,
-  ].filter(Boolean).join(' · ');
 
   const bucket = bucketOfSublote(s);
   /* Destino según estado: entregados parten de Terán; resto Fábrica → Terán */
   const origen = bucket === 'entregados' ? 'Almacén Terán' : 'Fábrica';
+  const band = bandMeta(bucket);
 
   /* Acciones permitidas por la state machine real para este rol.
-     Excluimos cancelarSublote (acción de anulación admin, no del flujo Luis).
-     FIX jun 2026: en "Entregados" NO mostramos acciones de recolección — el
-     sublote ya llegó a Terán. (getAccionesSublote aún ofrecería escanearRecoger
-     para un tote_activo, pero el backend lo rechaza si ya está en Terán; aquí
-     evitamos el botón fantasma y dejamos solo el chip "Entregado".) */
-  /* FIX jun 2026 (censo duplicados): 'escanearRecibirTeran' ("Entregar en
-     Terán") se quita de esta pantalla — era duplicado 100% de Recepción Terán
-     (misma entidad/estado/acción para almacen). Recolección queda 100% de Luis. */
+     Excluimos cancelarSublote (anulación admin) y escanearRecibirTeran
+     (recepción de Josué, no de Luis). En 'entregados' no hay acciones. */
   const acciones = bucket === 'entregados'
     ? []
     : getAccionesSublote(s, rol).filter(a => a !== 'cancelarSublote' && a !== 'escanearRecibirTeran');
 
+  /* Meta "1 tote · 988 L · LP-… · marca · ↳ tote" (conserva extras). */
+  const metaParts = [];
+  if (s.qty != null) metaParts.push(<b style={RC.metaB}>{s.qty} {s.tipo || 'cubetas'}</b>);
+  if (s.lit) metaParts.push(<b style={RC.metaB}>{s.lit} L</b>);
+  if (codLote) metaParts.push(<span style={{ fontFamily: 'var(--lp-font-mono)' }}>{codLote}</span>);
+  if (s.marca) metaParts.push(<b style={RC.metaB}>{s.marca}</b>);
+  if (s.esHijoDe) metaParts.push(<span style={{ color: '#d4537e' }}>↳ tote {s.esHijoDe}</span>);
+
   return (
-    <div style={S.card}>
-      {/* header: folio + estado */}
-      <div style={S.cardHead}>
-        <span style={S.folio}>{s.cod}</span>
-        {(esSublotePrueba || esLotePrueba) && <PruebaBadge size="sm" />}
-        <span style={{ marginLeft: 'auto' }}><EstadoBadge sublote={s} /></span>
+    <div style={RC.card}>
+      {/* Banda de estado: icono + label + folio */}
+      <div style={RC.band(band.fg)}>
+        <span style={RC.bandIcon(band.fg)}><BandIcon kind={band.icon} /></span>
+        <span style={RC.bandLabel(band.fg)}>{band.label}</span>
+        <span style={RC.bandFolio(band.fg)}>{s.cod}</span>
       </div>
 
-      {/* producto + cantidad */}
-      <div style={S.prod}>{producto}</div>
-      <div style={S.qty}>
-        {qtyTxt}
-        {codLote && <> · <span style={S.codLoteInline}>{codLote}</span></>}
-        {s.marca && <> · <span style={{ fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{s.marca}</span></>}
-        {s.esHijoDe && <> · <span style={{ color: 'var(--lp-qc-600)' }}>↳ tote {s.esHijoDe}</span></>}
-      </div>
-
-      {/* ruta Fábrica → Terán (chip del mockup .route) */}
-      <div style={S.route}>
-        <b style={S.routeNode}>{origen}</b>
-        <span style={S.routeArrow}><IconArrow size={16} /></span>
-        <b style={S.routeNode}>Almacén Terán</b>
-      </div>
-
-      {/* aviso de prueba: Luis no recolecta físicamente */}
-      {esLotePrueba && (
-        <div style={S.pruebaNote}>
-          Este lote es de prueba — no recolectes físicamente, sólo simula el flujo.
+      {/* Cuerpo */}
+      <div style={RC.body}>
+        <div>
+          <div style={RC.titleRow}>
+            <span style={RC.title}>{producto}</span>
+            {(esSublotePrueba || esLotePrueba) && <PruebaBadge size="sm" />}
+          </div>
+          <div style={RC.meta}>
+            {metaParts.map((m, i) => <Fragment key={i}>{i > 0 ? ' · ' : ''}{m}</Fragment>)}
+          </div>
         </div>
-      )}
 
-      {/* acción dominante por estado (state machine + data-id/data-rol mockup) */}
-      {acciones.length > 0 ? (
-        <div style={isDesktop ? S.actionsDesktop : S.actionsMobile}>
-          {acciones.map(a => {
+        {/* Aviso de prueba: Luis no recolecta físicamente */}
+        {esLotePrueba && (
+          <div style={RC.pruebaNote}>
+            Este lote es de prueba — no recolectes físicamente, sólo simula el flujo.
+          </div>
+        )}
+
+        {/* Ruta Fábrica → Terán (panel blanco) */}
+        <div style={RC.route}>
+          <span style={RC.routeFrom}>{origen}</span>
+          <span style={{ display: 'inline-flex', color: RC_FOREST }}><IconArrow size={18} /></span>
+          <span style={RC.routeTo}>Almacén Terán</span>
+        </div>
+
+        {/* Acción dominante por estado (state machine + data-id/data-rol). */}
+        {acciones.length > 0 ? (
+          acciones.map(a => {
             const meta = ACCION_BTN[a] || {
               label: LABELS_ACCION_SUBLOTE[a] || a,
               dataId: `recoleccion.btn.${a}`,
               dataRol: 'recolector,admin',
-              bg: 'var(--lp-brand-600)',
-              fg: '#fff',
               Icon: IconArrow,
             };
             const Ico = meta.Icon;
@@ -617,32 +718,22 @@ function SubloteCard({ sublote: s, rol, busy, onAccion, isDesktop }) {
                 key={a}
                 data-id={meta.dataId}
                 data-rol={meta.dataRol}
-                style={{
-                  ...(isDesktop ? S.btnDesktop : S.btnMobile),
-                  background: meta.bg, color: meta.fg,
-                }}
+                style={RC.btnPrimary}
                 disabled={busy}
                 onClick={() => onAccion(s, a)}
               >
-                {busy ? <span aria-hidden="true">…</span> : <><Ico size={isDesktop ? 18 : 20} />{meta.label}</>}
+                {busy ? <span aria-hidden="true">…</span> : <><Ico size={18} /> {meta.label}</>}
               </button>
             );
-          })}
-        </div>
-      ) : bucket === 'entregados' ? (
-        /* Estado terminal (entregado en Terán) — chip "hecho", no botón */
-        <div style={S.doneChip}>
-          <IconCheck size={16} /> Entregado en Terán
-        </div>
-      ) : bucket === 'enCamino' ? (
-        /* En camino: el mockup trae botón "Entregar en Terán" para Luis, pero
-           la regla dura del owner es que la recepción la confirma SOLO Terán
-           vía QR (censo dedup jun 2026 — el botón vive en Recepción de Josué).
-           Aquí va chip pasivo: una "acción" dominante por estado, sin atajo. */
-        <div style={S.doneChip}>
-          <IconTruck size={16} /> En camino — Terán lo recibe por QR
-        </div>
-      ) : null}
+          })
+        ) : bucket === 'enCamino' ? (
+          /* En camino: la recepción la confirma SOLO Terán por QR (Recepción de
+             Josué) — aquí solo una pista pasiva, sin atajo duplicado. */
+          <div style={RC.doneHint}>
+            <IconTruck size={15} /> Terán lo recibe por QR
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -696,7 +787,8 @@ const S = {
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
   search: {
     flex: 1, minWidth: 200, maxWidth: 420, height: 44, padding: '0 14px', borderRadius: 10,
-    border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
+    /* AUDIT UX 16-jul (U15): 16px mínimo en inputs — <16 fuerza zoom en iOS */
+    border: '1.5px solid var(--lp-border-subtle)', fontSize: 16,
     fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
     color: 'var(--lp-text-primary)', boxSizing: 'border-box',
   },

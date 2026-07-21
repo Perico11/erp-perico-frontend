@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
@@ -176,7 +177,7 @@ function UserFormModal({ user, roles, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <div style={S.modalTitle}>{isEdit ? 'Editar usuario' : 'Crear usuario'}</div>
@@ -258,7 +259,7 @@ function PinModal({ user, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={{ ...S.modal, maxWidth: 400 }}>
         <div style={S.modalHeader}>
           <div style={S.modalTitle}>Cambiar PIN · {user.nombre}</div>
@@ -330,7 +331,7 @@ function PermisosRolModal({ rol, permisosActuales, disponibles, onClose, onSaved
   const totalDisponibles = (disponibles || []).length;
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={{ ...S.modal, maxWidth: 640 }}>
         <div style={S.modalHeader}>
           <div>
@@ -408,7 +409,7 @@ function ConfirmDelete({ user, onClose, onSaved }) {
     }
   };
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={{ ...S.modal, maxWidth: 400 }}>
         <div style={S.modalHeader}>
           <div style={S.modalTitle}>Eliminar usuario</div>
@@ -470,6 +471,10 @@ export default function UsuariosPanel() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  /* Realtime (T3 jul 2026): canal 'usuarios' — altas/ediciones de usuarios
+     hechas por otro admin refrescan la lista sin F5. */
+  useRealtimeSync({ onUsuarios: () => cargar() });
 
   const handleSaved = () => {
     cargar();

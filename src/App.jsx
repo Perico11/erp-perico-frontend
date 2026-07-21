@@ -23,16 +23,22 @@ const TrazabilidadPage    = lazy(() => import('./pages/trazabilidad/Trazabilidad
 const ComprasPage         = lazy(() => import('./pages/compras/ComprasPage'));
 const RecoleccionPage     = lazy(() => import('./pages/recoleccion/RecoleccionPage'));
 const AdminPage           = lazy(() => import('./pages/admin/AdminPage'));
-const StockFabricaPage    = lazy(() => import('./pages/stock-fabrica/StockFabricaPage'));
 const CycleCountPage      = lazy(() => import('./pages/cycle-count/CycleCountPage'));
-const AlmacenRecepcionPage = lazy(() => import('./pages/almacen-recepcion/AlmacenRecepcionPage'));
+/* P2 (21-jul-2026): "Almacén" fusiona Stock Fábrica + Recepción Terán en una
+   pantalla con 2 vistas (?vista=fabrica|recepcion). Los componentes originales
+   se montan COMPLETOS adentro — cero acciones perdidas. /stock-fabrica
+   redirige preservando el query (?tab interno de fábrica sigue vivo). */
+const AlmacenPage         = lazy(() => import('./pages/almacen/AlmacenPage'));
 const FlujoPage           = lazy(() => import('./pages/flujo/FlujoPage'));
 const NotificacionesPage  = lazy(() => import('./pages/notificaciones/NotificacionesPage'));
 const DevolucionesPage    = lazy(() => import('./pages/devoluciones/DevolucionesPage'));
 const DevolucionesMPPage  = lazy(() => import('./pages/devoluciones-mp/DevolucionesMPPage'));
+const EntregasPage        = lazy(() => import('./pages/entregas/EntregasPage'));
 const PedidosPage         = lazy(() => import('./pages/pedidos/PedidosPage'));
 const TransferenciasPage  = lazy(() => import('./pages/transferencias/TransferenciasPage'));
 const IngresosPage        = lazy(() => import('./pages/ingresos/IngresosPage'));
+/* StkAmericanoPage retirada del router (dueño 16-jul): el americano vive en
+   Inventarios > Americano Terán / Alm. 2; las rutas viejas redirigen abajo. */
 const LaboratorioPage     = lazy(() => import('./pages/laboratorio/LaboratorioPage'));
 const ReportesPage        = lazy(() => import('./pages/reportes/ReportesPage'));
 const SeguridadPage       = lazy(() => import('./pages/seguridad/SeguridadPage'));
@@ -74,6 +80,14 @@ function RoleRoute({ roles, children }) {
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(user.rol)) return <Navigate to="/" replace />;
   return <Suspense fallback={<PageLoader />}>{children}</Suspense>;
+}
+
+/** Redirect /stock-fabrica → /almacen?vista=fabrica PRESERVANDO el query
+   (el ?tab= interno de Stock Fábrica y ?lote= siguen funcionando). */
+function StockFabricaRedirect() {
+  const next = new URLSearchParams(window.location.search);
+  next.set('vista', 'fabrica');
+  return <Navigate to={`/almacen?${next.toString()}`} replace />;
 }
 
 /** Ruta pública: redirige a / si ya hay sesión */
@@ -145,28 +159,43 @@ export default function App() {
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route index element={<ErrorBoundary><DashboardPage /></ErrorBoundary>} />
               {/* Fórmulas: Enrique (tecnico) excluido — ve la fórmula solo al producir.
-                  La pestaña ya se oculta en Sidebar/BottomNav; aquí se cierra el acceso por URL directa. */}
-              <Route path="formulas"       element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><FormulasPage /></ErrorBoundary></RoleRoute>} />
+                  La pestaña ya se oculta en Sidebar/BottomNav; aquí se cierra el acceso por URL directa.
+                  AUDIT 15-jul-2026: 'compras' también fuera — su permiso formulas es
+                  false (K11: IP del laboratorio) y el backend le responde 403: entrar
+                  por URL directa solo le daba una pantalla de errores. */}
+              <Route path="formulas"       element={<RoleRoute roles={['admin']}><ErrorBoundary><FormulasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="inventario"     element={<RoleRoute roles={['admin','tecnico','compras','almacen','inventario']}><ErrorBoundary><InventarioPage /></ErrorBoundary></RoleRoute>} />
+              {/* STK AMERICANO (jul 2026): vive en Inventarios > Americano Terán / Alm. 2
+                  (decisión dueño 16-jul). Las rutas viejas siguen vivas como redirect
+                  para links/QRs/hábitos guardados. */}
+              <Route path="stk-americano"  element={<Navigate to="/inventario?tab=stkAmericano" replace />} />
+              <Route path="stk-americano-2" element={<Navigate to="/inventario?tab=stkAmericano2" replace />} />
               <Route path="ordenes"        element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><OrdenesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pedidos"        element={<RoleRoute roles={['admin','almacen','tecnico']}><ErrorBoundary><PedidosPage /></ErrorBoundary></RoleRoute>} />
               <Route path="transferencias" element={<RoleRoute roles={['admin','almacen','inventario','tecnico']}><ErrorBoundary><TransferenciasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="ingresos"       element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><IngresosPage /></ErrorBoundary></RoleRoute>} />
               <Route path="flujo"          element={<RoleRoute roles={['admin','tecnico','almacen','recolector']}><ErrorBoundary><FlujoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="produccion"     element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><ProduccionPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="stock-fabrica"  element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><StockFabricaPage /></ErrorBoundary></RoleRoute>} />
+              {/* P2 (21-jul-2026): ruta vieja → vista "En fábrica" de Almacén */}
+              <Route path="stock-fabrica"  element={<StockFabricaRedirect />} />
               <Route path="recoleccion"    element={<RoleRoute roles={['admin','recolector','almacen']}><ErrorBoundary><RecoleccionPage /></ErrorBoundary></RoleRoute>} />
               <Route path="compras"        element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><ComprasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pronostico"     element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><PronosticoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="sat"            element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><SATPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pos-aliases"    element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><PosAliasesPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="trazabilidad"   element={<RoleRoute roles={['admin','tecnico','almacen','compras','recolector','inventario']}><ErrorBoundary><TrazabilidadPage /></ErrorBoundary></RoleRoute>} />
+              {/* P2 (21-jul-2026): 'compras' fuera — el nav nunca se la mostró
+                  (perm trazabilidad no incluye compras); era pantalla fantasma
+                  accesible solo por URL. Alinear ruta ↔ menú. */}
+              <Route path="trazabilidad"   element={<RoleRoute roles={['admin','tecnico','almacen','recolector','inventario']}><ErrorBoundary><TrazabilidadPage /></ErrorBoundary></RoleRoute>} />
               <Route path="conteo"         element={<RoleRoute roles={['admin','inventario']}><ErrorBoundary><CycleCountPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="almacen"        element={<RoleRoute roles={['admin','almacen']}><ErrorBoundary><AlmacenRecepcionPage /></ErrorBoundary></RoleRoute>} />
+              {/* P2 (21-jul-2026): pantalla fusionada — tecnico entra (solo ve
+                  la vista fábrica; el gate por vista vive en AlmacenPage). */}
+              <Route path="almacen"        element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><AlmacenPage /></ErrorBoundary></RoleRoute>} />
               <Route path="notificaciones" element={<Suspense fallback={<PageLoader />}><ErrorBoundary><NotificacionesPage /></ErrorBoundary></Suspense>} />
               <Route path="laboratorio"    element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><LaboratorioPage /></ErrorBoundary></RoleRoute>} />
               <Route path="devoluciones"   element={<RoleRoute roles={['admin','compras','almacen','tecnico']}><ErrorBoundary><DevolucionesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="devoluciones-mp" element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><DevolucionesMPPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="entregas"       element={<RoleRoute roles={['admin','almacen']}><ErrorBoundary><EntregasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="reportes"       element={<RoleRoute roles={['admin','inventario','compras']}><ErrorBoundary><ReportesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="admin"          element={<RoleRoute roles={['admin']}><ErrorBoundary><AdminPage /></ErrorBoundary></RoleRoute>} />
               <Route path="seguridad"      element={<RoleRoute roles={['admin','tecnico','inventario','almacen']}><ErrorBoundary><SeguridadPage /></ErrorBoundary></RoleRoute>} />

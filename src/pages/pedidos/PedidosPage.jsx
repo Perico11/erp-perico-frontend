@@ -22,6 +22,7 @@ import {
   bucketPedido, esPedidoTerminal, normEstado, esPedidoFueraDeFabrica,
 } from '../../lib/estados';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ═══════════════════════════════════════════════════════════════════════
    PedidosPage — reskin "Claude Design" verde (jun 2026).
@@ -666,30 +667,26 @@ export default function PedidosPage() {
       if (!r?.ok) throw new Error(r?.error || 'No se pudo aceptar');
       reload();
     } catch (e) {
-      setErr(e?.data?.error || e.message);
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setBusyId('');
     }
   };
 
-  /* Cancelar pedido — UN solo botón unificado.
-     - Admin: motivo + PIN → llama /api/pedidos/eliminar (cascada orden, revierte MP)
-     - Otros roles autorizados (técnico) en pedidos no producidos: solo motivo,
-       cambia estado a rechazado (sin PIN porque no hay MP que revertir aún)
-     Se muestra siempre que el pedido NO esté en estado terminal. */
+  /* Cancelar pedido — rechazo SUAVE unificado (21-jul-2026): motivo obligatorio,
+     sin PIN, sin borrar — /api/pedidos/rechazar valida el estado server-side y
+     cancela la orden vinculada. Vale para admin y técnico por igual, SOLO en
+     pendiente/aceptado (aún sin MP consumida). Para pedidos ya producidos o
+     para el borrado definitivo está handleEliminar (admin, motivo + PIN,
+     reversa de MP). Antes el Cancelar de admin llamaba al MISMO endpoint
+     destructivo que Eliminar — dos botones, un efecto. */
   const handleCancelar = async (p) => {
     setErr('');
-    const esAdmin = user?.rol === 'admin';
-    const yaProdujo = ['en_produccion','producido','qc_hold','qc_aprobado','en_envasado','envasado','en_recoleccion','en_camino','en_almacen'].includes(p.estado);
-
-    /* Paso 1: motivo (común) */
     const motivo = await confirm(
-      esAdmin
-        ? `Vas a cancelar el pedido ${p.id} de ${p.producto}. ${yaProdujo ? 'Como ya entró a producción, se revertirán las materias primas consumidas. ' : ''}Indica el motivo para auditoría.`
-        : `Vas a cancelar el pedido ${p.id} de ${p.producto}. Indica el motivo para dejar registro.`,
+      `Vas a cancelar el pedido ${p.id} de ${p.producto}. Indica el motivo para dejar registro.`,
       {
-        title: esAdmin ? 'Cancelar pedido — paso 1 de 2' : 'Cancelar pedido',
-        confirmText: esAdmin ? 'Continuar' : 'Cancelar pedido',
+        title: 'Cancelar pedido',
+        confirmText: 'Cancelar pedido',
         danger: true,
         prompt: {
           label: 'Motivo',
@@ -702,46 +699,16 @@ export default function PedidosPage() {
     );
     if (!motivo) return;
 
-    /* Paso 2: PIN (solo admin) */
-    let pin = null;
-    if (esAdmin) {
-      pin = await confirm(
-        `Para confirmar, ingresa tu PIN (${user?.nombre}).`,
-        {
-          title: 'Cancelar pedido — paso 2 de 2',
-          confirmText: 'Confirmar cancelación',
-          danger: true,
-          prompt: {
-            label: 'PIN',
-            placeholder: '0000',
-            required: true,
-            minLength: 4, maxLength: 6,
-            rows: 1, numeric: true, password: true,
-          },
-        }
-      );
-      if (!pin) return;
-    }
-
     setBusyId(p.id);
     try {
-      if (esAdmin) {
-        const r = await api.eliminarPedido(p.id, user?.nombre, pin, motivo);
-        const msg = `Pedido ${p.id} cancelado` +
-          (r?.revirtioMP ? ' · MP revertida' : '') +
-          (r?.ordenInfo ? ' · orden ' + r.ordenInfo.codigo + ' también' : '');
-        console.log('[CANCELAR]', msg);
-        setErr(''); /* limpiar errores previos */
-      } else {
-        /* FIX jun 2026 (auditoría): endpoint dedicado — valida el estado
-           server-side y CANCELA la orden vinculada. El upsert anterior dejaba
-           la orden huérfana viva (producible) y podía pisar campos con caché. */
-        await api.rechazarPedido(p.id, motivo);
-      }
+      /* FIX jun 2026 (auditoría): endpoint dedicado — valida el estado
+         server-side y CANCELA la orden vinculada. El upsert anterior dejaba
+         la orden huérfana viva (producible) y podía pisar campos con caché. */
+      await api.rechazarPedido(p.id, motivo);
       reload();
     } catch (e) {
       console.error('[CANCELAR] error:', e);
-      setErr('No se pudo cancelar: ' + (e?.data?.error || e.message || 'error desconocido'));
+      setErr('No se pudo cancelar: ' + humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setBusyId('');
     }
@@ -802,7 +769,7 @@ export default function PedidosPage() {
       reload();
     } catch (e) {
       console.error('[ELIMINAR] error:', e);
-      setErr('No se pudo eliminar: ' + (e?.data?.error || e.message || 'error desconocido'));
+      setErr('No se pudo eliminar: ' + humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setBusyId('');
     }
@@ -828,7 +795,7 @@ export default function PedidosPage() {
          id o pedidoId y abre prodModal directo. */
       navigate('/produccion?continuar=' + encodeURIComponent(p.id));
     } catch (e) {
-      setErr(e?.data?.error || e.message);
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setBusyId('');
     }
@@ -978,13 +945,16 @@ export default function PedidosPage() {
             const mostrarAceptar = tabOperable && p.estado === 'pendiente' && canAceptar;
             const mostrarIniciar = tabOperable && p.estado === 'aceptado' && canAceptar;
             const mostrarIrProduccion = tabOperable && p.estado === 'en_produccion' && canAceptar;
-            /* Cancelar disponible siempre que el pedido no esté en estado terminal.
-               Admin puede cancelar cualquier pedido (cascada orden + reversa MP).
-               Técnico solo pedidos pendientes/aceptados (no producidos aún). */
+            /* LIMPIEZA 21-jul-2026 (auditoría: "dos verbos, un efecto"): antes el
+               Cancelar de admin llamaba al MISMO /api/pedidos/eliminar que el botón
+               Eliminar de al lado. Ahora los verbos se distinguen de verdad:
+               · Cancelar = rechazo SUAVE (motivo, sin PIN, sin borrar) — solo en
+                 pendiente/aceptado, para admin y técnico por igual.
+               · Eliminar = destructivo (motivo + PIN, cascada orden + reversa MP)
+                 — solo admin, cubre también los estados ya producidos. */
             const esTerminal = esPedidoTerminal(p.estado);
-            const puedeAdminCancelar = user?.rol === 'admin' && !esTerminal;
-            const puedeTecnicoCancelar = canAceptar && !puedeAdminCancelar && ['pendiente', 'aceptado'].includes(p.estado);
-            const mostrarCancelar = (puedeAdminCancelar || puedeTecnicoCancelar) && tabOperable;
+            const puedeCancelarSuave = (user?.rol === 'admin' || canAceptar) && !esTerminal && ['pendiente', 'aceptado'].includes(p.estado);
+            const mostrarCancelar = puedeCancelarSuave && tabOperable;
             /* §7: Eliminar = SOLO admin. No se renderiza para otros roles.
                Disponible en cualquier filtro mientras el pedido no esté ya
                eliminado (los terminales sí pueden eliminarse del histórico). */
@@ -1096,20 +1066,18 @@ export default function PedidosPage() {
                         Ir a Producción {Icon.arrow}
                       </button>
                     )}
-                    {/* Cancelar / Rechazar UNIFICADO. Admin: motivo + PIN +
-                        reversa MP. Técnico: solo motivo → rechazado. */}
+                    {/* Cancelar = rechazo SUAVE (motivo, sin PIN, sin borrar).
+                        El borrado definitivo con reversa de MP es Eliminar. */}
                     {mostrarCancelar && (
                       <button
                         style={C.btn('danger')}
-                        data-id={user?.rol === 'admin' ? 'pedidos.btn.cancelar' : 'pedidos.btn.rechazar'}
+                        data-id="pedidos.btn.cancelar"
                         data-rol="tecnico,admin"
                         disabled={busyId === p.id}
                         onClick={() => handleCancelar(p)}
-                        title={user?.rol === 'admin'
-                          ? 'Cancelar pedido (pide motivo + PIN; revierte MP si aplica)'
-                          : 'Rechazar pedido (pide motivo)'}
+                        title="Cancelar pedido (pide motivo; queda como rechazado, sin borrar)"
                       >
-                        {busyId === p.id ? '…' : <>{Icon.x} {user?.rol === 'admin' ? 'Cancelar' : 'Rechazar'}</>}
+                        {busyId === p.id ? '…' : <>{Icon.x} Cancelar</>}
                       </button>
                     )}
                     {/* §7: Eliminar pedido — SOLO admin (data-rol="admin"). */}
@@ -1158,6 +1126,7 @@ export default function PedidosPage() {
       {showNuevo && (
         <NuevoPedidoModal
           prefillProducto={prefillProducto}
+          pedidos={pedidos} /* AUDIT UX 16-jul (U18): datalist de solicitantes recientes */
           onClose={() => { setShowNuevo(false); setPrefillProducto(null); }}
           onCreated={() => { setShowNuevo(false); setPrefillProducto(null); reload(); }}
         />

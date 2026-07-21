@@ -15,6 +15,7 @@ import {
   ESTADO_LOTE_ENVASANDO as PEND_ENVASADO,
   ESTADO_LOTE_RECOLECCION as PEND_RECOLECCION,
   ESTADO_LOTE_EN_CAMINO as PEND_ALMACEN,
+  esPedidoPorEntregar,
 } from '../../lib/estados';
 
 /* ════════════════════════════════════════════════════════════════════
@@ -98,6 +99,7 @@ export default function DashboardPage() {
     const lc = (s) => (s || '').toLowerCase();
 
     const pedidosPendientes = peds.filter(p => PEND_PEDIDOS.includes(lc(p.estado)));
+    const pedidosPorEntregar = peds.filter(p => esPedidoPorEntregar(p.estado));
     const ordenesPendientes = ords.filter(o => PEND_ORDENES.includes(lc(o.estado)));
     const lotesProducidos = lotes.filter(l => PEND_PRODUCCION.includes(lc(l.estado)));
     const lotesQC = lotes.filter(l => PEND_QC.includes(lc(l.estado)));
@@ -118,7 +120,7 @@ export default function DashboardPage() {
     const conteosVencidos = (conteosPend || []).filter(c => c && (c.vencido || c.estado === 'vencido' || c.diasRestantes < 0));
 
     return {
-      pedidosPendientes, ordenesPendientes, lotesProducidos, lotesQC, lotesEnvasado,
+      pedidosPendientes, pedidosPorEntregar, ordenesPendientes, lotesProducidos, lotesQC, lotesEnvasado,
       lotesRecoleccion, lotesEnCamino, ocsActivas, ocsVencidas,
       devsPendRecibir, devsPorReembolsar, ocsPorAprobar, conteosVencidos,
     };
@@ -145,6 +147,7 @@ export default function DashboardPage() {
     can('envasado') ? { key: 'envasado', titulo: 'Por envasar', desc: 'Lotes aprobados de QC, listos para envasar', count: tareas.lotesEnvasado.length, items: muestraNombres(tareas.lotesEnvasado), accent: ACC.brand, ruta: '/stock-fabrica' } : null,
     can('recoleccion') ? { key: 'recoleccion', titulo: 'Por recolectar', desc: 'Lotes envasados esperando a Luis', count: tareas.lotesRecoleccion.length, items: muestraNombres(tareas.lotesRecoleccion), accent: ACC.ok, ruta: '/recoleccion' } : null,
     esRol('admin', 'almacen') ? { key: 'almacen', titulo: 'En camino a Almacén', desc: 'Luis ya escaneó, esperando confirmación de recepción', count: tareas.lotesEnCamino.length, items: muestraNombres(tareas.lotesEnCamino), accent: ACC.info, ruta: '/almacen' } : null,
+    esRol('admin', 'almacen', 'tecnico', 'recolector') ? { key: 'pedidos-entregar', titulo: 'Pedidos de stock por entregar', desc: 'Producto terminado, pendiente de entrega', count: tareas.pedidosPorEntregar.length, items: muestraNombres(tareas.pedidosPorEntregar, 'codigo'), accent: ACC.info, ruta: '/pedidos?tab=activos' } : null,
     can('compras') ? { key: 'oc-vencidas', titulo: 'OCs vencidas', desc: 'Órdenes de compra que pasaron fecha de entrega', count: tareas.ocsVencidas.length, items: muestraNombres(tareas.ocsVencidas, 'codigo'), accent: ACC.critHi, ruta: '/compras' } : null,
     can('compras') ? { key: 'ocs-por-aprobar', titulo: 'OCs por aprobar', desc: 'Solicitudes pendientes de asignar proveedor/precio', count: tareas.ocsPorAprobar.length, items: muestraNombres(tareas.ocsPorAprobar, 'codigo'), accent: ACC.amber, ruta: '/compras' } : null,
     (can('produccion') || esRol('admin')) ? { key: 'dev-recibir', titulo: 'Devoluciones por recibir', desc: 'Producto del cliente por inspeccionar en fábrica', count: tareas.devsPendRecibir.length, items: muestraNombres(tareas.devsPendRecibir, 'id'), accent: ACC.mut, ruta: '/devoluciones' } : null,
@@ -182,7 +185,12 @@ export default function DashboardPage() {
       out.push({ label: 'Lotes en flujo', value: (d.trazabilidad.lotesEnEnvasado || 0) + (d.trazabilidad.lotesEnCamino || 0), sub: `${d.trazabilidad.lotesEnEnvasado || 0} envasando · ${d.trazabilidad.lotesEnCamino || 0} en camino`, ruta: '/trazabilidad' });
     }
     if (verInventario) {
-      out.push({ label: 'Valor inventario MP', value: fmt$(d.inventario.valorMP || 0), sub: `${d.inventario.mpsTotales || 0} MPs · ${d.inventario.ptsTotales || 0} PTs`, ruta: '/inventario?tab=mp' });
+      /* AUDIT UX 16-jul (U8): el VALOR en pesos solo para quien maneja dinero
+         (admin/compras vía editarPrecios) — a almacén/técnico/inventario el
+         backend les BLOQUEA costos y el monto es ruido para su trabajo. */
+      if (can('editarPrecios')) {
+        out.push({ label: 'Valor inventario MP', value: fmt$(d.inventario.valorMP || 0), sub: `${d.inventario.mpsTotales || 0} MPs · ${d.inventario.ptsTotales || 0} PTs`, ruta: '/inventario?tab=mp' });
+      }
       out.push({ label: 'Stock crítico', value: d.inventario.mpsCriticas || 0, valueColor: d.inventario.mpsCriticas > 0 ? 'var(--lp-danger-600)' : undefined, sub: 'MPs sin existencia', ruta: '/inventario?tab=mp&filter=sin' });
     }
     if (verCompras) {
@@ -203,12 +211,14 @@ export default function DashboardPage() {
   const KEY_ICON = {
     pedidos: 'ordenes', ordenes: 'ordenes', qc: 'qc', 'qc-hold': 'alert',
     envasado: 'stock', recoleccion: 'stock', almacen: 'inventario',
+    'pedidos-entregar': 'stock',
     'oc-vencidas': 'compras', 'ocs-por-aprobar': 'compras',
     'dev-recibir': 'devoluciones', 'dev-reembolsar': 'devoluciones', 'conteos-vencidos': 'qc',
   };
   const HERO_VERB = {
     pedidos: 'Preparar', ordenes: 'Revisar', qc: 'Revisar', 'qc-hold': 'Atender',
     envasado: 'Envasar', recoleccion: 'Recolectar', almacen: 'Recibir',
+    'pedidos-entregar': 'Revisar',
     'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar',
     'dev-recibir': 'Recibir', 'dev-reembolsar': 'Emitir', 'conteos-vencidos': 'Contar',
   };
@@ -224,6 +234,7 @@ export default function DashboardPage() {
     envasado: n => `${n} ${uno(n, 'lote listo', 'lotes listos')} para envasar`,
     recoleccion: n => `${n} ${uno(n, 'lote', 'lotes')} por recolectar`,
     almacen: n => `${n} ${uno(n, 'lote', 'lotes')} en camino a Terán`,
+    'pedidos-entregar': n => `${n} ${uno(n, 'pedido', 'pedidos')} de stock por entregar`,
     'oc-vencidas': n => `${n} ${uno(n, 'OC vencida', 'OCs vencidas')}`,
     'ocs-por-aprobar': n => `${n} ${uno(n, 'OC', 'OCs')} por aprobar`,
     'dev-recibir': n => `${n} ${uno(n, 'devolución', 'devoluciones')} por recibir`,

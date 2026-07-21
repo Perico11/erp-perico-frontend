@@ -9,8 +9,9 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
-import { ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, normEstado } from '../../lib/estados';
+import { ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, normEstado, ESTADO_LOTE_POST_PRODUCCION } from '../../lib/estados';
 import LoteDetalleModal from './LoteDetalleModal';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import PageTabs from '../../components/ui/PageTabs';
@@ -331,7 +332,7 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
       try { await api.registrarQC(buildQcRecord('aprobado')); } catch {}
       onSuccess(`QC aprobado: ${orden?.formula || lote?.producto}`);
     } catch (err) {
-      setError(err.message || 'Error al aprobar QC');
+      setError(humanizeError(err)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }
@@ -366,7 +367,7 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
       try { await api.registrarQC(buildQcRecord('rechazado')); } catch {}
       onSuccess(`QC rechazado: ${orden?.formula || lote?.producto} → vuelve a producción`);
     } catch (err) {
-      setError(err.message || 'Error al rechazar QC');
+      setError(humanizeError(err)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }
@@ -381,7 +382,7 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
   ];
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <span style={{ fontSize: 16, fontWeight: 600 }}>Control de calidad</span>
@@ -517,7 +518,7 @@ export default function ProduccionPage() {
               produccionIniciadaPor: userName,
             });
             reloadPed();
-          } catch (e) { showToast('Error: ' + (e.message || 'no se pudo iniciar')); }
+          } catch (e) { showToast('No se pudo iniciar: ' + humanizeError(e)); /* AUDIT UX 16-jul (U4) */ }
         } else {
           setProdModal(it);
         }
@@ -599,9 +600,9 @@ export default function ProduccionPage() {
      completan su envasado viven en ESTA pantalla. Al llegar a 'envasado' la
      card se suelta y el ciclo continúa visible en Pedidos. */
   const lotesEnEnvasado = useMemo(() => {
-    const ESTADOS_POST_PROD = ['producido', 'qc_hold', 'qc_aprobado', 'en_envasado'];
+    /* AUDIT 15-jul-2026: bucket desde lib/estados (fuente única, anti-drift). */
     return lotes
-      .filter(l => ESTADOS_POST_PROD.includes(l.estado))
+      .filter(l => ESTADO_LOTE_POST_PRODUCCION.includes(l.estado))
       .map(l => ({
         lote: l,
         /* PedidoLoteActions resuelve el lote desde su pedido u orden fuente */
@@ -1153,7 +1154,7 @@ export default function ProduccionPage() {
                   produccionIniciadaPor: userName,
                 });
                 reloadPed();
-              } catch (e) { showToast('Error: ' + (e.message || 'no se pudo iniciar')); }
+              } catch (e) { showToast('No se pudo iniciar: ' + humanizeError(e)); /* AUDIT UX 16-jul (U4) */ }
             } else {
               /* Para órdenes y pedidos ya en producción, abrir directo el flujo paso-a-paso */
               setProdModal(it);

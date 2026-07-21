@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import useConfirm from '../../hooks/useConfirm';
@@ -94,20 +95,63 @@ const S = {
   }),
 };
 
-export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto = null }) {
+/* AUDIT UX 16-jul (U18): clave localStorage del último solicitante usado */
+const LS_ULTIMO_SOLICITANTE = 'pp_ultimo_solicitante';
+
+export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto = null, pedidos = [] }) {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   useBodyScrollLock(); /* el body no scrollea mientras el sheet está abierto */
   /* Si llega prefillProducto (desde Inventario → "Pedir reposición"), inicializa el campo */
   const [producto, setProducto] = useState(prefillProducto || '');
   const [cantidad, setCantidad] = useState('');
   const [medida, setMedida] = useState('cubeta'); /* tote/cubeta/galón/litro/atomizador */
-  const [solicitante, setSolicitante] = useState('');
+  /* AUDIT UX 16-jul (U18): arranca con el último solicitante usado (se teclea
+     igual siempre — el operario solo lo cambia cuando pide alguien distinto). */
+  const [solicitante, setSolicitante] = useState(() => {
+    try { return localStorage.getItem(LS_ULTIMO_SOLICITANTE) || ''; } catch { return ''; }
+  });
   const [esPrueba, setEsPrueba] = useState(false);
   const [formulas, setFormulas] = useState([]);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [confirm, ConfirmEl] = useConfirm();
+  /* P2 (21-jul-2026): "¿transferir en vez de producir?" — si el producto ya
+     tiene stock en FÁBRICA, sugerir traerlo con una OT (con la línea
+     prellenada) en lugar de lanzar una producción nueva. Best-effort: si el
+     rol no puede leer inventario o crear OT, simplemente no aparece. */
+  const [ptFabrica, setPtFabrica] = useState({});
+  useEffect(() => {
+    let alive = true;
+    api.getInventario()
+      .then(r => { if (alive) setPtFabrica((r?.data || r || {}).pt || {}); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const puedeCrearOT = ['admin', 'almacen', 'inventario'].includes(user?.rol);
+  const stockFabInfo = useMemo(() => {
+    const q = producto.trim().toUpperCase();
+    if (!q) return null;
+    const key = Object.keys(ptFabrica).find(k => k.trim().toUpperCase() === q);
+    if (!key) return null;
+    const fab = Number(ptFabrica[key]?.qty) || 0;
+    if (fab <= 0) return null;
+    const pedidasCub = cantidad && parseInt(cantidad) > 0 ? Math.round(medidaACubetas(medida, parseInt(cantidad))) : 0;
+    return { key, fab, pedidasCub, cubre: pedidasCub > 0 && fab >= pedidasCub };
+  }, [producto, ptFabrica, cantidad, medida]);
+  /* AUDIT UX 16-jul (U18): datalist con los solicitantes de los últimos pedidos
+     (máx 6 únicos, más reciente primero) — los pedidos llegan de la página padre. */
+  const solicitantesRecientes = useMemo(() => {
+    const vistos = [];
+    [...(Array.isArray(pedidos) ? pedidos : [])]
+      .sort((a, b) => new Date(b?.fecha || 0) - new Date(a?.fecha || 0))
+      .forEach(p => {
+        const s = String(p?.solicitante || '').trim();
+        if (s && !vistos.some(v => v.toLowerCase() === s.toLowerCase())) vistos.push(s);
+      });
+    return vistos.slice(0, 6);
+  }, [pedidos]);
   /* Animación de entrada del sheet (mockup .overlay.show). prefers-reduced-motion → sin transición. */
   const [shown, setShown] = useState(false);
   useEffect(() => {
@@ -137,7 +181,8 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
       else if (r?.summary && Array.isArray(r.summary)) list = r.summary;
       else if (Array.isArray(r?.data)) list = r.data;
       else if (Array.isArray(r)) list = r;
-      setFormulas(list);
+      /* PT ocultos (jul 2026): los descontinuados no se pueden pedir */
+      setFormulas(list.filter(s => !s?.oculto));
     }).catch(err => {
       console.warn('[NuevoPedido] Error cargando fórmulas:', err?.message);
       setFormulas([]);
@@ -179,6 +224,8 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         creadoPor: user?.nombre || 'Usuario',
       };
       await api.upsertPedido(pedido);
+      /* AUDIT UX 16-jul (U18): recordar el solicitante para el próximo pedido */
+      try { localStorage.setItem(LS_ULTIMO_SOLICITANTE, solicitante.trim()); } catch { /* noop */ }
       onCreated?.();
     } catch (e) {
       setErr(humanizeError(e));
@@ -188,7 +235,7 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
   };
 
   return (
-    <div style={S.overlay(isDesktop, shown)} onClick={onClose}>
+    <div style={S.overlay(isDesktop, shown)}>
       {ConfirmEl}
       <div style={S.sheet(isDesktop, shown)} onClick={(e) => e.stopPropagation()}>
         <style>{FOCUS_CSS}</style>
@@ -219,7 +266,10 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
           value={producto}
           onChange={(e) => setProducto(e.target.value)}
           placeholder="Ej. Vinílica blanca 19L"
-          autoFocus
+          /* AUDIT UX 16-jul (U14): autoFocus solo en escritorio — en móvil el
+             teclado abre ANTES de pintar el sheet y tapa los botones (regla
+             documentada en components/ui/Modal.jsx). */
+          autoFocus={isDesktop}
         />
         <datalist id="formulas-list">
           {formulas.map((f, i) => <option key={i} value={f.nombre || f} />)}
@@ -259,22 +309,58 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
           </div>
         )}
 
+        {/* P2 (21-jul-2026): sugerencia "transferir en vez de producir" */}
+        {stockFabInfo && (
+          <div style={{
+            marginTop: 8, padding: '10px 12px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.5,
+            background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)',
+            border: '1.5px solid color-mix(in srgb, var(--lp-brand-600) 45%, transparent)',
+            color: 'var(--lp-brand-700)',
+          }}>
+            Hay <strong>{stockFabInfo.fab.toLocaleString('es-MX')} cub</strong> de {stockFabInfo.key} en <strong>Fábrica</strong>
+            {stockFabInfo.cubre
+              ? ' — alcanza para este pedido: puedes traerlas con una transferencia en vez de producir.'
+              : stockFabInfo.pedidasCub > 0
+                ? ` (pides ${stockFabInfo.pedidasCub}) — podrías traer esas y producir solo el resto.`
+                : ' — considera traerlas con una transferencia antes de producir más.'}
+            {puedeCrearOT && (
+              <button
+                type="button"
+                data-id="pedidos.btn.crear-ot-en-vez"
+                onClick={() => navigate('/transferencias?nueva=' + encodeURIComponent(JSON.stringify({ tipo: 'pt', producto: stockFabInfo.key, nombre: stockFabInfo.key, unidad: 'cub' })))}
+                style={{ display: 'block', marginTop: 8, padding: '7px 12px', borderRadius: 999, border: '1px solid var(--lp-brand-600)', background: 'transparent', color: 'var(--lp-brand-700)', cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}
+              >
+                Crear transferencia en su lugar →
+              </button>
+            )}
+          </div>
+        )}
+
         <label style={S.label} htmlFor="np-sol">Solicitante *</label>
         <input
           id="np-sol"
           className="np-finput"
           style={S.input}
+          list="np-solicitantes"
           value={solicitante}
           onChange={(e) => setSolicitante(e.target.value)}
           placeholder="Cliente, sucursal, persona…"
         />
+        {/* AUDIT UX 16-jul (U18): sugerencias de solicitantes recientes */}
+        <datalist id="np-solicitantes">
+          {solicitantesRecientes.map((s) => <option key={s} value={s} />)}
+        </datalist>
 
+        {/* AUDIT UX 16-jul (U13): el div es el ÚNICO handler del toggle — el
+            input con su propio onChange duplicaba el toggle y tocar el checkbox
+            exacto lo dejaba igual (doble inversión). pointerEvents:none + readOnly. */}
         <div style={S.pruebaBox(esPrueba)} onClick={() => setEsPrueba(p => !p)}>
           <input
             type="checkbox"
             checked={esPrueba}
-            onChange={(e) => setEsPrueba(e.target.checked)}
-            style={{ cursor: 'pointer' }}
+            readOnly
+            onChange={() => {}}
+            style={{ cursor: 'pointer', pointerEvents: 'none' }}
           />
           <span>
             <strong>Modo prueba</strong> — no descuenta MP ni suma PT

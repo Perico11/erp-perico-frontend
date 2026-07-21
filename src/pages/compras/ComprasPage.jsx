@@ -256,6 +256,9 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       eliminada: oc.eliminada || oc.estado === 'eliminada',
       /* FALTANTE: recibida con menos kg de los pedidos → badge en ComprasScreen. */
       faltante: !!oc.faltante,
+      /* P2 21-jul-2026: recibida (real, no eliminada) sin CFDI vinculado en
+         facturas_sat → badge "Falta CFDI" (recordatorio de ir a SAT/CFDI). */
+      faltaCfdi: oc.estado === 'recibida' && !oc.eliminada && !oc.tieneCfdi,
     };
   }), [ocs]);
 
@@ -1485,11 +1488,10 @@ export default function ComprasPage({ mode = 'compras' }) {
               />
         )}
 
+        {/* P1 (20-jul-2026): el Catálogo quedó de CONSULTA — el carrito que
+            generaba OCs duplicaba a Pronóstico ▸ Sugerencias. */}
         {activeTab === 'catalogo' && (
-          <CatalogoCompraTab
-            isDesktop={isDesktop}
-            onCreated={() => { reloadOCs(); setActiveTab('ocs'); }}
-          />
+          <CatalogoCompraTab isDesktop={isDesktop} />
         )}
 
         {activeTab === 'pedidos' && (

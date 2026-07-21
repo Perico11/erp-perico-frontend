@@ -4,6 +4,7 @@ import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import api from '../services/api';
 import PruebaBadge from './ui/PruebaBadge';
 import { QRScanner } from './QRModal';
+import { despacharScanSublote, extraerCodigoScan } from '../lib/scanSublote';
 import useConfirm from '../hooks/useConfirm';
 
 /* ──────────────────────────────────────────────────────────────────── */
@@ -412,67 +413,61 @@ export default function InboundAlertManager() {
     }
   }, [taking, scanFor, userName, marcarTomado, marcarConfirmado]);
 
+  /* P2 (21-jul-2026): despacho vía protocolo compartido lib/scanSublote
+     (single→bulk). El manejo de banners (marcarConfirmado / purga por lote)
+     sigue siendo propio de este componente. */
   const handleScanResult = useCallback(async (result) => {
     const alert = scanFor;
     setScanFor(null);
     if (!alert) return;
-    const code = result?.cod || result?.raw || '';
+    const code = extraerCodigoScan(result);
     if (!code) { window.alert('QR no reconocido. Intenta de nuevo.'); return; }
 
     const accion = accionDeAlert(alert);
+    const tipoConf = accion === 'escanearRecibirTeran' ? 'recibido' : 'recogido';
     setTaking(alert.cod);
-    try {
+    let bulkData = null;
+    await despacharScanSublote({
+      code, accion, confirm,
+      bulk: {
+        pregunta: (d) => { bulkData = d; return `Escaneaste el QR del LOTE ${d.codigoLote}. ¿Recibir TODOS los sublotes elegibles del lote en una sola acción?`; },
+        titulo: 'Recibir lote completo',
+        confirmText: 'Recibir todos',
+      },
       /* /api/sublotes/scan resuelve el sublote POR el código escaneado — la
-         verdad física manda. Si escanean otro envase, la acción aplica a ese
-         (igual que el escáner hero de Recepción). */
-      const r = await api.escanearSublote(code, accion);
-      const codReal = r?.sublote?.cod || code;
-      /* Éxito → confirmación verde sobre el banner del sublote EFECTIVAMENTE
-         recibido (la verdad física manda: si escaneó otro envase, codReal
-         difiere y el banner origen queda intacto — su sublote sigue pendiente).
-         El id es determinístico `${cod}:${etapa}` (FIX U2), así que se
-         construye directo; si ese banner no existe, marcarConfirmado es no-op. */
-      marcarConfirmado(`${codReal}:${alert.etapa}`,
-        accion === 'escanearRecibirTeran' ? 'recibido' : 'recogido');
-    } catch (e) {
-      const msg = e?.message || '';
-      const data = e?.data;
-      /* Escanearon el QR del LOTE completo → ofrecer bulk (mismo flujo que
-         Recepción). El guard anti-robo del backend exige el scanCod. */
-      if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
-        const ok = await confirm(
-          `Escaneaste el QR del LOTE ${data.codigoLote}. ¿Recibir TODOS los sublotes elegibles del lote en una sola acción?`,
-          { title: 'Recibir lote completo', confirmText: 'Recibir todos' }
-        );
-        if (ok) {
-          try {
-            await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion, scanCod: code });
-            /* Bulk OK → confirmar en verde TODOS los banners de ese lote en
-               esta etapa (mismo predicado del filter anterior) y purgar tras
-               la ventana de feedback, igual que el claim individual. */
-            const tipoConf = accion === 'escanearRecibirTeran' ? 'recibido' : 'recogido';
-            setAlerts(prev => prev.map(a => (a.etapa === alert.etapa && a.loteId === data.loteId)
-              ? { ...a, confirmado: tipoConf, tomadoPor: null }
-              : a
-            ));
-            setTimeout(() => {
-              setAlerts(prev => prev.filter(a => a.etapa !== alert.etapa || a.loteId !== data.loteId));
-            }, 1450);
-          } catch (e2) {
-            console.warn('[Inbound] Error bulk claim:', e2?.message, e2?.data);
-            window.alert(`No se pudo recibir el lote: ${e2?.message || 'error'}`);
-          }
+         verdad física manda. Si escanean otro envase, la acción aplica a ese:
+         codReal difiere y el banner origen queda intacto (id determinístico
+         `${cod}:${etapa}`, FIX U2; si ese banner no existe, marcarConfirmado
+         es no-op). */
+      onSublote: (r) => marcarConfirmado(`${r?.sublote?.cod || code}:${alert.etapa}`, tipoConf),
+      /* Bulk OK → confirmar en verde TODOS los banners de ese lote en esta
+         etapa y purgar tras la ventana de feedback, igual que el claim
+         individual. */
+      onBulk: () => {
+        const loteId = bulkData?.loteId;
+        setAlerts(prev => prev.map(a => (a.etapa === alert.etapa && a.loteId === loteId)
+          ? { ...a, confirmado: tipoConf, tomadoPor: null }
+          : a
+        ));
+        setTimeout(() => {
+          setAlerts(prev => prev.filter(a => a.etapa !== alert.etapa || a.loteId !== loteId));
+        }, 1450);
+      },
+      onError: (e, fase) => {
+        const msg = e?.message || '';
+        if (fase === 'bulk') {
+          console.warn('[Inbound] Error bulk claim:', msg, e?.data);
+          window.alert(`No se pudo recibir el lote: ${msg || 'error'}`);
+        } else if (msg.includes('estado') || e?.status === 409) {
+          marcarTomado(alert.id); /* otro lo tomó entre el banner y mi escaneo */
+        } else {
+          console.warn('[Inbound] Error claim:', msg, e?.data);
+          window.alert(`No se pudo tomar el sublote: ${msg}`);
         }
-      } else if (msg.includes('estado') || e?.status === 409) {
-        marcarTomado(alert.id); /* otro lo tomó entre el banner y mi escaneo */
-      } else {
-        console.warn('[Inbound] Error claim:', msg, e?.data);
-        window.alert(`No se pudo tomar el sublote: ${msg}`);
-      }
-    } finally {
-      setTaking(null);
-    }
-  }, [scanFor, marcarTomado, marcarConfirmado]);
+      },
+    });
+    setTaking(null);
+  }, [scanFor, marcarTomado, marcarConfirmado, confirm]);
 
   /* FIX U2: dismiss por id, no por cod — cada banner es independiente */
   const handleDismiss = useCallback((alertId) => {

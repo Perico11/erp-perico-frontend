@@ -91,6 +91,9 @@ const TECH_LABELS = {
   rendimiento_bajo: 'Rendimiento bajo',
   lote_en_camino: 'Lote en camino',
   devolucion: 'Devolución registrada',
+  ot_pendiente_surtir: 'Transferencia por surtir',
+  ot_pendiente_recibir: 'Transferencia por recibir',
+  recoleccion_envejecida: 'Recolección atorada',
 };
 const FILE_LABELS = {
   inventario: 'Inventario',

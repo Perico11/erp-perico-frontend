@@ -175,6 +175,10 @@ const api = {
      [{tipo,qty,subKey,tapaKey}] consumiendo envases de Terán. No cambia el total. */
   reenvasarPTTeran: (producto, origen, destinos, nota) =>
     request('POST', '/api/inventario/pt/reenvasar-teran', { producto, origen, destinos, nota }),
+  /* ── Entregas a tiendas (jul 2026): la baja del CEDIS al entregar ── */
+  getEntregas: () => request('GET', '/api/entregas'),
+  crearEntrega: (payload) => request('POST', '/api/entregas/crear', payload),
+  resolverEntregaQR: (cod) => request('GET', '/api/entregas/resolver?cod=' + encodeURIComponent(cod)),
   /* Transferencia de envase/tapa Fábrica→Terán (Josué): mueve N piezas de stock
      (Fábrica) a teran. ref = { tipo:'envase', catKey, subKey } | { tipo:'tapa', tapaKey }. */
   transferirEnvaseATeran: (ref, cantidad, nota) =>
@@ -275,6 +279,23 @@ const api = {
      de lote — es carga inicial / corrección manual. Admite individual o masivo. */
   ptInicial: ({ producto, cantidad, min, nota, items }) =>
     request('POST', '/api/inventario/pt-inicial', items ? { items, nota } : { producto, cantidad, min, nota }),
+  /* STK AMERICANO (jul 2026): PT importado de EE.UU. en totes de 1000 L.
+     Inventario SEPARADO del PT nacional. Alta manual + lote USA-* + salida por L. */
+  /* STK AMERICANO v2 (jul 2026): inventario POR COLOR con 3 presentaciones
+     (cubetas, galones, totesLitros a granel). Multi-almacén: `almacen` '1' (default)
+     o '2' — mismos endpoints, almacenes de datos separados. */
+  getStkAmericano: (almacen) => request('GET', '/api/stk-americano' + (almacen && almacen !== '1' ? '?almacen=' + almacen : '')),
+  /* Transferencia simple entre almacenes americanos (2 es extensión del 1, 18-jul). */
+  transferirStkAmericano: (payload) => request('POST', '/api/stk-americano/transferir', payload),
+  colorStkAmericano: ({ almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }) =>
+    request('POST', '/api/stk-americano/color', { almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }),
+  salidaStkAmericano: ({ almacen, key, nombre, presentacion, cantidad, nota }) =>
+    request('POST', '/api/stk-americano/salida', { almacen, key, nombre, presentacion, cantidad, nota }),
+  envasarStkAmericano: ({ almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente }) =>
+    request('POST', '/api/stk-americano/envasar', { almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente }),
+  eliminarStkAmericano: ({ almacen, key, nombre, motivo }) =>
+    request('POST', '/api/stk-americano/eliminar', { almacen, key, nombre, motivo }),
+  urlImportStkAmericano: (almacen) => API_BASE + '/api/stk-americano/importar' + (almacen && almacen !== '1' ? '?almacen=' + almacen : ''),
   /* Ajuste inline de UN producto terminado (qty + min) con audit.
      CANDADO REFORZADO: backend exige sesionConteoFolio o codigoTOTP de
      Google Authenticator (override admin). PIN ya no aplica para override. */
@@ -328,6 +349,9 @@ const api = {
   eliminarOrden: (ordenId, nombre, pin, motivo) =>
     request('POST', '/api/ordenes/eliminar', { ordenId, nombre, pin, motivo }),
   getFormulasSummary: () => request('GET', '/api/formulas/summary'),
+  /* PT ocultos (jul 2026): esconder PTs descontinuados de las pantallas sin eliminarlos */
+  getPTOcultos: () => request('GET', '/api/pt-ocultos'),
+  setPTOculto: (producto, oculto) => request('POST', '/api/pt-ocultos', { producto, oculto }),
 
   /* ── Producción / Trazabilidad ── */
   getTrazabilidad: () => request('GET', '/api/trazabilidad'),
@@ -374,8 +398,8 @@ const api = {
     request('POST', '/api/pedidos/rechazar', { pedidoId, motivo }),
   getProduccionHistorial: () => request('GET', '/api/produccion-historial'),
   getQC: () => request('GET', '/api/qc'),
-  /* saveQC = legacy overwrite (admin only). NO USAR — usar transicionLote('aprobarQC') */
-  saveQC: (data) => request('POST', '/api/qc', data),
+  /* (saveQC eliminado 21-jul-2026: legacy overwrite sin callers — usar
+     transicionLote('aprobarQC') / registrarQC) */
   registrarQC: (record) => request('POST', '/api/qc/registrar', record),
   /* Rangos QC por producto — para mostrar al técnico cuáles son los valores
      esperados al lado de cada input y marcar verde/rojo automático. */
@@ -411,8 +435,11 @@ const api = {
      scanCod/qrPayload del QR físico para escanearRecoger/RecibirTeran — sin
      reenviarlo, el bulk respondía 400 SIEMPRE y "tomar todo el lote" nunca
      funcionó. El caller pasa el código que escaneó. */
-  escanearLoteBulk: ({ loteId, codigoLote, accion, scanCod, qrPayload }) =>
-    request('POST', '/api/sublotes/scan-bulk', { loteId, codigoLote, accion, scanCod, qrPayload }),
+  /* P1 (20-jul-2026): acepta campos extra (overrideCaducidad/notaOverride del
+     despacho FEFO) — antes 2 pantallas llamaban api.post crudo para poder
+     mandarlos; ahora TODOS los scan-bulk pasan por este wrapper. */
+  escanearLoteBulk: ({ loteId, codigoLote, accion, scanCod, qrPayload, ...extra }) =>
+    request('POST', '/api/sublotes/scan-bulk', { loteId, codigoLote, accion, scanCod, qrPayload, ...extra }),
   getFormulaOrden: (ordenId) => request('POST', '/api/formulas/orden', { ordenId }),
   registrarProduccion: (body) => request('POST', '/api/inventario/produccion', body),
 
@@ -429,10 +456,9 @@ const api = {
   /* ── Envasado ── */
   registrarEnvasado: (loteId, sublotes) => request('POST', '/api/envasado/registrar', { loteId, sublotes }),
   cerrarLote: (loteId) => request('POST', '/api/envasado/cerrar-lote', { loteId }),
-  transferirSublotes: (loteId, subloteCods) => request('POST', '/api/envasado/transferir', { loteId, subloteCods }),
-  /* DEPRECATED — usar transicionSublote(toteCod, 'reenvasarTote', { nuevosSublotes, litrosConsumidos }).
-     Se mantiene SOLO para compat con código legacy externo; el frontend nuevo usa la state machine. */
-  reenvasar: (loteId, toteCod, sublotes) => request('POST', '/api/envasado/reenvasar', { loteId, toteCod, sublotes }),
+  /* (transferirSublotes y reenvasar eliminados 21-jul-2026: sin callers; sus
+     endpoints legacy quedaron admin-only — el flujo vivo es la state machine
+     via transicionSublote.) */
 
   /* ── Fórmulas ── */
   getFormulas: () => request('GET', '/api/formulas/todas'),

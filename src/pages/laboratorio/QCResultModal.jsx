@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import api from '../../services/api';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 const S = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
+    /* ≥1100: sobre el bottom-nav (regla proyecto, jul 2026) */
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1100,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
   },
   modal: {
@@ -17,10 +19,13 @@ const S = {
   formGroup: { marginBottom: 14 },
   label: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 4 },
   input: {
-    width: '100%', padding: '8px 12px', fontSize: 13, border: '1.5px solid var(--lp-border-subtle)',
+    /* AUDIT UX 16-jul (U15): 16px mínimo en inputs — <16 fuerza zoom en iOS */
+    width: '100%', padding: '8px 12px', fontSize: 16, border: '1.5px solid var(--lp-border-subtle)',
     borderRadius: 'var(--lp-radius-sm)', fontFamily: 'inherit', background: 'var(--lp-bg-base)',
     boxSizing: 'border-box', outline: 'none',
   },
+  /* AUDIT UX 16-jul (U7): error inline en vez de alert() nativo (precedente IngresosPage) */
+  err: { fontSize: 13.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 11px', marginTop: 10, lineHeight: 1.4 },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   row3: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 },
   btn: {
@@ -59,6 +64,7 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
   const [estado, setEstado] = useState(existingQC.estado || '');
   const [imagenBase64, setImagenBase64] = useState(existingQC.imagenBase64 || null);
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(''); /* AUDIT UX 16-jul (U7): error inline en vez de alert() */
   const fileRef = useRef(null);
 
   /* MÓVIL: el componente se monta solo cuando está abierto → lock siempre activo.
@@ -135,16 +141,18 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
     const file = e.target.files[0];
     if (!file) return;
     if (file.size > 4 * 1024 * 1024) {
-      alert('La imagen no debe exceder 4 MB');
+      setErr('La imagen no debe exceder 4 MB'); /* AUDIT UX 16-jul (U7) */
       return;
     }
+    setErr('');
     const reader = new FileReader();
     reader.onload = () => setImagenBase64(reader.result);
     reader.readAsDataURL(file);
   };
 
   const handleSave = async () => {
-    if (!estado) return alert('Selecciona un veredicto: Aprobado o Rechazado');
+    if (!estado) return setErr('Selecciona un veredicto: Aprobado o Rechazado'); /* AUDIT UX 16-jul (U7) */
+    setErr('');
     setSaving(true);
     try {
       await onSave(prueba.id, {
@@ -159,14 +167,14 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
       });
       onClose();
     } catch (e) {
-      alert(e.message);
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4+U7) */
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.title}>Control de Calidad</div>
         <div style={S.subtitle}>Prueba: {prueba.nombre}</div>
@@ -274,6 +282,9 @@ export default function QCResultModal({ prueba, onClose, onSave }) {
             </button>
           </div>
         </div>
+
+        {/* AUDIT UX 16-jul (U7): error inline en vez de alert() bloqueante */}
+        {err && <div style={S.err} role="alert">{err}</div>}
 
         <div style={S.actions}>
           <button style={{ ...S.btn, background: 'var(--lp-bg-base)', border: '1.5px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)' }} onClick={onClose}>

@@ -16,8 +16,14 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import useConfirm from '../../hooks/useConfirm'; /* AUDIT UX 16-jul (U16-baja) */
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
-const TIPO_LABEL = { mp: 'MP', envase: 'Envase', tapa: 'Tapa' };
+const TIPO_LABEL = { mp: 'MP', envase: 'Envase', tapa: 'Tapa', pta: 'PT Americano' };
+/* PTA (18-jul, pedido dueño vía Josué): producto terminado AMERICANO que llega
+   al Almacén Terán (1) o al Almacén 2. Los TOTES entran con LOTE pre-asignado. */
+const PTA_ALM_LABEL = { '1': 'Americano Terán', '2': 'Almacén 2' };
+const PTA_PRES = [['totes', 'Totes (1000 L)'], ['cubetas', 'Cubetas'], ['galones', 'Galones']];
 
 /* Iconos SVG line (regla del proyecto: sin emojis) */
 const IconCam = () => (
@@ -151,23 +157,103 @@ function fileToFacturaBase64(file, maxDim = 1600, quality = 0.72) {
 
 const fmt = (n) => (Number(n) || 0).toLocaleString('es-MX');
 
+/* ─── Pre-llenado heurístico: nota libre → línea MP sugerida ───────────────────
+   Los ingresos "viejos" llegaron SIN partidas: quien lo dio de alta escribió lo
+   que llegó en la NOTA (texto libre) en vez del editor de líneas. Esto saca
+   cantidad + unidad e intenta casar la MP contra el maestro. Si NO hay match
+   confiable deja el texto crudo como nombre: el backend rechaza MP inexistente
+   AL APROBAR, así que una corazonada nunca se cuela sola al stock (el admin la
+   corrige antes). Solo se usa cuando el ingreso no trae partidas. */
+const UNIS = 'kgs?|kilos?|grs?|g|lts?|litros?|totes?|cubetas?|tambos?|tambor(?:es)?|sacos?|piezas?|pzas?|pz|cajas?|bolsas?';
+const _norm = (s) => String(s || '').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+const _STOP_RE = /\b(?:llegaron|llego|entraron|entro|recibi|recibimos|recibieron|subio|vinieron|vino|son|fueron|de|del|el|la|los|las|un|una|unos|unas|y|con|para)\b/gi;
+
+function _matchMP(candidato, mpNames) {
+  const cand = _norm(candidato).replace(/\s+/g, ' ').trim();
+  if (!cand || !Array.isArray(mpNames) || !mpNames.length) return { nombre: String(candidato || '').trim(), confiable: false };
+  let hit = mpNames.find(n => _norm(n) === cand);                                        // exacto
+  if (hit) return { nombre: hit, confiable: true };
+  hit = mpNames.find(n => { const N = _norm(n); return N.length >= 4 && (cand.includes(N) || N.includes(cand)); });  // substring
+  if (hit) return { nombre: hit, confiable: true };
+  const codes = cand.match(/[A-Z]*-?\d+[A-Z0-9-]*/g) || [];                              // código con dígito (W-1008, 4144)
+  for (const c of codes) {
+    if (c.length < 2) continue;
+    hit = mpNames.find(n => _norm(n).includes(c));
+    if (hit) return { nombre: hit, confiable: true };
+  }
+  return { nombre: String(candidato || '').trim(), confiable: false };                   // sin match → crudo (backend lo rechaza al aprobar)
+}
+
+function _sugerirLineaDesdeNota(nota, mpNames) {
+  const txt = String(nota || '').trim();
+  if (!txt) return null;
+  // 1) "<número> <unidad>" juntos = lo más confiable ("2 TOTES", "800 kg")
+  const m = txt.match(new RegExp('(\\d+(?:[.,]\\d+)?)\\s*(' + UNIS + ')\\b', 'i'));
+  let cantidad = null, unidad = 'kg', quitar = null;
+  if (m) { cantidad = Number(m[1].replace(',', '.')); unidad = m[2].toLowerCase(); quitar = m[0]; }
+  else {
+    // 2) fallback: número "suelto" (no pegado a letra/guion → no agarra el 1008 de W-1008)
+    const m2 = txt.match(/(?:^|[^\w-])(\d+(?:[.,]\d+)?)(?![\w-])/);
+    if (m2) { cantidad = Number(m2[1].replace(',', '.')); quitar = m2[1]; }
+  }
+  if (!(cantidad > 0)) return null;
+  const uniMap = { kg: 'kg', kgs: 'kg', kilo: 'kg', kilos: 'kg', g: 'g', gr: 'g', grs: 'g', lt: 'lt', lts: 'lt', l: 'lt', litro: 'lt', litros: 'lt', tote: 'tote', totes: 'tote', cubeta: 'cubeta', cubetas: 'cubeta', saco: 'saco', sacos: 'saco', tambo: 'tambo', tambos: 'tambo', tambor: 'tambo', tambores: 'tambo', caja: 'caja', cajas: 'caja', bolsa: 'bolsa', bolsas: 'bolsa', pza: 'pz', pzas: 'pz', pz: 'pz', pieza: 'pz', piezas: 'pz' };
+  unidad = uniMap[unidad] || unidad || 'kg';
+  // nombre candidato = nota sin el número/unidad ni los verbos de "llegó"
+  const cand = (quitar ? txt.replace(quitar, ' ') : txt)
+    .replace(new RegExp('\\b(?:' + UNIS + ')\\b', 'ig'), ' ')
+    .replace(_STOP_RE, ' ')
+    .replace(/\s+/g, ' ').trim();
+  // Cantidad SIN producto identificable (ej. "llegaron 3 cubetas") → no sugerir.
+  // Clave: NO caer a `txt` completo, o el nombre quedaría "llegaron 3 cubetas".
+  const { nombre, confiable } = cand ? _matchMP(cand, mpNames) : { nombre: '', confiable: false };
+  if (!String(nombre || '').trim()) return null;
+  return { tipo: 'mp', mp: nombre, nombre, cantidad, unidad, __sugerida: true, __confiable: confiable };
+}
+
 /* ─── Editor de líneas (lo que llegó) — compartido crear/revisar ───────────── */
-function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOnly }) {
+function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts, ptaCat, readOnly, onMPSeleccionada }) {
   const [tipo, setTipo] = useState('mp');
-  /* Borrador POR PESTAÑA (fix crítico jul 2026): cada tipo (mp/envase/tapa) recuerda
-     lo que estabas escribiendo → cambiar de sub-pestaña YA NO borra la info del
-     anterior. Antes era un solo estado compartido que se reseteaba al cambiar. */
+  /* Borrador POR PESTAÑA (fix crítico jul 2026): cada tipo (mp/envase/tapa/pta)
+     recuerda lo que estabas escribiendo → cambiar de sub-pestaña YA NO borra la
+     info del anterior. Antes era un solo estado compartido que se reseteaba. */
   const [draft, setDraft] = useState({
     mp:     { sel: '', cant: '', uni: 'kg', lote: '', costoKg: '' },
     envase: { sel: '', cant: '', uni: 'pz' },
     tapa:   { sel: '', cant: '', uni: 'pz' },
+    pta:    { sel: '', cant: '', uni: 'totes', almacen: '1', pres: 'totes' },
   });
   const d = draft[tipo];
   const setD = (patch) => setDraft(prev => ({ ...prev, [tipo]: { ...prev[tipo], ...patch } }));
 
-  const opts = tipo === 'mp' ? mpNames.map(n => ({ value: n, label: n }))
+  /* En el dropdown de MP el label secundario muestra proveedor + precio del ERP
+     (el value sigue siendo SOLO el nombre — es lo que viaja en la línea). */
+  const opts = tipo === 'mp' ? mpNames.map(n => {
+      const i = mpInfo && mpInfo[n];
+      const extra = i ? [i.proveedor, Number(i.costoKg) > 0 ? `$${i.costoKg}/kg` : null].filter(Boolean).join(' · ') : '';
+      return { value: n, label: extra || n };
+    })
     : tipo === 'envase' ? envaseOpts
+    : tipo === 'pta' ? ((ptaCat && ptaCat[d.almacen]) || []).map(n => ({ value: n, label: n }))
     : tapaOpts;
+
+  /* Autollenado (jul 2026, pedido dueño): al elegir una MP del catálogo se
+     prellenan los datos que el ERP ya conoce — costo/kg del maestro aquí, y
+     proveedor vía onMPSeleccionada en el form padre. Solo rellena campos
+     vacíos (lo tecleado por el usuario manda) y marca __auto para avisar que
+     el precio es del sistema, no de la factura. */
+  const onSelMP = (val) => {
+    const info = tipo === 'mp' && mpInfo ? mpInfo[val] : null;
+    if (!info) { setD({ sel: val, __auto: null }); return; }
+    const patch = { sel: val, __auto: null };
+    if (!(Number(d.costoKg) > 0) && Number(info.costoKg) > 0) {
+      patch.costoKg = String(info.costoKg);
+      patch.__auto = info;
+    }
+    if (info.unidad && (!d.uni || d.uni === 'kg')) patch.uni = info.unidad;
+    setD(patch);
+    if (onMPSeleccionada) onMPSeleccionada(info);
+  };
 
   const agregar = () => {
     const c = Number(d.cant);
@@ -182,13 +268,21 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
       const o = envaseOpts.find(x => x.value === d.sel);
       if (!o) return;
       linea = { tipo: 'envase', catKey: o.catKey, subKey: o.subKey, nombre: o.nombre, cantidad: c, unidad: d.uni || 'pz' };
+    } else if (tipo === 'pta') {
+      /* Producto americano: texto libre (colores nuevos se dan de alta solos). */
+      const uni = d.pres === 'totes' ? 'tote(s)' : d.pres === 'cubetas' ? 'cub' : 'gal';
+      linea = {
+        tipo: 'pta', almacen: d.almacen, producto: d.sel, presentacion: d.pres,
+        cantidad: c, unidad: uni,
+        nombre: `${d.sel} → ${PTA_ALM_LABEL[d.almacen]}`,
+      };
     } else {
       const o = tapaOpts.find(x => x.value === d.sel);
       if (!o) return;
       linea = { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, cantidad: c, unidad: d.uni || 'pz' };
     }
     setLineas([...(lineas || []), linea]);
-    setD({ sel: '', cant: '', lote: '', costoKg: '' }); /* limpia SOLO esta pestaña tras agregar */
+    setD({ sel: '', cant: '', lote: '', costoKg: '', __auto: null }); /* limpia SOLO esta pestaña tras agregar */
   };
 
   const quitar = (i) => setLineas(lineas.filter((_, idx) => idx !== i));
@@ -201,6 +295,7 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
             <div key={i} style={S.lineChip}>
               <span style={S.lineTipo}>{TIPO_LABEL[l.tipo] || l.tipo}</span>
               <span style={{ flex: 1, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</span>
+              {l.__sugerida && <span style={S.sugTag}>sugerida</span>}
               <span style={{ fontWeight: 600 }}>{fmt(l.cantidad)} {l.unidad}</span>
               {!readOnly && (
                 <button onClick={() => quitar(i)} aria-label="Quitar" style={S.chipDel}>✕</button>
@@ -211,21 +306,48 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
       )}
       {!readOnly && (
         <div style={S.lineForm}>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {['mp', 'envase', 'tapa'].map(t => (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {['mp', 'envase', 'tapa', 'pta'].map(t => (
               <button key={t} onClick={() => setTipo(t)} /* solo cambia de pestaña; el borrador se conserva */
                 style={{ ...S.seg, ...(tipo === t ? S.segActive : {}) }}>{TIPO_LABEL[t]}</button>
             ))}
           </div>
-          <input list="ing-opts" value={d.sel} onChange={e => setD({ sel: e.target.value })}
-            placeholder={tipo === 'mp' ? 'Materia prima…' : tipo === 'envase' ? 'Envase…' : 'Tapa…'} style={S.input} />
+          {/* PTA: almacén destino + presentación (los TOTES entran con lote pre-asignado) */}
+          {tipo === 'pta' && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+              {['1', '2'].map(a => (
+                <button key={a} onClick={() => setD({ almacen: a })}
+                  style={{ ...S.seg, ...(d.almacen === a ? S.segActive : {}) }}>{PTA_ALM_LABEL[a]}</button>
+              ))}
+            </div>
+          )}
+          {tipo === 'pta' && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+              {PTA_PRES.map(([v, l]) => (
+                <button key={v} onClick={() => setD({ pres: v })}
+                  style={{ ...S.seg, ...(d.pres === v ? S.segActive : {}) }}>{l}</button>
+              ))}
+            </div>
+          )}
+          <input list="ing-opts" value={d.sel} onChange={e => onSelMP(e.target.value)}
+            placeholder={tipo === 'mp' ? 'Materia prima…' : tipo === 'envase' ? 'Envase…' : tipo === 'pta' ? 'Color / producto americano…' : 'Tapa…'} style={{ ...S.input, ...(tipo === 'pta' ? { marginTop: 6 } : {}) }} />
+          {tipo === 'pta' && d.pres === 'totes' && (
+            <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 4, lineHeight: 1.4 }}>
+              Cantidad = número de <strong>totes</strong> (1000 L c/u). Cada tote entra con su <strong>lote asignado</strong> — la etiqueta se imprime desde que llega.
+            </div>
+          )}
           {/* Lote + costo/kg OPCIONALES de la MP (jul 2026, pedido dueño). Solo MP.
               El costo/kg alimenta el promedio ponderado del costo del sistema. */}
           {tipo === 'mp' && (
             <input value={d.lote || ''} onChange={e => setD({ lote: e.target.value })} placeholder="Lote de la MP (opcional)" style={{ ...S.input, marginTop: 6 }} />
           )}
           {tipo === 'mp' && (
-            <input type="number" inputMode="decimal" min="0" value={d.costoKg || ''} onChange={e => setD({ costoKg: e.target.value })} placeholder="Costo por kg de esta factura (opcional)" style={{ ...S.input, marginTop: 6 }} />
+            <input type="number" inputMode="decimal" min="0" value={d.costoKg || ''} onChange={e => setD({ costoKg: e.target.value, __auto: null })} placeholder="Costo por kg de esta factura (opcional)" style={{ ...S.input, marginTop: 6 }} />
+          )}
+          {tipo === 'mp' && d.__auto && (
+            <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 4, lineHeight: 1.4 }}>
+              Precio prellenado del ERP (${d.__auto.costoKg}/kg{d.__auto.proveedor ? ` · ${d.__auto.proveedor}` : ''}) — corrígelo si la factura trae otro.
+            </div>
           )}
           <datalist id="ing-opts">
             {opts.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -255,6 +377,29 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const fileRef = useRef(null);
+  /* P1 conciliación ingreso↔OC (20-jul-2026): si alguna MP capturada está en
+     una OC ACTIVA (aprobada, sin recibir), avisar — la misma factura puede
+     entrar DOBLE si Arely además la recibe por Compras. El usuario puede
+     vincular el ingreso a esa OC (referencia). Best-effort: almacén no puede
+     leer OCs (403) → sin aviso, sin romper nada. */
+  const [ocsActivas, setOcsActivas] = useState([]);
+  const [ocVinculada, setOcVinculada] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    api.getOCs()
+      .then(r => {
+        if (!alive) return;
+        const arr = Array.isArray(r) ? r : (r?.data || r?.ocs || []);
+        setOcsActivas((arr || []).filter(o => o && o.aprobada && !['recibida', 'eliminada'].includes(o.estado)));
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  const ocMatch = useMemo(() => {
+    const mpsCapturadas = (lineas || []).filter(l => l.tipo === 'mp').map(l => String(l.mp || '').trim().toUpperCase());
+    if (!mpsCapturadas.length) return null;
+    return ocsActivas.find(o => (o.items || []).some(it => mpsCapturadas.includes(String(it.mp || '').trim().toUpperCase()))) || null;
+  }, [lineas, ocsActivas]);
 
   const onFile = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -265,7 +410,7 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
       setFacturaData(b64);
       setEsPdf(file.type === 'application/pdf');
       setFacturaPreview(file.type === 'application/pdf' ? null : b64);
-    } catch (e2) { setErr('No se pudo procesar la foto: ' + (e2?.message || '')); }
+    } catch (e2) { setErr('No se pudo procesar la foto: ' + humanizeError(e2)); } /* AUDIT UX 16-jul (U4) */
   };
 
   const guardar = async () => {
@@ -282,16 +427,23 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
         proveedor: proveedor.trim(), numFactura: numFactura.trim(),
         monto: Number(monto) > 0 ? Number(monto) : null,
         nota: nota.trim(), lineas, facturaBase64: facturaData,
+        ...(ocVinculada ? { ocId: ocVinculada } : {}),
       });
       if (r && r.ok) onSaved(r.ingreso);
       else setErr((r && r.error) || 'No se pudo crear');
     } catch (e2) {
-      setErr(e2?.data?.error || e2?.message || 'No se pudo crear el ingreso');
+      setErr(humanizeError(e2)); /* AUDIT UX 16-jul (U4) */
     } finally { setSaving(false); }
   };
 
+  /* MP elegida en el editor → proveedor del ERP, solo si el campo sigue vacío
+     (una factura trae UN proveedor; lo que el usuario ya tecleó manda). */
+  const mpElegida = (info) => {
+    if (info && info.proveedor) setProveedor(p => (p && p.trim() ? p : info.proveedor));
+  };
+
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetHead}>
           <div style={{ fontSize: 17, fontWeight: 650 }}>Nuevo ingreso</div>
@@ -321,7 +473,22 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
           {esPdf && <div style={S.pdfOk}>PDF adjunto ✓</div>}
 
           <label style={S.lbl}>¿Qué llegó? * <span style={{ color: 'var(--lp-text-tertiary,#8a948f)', fontWeight: 400 }}>(producto y cantidad — así el admin solo aprueba)</span></label>
-          <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} />
+          <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} onMPSeleccionada={mpElegida} />
+
+          {ocMatch && (
+            <div style={{ background: 'var(--lp-warning-50,#fdf6e3)', border: '1.5px solid var(--lp-warning-600,#b98900)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--lp-warning-700,#8a6a00)', marginTop: 4 }}>
+              <strong>Ojo:</strong> esta MP está en la OC activa <strong>{ocMatch.codigo || ocMatch.id}</strong> ({ocMatch.proveedor || '?'}).
+              Si esta entrega ES esa OC, mejor recíbela en <strong>Compras → Recibir</strong> (si además se registra aquí, el stock entraría DOBLE).
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontWeight: 600 }}>
+                <input
+                  type="checkbox"
+                  checked={ocVinculada === (ocMatch.id || ocMatch.codigo)}
+                  onChange={e => setOcVinculada(e.target.checked ? (ocMatch.id || ocMatch.codigo) : null)}
+                />
+                Es entrega SUELTA relacionada — vincular como referencia a {ocMatch.codigo || ocMatch.id}
+              </label>
+            </div>
+          )}
 
           <label style={S.lbl}>Nota</label>
           <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} placeholder="Observaciones…" style={{ ...S.input, resize: 'vertical' }} />
@@ -341,7 +508,14 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
 
 /* ─── Sheet: revisar (admin) → aprobar (suma stock) / rechazar ─────────────── */
 function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
-  const [lineas, setLineas] = useState(() => (ing.lineas || []).map(l => ({ ...l })));
+  /* Pre-llenado: si el ingreso NO trae partidas (llegó como foto + nota), sugiere
+     una línea parseada de la nota para que el admin no teclee de cero. */
+  const [lineas, setLineas] = useState(() => {
+    const base = (ing.lineas || []).map(l => ({ ...l }));
+    if (base.length) return base;
+    const sug = _sugerirLineaDesdeNota(ing.nota, (catalogs && catalogs.mpNames) || []);
+    return sug ? [sug] : [];
+  });
   const [notaRevision, setNotaRevision] = useState('');
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
@@ -355,12 +529,12 @@ function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
       if (r && r.ok) onDone(r.ingreso, decision, r.mutaciones || []);
       else setErr((r && r.error) || 'No se pudo revisar');
     } catch (e) {
-      setErr(e?.data?.error || e?.message || 'No se pudo revisar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally { setBusy(''); }
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetHead}>
           <div>
@@ -381,6 +555,12 @@ function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
           {ing.nota && <div style={S.notaBox}>“{ing.nota}”</div>}
 
           <label style={S.lbl}>Líneas a sumar al inventario</label>
+          {lineas.some(l => l.__sugerida) && (
+            <div style={S.sugBox}>
+              Pre-llenado desde la nota — verifica MP, cantidad y unidad antes de aprobar.
+              {lineas.some(l => l.__sugerida && !l.__confiable) ? ' No encontré la MP en el maestro; elígela de la lista.' : ''}
+            </div>
+          )}
           <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} />
 
           <label style={S.lbl}>Nota de revisión</label>
@@ -435,7 +615,7 @@ function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
       setFacturaData(b64);
       setEsPdf(file.type === 'application/pdf');
       setFacturaPreview(file.type === 'application/pdf' ? null : b64);
-    } catch (e2) { setErr('No se pudo procesar la foto: ' + (e2?.message || '')); }
+    } catch (e2) { setErr('No se pudo procesar la foto: ' + humanizeError(e2)); } /* AUDIT UX 16-jul (U4) */
   };
 
   const guardar = async () => {
@@ -454,12 +634,17 @@ function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
       if (r && r.ok) onSaved(r.ingreso, r);
       else setErr((r && r.error) || 'No se pudo guardar');
     } catch (e2) {
-      setErr(e2?.data?.error || e2?.message || 'No se pudo guardar los cambios');
+      setErr(humanizeError(e2)); /* AUDIT UX 16-jul (U4) */
     } finally { setSaving(false); }
   };
 
+  /* Igual que en CrearSheet: proveedor del ERP solo si el campo quedó vacío. */
+  const mpElegida = (info) => {
+    if (info && info.proveedor) setProveedor(p => (p && p.trim() ? p : info.proveedor));
+  };
+
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetHead}>
           <div style={{ fontSize: 17, fontWeight: 650 }}>Editar <span style={{ fontFamily: MONO, fontSize: 15 }}>{ing.folio}</span></div>
@@ -501,7 +686,7 @@ function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
           {esPdf && <div style={S.pdfOk}>PDF nuevo adjunto ✓</div>}
 
           <label style={S.lbl}>¿Qué llegó? *</label>
-          <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} />
+          <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} onMPSeleccionada={mpElegida} />
 
           <label style={S.lbl}>Nota</label>
           <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} placeholder="Observaciones…" style={{ ...S.input, resize: 'vertical' }} />
@@ -570,11 +755,14 @@ export default function IngresosPage() {
   const [editar, setEditar] = useState(null); /* ingreso en edición (admin) */
   const [eliminando, setEliminando] = useState(null); /* id del ingreso que se está borrando */
   const [toast, setToast] = useState(null);
-  const [catalogs, setCatalogs] = useState({ mpNames: [], envaseOpts: [], tapaOpts: [] });
+  const [catalogs, setCatalogs] = useState({ mpNames: [], mpInfo: {}, envaseOpts: [], tapaOpts: [], ptaCat: { '1': [], '2': [] } });
   /* Handoff 1c: vista segmentada + acordeón por proveedor + filtro de historial */
   const [vista, setVista] = useState('recientes');       /* 'recientes' | 'proveedor' */
   const [expandido, setExpandido] = useState(null);      /* key del grupo abierto */
   const [filtroProveedor, setFiltroProveedor] = useState(null);
+  /* AUDIT UX 16-jul (U16-baja): useConfirm en lugar de window.confirm — el
+     nativo se descarta en silencio en PWA standalone iOS (patrón Sprint G-4). */
+  const [confirm, ConfirmEl] = useConfirm();
 
   const showToast = useCallback((msg, isErr = false) => {
     setToast({ msg, isErr });
@@ -599,9 +787,27 @@ export default function IngresosPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [mr, er] = await Promise.all([api.getMaestroMP(), api.getEnvases()]);
+        const [mr, er, a1, a2] = await Promise.all([
+          api.getMaestroMP(), api.getEnvases(),
+          api.getStkAmericano('1').catch(() => null), api.getStkAmericano('2').catch(() => null),
+        ]);
         const maestro = (mr && mr.data) || mr || {};
-        const mpNames = Object.keys(maestro.mps || {}).sort();
+        /* Las 'eliminado' NO se ofrecen: un ingreso les sumaría stock invisible
+           (el inventario lista solo activas/ocultas). Si una MP regresa, primero
+           se reactiva en el maestro. mpInfo = datos que el ERP ya conoce por MP
+           (proveedor principal + costo/kg + unidad) para el autollenado. */
+        const mpInfo = {};
+        Object.entries(maestro.mps || {}).forEach(([n, dmp]) => {
+          if (dmp && dmp.estado === 'eliminado') return;
+          const ck = dmp && dmp.costo && Number(dmp.costo.costoKg);
+          mpInfo[n] = {
+            nombre: n,
+            proveedor: (dmp && dmp.proveedor && dmp.proveedor.principal) || '',
+            costoKg: ck > 0 ? +ck.toFixed(2) : null,
+            unidad: (dmp && dmp.unidad) || '',
+          };
+        });
+        const mpNames = Object.keys(mpInfo).sort();
         const env = (er && er.data) || er || {};
         const envaseOpts = [];
         Object.entries(env.categorias || {}).forEach(([catKey, cat]) => {
@@ -616,7 +822,13 @@ export default function IngresosPage() {
         const tapaOpts = Object.entries(env.tapas || {}).map(([tapaKey, t]) => ({
           value: tapaKey, label: t.nombre || tapaKey, tapaKey, nombre: t.nombre || tapaKey, unidad: t.unidad || 'pz',
         }));
-        setCatalogs({ mpNames, envaseOpts, tapaOpts });
+        /* Catálogo de colores americanos por almacén (autocompletar de PTA;
+           texto libre permitido — colores nuevos se dan de alta al aprobar). */
+        const ptaCat = {
+          '1': ((a1 && a1.data && a1.data.catalogo) || []),
+          '2': ((a2 && a2.data && a2.data.catalogo) || []),
+        };
+        setCatalogs({ mpNames, mpInfo, envaseOpts, tapaOpts, ptaCat });
       } catch { /* noop */ }
     })();
   }, []);
@@ -671,14 +883,16 @@ export default function IngresosPage() {
       + (revierte
         ? 'Ya fue aprobado: se RESTARÁ del inventario lo que sumó y se borrará todo rastro (registro, foto, movimientos). No se puede deshacer.'
         : 'Se borrará el registro y su foto. No se puede deshacer.');
-    if (!window.confirm(msg)) return;
+    /* AUDIT UX 16-jul (U16-baja): window.confirm → useConfirm */
+    const ok = await confirm(msg, { title: 'Eliminar ingreso', confirmText: 'Eliminar', danger: true });
+    if (!ok) return;
     setEliminando(ing.id);
     try {
       const r = await api.eliminarIngreso(ing.id);
       showToast(`${ing.folio} eliminado` + (r && r.reverts && r.reverts.length ? ` · revertido del stock (${r.reverts.length})` : ''));
       load();
     } catch (e) {
-      showToast('No se pudo eliminar: ' + (e?.data?.error || e?.message || 'error'), true);
+      showToast('No se pudo eliminar: ' + humanizeError(e), true); /* AUDIT UX 16-jul (U4) */
     } finally { setEliminando(null); }
   };
 
@@ -895,8 +1109,10 @@ export default function IngresosPage() {
       )}
 
       {toast && (
-        <div style={{ ...S.toast, ...(toast.isErr ? { background: '#B91C1C' } : {}) }}>{toast.msg}</div>
+        /* AUDIT UX 16-jul (U20): anunciar el toast a lectores de pantalla */
+        <div role="status" aria-live="polite" style={{ ...S.toast, ...(toast.isErr ? { background: '#B91C1C' } : {}) }}>{toast.msg}</div>
       )}
+      {ConfirmEl}{/* AUDIT UX 16-jul (U16-baja) */}
     </div>
   );
 }
@@ -904,9 +1120,9 @@ export default function IngresosPage() {
 /* ─── estilos ────────────────────────────────────────────────────────────── */
 const BRAND = 'var(--lp-brand-700,#0f7a5a)';
 const S = {
-  card: { background: 'var(--lp-surface,#fff)', border: '1px solid var(--lp-border,rgba(0,0,0,.1))', borderRadius: 16, padding: '14px 16px' },
+  card: { background: 'var(--lp-bg-raised,#fff)', border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.1))', borderRadius: 16, padding: '14px 16px' },
   badge: { fontSize: 11.5, fontWeight: 600, padding: '3px 10px', borderRadius: 20 },
-  miniLine: { fontSize: 12, background: 'var(--lp-bg-base,#f5f6f4)', border: '1px solid var(--lp-border,rgba(0,0,0,.08))', borderRadius: 7, padding: '3px 9px' },
+  miniLine: { fontSize: 12, background: 'var(--lp-bg-base,#f5f6f4)', border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.08))', borderRadius: 7, padding: '3px 9px' },
   /* Jerarquía de card: proveedor manda; folio en mono (código), monto en mono. */
   folio: { fontFamily: MONO, fontSize: 12, color: 'var(--lp-text-secondary,#5a6b63)', letterSpacing: '0.2px' },
   monto: { fontFamily: MONO, fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary,#16201c)', whiteSpace: 'nowrap' },
@@ -914,31 +1130,31 @@ const S = {
   /* "Ver factura" con área táctil real (antes era una liga de 12px) */
   verFacturaBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: BRAND, padding: '9px 14px', minHeight: 40, borderRadius: 9, border: '1px solid rgba(15,122,90,.28)', background: 'rgba(15,122,90,.06)', textDecoration: 'none', whiteSpace: 'nowrap', boxSizing: 'border-box' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', color: 'var(--lp-text-secondary,#5a6b63)', padding: '52px 16px', fontSize: 14 },
-  tab: { fontSize: 13, fontWeight: 500, padding: '6px 14px', borderRadius: 20, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
+  tab: { fontSize: 13, fontWeight: 500, padding: '6px 14px', borderRadius: 20, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
   tabActive: { background: BRAND, color: '#fff', borderColor: BRAND },
   btnPrimary: { fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 10, border: 'none', background: BRAND, color: '#fff', cursor: 'pointer' },
-  btnGhost: { fontSize: 14, fontWeight: 500, padding: '9px 16px', borderRadius: 10, border: '1px solid var(--lp-border,rgba(0,0,0,.15))', background: 'transparent', color: 'var(--lp-text-primary,#16201c)', cursor: 'pointer' },
+  btnGhost: { fontSize: 14, fontWeight: 500, padding: '9px 16px', borderRadius: 10, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.15))', background: 'transparent', color: 'var(--lp-text-primary,#16201c)', cursor: 'pointer' },
   btnDanger: { fontSize: 14, fontWeight: 600, padding: '9px 16px', borderRadius: 10, border: '1px solid #FCA5A5', background: '#FEF2F2', color: '#B91C1C', cursor: 'pointer' },
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
-  sheet: { background: 'var(--lp-surface,#fff)', width: '100%', maxWidth: 560, maxHeight: '92vh', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column' },
-  sheetHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--lp-border,rgba(0,0,0,.08))' },
+  sheet: { background: 'var(--lp-bg-raised,#fff)', width: '100%', maxWidth: 560, maxHeight: '92vh', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column' },
+  sheetHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--lp-border-subtle,rgba(0,0,0,.08))' },
   sheetBody: { padding: '14px 18px', overflowY: 'auto', display: 'flex', flexDirection: 'column' },
-  sheetFoot: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 18px', borderTop: '1px solid var(--lp-border,rgba(0,0,0,.08))' },
+  sheetFoot: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 18px', borderTop: '1px solid var(--lp-border-subtle,rgba(0,0,0,.08))' },
   x: { border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: 'var(--lp-text-secondary,#5a6b63)' },
   lbl: { fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-secondary,#5a6b63)', margin: '12px 0 5px' },
   /* 16px EXACTOS: con menos, iOS hace zoom automático al enfocar el input
      (una de las quejas de legibilidad en móvil). También se lee mejor en PC. */
-  input: { width: '100%', fontSize: 16, padding: '10px 12px', borderRadius: 9, border: '1px solid var(--lp-border,rgba(0,0,0,.15))', background: 'var(--lp-surface,#fff)', color: 'var(--lp-text-primary,#16201c)', boxSizing: 'border-box' },
+  input: { width: '100%', fontSize: 16, padding: '10px 12px', borderRadius: 9, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.15))', background: 'var(--lp-bg-raised,#fff)', color: 'var(--lp-text-primary,#16201c)', boxSizing: 'border-box' },
   fotoBtn: { fontSize: 14, fontWeight: 600, padding: '12px', borderRadius: 10, border: '1.5px dashed ' + BRAND, background: 'rgba(15,122,90,.05)', color: BRAND, cursor: 'pointer', width: '100%' },
-  preview: { width: '100%', maxHeight: 260, objectFit: 'contain', borderRadius: 10, border: '1px solid var(--lp-border,rgba(0,0,0,.1))', marginTop: 8, background: '#fafafa', display: 'block' },
+  preview: { width: '100%', maxHeight: 260, objectFit: 'contain', borderRadius: 10, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.1))', marginTop: 8, background: '#fafafa', display: 'block' },
   pdfOk: { fontSize: 13, color: BRAND, fontWeight: 600, marginTop: 8 },
   notaBox: { fontSize: 13, fontStyle: 'italic', color: 'var(--lp-text-secondary,#5a6b63)', background: 'var(--lp-bg-base,#f5f6f4)', borderRadius: 8, padding: '8px 10px', margin: '4px 0 2px' },
   err: { fontSize: 13.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 11px', marginTop: 10, lineHeight: 1.4 },
-  lineChip: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '8px 11px', borderRadius: 8, border: '1px solid var(--lp-border,rgba(0,0,0,.1))', background: 'var(--lp-bg-base,#f7f8f6)' },
+  lineChip: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, padding: '8px 11px', borderRadius: 8, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.1))', background: 'var(--lp-bg-base,#f7f8f6)' },
   lineTipo: { fontSize: 10, fontWeight: 700, color: BRAND, background: 'rgba(15,122,90,.1)', borderRadius: 5, padding: '1px 6px' },
   chipDel: { border: 'none', background: 'transparent', color: '#B91C1C', cursor: 'pointer', fontSize: 13 },
-  lineForm: { display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, border: '1px dashed var(--lp-border,rgba(0,0,0,.15))' },
-  seg: { flex: 1, fontSize: 12.5, fontWeight: 600, padding: '6px', minHeight: 36, borderRadius: 7, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
+  lineForm: { display: 'flex', flexDirection: 'column', gap: 8, padding: 10, borderRadius: 10, border: '1px dashed var(--lp-border-subtle,rgba(0,0,0,.15))' },
+  seg: { flex: 1, fontSize: 12.5, fontWeight: 600, padding: '6px', minHeight: 36, borderRadius: 7, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
   segActive: { background: BRAND, color: '#fff', borderColor: BRAND },
   addBtn: { fontSize: 13, fontWeight: 600, padding: '10px 12px', minHeight: 40, borderRadius: 8, border: 'none', background: BRAND, color: '#fff', cursor: 'pointer', whiteSpace: 'nowrap' },
   toast: { position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#16201c', color: '#fff', fontSize: 14, padding: '11px 18px', borderRadius: 10, zIndex: 1200, maxWidth: '90vw', textAlign: 'center' },
@@ -956,18 +1172,21 @@ const S = {
   kpiLbl: { fontSize: 11.5, color: 'var(--lp-text-tertiary,#6b8a78)', marginTop: 2 },
   segmented: { margin: '14px 0 0', background: 'rgba(0,0,0,0.04)', borderRadius: 99, padding: 4, display: 'grid', gridTemplateColumns: '1fr 1fr' },
   segmentedBtn: { textAlign: 'center', fontSize: 13, color: 'var(--lp-text-secondary,#3d5a4a)', padding: '8px 0', minHeight: 36, background: 'none', border: 'none', borderRadius: 99, cursor: 'pointer', fontFamily: 'inherit', transition: 'background 260ms cubic-bezier(.22,1,.36,1)' },
-  segmentedActive: { fontWeight: 500, color: 'var(--lp-text-primary,#0d2320)', background: 'var(--lp-surface,#FEFEFE)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' },
-  grupoCard: { background: 'var(--lp-surface,#FEFEFE)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden' },
+  segmentedActive: { fontWeight: 500, color: 'var(--lp-text-primary,#0d2320)', background: 'var(--lp-bg-raised,#FEFEFE)', boxShadow: '0 1px 4px rgba(0,0,0,0.05)' },
+  grupoCard: { background: 'var(--lp-bg-raised,#FEFEFE)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 16, boxShadow: '0 1px 4px rgba(0,0,0,0.05)', overflow: 'hidden' },
   grupoHead: { width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', minHeight: 62, background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', color: 'inherit' },
   avatar: { width: 34, height: 34, borderRadius: 99, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 500, flexShrink: 0 },
   grupoNombre: { fontSize: 14.5, fontWeight: 500, color: 'var(--lp-text-primary,#0d2320)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   grupoMeta: { fontSize: 11.5, color: 'var(--lp-text-tertiary,#6b8a78)', marginTop: 1 },
   grupoBody: { borderTop: '1px solid rgba(0,0,0,0.04)', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 8, background: 'rgba(29,158,117,0.04)' },
-  facturaPill: { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-surface,#FEFEFE)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 99, padding: '8px 14px', minHeight: 36, fontSize: 12, fontWeight: 500, color: '#0F6E56', textDecoration: 'none', boxSizing: 'border-box' },
+  facturaPill: { display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-bg-raised,#FEFEFE)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: 99, padding: '8px 14px', minHeight: 36, fontSize: 12, fontWeight: 500, color: '#0F6E56', textDecoration: 'none', boxSizing: 'border-box' },
   histBtn: { background: 'none', border: 'none', fontFamily: 'inherit', fontSize: 12, fontWeight: 500, color: 'var(--lp-text-secondary,#3d5a4a)', cursor: 'pointer', padding: '8px 10px', minHeight: 36 },
   filtroChip: { display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(15,122,90,.08)', border: '1px solid rgba(15,122,90,.25)', borderRadius: 99, padding: '7px 14px', minHeight: 36, fontSize: 13, fontWeight: 500, color: BRAND, cursor: 'pointer', fontFamily: 'inherit' },
   /* Menú "⋯" de la tarjeta (admin): botón kebab + dropdown con las 3 acciones */
-  kebabBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 10, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'var(--lp-surface,#fff)', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer', boxSizing: 'border-box' },
-  menu: { position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 172, background: 'var(--lp-surface,#fff)', border: '1px solid var(--lp-border,rgba(0,0,0,.1))', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,.16)', padding: 6, zIndex: 60, display: 'flex', flexDirection: 'column', gap: 2 },
+  kebabBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 10, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.12))', background: 'var(--lp-bg-raised,#fff)', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer', boxSizing: 'border-box' },
+  menu: { position: 'absolute', top: 'calc(100% + 6px)', right: 0, minWidth: 172, background: 'var(--lp-bg-raised,#fff)', border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.1))', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,.16)', padding: 6, zIndex: 60, display: 'flex', flexDirection: 'column', gap: 2 },
   menuItem: { display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left', fontSize: 14, fontWeight: 500, color: 'var(--lp-text-primary,#16201c)', background: 'none', border: 'none', borderRadius: 8, padding: '10px 12px', minHeight: 42, cursor: 'pointer', fontFamily: 'inherit', textDecoration: 'none', boxSizing: 'border-box' },
+  /* Pre-llenado desde la nota: aviso ámbar + tag por línea (el admin verifica) */
+  sugBox: { fontSize: 12.5, color: '#92610A', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 8, padding: '8px 10px', margin: '2px 0 8px', lineHeight: 1.45 },
+  sugTag: { fontSize: 10, fontWeight: 700, color: '#92610A', background: '#FEF3C7', border: '1px solid #FDE68A', borderRadius: 5, padding: '1px 6px', whiteSpace: 'nowrap', flexShrink: 0 },
 };

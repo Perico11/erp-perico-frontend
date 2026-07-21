@@ -9,7 +9,6 @@ import UsuariosPanel from './UsuariosPanel';
 import MargenesDashboard from './MargenesDashboard';
 import CanonicoPanel from './CanonicoPanel';
 import TOTPSetupPanel from './TOTPSetupPanel';
-import DevolucionesPanel from './DevolucionesPanel';
 import SATPanel from './SATPanel';
 import CostosMPPanel from './CostosMPPanel';
 import CostosAuxiliaresPanel from './CostosAuxiliaresPanel';
@@ -1240,7 +1239,6 @@ const SECTION_PANELS = {
   'canonico':      CanonicoPanel,
   'usuarios':      UsuariosPanel,
   'margenes':      MargenesDashboard,
-  'devoluciones':  DevolucionesPanel,
   'sat':           SATPanel,
   'maestro-mp':    MaestroMPPanel,
   'costos-mp':     CostosMPPanel,
@@ -1269,6 +1267,16 @@ export default function AdminPage() {
     const s = searchParams.get('section');
     if (s && SECTION_PANELS[s]) setActiveSection(s);
   }, [searchParams]);
+
+  /* Unificación Devoluciones (jul 2026): el panel embebido DevolucionesPanel
+     duplicaba a la pantalla canónica /devoluciones (sheets nuevas + data-id) y
+     se eliminó. Deep-links viejos ?section=devoluciones redirigen allá — antes
+     ni siquiera renderizaban (la sección no estaba en ADMIN_SECTIONS → blanco). */
+  useEffect(() => {
+    if (searchParams.get('section') === 'devoluciones') {
+      navigate('/devoluciones', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   const currentSection = activeSection
     ? ADMIN_SECTIONS.find(s => s.id === activeSection)

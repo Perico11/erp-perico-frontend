@@ -14,6 +14,7 @@ import {
 import PruebaBadge from './ui/PruebaBadge';
 import useConfirm from '../hooks/useConfirm';
 import { QRScanner } from './QRModal';
+import { despacharScanSublote, extraerCodigoScan, resumenBulk } from '../lib/scanSublote';
 
 /* Iconos SVG line (sin emojis) para los botones QC */
 const IcoCheck = ({ size = 14 }) => (
@@ -386,7 +387,8 @@ function LoteActionsCard({ pedido, lote, userRol, userName, onSuccess, onError, 
     setBusy('enviarRecolectar');
     try {
       const elegibles = sublotes.filter(s => s.estado === 'envasado' && !s.esMerma).length;
-      const r = await api.post('/api/sublotes/scan-bulk', {
+      /* P1 (20-jul-2026): por el wrapper canónico, no api.post crudo */
+      await api.escanearLoteBulk({
         loteId: lote.id,
         accion: 'marcarRecoleccion',
         ...overridePayload,
@@ -431,37 +433,29 @@ function LoteActionsCard({ pedido, lote, userRol, userName, onSuccess, onError, 
      el endpoint /sublotes/scan resuelve el sublote por el código leído, así
      que el guard scanCod===cod se cumple intrínsecamente (no hay bypass
      manual). Si se lee el QR del LOTE completo, ofrece recibir todo en bulk. */
+  /* P2 (21-jul-2026): protocolo compartido lib/scanSublote (single→bulk). */
   const handleScanRecepcion = async (result) => {
     setScanRecepcion(false);
-    const code = (result?.cod || result?.raw || '').trim();
+    const code = extraerCodigoScan(result);
     if (!code) { if (onError) onError('QR no reconocido'); return; }
     setBusy('recibirTeran');
-    try {
-      const r = await api.escanearSublote(code, 'escanearRecibirTeran');
-      const s = r?.sublote;
-      const esTote = s?.claseSublote === 'tote' || s?.tipo === 'tote';
-      if (onSuccess) onSuccess(`${s?.cod || code} recibido en Terán${esTote ? ' (TOTE activo en buffer)' : ' (alta como PT)'}`);
-    } catch (err) {
-      const data = err?.data;
-      if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
-        const ok = await confirm(
-          `Escaneaste el QR del LOTE ${data.codigoLote || ''}. ¿Recibir TODOS los sublotes en camino del lote?`,
-          { confirmText: 'Recibir todo el lote' }
-        );
-        if (ok) {
-          try {
-            const r2 = await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion: 'escanearRecibirTeran', scanCod: code });
-            const n = r2?.procesados?.length || 0;
-            const omit = r2?.omitidos?.length || 0;
-            if (onSuccess) onSuccess(`Lote recibido: ${n} sublote(s)${omit ? ` · ${omit} omitido(s)` : ''}`);
-          } catch (e2) { if (onError) onError(e2.message || 'Bulk scan falló'); }
-        }
-      } else {
-        if (onError) onError(err.message || 'El QR no coincide con un sublote en camino');
-      }
-    } finally {
-      setBusy('');
-    }
+    await despacharScanSublote({
+      code, accion: 'escanearRecibirTeran', confirm,
+      bulk: {
+        pregunta: (d) => `Escaneaste el QR del LOTE ${d.codigoLote || ''}. ¿Recibir TODOS los sublotes en camino del lote?`,
+        confirmText: 'Recibir todo el lote',
+      },
+      onSublote: (r) => {
+        const s = r?.sublote;
+        const esTote = s?.claseSublote === 'tote' || s?.tipo === 'tote';
+        if (onSuccess) onSuccess(`${s?.cod || code} recibido en Terán${esTote ? ' (TOTE activo en buffer)' : ' (alta como PT)'}`);
+      },
+      onBulk: (r2) => { if (onSuccess) onSuccess(`Lote recibido: ${resumenBulk(r2)}`); },
+      onError: (err, fase) => {
+        if (onError) onError(fase === 'bulk' ? (err.message || 'Bulk scan falló') : (err.message || 'El QR no coincide con un sublote en camino'));
+      },
+    });
+    setBusy('');
   };
 
   return (

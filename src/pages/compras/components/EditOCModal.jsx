@@ -63,6 +63,13 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
   const [transportista, setTransportista] = useState(oc.transportista || '');
   const [paqueteria, setPaqueteria] = useState(oc.paqueteria || '');
   const [numGuia, setNumGuia] = useState(oc.numGuia || '');
+  /* P2 (21-jul-2026): datos de la FACTURA real — sin totalFacturaConIva el
+     match SAT↔OC (compara ese campo ±2% contra el CFDI) nunca encontraba
+     candidatas porque ninguna UI lo capturaba. */
+  const [numFactura, setNumFactura] = useState(oc.numFactura || '');
+  const [totalFactura, setTotalFactura] = useState(
+    oc.totalFacturaConIva != null ? String(oc.totalFacturaConIva) : ''
+  );
   const [fleteOverride, setFleteOverride] = useState(
     oc.fleteEstimadoMxn != null ? String(oc.fleteEstimadoMxn) : ''
   );
@@ -106,7 +113,11 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
         transportista: transportista || null,
         paqueteria: paqueteria || null,
         numGuia: numGuia || null,
+        numFactura: numFactura || null,
       };
+      if (totalFactura !== '' && !isNaN(Number(totalFactura))) {
+        payload.totalFacturaConIva = Number(totalFactura);
+      }
       if (fleteOverride !== '' && !isNaN(Number(fleteOverride))) {
         payload.fleteEstimadoMxn = Number(fleteOverride);
       }
@@ -121,7 +132,7 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.title}>Editar OC — {oc.codigo}</div>
 
@@ -184,6 +195,22 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
             <label style={S.label}>Número de guía</label>
             <input style={S.input} value={numGuia} onChange={(e) => setNumGuia(e.target.value)} placeholder="Ej. 7705 1234 5678" />
           </div>
+        </div>
+
+        {/* P2 (21-jul-2026): factura real — el total c/IVA es lo que el match
+            SAT compara (±2%) contra el CFDI para vincular la factura a esta OC. */}
+        <div style={S.grid2}>
+          <div>
+            <label style={S.label}># Factura del proveedor</label>
+            <input style={S.input} value={numFactura} onChange={(e) => setNumFactura(e.target.value)} placeholder="Folio de la factura" />
+          </div>
+          <div>
+            <label style={S.label}>Total factura c/IVA (MXN)</label>
+            <input style={S.input} type="number" inputMode="decimal" min="0" step="0.01" value={totalFactura} onChange={(e) => setTotalFactura(e.target.value)} placeholder="Ej. 58,420.00" />
+          </div>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: -6, marginBottom: 10 }}>
+          Con el total capturado, el CFDI se vincula solo en SAT/CFDI (match por monto ±2%).
         </div>
 
         <div style={S.fieldGroup}>

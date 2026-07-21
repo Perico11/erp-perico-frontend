@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import api from '../../../services/api';
 import useIsDesktop from '../../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
+import humanizeError from '../../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { presEnvases } from '../presentaciones';
 
 const PRESENTACIONES = [
@@ -228,6 +229,9 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   const [fleteEstimado, setFleteEstimado] = useState('');
   const [fleteOverride, setFleteOverride] = useState(false);
   const [creating, setCreating] = useState(false);
+  /* AUDIT UX 16-jul (U7): error de validación inline (en el footer pegajoso,
+     siempre visible) en vez de alert() nativo bloqueante. */
+  const [formErr, setFormErr] = useState('');
 
   /* Load catalog y enriquecer items con proveedor + último precio + lead time */
   useEffect(() => {
@@ -264,7 +268,7 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           }
         }
       })
-      .catch(err => setError(err.message))
+      .catch(err => setError(humanizeError(err))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -296,22 +300,24 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   }, [sugeridoFlete, fleteOverride]);
 
   const handleAddItem = () => {
+    /* AUDIT UX 16-jul (U7): validación inline en vez de alert() */
     if (!mp) {
-      alert('Selecciona materia prima');
+      setFormErr('Selecciona materia prima');
       return;
     }
     if (!kg || Number(kg) <= 0) {
-      alert('Ingresa kilos válidos');
+      setFormErr('Ingresa kilos válidos');
       return;
     }
     if (!presentacion) {
-      alert('Selecciona presentación');
+      setFormErr('Selecciona presentación');
       return;
     }
     if (presentacion === 'otro' && !presentacionOtro) {
-      alert('Especifica la presentación');
+      setFormErr('Especifica la presentación');
       return;
     }
+    setFormErr('');
 
     setItems([...items, {
       mp,
@@ -331,8 +337,9 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   };
 
   const handleCreate = async () => {
+    /* AUDIT UX 16-jul (U7): validación inline en vez de alert() */
     if (!proveedor) {
-      alert('Selecciona proveedor');
+      setFormErr('Selecciona proveedor');
       return;
     }
     /* Si no se pulsó "+ Agregar al pedido", incluir la MP que está cargada en el
@@ -351,11 +358,12 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           kg_recibidos: null,
         }];
       } else {
-        alert('Agrega al menos un item');
+        setFormErr('Agrega al menos un item'); /* AUDIT UX 16-jul (U7) */
         return;
       }
     }
 
+    setFormErr('');
     setCreating(true);
     try {
       const res = await api.post('/api/compras/oc', {
@@ -370,10 +378,10 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
         onCreated();
         if (onClose) onClose(); /* garantizar cierre del modal en éxito */
       } else {
-        alert(`Error: ${res.error || 'desconocido'}`);
+        setFormErr(humanizeError({ data: res })); /* AUDIT UX 16-jul (U4+U7) */
       }
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setFormErr(humanizeError(err)); /* AUDIT UX 16-jul (U4+U7) */
     } finally {
       setCreating(false);
     }
@@ -675,6 +683,13 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
         {/* Footer PEGAJOSO — botones fijos abajo. Orden del mockup: Cancelar
             discreto, primario dominante. */}
         <div style={S.footer}>
+          {/* AUDIT UX 16-jul (U7): error inline en el footer pegajoso (siempre
+              visible aunque el body esté scrolleado) en vez de alert() */}
+          {formErr && (
+            <div role="alert" style={{ fontSize: 13.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 11px', marginBottom: 10, lineHeight: 1.4 }}>
+              {formErr}
+            </div>
+          )}
           <div style={S.buttons}>
             <button
               style={{ ...S.btn, ...S.btnSecondary, flex: '0 0 auto', padding: '12px 18px' }}

@@ -4,6 +4,7 @@ import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import CompararFormulasModal from './CompararFormulasModal';
 import HelpHint from '../../components/HelpHint';
 import SecureView from '../../components/SecureView';
@@ -151,7 +152,7 @@ function RenameModal({ formulaId, onClose, onSuccess }) {
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>Renombrar Fórmula</span>
@@ -208,7 +209,7 @@ function DuplicarModal({ formulaId, onClose, onSuccess }) {
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <span style={{ fontSize: 15, fontWeight: 700 }}>Duplicar Fórmula</span>
@@ -400,8 +401,11 @@ function NuevaMPModal({ nombreInicial, onClose, onCreated }) {
     }
   };
 
+  /* Overlay de pantalla completa: 1100 = sobre el bottom-nav Y sobre el
+     editor de fórmula (S.overlay base 1000) desde el que se abre. El viejo
+     zIndex:200 lo dejaba DEBAJO de ambos. */
   return (
-    <div style={{ ...S.overlay, zIndex: 200 }} onClick={onClose}>
+    <div style={{ ...S.overlay, zIndex: 1100 }}>
       <div style={{ ...S.modal, maxWidth: 480 }} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>
@@ -520,7 +524,20 @@ function EditIngModal({ formulaId, formula, onClose, onSuccess }) {
   }, []);
 
   const totalKg = ings.reduce((s, i) => s + (parseFloat(i.kg19) || 0), 0);
-  const totalVol = ings.reduce((s, i) => s + (parseFloat(i.vol) || 0), 0);
+
+  /* BASE FIJA para los %: el total de la fórmula GUARDADA (al abrir el modal).
+     Contra base fija, al mover una cantidad SOLO esa fila cambia su % y el TOTAL
+     marca el desbalance (ej. 103.2%). Antes se dividía entre el total ACTUAL →
+     siempre re-normalizaba a 100% y el usuario no veía moverse nada. */
+  const baseKg = useMemo(
+    () => (formula.ingredientes || []).reduce((s, i) => s + (parseFloat(i.kg19) || 0), 0),
+    [] // eslint-disable-line react-hooks/exhaustive-deps — snapshot al abrir
+  );
+  const refKg = baseKg > 0 ? baseKg : totalKg; /* fórmula nueva: base viva */
+  const totalPct = refKg > 0 ? (totalKg / refKg) * 100 : 0;
+  const desbalance = Math.abs(totalPct - 100);
+  /* Volumen VIVO (kg/densidad) — el campo ing.vol guardado no se actualiza al teclear */
+  const totalVol = ings.reduce((s, i) => s + ((parseFloat(i.kg19) || 0) / (parseFloat(i.densidad) || 1)), 0);
 
   const updateIng = (idx, field, val) => {
     setIngs(prev => prev.map((ing, i) => i === idx ? { ...ing, [field]: val } : ing));
@@ -614,7 +631,7 @@ function EditIngModal({ formulaId, formula, onClose, onSuccess }) {
 
   return (
     <>
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={{ ...S.modal, maxWidth: 720 }} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>
@@ -650,7 +667,7 @@ function EditIngModal({ formulaId, formula, onClose, onSuccess }) {
           </div>
 
           {ings.map((ing, idx) => {
-            const pct = totalKg > 0 ? ((parseFloat(ing.kg19) || 0) / totalKg * 100) : 0;
+            const pct = refKg > 0 ? ((parseFloat(ing.kg19) || 0) / refKg * 100) : 0;
             const isDragOver = dragOverIdx === idx && draggedIdx !== idx;
             const isDragging = draggedIdx === idx;
             return (
@@ -721,17 +738,27 @@ function EditIngModal({ formulaId, formula, onClose, onSuccess }) {
             );
           })}
 
-          {/* Total row */}
+          {/* Total row — % contra la fórmula guardada: 100% = balanceada; otro valor = desbalance */}
           <div style={{ display: 'flex', gap: 8, padding: '8px 0 4px 22px', borderTop: '2px solid var(--lp-border-subtle)', marginTop: 8 }}>
             <span style={{ width: 24 }}></span>
             <span style={{ flex: 1, fontWeight: 700, fontSize: 12 }}>Total por cubeta 19L</span>
             <span style={{ width: 90, textAlign: 'right', fontWeight: 700, fontSize: 12, fontFamily: 'var(--lp-font-mono)' }}>
               {totalKg.toFixed(2)} kg
             </span>
-            <span style={{ width: 60, textAlign: 'right', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-              {totalVol.toFixed(1)} L
+            <span style={{
+              width: 60, textAlign: 'right', fontSize: 11, fontFamily: 'var(--lp-font-mono)',
+              fontWeight: desbalance > 0.5 ? 700 : 400,
+              color: desbalance > 2 ? 'var(--lp-danger-600)' : desbalance > 0.5 ? 'var(--lp-warning-700)' : 'var(--lp-success-600, #1D9E75)',
+            }}>
+              {totalPct.toFixed(1)}%
             </span>
             <span style={{ width: 28 }}></span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, padding: '2px 28px 0 22px', justifyContent: 'flex-end' }}>
+            <span style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)' }}>
+              % vs fórmula guardada ({refKg.toFixed(2)} kg) · Vol. calc: {totalVol.toFixed(1)} L de 19 L
+              {desbalance > 0.5 ? ` · desbalance ${totalPct > 100 ? '+' : '−'}${desbalance.toFixed(1)}%` : ' · balanceada'}
+            </span>
           </div>
 
           <button onClick={addIng} style={{ ...S.btnSmall, marginTop: 12 }}>
@@ -760,12 +787,16 @@ function EditIngModal({ formulaId, formula, onClose, onSuccess }) {
 /* ═══════════════════════════════════════════════════════════════════ */
 /* FORMULA CARD                                                        */
 /* ═══════════════════════════════════════════════════════════════════ */
-function FormulaCard({ id, formula, isAdmin, onRename, onEdit, onDuplicate }) {
+function FormulaCard({ id, formula, isAdmin, oculta, onOcultar, onRename, onEdit, onDuplicate }) {
   const [open, setOpen] = useState(false);
   const ings = formula.ingredientes || [];
   const tec = formula.tecnico || {};
   const totalKg = ings.reduce((sum, ing) => sum + (ing.kg19 || 0), 0);
-  const totalVol = ings.reduce((sum, ing) => sum + (ing.vol || 0), 0);
+  /* Volumen vivo desde kg/densidad (no del campo vol guardado) — control físico:
+     una cubeta debe llenar ~19 L; si la fórmula queda desbalanceada, esto lo delata. */
+  const totalVol = ings.reduce((sum, ing) => sum + ((ing.kg19 || 0) / (ing.densidad || 1)), 0);
+  const pctLlenado = (totalVol / 19) * 100;
+  const desbalanceVol = Math.abs(pctLlenado - 100);
 
   return (
     <div style={S.card}>
@@ -795,7 +826,13 @@ function FormulaCard({ id, formula, isAdmin, onRename, onEdit, onDuplicate }) {
           <div style={S.ingTitle}>
             <span>Ingredientes</span>
             {isAdmin && (
-              <div style={{ display: 'flex', gap: 4 }}>
+              <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                {oculta && (
+                  <span style={{
+                    fontSize: 10, fontWeight: 800, letterSpacing: 0.5, padding: '3px 8px',
+                    borderRadius: 10, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)',
+                  }}>OCULTA</span>
+                )}
                 <button style={S.btnSmall} onClick={(e) => { e.stopPropagation(); onEdit(id, formula); }}>
                   Editar
                 </button>
@@ -806,6 +843,12 @@ function FormulaCard({ id, formula, isAdmin, onRename, onEdit, onDuplicate }) {
                 <button style={{ ...S.btnSmall, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)' }}
                   onClick={(e) => { e.stopPropagation(); onDuplicate(id); }}>
                   Duplicar
+                </button>
+                <button
+                  title={oculta ? 'Volver a mostrar en todas las pantallas' : 'Ocultar de Inventario, Pedidos y Fórmulas (no elimina nada)'}
+                  style={{ ...S.btnSmall, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' }}
+                  onClick={(e) => { e.stopPropagation(); onOcultar && onOcultar(id); }}>
+                  {oculta ? 'Mostrar' : 'Ocultar'}
                 </button>
               </div>
             )}
@@ -830,13 +873,28 @@ function FormulaCard({ id, formula, isAdmin, onRename, onEdit, onDuplicate }) {
             ))
           )}
           {totalKg > 0 && (
-            <div style={{ ...S.ingRow, fontWeight: 700, borderBottom: 'none', paddingTop: 8 }}>
-              <span style={{ width: 20, flexShrink: 0 }}></span>
-              <span style={S.ingName}>Total por cubeta 19L</span>
-              <span style={S.ingQty}>{totalKg.toFixed(3)}</span>
-              <span style={S.ingUnit}>kg</span>
-              <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', minWidth: 40, textAlign: 'right' }}>100%</span>
-            </div>
+            <>
+              <div style={{ ...S.ingRow, fontWeight: 700, borderBottom: 'none', paddingTop: 8 }}>
+                <span style={{ width: 20, flexShrink: 0 }}></span>
+                <span style={S.ingName}>Total por cubeta 19L</span>
+                <span style={S.ingQty}>{totalKg.toFixed(3)}</span>
+                <span style={S.ingUnit}>kg</span>
+                {/* Llenado de cubeta (vol calc / 19 L) — reacciona si la fórmula quedó
+                    desbalanceada, a diferencia del viejo "100%" fijo de composición. */}
+                <span style={{
+                  fontSize: 11, minWidth: 40, textAlign: 'right', fontFamily: 'var(--lp-font-mono)',
+                  fontWeight: desbalanceVol > 1 ? 700 : 400,
+                  color: desbalanceVol > 3 ? 'var(--lp-danger-600)' : desbalanceVol > 1 ? 'var(--lp-warning-700)' : 'var(--lp-text-tertiary)',
+                }}>
+                  {pctLlenado.toFixed(1)}%
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '0 0 4px 0' }}>
+                <span style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)' }}>
+                  Llenado: {totalVol.toFixed(2)} L de 19 L{desbalanceVol > 1 ? ` · ${pctLlenado > 100 ? 'sobra' : 'falta'} ${Math.abs(totalVol - 19).toFixed(2)} L` : ' ✓'}
+                </span>
+              </div>
+            </>
           )}
         </div>
       )}
@@ -864,6 +922,11 @@ export default function FormulasPage() {
   const [toastMsg, setToastMsg] = useState('');
   const [comparar, setComparar] = useState(false);
 
+  /* Realtime (T3 jul 2026): canal 'formulas' — cambios de fórmula / precio MP
+     hechos en otra sesión refrescan el summary (badge de recálculo en vivo,
+     antes dependía del polling de 30s). */
+  useRealtimeSync({ onFormulas: () => reload() });
+
   const showToast = useCallback((msg) => {
     setToastMsg(msg);
     setTimeout(() => setToastMsg(''), 5000);
@@ -876,8 +939,27 @@ export default function FormulasPage() {
     return raw;
   }, [fData]);
 
+  /* PT ocultos (jul 2026): descontinuados fuera de la vista sin eliminarlos.
+     Fuente: pt_ocultos.json vía /api/pt-ocultos. Solo admin puede alternar. */
+  const [ocultos, setOcultos] = useState({});
+  const [verOcultas, setVerOcultas] = useState(false);
+  useEffect(() => {
+    api.getPTOcultos?.().then(r => setOcultos(r?.data?.ocultos || r?.ocultos || {})).catch(() => {});
+  }, []);
+  const toggleOculto = useCallback(async (id) => {
+    const nuevo = !ocultos[id];
+    try {
+      const r = await api.setPTOculto(id, nuevo);
+      setOcultos(r?.ocultos || { ...ocultos, ...(nuevo ? { [id]: true } : {}) });
+      if (!nuevo) { const cp = { ...(r?.ocultos || ocultos) }; delete cp[id]; setOcultos(r?.ocultos || cp); }
+      showToast(nuevo ? `"${id}" oculta — ya no aparece en Inventario ni Pedidos` : `"${id}" visible de nuevo`);
+    } catch (e) { showToast('Error: ' + (e.message || 'no se pudo cambiar')); }
+  }, [ocultos, showToast]);
+  const numOcultas = Object.keys(ocultos).length;
+
   const entries = useMemo(() => {
     let arr = Object.entries(formulas);
+    if (!verOcultas) arr = arr.filter(([id]) => !ocultos[id]);
     if (debouncedQuery) {
       const q = debouncedQuery.toLowerCase();
       arr = arr.filter(([id, f]) =>
@@ -886,7 +968,7 @@ export default function FormulasPage() {
       );
     }
     return arr.sort((a, b) => (a[1].nombre || a[0]).localeCompare(b[1].nombre || b[0]));
-  }, [formulas, debouncedQuery]);
+  }, [formulas, debouncedQuery, ocultos, verOcultas]);
 
   const totalFormulas = Object.keys(formulas).length;
   const avgIngs = totalFormulas > 0
@@ -971,6 +1053,21 @@ export default function FormulasPage() {
           >
             Comparar dos fórmulas
           </button>
+          {isAdmin && numOcultas > 0 && (
+            <button
+              onClick={() => setVerOcultas(v => !v)}
+              style={{
+                padding: '10px 16px', fontSize: 12, fontWeight: 700,
+                borderRadius: 'var(--lp-radius-sm)',
+                border: '1.5px solid ' + (verOcultas ? 'var(--lp-warning-700)' : 'var(--lp-border-subtle)'),
+                background: verOcultas ? 'var(--lp-warning-100)' : 'var(--lp-bg-raised)',
+                color: verOcultas ? 'var(--lp-warning-700)' : 'var(--lp-text-primary)',
+                cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+              }}
+            >
+              {verOcultas ? 'Ocultar de nuevo' : `Ver ocultas (${numOcultas})`}
+            </button>
+          )}
         </div>
 
         {entries.length === 0 ? (
@@ -984,6 +1081,8 @@ export default function FormulasPage() {
               id={id}
               formula={formula}
               isAdmin={isAdmin}
+              oculta={!!ocultos[id]}
+              onOcultar={toggleOculto}
               onRename={setRenameId}
               onDuplicate={setDupId}
               onEdit={(fId, f) => setEditTarget({ id: fId, formula: f })}

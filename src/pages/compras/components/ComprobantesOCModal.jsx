@@ -56,7 +56,7 @@ export default function ComprobantesOCModal({ oc, onClose }) {
   const qc = oc.qcRecepcion;
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={S.overlay}>
       <div style={S.sheet}>
         <div style={S.h}>Detalle de la orden</div>
         <div style={S.sub}>{oc.codigo || oc.id} · {oc.proveedor || '—'}</div>
