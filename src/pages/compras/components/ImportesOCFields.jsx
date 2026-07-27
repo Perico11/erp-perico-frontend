@@ -13,6 +13,12 @@ const S = {
   row: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) 118px', gap: 10, alignItems: 'center', padding: '7px 0' },
   mp: { fontSize: 13.5, fontWeight: 600, color: 'var(--lp-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   sub: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 1 },
+  /* Partida en bloque (nombre arriba, dos campos abajo): con dos inputs en la
+     misma fila que el nombre, en móvil el nombre de la MP quedaba en 70 px. */
+  partida: { padding: '9px 0', borderBottom: '1px solid var(--lp-border-subtle)' },
+  dosCampos: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 7 },
+  mini: { fontSize: 10.5, fontWeight: 600, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.03em', marginBottom: 3 },
+  pesos: { position: 'absolute', left: 9, top: 14, fontSize: 12, color: 'var(--lp-text-tertiary)', pointerEvents: 'none' },
   priceWrap: { position: 'relative' },
   price: { width: '100%', height: 44, padding: '0 34px 0 10px', borderRadius: 10, background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'inherit', fontSize: 14, textAlign: 'right', color: 'var(--lp-text-primary)', outline: 'none', boxSizing: 'border-box' },
   unit: { position: 'absolute', right: 9, top: 14, fontSize: 11, color: 'var(--lp-text-tertiary)', pointerEvents: 'none' },
@@ -24,8 +30,8 @@ const S = {
 
 export default function ImportesOCFields({ ctl, titulo = 'Importes de la factura · corrige si cambiaron' }) {
   const {
-    oc, partidas, precios, setPrecio, flete, setFlete, totalIva, setTotalIva,
-    recostear, setRecostear, totalProducto, fleteNum, subtotal,
+    oc, partidas, precios, setPrecio, importes, setImporte, flete, setFlete,
+    totalIva, setTotalIva, recostear, setRecostear, totalProducto, fleteNum, subtotal,
     preciosCambiados, yaRecibida,
   } = ctl;
 
@@ -36,34 +42,58 @@ export default function ImportesOCFields({ ctl, titulo = 'Importes de la factura
         {partidas.length === 0 && (
           <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)' }}>Esta OC no tiene partidas capturadas.</div>
         )}
+        {/* Partida: la factura a veces trae el $/kg y a veces solo el total del
+            renglón. Los dos campos se editan y se derivan entre sí, así Arely
+            teclea lo que tenga enfrente sin sacar la calculadora. */}
         {partidas.map((p, i) => (
-          <div key={p.mp + i} style={S.row}>
-            <div style={{ minWidth: 0 }}>
-              <div style={S.mp} title={p.mp}>{p.mp}</div>
-              <div style={S.sub}>
-                {p.kg.toLocaleString('es-MX')} kg{p.recibido ? ' recibidos' : ''}
-                {Number(precios[i]) > 0 ? ' · ' + money(p.kg * Number(precios[i])) : ''}
+          <div key={p.mp + i} style={S.partida}>
+            <div style={S.mp} title={p.mp}>{p.mp}</div>
+            <div style={S.sub}>{p.kg.toLocaleString('es-MX')} kg{p.recibido ? ' recibidos' : ''}</div>
+            <div style={S.dosCampos}>
+              <div>
+                <div style={S.mini}>Precio</div>
+                <div style={S.priceWrap}>
+                  <input
+                    data-id="compras.pago.precio-mp"
+                    style={S.price}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={precios[i]}
+                    onChange={(e) => setPrecio(i, e.target.value)}
+                    placeholder="0.00"
+                    aria-label={'Precio por kg de ' + p.mp}
+                  />
+                  <span style={S.unit}>/kg</span>
+                </div>
               </div>
-            </div>
-            <div style={S.priceWrap}>
-              <input
-                data-id="compras.pago.precio-mp"
-                style={S.price}
-                type="number"
-                inputMode="decimal"
-                min="0"
-                step="0.01"
-                value={precios[i]}
-                onChange={(e) => setPrecio(i, e.target.value)}
-                placeholder="0.00"
-                aria-label={'Precio por kg de ' + p.mp}
-              />
-              <span style={S.unit}>/kg</span>
+              <div>
+                <div style={S.mini}>Importe del renglón</div>
+                <div style={S.priceWrap}>
+                  <input
+                    data-id="compras.pago.importe-mp"
+                    style={{ ...S.price, padding: '0 10px 0 18px', opacity: p.kg > 0 ? 1 : 0.5 }}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    value={importes[i]}
+                    onChange={(e) => setImporte(i, e.target.value)}
+                    placeholder="0.00"
+                    disabled={!(p.kg > 0)}
+                    title={p.kg > 0 ? '' : 'Sin kg no se puede derivar el precio'}
+                    aria-label={'Importe total de ' + p.mp}
+                  />
+                  <span style={S.pesos}>$</span>
+                </div>
+              </div>
             </div>
           </div>
         ))}
 
-        <div style={{ ...S.row, borderTop: '1px solid var(--lp-border-subtle)', marginTop: 4, paddingTop: 11 }}>
+        {/* Sin borderTop: cada partida ya cierra con su propia línea. */}
+        <div style={{ ...S.row, paddingTop: 11 }}>
           <div style={{ minWidth: 0 }}>
             <div style={S.mp}>Flete</div>
             <div style={S.sub}>

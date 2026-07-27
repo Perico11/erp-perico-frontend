@@ -17,6 +17,8 @@ export const money = (n) => '$' + (Number(n) || 0).toLocaleString('es-MX', { min
 /* '' cuando no hay valor previo: el placeholder invita a capturar el real sin
    simular que el estimado del maestro es el precio de la factura. */
 const numStr = (v) => (v != null && Number(v) > 0 ? String(v) : '');
+/* Importe de renglón: 2 decimales, sin separadores (va dentro de un input). */
+const impStr = (v) => (Number(v) > 0 ? String(Math.round(Number(v) * 100) / 100) : '');
 
 export function useImportesOC(oc) {
   /* Partidas: kg fijos (lo recibido), precio editable. */
@@ -28,13 +30,34 @@ export function useImportesOC(oc) {
   })), [oc]);
 
   const [precios, setPrecios] = useState(() => partidas.map(p => numStr(p.precioOriginal)));
+  /* Importe por partida = lo que la factura trae como total del renglón. La
+     factura del proveedor casi nunca dice "$/kg": dice "AUGEO 210 kg $25,935".
+     Por eso los dos campos son editables y se derivan entre sí (pedido del
+     dueño 27-jul-2026: "cambiar el total del producto, no solo el flete").
+     El PRECIO sigue siendo la fuente de verdad — es lo que persiste la OC y lo
+     que costea el sistema; el importe solo es otra forma de teclearlo. */
+  const [importes, setImportes] = useState(() => partidas.map(p => impStr(p.kg * p.precioOriginal)));
   const [flete, setFlete] = useState(numStr(oc.fleteEstimadoMxn));
   const [totalIva, setTotalIva] = useState(numStr(oc.totalFacturaConIva));
   /* Casilla del dueño: corregir el precio también corrige el costo/kg del
      sistema (promedio ponderado). Solo aplica si la MP ya está en stock. */
   const [recostear, setRecostear] = useState(true);
 
-  const setPrecio = (idx, v) => setPrecios(prev => prev.map((p, i) => (i === idx ? v : p)));
+  /* Teclea $/kg → recalcula el importe del renglón. */
+  const setPrecio = (idx, v) => {
+    setPrecios(prev => prev.map((p, i) => (i === idx ? v : p)));
+    const kg = (partidas[idx] || {}).kg || 0;
+    setImportes(prev => prev.map((x, i) => (i === idx ? (v === '' || !(kg > 0) ? '' : impStr(kg * Number(v))) : x)));
+  };
+  /* Teclea el importe del renglón → deriva el $/kg (6 decimales para que
+     kg × precio devuelva al centavo el total tecleado, incluso en totes de
+     1,000 kg). Con kg=0 no hay de qué dividir: el campo va deshabilitado. */
+  const setImporte = (idx, v) => {
+    setImportes(prev => prev.map((x, i) => (i === idx ? v : x)));
+    const kg = (partidas[idx] || {}).kg || 0;
+    if (!(kg > 0)) return;
+    setPrecios(prev => prev.map((p, i) => (i === idx ? (v === '' ? '' : String(Math.round((Number(v) / kg) * 1e6) / 1e6)) : p)));
+  };
 
   const totalProducto = useMemo(
     () => partidas.reduce((s, p, i) => s + p.kg * (Number(precios[i]) || 0), 0),
@@ -52,6 +75,7 @@ export function useImportesOC(oc) {
   const ivaNum = Number(totalIva);
   const ivaCambio = totalIva !== '' && isFinite(ivaNum) && ivaNum >= 0 && ivaNum !== (Number(oc.totalFacturaConIva) || 0);
   const hayError = precios.some(p => p !== '' && (!isFinite(Number(p)) || Number(p) < 0)) ||
+                   importes.some(x => x !== '' && (!isFinite(Number(x)) || Number(x) < 0)) ||
                    (flete !== '' && (!isFinite(fleteNum) || fleteNum < 0)) ||
                    (totalIva !== '' && (!isFinite(ivaNum) || ivaNum < 0));
   const hayCambios = preciosCambiados.length > 0 || fleteCambio || ivaCambio;
@@ -71,8 +95,8 @@ export function useImportesOC(oc) {
   };
 
   return {
-    oc, partidas, precios, setPrecio, flete, setFlete, totalIva, setTotalIva,
-    recostear, setRecostear, totalProducto, fleteNum, subtotal,
+    oc, partidas, precios, setPrecio, importes, setImporte, flete, setFlete,
+    totalIva, setTotalIva, recostear, setRecostear, totalProducto, fleteNum, subtotal,
     preciosCambiados, fleteCambio, ivaCambio, hayError, hayCambios, yaRecibida,
     payloadImportes,
   };
