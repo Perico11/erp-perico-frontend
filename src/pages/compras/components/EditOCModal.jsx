@@ -32,6 +32,8 @@ const S = {
   itemHeader: { display: 'grid', gridTemplateColumns: '2fr 80px 90px 80px 30px', gap: 8, alignItems: 'center', fontSize: 11, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', marginBottom: 6 },
   itemRow: { display: 'grid', gridTemplateColumns: '2fr 80px 90px 80px 30px', gap: 8, alignItems: 'center', marginBottom: 6 },
   small: { padding: '6px 8px', fontSize: 11, border: '1px solid var(--lp-border-subtle)', borderRadius: 6, fontFamily: 'var(--lp-font-sans)', boxSizing: 'border-box', width: '100%' },
+  /* Kilos de una partida ya levantada: dato, no campo (candado dueño jul 2026). */
+  kgFijo: { padding: '6px 8px', fontSize: 11.5, fontWeight: 600, textAlign: 'right', color: 'var(--lp-text-secondary)', background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)', borderRadius: 6, boxSizing: 'border-box', width: '100%' },
   delBtn: { background: 'transparent', border: 'none', color: 'var(--lp-danger-600)', cursor: 'pointer', fontSize: 16, padding: 0 },
   addBtn: { width: '100%', padding: '8px', fontSize: 12, fontWeight: 600, border: '1.5px dashed var(--lp-border-subtle)', borderRadius: 8, background: 'transparent', color: 'var(--lp-text-secondary)', cursor: 'pointer', marginTop: 6 },
   buttons: { display: 'flex', gap: 10, marginTop: 14 },
@@ -48,6 +50,10 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
      condicionalmente), por eso pasamos true. */
   useBodyScrollLock(true);
 
+  /* CANDADO dueño (27-jul-2026): los kilos de una partida YA LEVANTADA no se
+     suben ni se bajan aquí (el backend también lo rechaza). La cantidad pedida
+     queda como se levantó la OC y la que llega se captura al Recibir MP. Solo
+     una partida NUEVA trae kg editables: agregar lo que faltó es otra cosa. */
   const [items, setItems] = useState(() =>
     (oc.items || []).map(i => ({
       mp: i.mp || '',
@@ -55,6 +61,7 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
       presentacion: i.presentacion || 'saco_25',
       presentacionOtro: i.presentacionOtro || '',
       kg_recibidos: i.kg_recibidos != null ? Number(i.kg_recibidos) : null,
+      esNueva: false,
     }))
   );
   const [prioridad, setPrioridad] = useState(oc.prioridad || 'media');
@@ -95,7 +102,7 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
     setItems(items.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
   const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
-  const addItem = () => setItems([...items, { mp: '', kg: 0, presentacion: 'saco_25', presentacionOtro: '', kg_recibidos: null }]);
+  const addItem = () => setItems([...items, { mp: '', kg: 0, presentacion: 'saco_25', presentacionOtro: '', kg_recibidos: null, esNueva: true }]);
   const usarAuto = () => setFleteOverride(String(fleteAuto));
 
   const guardar = async () => {
@@ -106,7 +113,8 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
     try {
       const payload = {
         id: oc.id,
-        items: itemsValidos,
+        /* `esNueva` es marca de UI (kg editable o no) — no viaja al servidor. */
+        items: itemsValidos.map(({ esNueva, ...i }) => i), // eslint-disable-line no-unused-vars
         prioridad,
         fechaEntregaEstimada: fechaEntrega || null,
         almacenDestino: almacen || null,
@@ -150,7 +158,11 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
           {items.map((it, idx) => (
             <div key={idx} style={S.itemRow}>
               <input style={S.small} value={it.mp} onChange={(e) => updateItem(idx, 'mp', e.target.value)} placeholder="MP" list="edit-oc-mps" />
-              <input style={{ ...S.small, textAlign: 'right' }} type="number" inputMode="decimal" min="0" step="0.1" value={it.kg} onChange={(e) => updateItem(idx, 'kg', e.target.value)} />
+              {it.esNueva
+                ? <input style={{ ...S.small, textAlign: 'right' }} type="number" inputMode="decimal" min="0" step="0.1" value={it.kg} onChange={(e) => updateItem(idx, 'kg', e.target.value)} />
+                : <div style={S.kgFijo} title="Los kilos pedidos no se editan; lo que llegue se captura al Recibir MP">
+                    {(Number(it.kg) || 0).toLocaleString('es-MX')}
+                  </div>}
               <select style={S.small} value={it.presentacion} onChange={(e) => updateItem(idx, 'presentacion', e.target.value)}>
                 {PRESENTACIONES.map(p => <option key={p.v} value={p.v}>{p.lbl}</option>)}
               </select>
@@ -159,6 +171,10 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
             </div>
           ))}
           <button style={S.addBtn} onClick={addItem}>+ agregar item</button>
+          <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
+            Los kilos pedidos quedan fijos: lo que realmente llegue se captura al <b>Recibir MP</b>,
+            y los precios en <b>Registrar pago</b> / <b>Corregir importes</b>.
+          </div>
           <datalist id="edit-oc-mps">{mpNames.map(n => <option key={n} value={n} />)}</datalist>
         </div>
 
