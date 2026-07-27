@@ -29,11 +29,17 @@ const LBL_PRES = { cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador
 const RECOLECTOR_FALLBACK = 'Luis Lara';
 function useRecolector() {
   const { data } = useApiData(() => api.getUsuarios(), null, 0);
+  /* El admin puede fijar quién firma la entrega desde Usuarios ▸ Firmas de
+     documentos. Si lo deja vacío, se usa quien tenga el rol de recolector —
+     así el papel sigue solo al personal sin que nadie configure nada. */
+  const { data: firmData } = useApiData(() => api.getFirmantes(), null, 0);
   return useMemo(() => {
+    const conf = ((firmData?.data || firmData || {}).remisionEntrega || {}).nombre;
+    if (conf && conf.trim()) return conf.trim();
     const arr = Array.isArray(data) ? data : (data?.data || data?.usuarios || []);
     const u = (arr || []).find(x => x && x.rol === 'recolector' && !x.eliminado);
     return (u && (u.nombre || '').trim()) || RECOLECTOR_FALLBACK;
-  }, [data]);
+  }, [data, firmData]);
 }
 const PRES_PT = ['cubeta', 'galon', 'litro', 'atomizador750'];
 

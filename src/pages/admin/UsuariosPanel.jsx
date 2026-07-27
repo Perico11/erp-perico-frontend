@@ -449,6 +449,116 @@ function ConfirmDelete({ user, onClose, onSaved }) {
 
 /* ────────── PANEL PRINCIPAL ────────── */
 /* ═══════════════════════════════════════════════════════════════════════
+   FirmasPanel — quién firma cada documento impreso (27-jul-2026).
+
+   Antes estos nombres estaban escritos a mano dentro del JSX de la hoja de
+   Orden de Transferencia y de la remisión de entregas. Cuando Rodolfo dejó de
+   recibir en Almacén Terán hubo que editar código, compilar y desplegar para
+   cambiar un nombre en un papel — y hasta entonces los documentos salieron
+   con el nombre de alguien que ya no estaba ahí.
+   ═══════════════════════════════════════════════════════════════════════ */
+const RANURAS_FIRMA = [
+  { grupo: 'Hoja de Orden de Transferencia (Fábrica → Terán)', items: [
+    { id: 'otSalida', ayuda: 'Quien entrega el material en la fábrica' },
+    { id: 'otTraslado', ayuda: 'Quien lo transporta y lo entrega en Terán' },
+    { id: 'otRecepcionAlmacen', ayuda: 'Quien lo recibe en el almacén' },
+    { id: 'otRecepcionOficina', ayuda: 'Quien lo recibe en recepción' },
+  ] },
+  { grupo: 'Remisión de entregas a tienda', items: [
+    { id: 'remisionSalida', ayuda: 'Deja el nombre VACÍO para que salga quien despachó la entrega' },
+    { id: 'remisionEntrega', ayuda: 'Quien lleva el material a la tienda. Vacío = el usuario con rol de recolector' },
+  ] },
+];
+
+function FirmasPanel() {
+  const [firm, setFirm] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState('');
+
+  const cargar = useCallback(() => {
+    setLoading(true);
+    api.getFirmantes()
+      .then(r => setFirm(r?.data || r || {}))
+      .catch(e => setErr(e.message || 'No se pudieron cargar'))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const set = (ranura, campo, valor) =>
+    setFirm(f => ({ ...f, [ranura]: { ...(f?.[ranura] || {}), [campo]: valor } }));
+
+  const guardar = async () => {
+    setErr(''); setOk(''); setSaving(true);
+    try {
+      const r = await api.setFirmantes(firm);
+      setFirm(r?.data || firm);
+      setOk('Guardado. Los documentos que se impriman de ahora en adelante llevan estos nombres.');
+      setTimeout(() => setOk(''), 6000);
+    } catch (e) { setErr(e.message || 'No se pudo guardar'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <div style={S.loading}>Cargando firmas...</div>;
+
+  return (
+    <div>
+      {err && <div style={S.err}>{err}</div>}
+      {ok && <div style={{ ...S.err, background: 'var(--lp-success-100)', color: 'var(--lp-success-700)', borderColor: 'var(--lp-success-300)' }}>{ok}</div>}
+
+      <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
+        Estos nombres se imprimen en las líneas de firma de los documentos. Cámbialos
+        cuando cambie el personal — no hace falta tocar el sistema.
+      </div>
+
+      {RANURAS_FIRMA.map(g => (
+        <div key={g.grupo} style={{ marginBottom: 22 }}>
+          <div style={{ ...S.label, marginBottom: 10 }}>{g.grupo}</div>
+          {g.items.map(({ id, ayuda }) => {
+            const v = firm?.[id] || {};
+            return (
+              <div key={id} style={{
+                border: '1.5px solid var(--lp-border-subtle)', borderRadius: 10,
+                padding: 12, marginBottom: 10, background: 'var(--lp-bg-raised)',
+              }}>
+                <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 8 }}>{ayuda}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+                  <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                    Nombre y firma
+                    <input style={{ ...S.input, marginTop: 4 }} value={v.nombre || ''}
+                      placeholder="(usa el usuario del registro)"
+                      onChange={e => set(id, 'nombre', e.target.value)}
+                      data-id={`firmas.${id}.nombre`} />
+                  </label>
+                  <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                    Concepto
+                    <input style={{ ...S.input, marginTop: 4 }} value={v.puesto || ''}
+                      onChange={e => set(id, 'puesto', e.target.value)}
+                      data-id={`firmas.${id}.puesto`} />
+                  </label>
+                  <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                    Lugar
+                    <input style={{ ...S.input, marginTop: 4 }} value={v.lugar || ''}
+                      onChange={e => set(id, 'lugar', e.target.value)}
+                      data-id={`firmas.${id}.lugar`} />
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      <button type="button" style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }}
+        onClick={guardar} disabled={saving} data-id="firmas.btn.guardar">
+        {saving ? 'Guardando...' : 'Guardar firmas'}
+      </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
    VaciadoresPanel — catálogo del personal que ENVASA (jul 2026, pedido dueño).
 
    No son usuarios del sistema (no tienen PIN ni entran a la app): es una
@@ -625,13 +735,14 @@ export default function UsuariosPanel() {
   const tabsSeccion = [
     { id: 'usuarios', label: 'Usuarios del sistema', style: (a) => tabStyle(a) },
     { id: 'vaciadores', label: 'Vaciadores', style: (a) => tabStyle(a) },
+    { id: 'firmas', label: 'Firmas de documentos', style: (a) => tabStyle(a) },
   ];
 
   return (
     <div>
       <PageTabs tabs={tabsSeccion} activeTab={seccion} onChange={setSeccion} style={{ marginBottom: 16 }} />
 
-      {seccion === 'vaciadores' ? <VaciadoresPanel /> : (
+      {seccion === 'firmas' ? <FirmasPanel /> : seccion === 'vaciadores' ? <VaciadoresPanel /> : (
     <div>
       {err && <div style={S.err}>{err}</div>}
 

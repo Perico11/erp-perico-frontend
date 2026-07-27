@@ -509,6 +509,13 @@ const api = {
   getNotificaciones: () => request('GET', '/api/notificaciones'),
   marcarNotificacionesLeidas: (items) => request('POST', '/api/notificaciones/leer', { items }),
 
+  /* ── Firmantes de los documentos impresos (hoja de OT, remisión de tiendas) ──
+     Antes estaban escritos a mano en el JSX: cambiar un nombre exigía compilar
+     y desplegar. Lectura: cualquier sesión (quien imprime). Escritura: admin. */
+  getFirmantes: () => request('GET', '/api/firmantes'),
+  setFirmantes: (data) => request('POST', '/api/firmantes', data),
+  resetFirmantes: () => request('POST', '/api/firmantes/reset', {}),
+
   /* ── Usuarios (admin) ── */
   getUsuarios: () => request('GET', '/api/usuarios'),
   crearUsuario: (id, nombre, apellido, pin, rol) =>

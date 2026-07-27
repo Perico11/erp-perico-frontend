@@ -1095,6 +1095,14 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
    <img> del QR + folio + líneas + window.print().
    ═══════════════════════════════════════════════════════════════════════════ */
 function OTQRPrintModal({ ot, onClose }) {
+  /* Los firmantes salen de configuración (Usuarios ▸ Firmas de documentos).
+     Estaban escritos a mano aquí: cambiar un nombre exigía compilar y
+     desplegar, y mientras tanto la hoja se imprimía con quien ya no estaba.
+     Si la petición falla se usan los mismos valores de siempre — un problema
+     de red no debe dejar una hoja sin firmas. */
+  const { data: firmData } = useApiData(() => api.getFirmantes(), null, 0);
+  const firmantes = firmData?.data || firmData || null;
+
   const url = urlQrOT(ot.id);
   const qrPreview = qrDataUrl(url, { scale: 8, margin: 2, ecLevel: 'M' });
   const qrPrint = qrDataUrl(url, { scale: 10, margin: 2, ecLevel: 'M' });
@@ -1139,15 +1147,21 @@ function OTQRPrintModal({ ot, onClose }) {
         <div class="sgrole">${esc(f.role)}</div>
         <div class="sgplace">${esc(f.place)}</div>
       </div>`;
+    /* Cada ranura viene de la configuración; el segundo argumento es el valor
+       que tenía el código, por si la configuración no cargó. */
+    const _f = (ranura, nombre, puesto, lugar) => {
+      const c = (firmantes && firmantes[ranura]) || {};
+      return { name: c.nombre || nombre, role: c.puesto || puesto, place: c.lugar || lugar };
+    };
     const firmasSalida = [
-      { name: 'Enrique Gamboa García', role: 'Salida', place: 'Almacén Huertas' },
-      { name: 'Luis Jonathan Lara', role: 'Entregó en Almacén Terán', place: 'Recolección y traslado' },
+      _f('otSalida', 'Enrique Gamboa García', 'Salida', 'Almacén Huertas'),
+      _f('otTraslado', 'Luis Jonathan Lara', 'Entregó en Almacén Terán', 'Recolección y traslado'),
     ].map(_sg).join('');
     const firmasRecepcion = [
       /* 27-jul-2026: Rodolfo dejó de recibir en Almacén Terán; ahora firma
          Jhonny o Josué, el que esté en el turno. */
-      { name: 'Jhonny / Josué', role: 'Recibido en almacén', place: 'Almacén Terán' },
-      { name: 'Arely L. Meza', role: 'Recibido en recepción', place: 'Recepción Terán' },
+      _f('otRecepcionAlmacen', 'Jhonny / Josué', 'Recibido en almacén', 'Almacén Terán'),
+      _f('otRecepcionOficina', 'Arely L. Meza', 'Recibido en recepción', 'Recepción Terán'),
     ].map(_sg).join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Transferencia ${esc(ot.folio)}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
