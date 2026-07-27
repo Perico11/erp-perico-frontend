@@ -1144,7 +1144,9 @@ function OTQRPrintModal({ ot, onClose }) {
       { name: 'Luis Jonathan Lara', role: 'Entregó en Almacén Terán', place: 'Recolección y traslado' },
     ].map(_sg).join('');
     const firmasRecepcion = [
-      { name: 'Rodolfo Casanova', role: 'Recibido en almacén', place: 'Almacén Terán' },
+      /* 27-jul-2026: Rodolfo dejó de recibir en Almacén Terán; ahora firma
+         Jhonny o Josué, el que esté en el turno. */
+      { name: 'Jhonny / Josué', role: 'Recibido en almacén', place: 'Almacén Terán' },
       { name: 'Arely L. Meza', role: 'Recibido en recepción', place: 'Recepción Terán' },
     ].map(_sg).join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Transferencia ${esc(ot.folio)}</title>
