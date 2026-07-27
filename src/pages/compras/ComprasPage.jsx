@@ -21,6 +21,7 @@ import PageTabs from '../../components/ui/PageTabs';
 import NewOCModal from './components/NewOCModal';
 import AprobarOCModal from './components/AprobarOCModal';
 import RegistrarPagoModal from './components/RegistrarPagoModal';
+import CorregirImportesModal from './components/CorregirImportesModal';
 import EditOCModal from './components/EditOCModal';
 import RecibirOCModal from './components/RecibirOCModal';
 import EliminarOCModal from './components/EliminarOCModal';
@@ -311,6 +312,7 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onEliminarOC={(cod) => openModal(cod, 'eliminar')}
         onRecibirMP={(cod) => openModal(cod, 'recibir')}
         onRegistrarPago={(cod) => openModal(cod, 'pago')}
+        onCorregirImportes={(cod) => openModal(cod, 'importes')}
         onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) setPrintOC(oc); }}
         onVerComprobante={(cod) => openModal(cod, 'comprobante')}
       />
@@ -319,6 +321,7 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
 
       {active?.type === 'aprobar'  && <AprobarOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'pago'     && <RegistrarPagoModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
+      {active?.type === 'importes' && <CorregirImportesModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'editar'   && <EditOCModal       oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'recibir'  && <RecibirOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'eliminar' && <EliminarOCModal   oc={active.oc} onClose={closeModal} onSaved={afterSave} />}

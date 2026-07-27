@@ -3,7 +3,8 @@
 // comprobante, badge Solicitud, buscador). SOLO contenido + estado de UI; cero fetch/lógica.
 // Props: data{ocs:[{cod,mp,qty,sol?,prov,monto,entrega,estado,vencida?,porVencer?,pago?,comp?,solicitud?}]},
 //   onNuevaOC, onAprobarOC(cod), onEditarOC(cod), onEliminarOC(cod), onRecibirMP(cod),
-//   onRegistrarPago(cod), onImprimirOC(cod), onVerComprobante(cod), can, role, isDesktop.
+//   onRegistrarPago(cod), onCorregirImportes(cod), onImprimirOC(cod), onVerComprobante(cod),
+//   can, role, isDesktop.
 // "Aprobar OC" llama onAprobarOC(cod) → abre el modal REAL (pago + comprobante + vencimiento).
 import { useState, useEffect } from 'react';
 
@@ -38,7 +39,7 @@ function btn(kind) {
 }
 
 export default function ComprasScreen({
-  data = DEMO, onNuevaOC, onAprobarOC, onEditarOC, onEliminarOC, onRecibirMP, onRegistrarPago, onImprimirOC, onVerComprobante,
+  data = DEMO, onNuevaOC, onAprobarOC, onEditarOC, onEliminarOC, onRecibirMP, onRegistrarPago, onCorregirImportes, onImprimirOC, onVerComprobante,
   can = () => true, role, isDesktop = false, initialTab,
 }) {
   const ocs = (data && data.ocs) || DEMO.ocs;
@@ -146,6 +147,9 @@ export default function ComprasScreen({
                   {o.estado === 'activa' && <>
                     {can('recibirMP') && <button data-id="compras.btn.recibir-mp" data-rol={role} onClick={() => onRecibirMP?.(o.cod)} style={btn('primary')}><Ico d={I_CHECK} /> Recibir MP</button>}
                     {o.pago !== 'contado' && o.pago !== 'credito-pagado' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} onClick={() => onRegistrarPago?.(o.cod)} style={btn('ghost')}>Registrar pago</button>}
+                    {/* Contado / ya pagada: el pago se cerró al aprobar, así que la
+                        corrección de importes (precio, flete) necesita puerta propia. */}
+                    {(o.pago === 'contado' || o.pago === 'credito-pagado') && can('compras') && <button data-id="compras.btn.corregir-importes" data-rol={role} title="Corregir precio, flete o total facturado" onClick={() => onCorregirImportes?.(o.cod)} style={btn('ghost')}>Corregir importes</button>}
                     {/* #1 editar OC activa (corregir tras aprobar) */}
                     {can('compras') && <button data-id="compras.btn.editar-oc" data-rol={role} onClick={() => onEditarOC?.(o.cod)} style={btn('ghost')}>Editar</button>}
                     {/* #2 ver comprobante adjunto */}
@@ -164,6 +168,10 @@ export default function ComprasScreen({
                         ya recibió la MP (el pago es posterior a la recepción). Antes este
                         botón solo vivía en 'activa' → al recibir desaparecía. */}
                     {!o.eliminada && o.pago === 'credito' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} title="Registrar el pago del crédito (sube comprobante)" onClick={() => onRegistrarPago?.(o.cod)} style={btn('primary')}>Registrar pago</button>}
+                    {/* Recibida sin pago pendiente (contado o crédito ya pagado): la
+                        factura real puede traer otro precio/flete y no hay "Registrar
+                        pago" donde corregirlo — Editar tampoco (rechaza recibidas). */}
+                    {!o.eliminada && o.pago !== 'credito' && can('compras') && <button data-id="compras.btn.corregir-importes" data-rol={role} title="Corregir precio, flete o total facturado" onClick={() => onCorregirImportes?.(o.cod)} style={btn('ghost')}>Corregir importes</button>}
                     {!o.eliminada && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver recepción, firma, factura y pago" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
                     {!o.eliminada && can('compras') && <button data-id="compras.btn.abrir-imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
                   </>}

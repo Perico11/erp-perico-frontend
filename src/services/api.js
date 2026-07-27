@@ -482,6 +482,9 @@ const api = {
   /* AC1/AC2 (jun 2026): aprobar OC con forma de pago + comprobante, y registrar pago */
   aprobarOC: (data) => request('POST', '/api/compras/oc/aprobar', data),
   registrarPagoOC: (data) => request('POST', '/api/compras/oc/registrar-pago', data),
+  /* 27-jul-2026: corregir precio/kg, flete y total facturado cuando la OC ya no
+     pasa por "Registrar pago" (contado, o crédito ya pagado). */
+  corregirImportesOC: (data) => request('POST', '/api/compras/oc/corregir-importes', data),
 
   /* ── Vaciadores / envasadores (jul 2026): quién envasó cada lote ── */
   getVaciadores: () => request('GET', '/api/vaciadores'),

@@ -1,11 +1,20 @@
 import { useState } from 'react';
 import api from '../../../services/api';
 import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
+import { useImportesOC } from './importesOC';
+import ImportesOCFields from './ImportesOCFields';
 
 /* RegistrarPagoModal — HANDOFF jun 2026 (Sprint AC2).
    Cierra una OC a crédito: sube el comprobante del pago real (transferencia /
    recibo) y la referencia. La OC pasa a "pagada" y la alerta de vencimiento
-   desaparece. */
+   desaparece.
+
+   CORRECCIÓN DE IMPORTES (27-jul-2026, pedido del dueño): pagar es el momento en
+   que Arely tiene la factura real y descubre que el precio de la MP o el flete no
+   fue el estimado, así que los campos de importes (compartidos con
+   CorregirImportesModal) viven aquí mismo. "Editar" no sirve para esto: el
+   backend lo rechaza en OCs ya recibidas, que es justo donde vive el crédito por
+   pagar. Los kg no se tocan aquí — eso es "Recibir MP". */
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto', padding: 16 },
@@ -36,6 +45,7 @@ export default function RegistrarPagoModal({ oc, onClose, onSaved }) {
   const [ref, setRef] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  const imp = useImportesOC(oc);
 
   /* MÓVIL: este modal se monta solo cuando está abierto (el padre lo renderiza
      condicionalmente), por eso pasamos `true`. Congela el scroll del fondo y
@@ -51,14 +61,21 @@ export default function RegistrarPagoModal({ oc, onClose, onSaved }) {
     reader.readAsDataURL(f);
   };
 
-  const puede = fileB64 && ref.trim();
+  const puede = fileB64 && ref.trim() && !imp.hayError;
 
   const registrar = async () => {
     setErr('');
-    if (!puede) { setErr('Adjunta el comprobante de pago y la referencia.'); return; }
+    if (imp.hayError) { setErr('Revisa los importes: no se aceptan valores negativos ni texto.'); return; }
+    if (!fileB64 || !ref.trim()) { setErr('Adjunta el comprobante de pago y la referencia.'); return; }
     setSaving(true);
     try {
-      await api.registrarPagoOC({ id: oc.id, referencia: ref.trim(), comprobantePagoPdfBase64: fileB64, comprobanteNombre: fileName });
+      await api.registrarPagoOC({
+        id: oc.id,
+        referencia: ref.trim(),
+        comprobantePagoPdfBase64: fileB64,
+        comprobanteNombre: fileName,
+        ...imp.payloadImportes(),
+      });
       onSaved && onSaved();
       onClose && onClose();
     } catch (e) {
@@ -73,6 +90,8 @@ export default function RegistrarPagoModal({ oc, onClose, onSaved }) {
       <div style={S.sheet}>
         <div style={S.h}>Registrar pago del crédito</div>
         <div style={S.s}>{oc.codigo} · {oc.proveedor}</div>
+
+        <ImportesOCFields ctl={imp} />
 
         <label style={S.lbl}>Comprobante de pago · obligatorio</label>
         <label style={S.drop(!!fileB64)}>
