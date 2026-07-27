@@ -36,6 +36,39 @@ function useRecolector() {
   }, [data]);
 }
 const PRES_PT = ['cubeta', 'galon', 'litro', 'atomizador750'];
+
+/* Catálogo de PT entregable desde el desglose de Terán (/api/inventario/pt-por-ubicacion).
+   A una tienda se le entregan ENVASES: un tote sin abrir (52 cub-eq) o el
+   granel de un tote ya abierto no se pueden entregar hasta re-envasarlos.
+
+   BUG QUE RESUELVE (reporte del dueño, 27-jul-2026): antes se filtraba
+   `PRES_PT.some(x => disp[x] > 0)` y el producto DESAPARECÍA de la lista.
+   Josué veía 52 cubetas de VERDE BOSQUE en Inventario y en Entregas el
+   producto no existía — sin ninguna explicación. Eran 4 productos invisibles
+   (208 cub-eq, todos con su stock en un tote) más los que mostraban menos de
+   lo que el inventario decía porque el resto estaba en granel.
+
+   Ahora se conservan, marcados con `envasado:false` y el detalle de cuánto
+   falta por envasar, para que la pantalla lo explique en vez de esconderlo. */
+export function catalogoPT(teran) {
+  return Object.entries(teran || {})
+    .map(([nombre, d]) => {
+      const disp = {
+        cubeta: Math.floor(Number(d.cubeta) || 0), galon: Math.floor(Number(d.galon) || 0),
+        litro: Math.floor(Number(d.litro) || 0), atomizador750: Math.floor(Number(d.atm) || 0),
+      };
+      const totes = Math.floor(Number(d.tote) || 0);
+      const granel = +(Number(d.granel) || 0).toFixed(2);
+      return {
+        nombre, disp, totes, granel,
+        sinEnvasar: +(totes * 52 + granel).toFixed(2),
+        envasado: PRES_PT.some(x => disp[x] > 0),
+      };
+    })
+    .filter(p => p.envasado || p.sinEnvasar > 0)
+    /* lo entregable primero; lo que hay que re-envasar, después */
+    .sort((a, b) => (b.envasado - a.envasado) || a.nombre.localeCompare(b.nombre));
+}
 const nf = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return (iso || '').slice(0, 16); } };
 const fechaLarga = (iso) => { try { return new Date(iso || Date.now()).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }); } catch { return (iso || '').slice(0, 10); } };
@@ -205,19 +238,7 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
   const { data: ptUbi } = useApiData(() => api.getPTPorUbicacion(), null, 0);
 
   const catalogo = useMemo(() => {
-    if (fuente === 'pt') {
-      const teran = ptUbi?.teran || ptUbi?.data?.teran || {};
-      return Object.entries(teran)
-        .map(([nombre, d]) => ({
-          nombre,
-          disp: {
-            cubeta: Math.floor(Number(d.cubeta) || 0), galon: Math.floor(Number(d.galon) || 0),
-            litro: Math.floor(Number(d.litro) || 0), atomizador750: Math.floor(Number(d.atm) || 0),
-          },
-        }))
-        .filter(p => PRES_PT.some(x => p.disp[x] > 0))
-        .sort((a, b) => a.nombre.localeCompare(b.nombre));
-    }
+    if (fuente === 'pt') return catalogoPT(ptUbi?.teran || ptUbi?.data?.teran || {});
     const src = fuente === 'americano2' ? am2 : am1;
     const colores = src?.data?.colores || src?.colores || [];
     return colores
@@ -235,7 +256,17 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
     setErr('');
     if (!sel) { setErr('Elige un producto'); return; }
     if (n <= 0) { setErr('Indica la cantidad'); return; }
-    if (n > disp) { setErr(`Solo hay ${nf(disp)} ${LBL_PRES[presentacion]?.toLowerCase() || presentacion}(s) disponibles`); return; }
+    if (n > disp) {
+      /* Explicar DÓNDE está el resto. "Solo hay 10 disponibles" cuando el
+         inventario muestra 52 en Terán parece un error del sistema; la
+         diferencia suele estar en un tote sin abrir o en granel, que no se
+         entrega hasta re-envasarlo. */
+      const base = `Solo hay ${nf(disp)} ${LBL_PRES[presentacion]?.toLowerCase() || presentacion}(s) envasado(s)`;
+      setErr(sel?.sinEnvasar > 0
+        ? `${base}. Hay ${nf(sel.sinEnvasar)} cub más en Terán${sel.totes ? ` (${sel.totes} tote${sel.totes === 1 ? '' : 's'} sin abrir)` : ' a granel'}: re-envásalas desde Inventario ▸ PT para poder entregarlas.`
+        : base);
+      return;
+    }
     const nueva = fuente === 'pt'
       ? { fuente: 'pt', producto: sel.nombre, presentacion, cantidad: n }
       : { fuente: 'americano', almacen: fuente === 'americano2' ? '2' : '1', producto: sel.key || sel.nombre, nombre: sel.nombre, presentacion, cantidad: n };
@@ -325,12 +356,34 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
             <select style={S.input} value={producto} onChange={e => setProducto(e.target.value)} data-id="entregas.select.producto">
               <option value="">— elige producto ({catalogo.length} con stock) —</option>
               {catalogo.map(c => (
-                <option key={c.nombre} value={c.nombre}>
-                  {c.nombre} · {presOpts.filter(p => c.disp[p] > 0).map(p => `${nf(c.disp[p])} ${LBL_PRES[p].toLowerCase()}${c.disp[p] === 1 ? '' : 's'}`).join(' · ')}
+                <option key={c.nombre} value={c.nombre} disabled={fuente === 'pt' && !c.envasado}>
+                  {c.nombre}
+                  {presOpts.some(p => c.disp[p] > 0)
+                    ? ' · ' + presOpts.filter(p => c.disp[p] > 0).map(p => `${nf(c.disp[p])} ${LBL_PRES[p].toLowerCase()}${c.disp[p] === 1 ? '' : 's'}`).join(' · ')
+                    : ''}
+                  {fuente === 'pt' && c.sinEnvasar > 0
+                    ? ` — ${nf(c.sinEnvasar)} cub sin envasar${c.totes ? ` (${c.totes} tote${c.totes === 1 ? '' : 's'})` : ''}`
+                    : ''}
                 </option>
               ))}
             </select>
           </div>
+
+          {/* Stock que existe en Terán pero todavía no se puede entregar. Sin
+              este aviso el producto o desaparecía de la lista, o decía "solo
+              hay 10" con 52 cubetas en el inventario — y parecía un error. */}
+          {fuente === 'pt' && sel?.sinEnvasar > 0 && (
+            <div style={{
+              marginTop: 10, padding: '9px 11px', borderRadius: 8, fontSize: 12, lineHeight: 1.55,
+              background: 'var(--lp-warning-bg, #FEF3C7)', color: 'var(--lp-warning-text, #92400E)',
+              border: '1px solid var(--lp-warning-border, #FCD34D)',
+            }}>
+              <strong>{nf(sel.sinEnvasar)} cubetas sin envasar</strong>
+              {sel.totes ? ` (${sel.totes} tote${sel.totes === 1 ? '' : 's'} sin abrir)` : ' a granel'}.
+              {' '}Están en Terán pero no se pueden entregar así: re-envásalas desde
+              Inventario ▸ PT ▸ Terán y aparecerán aquí.
+            </div>
+          )}
 
           <div style={{ ...S.seg, marginTop: 10 }}>
             {presOpts.map(p => (
