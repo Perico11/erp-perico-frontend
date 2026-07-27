@@ -1041,13 +1041,24 @@ function AccionesMenu({ ing, onEditar, onEliminar, eliminando, isDesktop }) {
             style={{ ...S.menuItem, color: BRAND }} onClick={() => setOpen(false)}>
             <IconDoc /> Ver factura
           </a>
-          <button role="menuitem" style={S.menuItem} onClick={() => { setOpen(false); onEditar(); }}>
-            <IconEdit /> Editar
-          </button>
-          <button role="menuitem" disabled={eliminando} style={{ ...S.menuItem, color: '#B91C1C', opacity: eliminando ? 0.6 : 1 }}
-            onClick={() => { setOpen(false); onEliminar(); }}>
-            <IconTrash /> {eliminando ? 'Eliminando…' : 'Eliminar'}
-          </button>
+          {/* Espejo de una recepción de OC: el stock y las cantidades mandan
+              desde Compras. El backend rechaza editar/eliminar aquí (409), así
+              que ni se ofrecen — en su lugar se dice dónde sí se corrige. */}
+          {ing.generadoPorOC ? (
+            <div style={{ ...S.menuItem, cursor: 'default', color: 'var(--lp-text-tertiary,#8a948f)', fontWeight: 400, fontSize: 12.5, lineHeight: 1.4, display: 'block' }}>
+              Entró por la orden de compra {ing.ocCodigo || ing.ocId}. Para corregirla o deshacerla, hazlo desde Compras.
+            </div>
+          ) : (
+            <>
+              <button role="menuitem" style={S.menuItem} onClick={() => { setOpen(false); onEditar(); }}>
+                <IconEdit /> Editar
+              </button>
+              <button role="menuitem" disabled={eliminando} style={{ ...S.menuItem, color: '#B91C1C', opacity: eliminando ? 0.6 : 1 }}
+                onClick={() => { setOpen(false); onEliminar(); }}>
+                <IconTrash /> {eliminando ? 'Eliminando…' : 'Eliminar'}
+              </button>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -1349,7 +1360,13 @@ export default function IngresosPage() {
                   {nL === 0 ? ' · sin partidas aún' : ''}
                   {ing.ocId && (
                     <span style={{ marginLeft: 6, display: 'inline-flex', padding: '1px 8px', fontSize: 10.5, fontWeight: 700, borderRadius: 999, background: 'var(--lp-brand-50,#e9f6f1)', color: 'var(--lp-brand-700,#0F6E56)', verticalAlign: 'middle' }}>
-                      OC {ing.ocId}
+                      OC {ing.ocCodigo || ing.ocId}
+                    </span>
+                  )}
+                  {/* Nació al recibir la OC en Compras, no se capturó aquí. */}
+                  {ing.generadoPorOC && (
+                    <span style={{ marginLeft: 6, display: 'inline-flex', padding: '1px 8px', fontSize: 10.5, fontWeight: 700, borderRadius: 999, background: 'var(--lp-bg-sunken,#f1f4f2)', color: 'var(--lp-text-secondary,#5a6b63)', verticalAlign: 'middle' }}>
+                      desde Compras
                     </span>
                   )}
                 </div>
