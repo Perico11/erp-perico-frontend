@@ -929,6 +929,11 @@ function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
     setErr('');
     if (!proveedor.trim()) return setErr('Escribe el proveedor');
     if (!lineas.length) return setErr('Agrega al menos una partida (MP, envase o tapa)');
+    /* Mismo candado que CrearSheet: con el peso editable inline una cantidad
+       borrada llegaba al backend, que descartaba la partida en silencio — y aquí
+       además el stock viejo ya se había revertido, así que la MP se perdía dos
+       veces (del renglón y del inventario). */
+    if (lineas.some(l => !(Number(l.cantidad) > 0))) return setErr('Hay partidas con cantidad vacía o en 0 — confirma el peso o quítalas');
     setSaving(true);
     try {
       const payload = {
