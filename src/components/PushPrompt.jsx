@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuthOpcional } from '../context/AuthContext';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { requestPushPermission, getPushPermission, setPushSettings, setCurrentRol } from '../utils/pushNotifications';
 import { pushSupported, subscribeToPush, isSubscribed } from '../utils/webPush';
@@ -14,8 +14,7 @@ import { pushSupported, subscribeToPush, isSubscribed } from '../utils/webPush';
 const DISMISS_KEY = 'pp_push_prompt_dismissed';
 
 export default function PushPrompt() {
-  let auth = null;
-  try { auth = useAuth(); } catch { /* fuera de provider (tests) */ }
+  const auth = useAuthOpcional();   /* null fuera del provider (tests), sin lanzar */
   const user = auth?.user || null;
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);

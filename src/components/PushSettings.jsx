@@ -8,8 +8,8 @@ import {
   rolPuedeRecibir,
   setCurrentRol,
 } from '../utils/pushNotifications';
-import { subscribeToPush, unsubscribeFromPush, sendTestPush, pushSupported } from '../utils/webPush';
-import { useAuth } from '../context/AuthContext';
+import { subscribeToPush, sendTestPush, pushSupported } from '../utils/webPush';
+import { useAuthOpcional } from '../context/AuthContext';
 
 const S = {
   card: {
@@ -91,10 +91,9 @@ export default function PushSettings({ embedded = false }) {
   const [perm, setPerm] = useState(getPushPermission());
   const [settings, setSettings] = useState(getPushSettings());
 
-  /* useAuth defensivo — mismo patrón que useNavigate en useRealtimeSync:
-     si algún mount quedara fuera del AuthProvider (tests), no rompemos. */
-  let auth = null;
-  try { auth = useAuth(); } catch { /* sin provider: rol desconocido */ }
+  /* Tolerante a montarse fuera del AuthProvider (tests): devuelve null en vez
+     de lanzar, y la llamada al hook es incondicional. */
+  const auth = useAuthOpcional();
   const rol = auth?.user?.rol || null;
 
   /* Write-through del rol a sessionStorage: la capa de dispatch

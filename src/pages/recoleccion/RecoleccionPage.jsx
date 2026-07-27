@@ -146,7 +146,9 @@ export function bucketOfSublote(s) {
 /* ═══════════════════════════════════════════════════════════════════ */
 /* MAIN PAGE                                                          */
 /* ═══════════════════════════════════════════════════════════════════ */
-export default function RecoleccionPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub "Logística"
+   (/transferencias) del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function RecoleccionPage({ embedded = false }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
@@ -331,7 +333,7 @@ export default function RecoleccionPage() {
       if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         navigator.vibrate([80, 40, 80]); /* corto-pausa-corto = OK */
       }
-    } catch (e) {}
+    } catch {}
     try {
       /* Beep corto vía Web Audio API — funciona en iOS Safari y Android Chrome.
          Frecuencia 880Hz por 120ms con envelope para evitar click. */
@@ -348,8 +350,8 @@ export default function RecoleccionPage() {
       osc.connect(gain).connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.15);
-      setTimeout(() => { try { ctx.close(); } catch(e){} }, 200);
-    } catch (e) {}
+      setTimeout(() => { try { ctx.close(); } catch {} }, 200);
+    } catch {}
   }, []);
 
   const feedbackScanError = useCallback(() => {
@@ -357,7 +359,7 @@ export default function RecoleccionPage() {
       if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
         navigator.vibrate([200]); /* largo = error */
       }
-    } catch (e) {}
+    } catch {}
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;
@@ -372,8 +374,8 @@ export default function RecoleccionPage() {
       osc.connect(gain).connect(ctx.destination);
       osc.start();
       osc.stop(ctx.currentTime + 0.32);
-      setTimeout(() => { try { ctx.close(); } catch(e){} }, 400);
-    } catch (e) {}
+      setTimeout(() => { try { ctx.close(); } catch {} }, 400);
+    } catch {}
   }, []);
 
   /* Resultado del scan: dispatch al server con la acción permitida por rol.
@@ -416,7 +418,7 @@ export default function RecoleccionPage() {
   if (loading) {
     return (
       <>
-        <TopBar title="Recolección" />
+        {!embedded && <TopBar title="Recolección" />}
         <div style={S.spinner}><div className="lp-spinner" /></div>
       </>
     );
@@ -438,7 +440,7 @@ export default function RecoleccionPage() {
   /* ════════════════════ RENDER ════════════════════ */
   return (
     <>
-      <TopBar title="Recolección" />
+      {!embedded && <TopBar title="Recolección" />}
       <div style={isDesktop ? S.wrapDesktop : S.wrapMobile}>
 
         {/* Saludo + contador (subtítulo .tsub del mockup — TopBar no trae subtitle) */}

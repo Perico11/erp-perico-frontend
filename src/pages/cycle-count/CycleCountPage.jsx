@@ -977,7 +977,9 @@ function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
   );
 }
 
-export default function CycleCountPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub /inventario
+   del admin (patrón AlmacenPage). Solo suprime su TopBar propio. */
+export default function CycleCountPage({ embedded = false }) {
   const { can, user } = useAuth();
   const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
@@ -1180,7 +1182,7 @@ export default function CycleCountPage() {
   if (sinAcceso) {
     return (
       <div>
-        <TopBar title="Conteo" />
+        {!embedded && <TopBar title="Conteo" />}
         <div style={{ maxWidth: 480, margin: '40px auto', padding: 24, background: 'var(--lp-bg-raised)', borderRadius: 18, border: '1px solid var(--lp-border-subtle)', textAlign: 'center' }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Sin acceso</div>
           <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
@@ -1194,7 +1196,7 @@ export default function CycleCountPage() {
 
   return (
     <div>
-      <TopBar title="Conteo" />
+      {!embedded && <TopBar title="Conteo" />}
       <div style={S.wrap}>
         <div style={S.h1}>Conteo</div>
         {/* Subtítulo del mockup: "Hola Burgos · 2 vencidos" */}

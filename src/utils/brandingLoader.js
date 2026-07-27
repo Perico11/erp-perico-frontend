@@ -28,7 +28,7 @@ function applyBranding(data) {
     root.style.setProperty('--lp-radius-lg', `${data.radiusBase + 6}px`);
   }
   /* Guardar cache para que en próximos arranques no haya flash de defaults */
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch(e) {}
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
 }
 
 /* Aplicar de inmediato lo que esté en cache (evita FOUC mientras llega del server) */
@@ -36,7 +36,7 @@ export function loadCachedBranding() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) applyBranding(JSON.parse(raw));
-  } catch(e) {}
+  } catch {}
 }
 
 /* Cargar desde el servidor y aplicar — llamar después del login o al boot */
@@ -46,7 +46,7 @@ export async function loadBrandingFromServer() {
     if (!res.ok) return;
     const data = await res.json();
     if (data?.data) applyBranding(data.data);
-  } catch(e) {
+  } catch {
     /* offline / server down — usamos cache local */
   }
 }

@@ -495,6 +495,8 @@ function LoteCard({ lote, isDesktop, onShowQR, defaultOpen = false }) {
                           {sub.lit ? ` · ${sub.lit}L` : ''}
                         </span>
                         {sub.tapa && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>{sub.tapa}</span>}
+                        {/* Quién envasó (jul 2026) — responsable de la tanda. */}
+                        {sub.envasadoPor && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>Envasó: {sub.envasadoPor}</span>}
                         {sub.esMerma && <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-600)')}>Merma</span>}
                         {sub.consumido && <span style={S.badge('var(--lp-success-100)', 'var(--lp-success-700)')}>Consumido</span>}
                         <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', display: 'inline-flex', alignItems: 'center', gap: 2 }}>

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import CountBadge from '../ui/CountBadge';
 import { usePedidosNotif } from '../../context/PedidosNotifContext';
+import { useChatNotif } from '../../context/ChatNotifContext';
 
 /* ════════════════════════════════════════════════════════════════════════════
    BottomNav móvil — patrón "sheet con grid completo" (Opción B)
@@ -71,6 +72,7 @@ const ICONS = {
   stkAmericano: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M6 7v12M10 7v12M14 7v12M18 7v12"/></svg>,
   entregas:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
   notif:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
+  chat:         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
   cerrar:       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
 };
 
@@ -100,13 +102,17 @@ const SECCIONES = [
   {
     titulo: 'Inventario',
     items: [
-      { path: '/inventario',   label: 'Stock MP',     icon: ICONS.inv,      perm: 'inventario' },
+      /* JUL 2026 ("unificar mismo uso"): para ADMIN /inventario es HUB
+         (Stock · Conteo · Ingresos) y /transferencias es HUB "Logística"
+         (Transferencias · Entregas · Recolección). Los operadores conservan
+         sus tiles directos; el admin ve un tile por hub. */
+      { path: '/inventario',   label: 'Inventario',   icon: ICONS.inv,      perm: 'inventario' },
       /* STK Americano vive en Inventarios > Americano Terán / Alm. 2 (dueño 16-jul). */
-      /* Entregas a tiendas (jul 2026): la BAJA del CEDIS al entregar (Josué + admin). */
-      { path: '/entregas',     label: 'Entregas',     icon: ICONS.entregas, perm: 'inventario', roles: ['admin','almacen'] },
-      { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount' },
-      { path: '/transferencias', label: 'Transferencias', icon: ICONS.transfer, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
-      { path: '/ingresos',     label: 'Ingresos proveedor', icon: ICONS.recepcion, perm: 'ingresos', roles: ['admin','tecnico','almacen'] },
+      { path: '/entregas',     label: 'Entregas',     icon: ICONS.entregas, perm: 'inventario', roles: ['almacen'] },
+      { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount', roles: ['inventario'] },
+      { path: '/transferencias', label: 'Logística',  icon: ICONS.transfer, perm: 'transferencias', roles: ['admin'] },
+      { path: '/transferencias', label: 'Transferencias', icon: ICONS.transfer, perm: 'transferencias', roles: ['almacen','inventario','tecnico'] },
+      { path: '/ingresos',     label: 'Ingresos proveedor', icon: ICONS.recepcion, perm: 'ingresos', roles: ['tecnico','almacen'] },
       { path: '/devoluciones', label: 'Devoluciones', icon: ICONS.devol,    perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
       { path: '/reportes',     label: 'Reportes',     icon: ICONS.reportes, perm: 'inventario', roles: ['admin','inventario','compras'] },
     ],
@@ -114,23 +120,30 @@ const SECCIONES = [
   {
     titulo: 'Compras y trazabilidad',
     items: [
+      /* Para ADMIN /compras es HUB (OCs · Pronóstico · SAT · POS Aliases).
+         Arely conserva sus tiles directos (decisiones LOCKED §9 intactas). */
       { path: '/compras',      label: 'Compras',      icon: ICONS.compr, perm: 'compras' },
-      { path: '/pronostico',   label: 'Pronóstico',   icon: ICONS.pronostico, perm: 'compras', roles: ['admin','compras'] },
-      { path: '/devoluciones-mp', label: 'Devol. proveedor', icon: ICONS.devol, perm: 'devoluciones', roles: ['admin','compras'] },
-      { path: '/sat',          label: 'SAT / CFDI',   icon: ICONS.sat,        perm: 'compras', roles: ['admin','compras'] },
-      { path: '/pos-aliases',  label: 'POS Aliases',  icon: ICONS.posAliases, perm: 'compras', roles: ['admin','compras'] },
-      { path: '/recoleccion',  label: 'Recolección',  icon: ICONS.recol, perm: 'recoleccion' },
+      { path: '/pronostico',   label: 'Pronóstico',   icon: ICONS.pronostico, perm: 'compras', roles: ['compras'] },
+      /* JUL 2026 (censo duplicados): para ADMIN la devolución a proveedor vive
+         dentro del hub /devoluciones (vista "A proveedor") — solo Arely conserva
+         el tile directo. La ruta /devoluciones-mp sigue viva para deep-links. */
+      { path: '/devoluciones-mp', label: 'Devol. proveedor', icon: ICONS.devol, perm: 'devoluciones', roles: ['compras'] },
+      { path: '/sat',          label: 'SAT / CFDI',   icon: ICONS.sat,        perm: 'compras', roles: ['compras'] },
+      { path: '/pos-aliases',  label: 'POS Aliases',  icon: ICONS.posAliases, perm: 'compras', roles: ['compras'] },
+      /* Luis/Josué directa; admin dentro del hub Logística. */
+      { path: '/recoleccion',  label: 'Recolección',  icon: ICONS.recol, perm: 'recoleccion', roles: ['recolector','almacen'] },
       { path: '/trazabilidad', label: 'Trazabilidad', icon: ICONS.traz,  perm: 'trazabilidad' },
     ],
   },
   {
     titulo: 'Otros',
     items: [
-      /* Enrique (tecnico) NO ve la pestaña Fórmulas — solo la fórmula al producir
-         (carga vía API en /produccion). Se oculta con `roles`, no quitando el
-         permiso (producción lo necesita). compras ya queda fuera por perm. */
-      { path: '/formulas',       label: 'Fórmulas',      icon: ICONS.formulas, perm: 'formulas', roles: ['admin','compras'] },
-      { path: '/laboratorio',    label: 'Laboratorio',   icon: ICONS.lab,      perm: 'laboratorio' },
+      /* Para ADMIN /formulas es HUB (Fórmulas · Laboratorio). Enrique (tecnico)
+         NO ve Fórmulas — solo la fórmula al producir; conserva su Laboratorio. */
+      { path: '/formulas',       label: 'Fórmulas y lab', icon: ICONS.formulas, perm: 'formulas', roles: ['admin'] },
+      { path: '/laboratorio',    label: 'Laboratorio',   icon: ICONS.lab,      perm: 'laboratorio', roles: ['tecnico'] },
+      /* Chat interno (jul 2026): todos los roles. Badge = sin leer. */
+      { path: '/chat',           label: 'Chat',          icon: ICONS.chat,     perm: 'dashboard' },
       { path: '/notificaciones', label: 'Notificaciones',icon: ICONS.notif,    perm: 'dashboard' },
       { path: '/admin',          label: 'Admin',         icon: ICONS.admin,    perm: 'admin' },
     ],
@@ -161,8 +174,9 @@ export default function BottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
-  /* Sprint P: badge en tab/tile "Pedidos" */
+  /* Sprint P: badge en tab/tile "Pedidos" + jul 2026: badge de chat sin leer */
   const pedidosNotif = usePedidosNotif();
+  const chatNotif = useChatNotif();
 
   /* Cerrar sheet al navegar */
   useEffect(() => { setSheetOpen(false); }, [location.pathname]);
@@ -292,11 +306,11 @@ export default function BottomNav() {
                 <div style={S.secTitle}>{sec.titulo}</div>
                 <div style={S.grid}>
                   {sec.items.map(it => {
-                    const esPedidos = it.path === '/pedidos';
-                    const count = esPedidos ? pedidosNotif.count : 0;
+                    const count = it.path === '/pedidos' ? pedidosNotif.count
+                                : it.path === '/chat' ? chatNotif.count : 0;
                     return (
                       <button
-                        key={'tile-' + it.path}
+                        key={'tile-' + it.path + '-' + it.label}
                         type="button"
                         style={{ ...S.tile(isActive(it.path)), position: 'relative' }}
                         onClick={() => handleNav(it.path)}

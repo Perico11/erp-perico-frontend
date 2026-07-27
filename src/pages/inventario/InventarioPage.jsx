@@ -13,12 +13,13 @@ import StkAmericanoView from '../stk-americano/StkAmericanoView';
 import { SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import CostosMPPanel from '../admin/CostosMPPanel';
 import MaestroMPInline from './MaestroMPInline';
-import HelpHint from '../../components/HelpHint';
-import PageTabs from '../../components/ui/PageTabs';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
 import CanonicoCard from './CanonicoCard';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import useVaciadores from '../../hooks/useVaciadores';
+/* DISEÑO ÚNICO de envasado (jul 2026): bloques compartidos por las 4 pantallas. */
+import { Sec, PresPills, EnvaseSelect, TapaSelect, QuienEnvaso, Contador, TopeHint } from '../../components/envasado/EnvasarUI';
 import { ESTADO_LOTE_OCULTO_INVENTARIO, ESTADO_LOTE_UBICACION_TERAN } from '../../lib/estados';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
@@ -1494,7 +1495,9 @@ function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
 }
 
 /* ================================================================ */
-export default function InventarioPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub /inventario
+   del admin (patrón AlmacenPage). Solo suprime su TopBar propio. */
+export default function InventarioPage({ embedded = false }) {
   const { user, can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2191,7 +2194,7 @@ export default function InventarioPage() {
   if (invLoading) {
     return (
       <>
-        <TopBar title="Inventarios" />
+        {!embedded && <TopBar title="Inventarios" />}
         <div style={S.spinner}><div className="lp-spinner" /></div>
       </>
     );
@@ -2199,7 +2202,7 @@ export default function InventarioPage() {
 
   return (
     <>
-      <TopBar title="Inventarios" />
+      {!embedded && <TopBar title="Inventarios" />}
       <div style={S.wrap}>
         <div style={S.h1}>Inventario</div>
         <div style={S.psub}>Materia prima y producto terminado</div>
@@ -3005,6 +3008,9 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   const [tapaKey, setTapaKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* Vaciador responsable (jul 2026) — mismo desplegable que en los sheets de
+     Stock Fábrica; el nombre se espeja a los sublotes hijos. */
+  const { vaciadores, envasadorId, elegir: elegirVaciador, camposSublote } = useVaciadores();
 
   const cats = envData?.categorias || {};
   const tapas = envData?.tapas || {};
@@ -3019,12 +3025,25 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   const valido = !isNaN(n) && n > 0 && producedCub <= dispCub + 0.01;
   const restante = Math.max(0, dispCub - producedCub);
 
+  /* Tope + cuello de botella (diseño único jul 2026): cuántas caben por
+     material disponible, por envases y por tapas — el menor manda y se dice
+     cuál es. Antes solo fallaba al guardar. */
+  const subSelTeran = subs.find(([sk]) => sk === subKey);
+  const tapaSelTeran = tapaList.find(([tk]) => tk === tapaKey);
+  const cubEqUnidad = reenvCubEq(destinoTipo, 1) || 1;
+  const limitesTeran = [
+    { n: Math.floor(dispCub / cubEqUnidad), motivo: 'la pintura disponible' },
+    ...(subSelTeran ? [{ n: Math.round(Number(subSelTeran[1].teran) || 0), motivo: 'los envases en Terán' }] : []),
+    ...(usaTapa && tapaSelTeran ? [{ n: Math.round(Number(tapaSelTeran[1].teran) || 0), motivo: 'las tapas en Terán' }] : []),
+  ];
+  const maxUnidTeran = Math.max(0, Math.min(...limitesTeran.map(l => l.n)));
+
   const submit = async () => {
     if (!valido || saving) return;
     setSaving(true); setErr('');
     try {
       const destinos = [{ tipo: destinoTipo, qty: n, subKey: subKey || null, tapaKey: usaTapa ? (tapaKey || null) : null }];
-      const r = await api.reenvasarPTTeran(producto, origen, destinos);
+      const r = await api.reenvasarPTTeran(producto, origen, destinos, null, camposSublote);
       onDone(r);
     } catch (e) { setErr(e?.data?.error || e.message || 'No se pudo reenvasar'); setSaving(false); }
   };
@@ -3047,33 +3066,52 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
           ))}
         </select>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 92px', gap: 10, marginTop: 12 }}>
-          <div>
-            <label style={S.flbl}>Convertir a</label>
-            <select style={selStyle} value={destinoTipo} onChange={e => { setDestinoTipo(e.target.value); setSubKey(''); setTapaKey(''); }}>
-              {destinoOpts.map(t => <option key={t} value={t}>{REENV_TIPO_LBL[t]}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={S.flbl}>Cantidad</label>
-            <input style={S.finQty} type="number" inputMode="numeric" min="1" step="1" value={qty} onChange={e => setQty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
-          </div>
-        </div>
+        {/* DISEÑO ÚNICO (jul 2026): mismo orden y mismos controles que las otras
+            3 pantallas de envasado — components/envasado/EnvasarUI. */}
+        <Sec>En qué se envasa</Sec>
+        <PresPills
+          opciones={destinoOpts.map(t => ({
+            id: t, nombre: REENV_TIPO_LBL[t],
+            sub: REENV_ML[t] ? (REENV_ML[t] / 1000) + ' L' : null,
+          }))}
+          valor={destinoTipo}
+          onChange={(v) => { setDestinoTipo(v); setSubKey(''); setTapaKey(''); }}
+          dataId="inventario.pres"
+        />
 
-        <label style={{ ...S.flbl, marginTop: 12 }}>Envase a usar (de Terán)</label>
-        <select style={selStyle} value={subKey} onChange={e => setSubKey(e.target.value)}>
-          <option value="">— sin descontar envase —</option>
-          {subs.map(([sk, sub]) => <option key={sk} value={sk}>{sub.nombre} (Terán: {Math.round(Number(sub.teran) || 0)})</option>)}
-        </select>
+        <EnvaseSelect
+          etiqueta="Envase (stock de Terán)"
+          opciones={subs.map(([sk, sub]) => ({
+            value: sk,
+            disabled: (Number(sub.teran) || 0) <= 0,
+            label: `${sub.nombre} · ${Math.round(Number(sub.teran) || 0) <= 0 ? 'sin stock' : `${Math.round(Number(sub.teran) || 0)} en Terán`}`,
+          }))}
+          valor={subKey}
+          onChange={setSubKey}
+          vacio="— sin descontar envase —"
+          dataId="inventario.sel.envase"
+        />
+
         {usaTapa && (
-          <>
-            <label style={{ ...S.flbl, marginTop: 12 }}>Tapa (de Terán)</label>
-            <select style={selStyle} value={tapaKey} onChange={e => setTapaKey(e.target.value)}>
-              <option value="">— sin tapa —</option>
-              {tapaList.map(([tk, t]) => <option key={tk} value={tk}>{t.nombre} (Terán: {Math.round(Number(t.teran) || 0)})</option>)}
-            </select>
-          </>
+          <TapaSelect
+            opciones={tapaList.map(([tk, t]) => ({
+              value: tk, color: t.color || undefined,
+              disabled: (Number(t.teran) || 0) <= 0,
+              label: `${t.color_nombre || t.nombre} · ${Math.round(Number(t.teran) || 0) <= 0 ? 'sin stock' : `${Math.round(Number(t.teran) || 0)} en Terán`}`,
+            }))}
+            valor={tapaKey}
+            onChange={setTapaKey}
+            vacio="— sin tapa —"
+            dataId="inventario.sel.tapa"
+          />
         )}
+
+        <QuienEnvaso vaciadores={vaciadores} valor={envasadorId} onChange={elegirVaciador}
+          dataId="inventario.sel.vaciador" />
+
+        <Sec>Cuántas {(REENV_TIPO_LBL[destinoTipo] || '').toLowerCase()}s</Sec>
+        <Contador valor={qty} onChange={(v) => setQty(String(v))} max={maxUnidTeran} min={0} dataId="inventario.qty" />
+        <TopeHint limites={limitesTeran} />
 
         <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6 }}>
           Disponible en <strong>{REENV_TIPO_LBL[origen] || origen}</strong>: <strong>{Math.round(dispCub)} cub-equiv</strong><br />
@@ -3725,7 +3763,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
     try {
       await onSubmit(elegido, qty);
       /* Guarda la medida real (ej. "2 totes") como metadato — no rompe si falla. */
-      try { await api.ptMeta(elegido, { medida, medidaQty: cantNum }); } catch (_) {}
+      try { await api.ptMeta(elegido, { medida, medidaQty: cantNum }); } catch {}
     }
     catch (e) { setError(e?.data?.error || e?.message || 'No se pudo guardar'); }
     finally { setSaving(false); }

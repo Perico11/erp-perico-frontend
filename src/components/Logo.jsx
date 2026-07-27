@@ -24,7 +24,7 @@ function getBase() {
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) {
       return import.meta.env.BASE_URL.replace(/\/$/, '');
     }
-  } catch (_) {}
+  } catch {}
   return '';
 }
 

@@ -3,6 +3,16 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import PageTabs from '../../components/ui/PageTabs';
+
+/* Estilo de las sub-pestañas (usuarios · vaciadores) — subrayado del DS verde. */
+const tabStyle = (activo) => ({
+  padding: '9px 16px', minHeight: 42, border: 'none', background: 'none',
+  cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13.5,
+  fontWeight: activo ? 700 : 500,
+  color: activo ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+  borderBottom: '2px solid ' + (activo ? 'var(--lp-brand-600)' : 'transparent'),
+});
 
 const S = {
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
@@ -438,8 +448,123 @@ function ConfirmDelete({ user, onClose, onSaved }) {
 }
 
 /* ────────── PANEL PRINCIPAL ────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   VaciadoresPanel — catálogo del personal que ENVASA (jul 2026, pedido dueño).
+
+   No son usuarios del sistema (no tienen PIN ni entran a la app): es una
+   lista simple de nombres que alimenta el desplegable "Quién envasó" de los
+   sheets de Envasar y Re-envasar. Al envasar, el nombre se COPIA al sublote,
+   así que dar de baja a alguien nunca altera la historia de lotes viejos.
+   ═══════════════════════════════════════════════════════════════════════ */
+function VaciadoresPanel() {
+  const [lista, setLista] = useState([]);
+  const [nombre, setNombre] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [porBorrar, setPorBorrar] = useState(null);
+
+  const cargar = useCallback(() => {
+    setLoading(true);
+    api.getVaciadores()
+      .then(r => setLista(Array.isArray(r?.data) ? r.data : []))
+      .catch(e => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+  useRealtimeSync({ onVaciadores: () => cargar() });
+
+  const agregar = async () => {
+    const n = nombre.trim();
+    if (n.length < 2) { setErr('Escribe el nombre completo'); return; }
+    setSaving(true); setErr('');
+    try {
+      await api.crearVaciador(n);
+      setNombre('');
+      cargar();
+    } catch (e) {
+      setErr(e?.data?.error || e.message);
+    } finally { setSaving(false); }
+  };
+
+  const borrar = async (v) => {
+    setErr('');
+    try { await api.eliminarVaciador(v.id); setPorBorrar(null); cargar(); }
+    catch (e) { setErr(e?.data?.error || e.message); }
+  };
+
+  return (
+    <div>
+      {err && <div style={S.err}>{err}</div>}
+
+      <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 14, maxWidth: 620 }}>
+        El personal que envasa. Aparecen en el desplegable <strong>"Quién envasó"</strong> de Envasar y
+        Re-envasar, y su nombre queda grabado en cada sublote — así sabes quién es el responsable de cada tanda.
+        No entran a la app ni necesitan PIN.
+      </div>
+
+      <div style={S.toolbar}>
+        <input
+          style={S.search}
+          type="text"
+          placeholder="Nombre del vaciador…"
+          value={nombre}
+          maxLength={80}
+          onChange={(e) => setNombre(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }}
+          data-id="admin.input.vaciador"
+        />
+        <button style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }} onClick={agregar} disabled={saving}
+          data-id="admin.btn.agregar-vaciador">
+          {saving ? 'Agregando…' : '+ Agregar vaciador'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={S.loading}>Cargando…</div>
+      ) : lista.length === 0 ? (
+        <div style={S.loading}>Todavía no hay vaciadores. Agrega el primero arriba.</div>
+      ) : (
+        <div style={S.list}>
+          {lista.map(v => (
+            <div key={v.id} style={S.row}>
+              <div style={S.avatar('var(--lp-brand-100)')}>
+                {(v.nombre || '?').charAt(0).toUpperCase()}
+              </div>
+              <div style={S.info}>
+                <div style={S.name}>{v.nombre}</div>
+                <div style={S.meta}>
+                  Alta {(v.creadoEn || '').slice(0, 10)}{v.creadoPor ? ` · por ${v.creadoPor}` : ''}
+                </div>
+              </div>
+              <div style={S.actions}>
+                {porBorrar === v.id ? (
+                  <>
+                    <button style={S.btnGhost} onClick={() => setPorBorrar(null)}>Cancelar</button>
+                    <button style={S.btnDanger} onClick={() => borrar(v)}>Confirmar baja</button>
+                  </>
+                ) : (
+                  <button style={S.btnDanger} onClick={() => setPorBorrar(v.id)}>Eliminar</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {lista.length > 0 && (
+        <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 12, lineHeight: 1.6 }}>
+          Dar de baja a alguien solo lo quita del desplegable. Los lotes que ya envasó conservan su nombre.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UsuariosPanel() {
   const { can, recargarPermisos, permisosRoles } = useAuth();
+  /* Sub-pestañas (jul 2026): usuarios del sistema · vaciadores (personal que envasa) */
+  const [seccion, setSeccion] = useState('usuarios');
   const [list, setList] = useState([]);
   const [roles, setRoles] = useState(['admin', 'tecnico', 'compras', 'almacen', 'recolector', 'inventario']);
   const [permisosDisponibles, setPermisosDisponibles] = useState([]);
@@ -497,7 +622,16 @@ export default function UsuariosPanel() {
 
   if (loading) return <div style={S.loading}>Cargando usuarios...</div>;
 
+  const tabsSeccion = [
+    { id: 'usuarios', label: 'Usuarios del sistema', style: (a) => tabStyle(a) },
+    { id: 'vaciadores', label: 'Vaciadores', style: (a) => tabStyle(a) },
+  ];
+
   return (
+    <div>
+      <PageTabs tabs={tabsSeccion} activeTab={seccion} onChange={setSeccion} style={{ marginBottom: 16 }} />
+
+      {seccion === 'vaciadores' ? <VaciadoresPanel /> : (
     <div>
       {err && <div style={S.err}>{err}</div>}
 
@@ -575,6 +709,22 @@ export default function UsuariosPanel() {
           <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 10, lineHeight: 1.6 }}>
             Edita qué pantallas y acciones tiene cada rol. Si das más permisos, los usuarios de ese rol verán más botones al refrescar.
           </div>
+          {/* Honestidad sobre el alcance (auditoría 26-jul-2026): estos permisos
+              deciden lo que se MUESTRA; el servidor sigue autorizando por ROL.
+              Sin este aviso, quitar un permiso parece un candado y no lo es —
+              y creer que algo está restringido cuando no lo está es peor que
+              saber que no lo está. Cablear el enforce granular está pendiente
+              (requirePermission existe en el backend, sin usar todavía). */}
+          <div style={{
+            fontSize: 11, lineHeight: 1.6, marginBottom: 12, padding: '8px 10px',
+            borderRadius: 8, background: 'var(--lp-warning-bg, #FEF3C7)',
+            color: 'var(--lp-warning-text, #92400E)', border: '1px solid var(--lp-warning-border, #FCD34D)',
+          }}>
+            <strong>Qué controla esto:</strong> lo que cada rol VE en la aplicación.
+            El servidor autoriza por rol, no por estas casillas, así que quitar un
+            permiso oculta el botón pero no bloquea la acción a alguien que conozca
+            la ruta. Para restringir de verdad, cambia el rol del usuario.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
             {roles.map(r => {
               const rs = rolStyle(r);
@@ -624,6 +774,8 @@ export default function UsuariosPanel() {
           onClose={() => setEditPermsRol(null)}
           onSaved={handleSaved}
         />
+      )}
+    </div>
       )}
     </div>
   );

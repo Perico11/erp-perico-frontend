@@ -18,11 +18,11 @@ const S = {
   subtitle: { fontSize: 13, color: 'var(--lp-text-tertiary)', marginTop: 4, fontFamily: 'var(--lp-font-sans)' },
 };
 
-export default function SATPage() {
+export default function SATPage({ embedded = false }) {
   const isDesktop = useIsDesktop();
   return (
     <>
-      <TopBar title="SAT / CFDI" />
+      {!embedded && <TopBar title="SAT / CFDI" />}
       <div style={{ ...S.wrap, maxWidth: isDesktop ? 1100 : '100%' }}>
         <div style={S.header}>
           <h1 style={S.title}>SAT / CFDI</h1>

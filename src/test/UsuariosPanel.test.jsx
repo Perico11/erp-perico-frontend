@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import UsuariosPanel from '../pages/admin/UsuariosPanel';
 
@@ -42,7 +43,7 @@ describe('UsuariosPanel', () => {
   });
 
   it('renderiza KPIs y lista de usuarios', async () => {
-    render(<UsuariosPanel />);
+    render(<MemoryRouter><UsuariosPanel /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText('Total usuarios')).toBeInTheDocument();
     });
@@ -52,7 +53,7 @@ describe('UsuariosPanel', () => {
   });
 
   it('muestra botón "+ Crear usuario" si tiene permiso crearUsuarios', async () => {
-    render(<UsuariosPanel />);
+    render(<MemoryRouter><UsuariosPanel /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText('+ Crear usuario')).toBeInTheDocument();
     });
@@ -60,7 +61,7 @@ describe('UsuariosPanel', () => {
 
   it('filtra usuarios por búsqueda', async () => {
     const user = userEvent.setup();
-    render(<UsuariosPanel />);
+    render(<MemoryRouter><UsuariosPanel /></MemoryRouter>);
     await waitFor(() => screen.getByText('Emmanuel Glez'));
 
     const input = screen.getByPlaceholderText(/Buscar/i);
@@ -73,7 +74,7 @@ describe('UsuariosPanel', () => {
   });
 
   it('botón Eliminar NO aparece para admin', async () => {
-    render(<UsuariosPanel />);
+    render(<MemoryRouter><UsuariosPanel /></MemoryRouter>);
     await waitFor(() => screen.getByText('Emmanuel Glez'));
 
     /* Admin Emmanuel no debe tener botón Eliminar (regla del backend) */
@@ -82,7 +83,7 @@ describe('UsuariosPanel', () => {
   });
 
   it('muestra sección "Permisos por rol" si tiene editarPermisos', async () => {
-    render(<UsuariosPanel />);
+    render(<MemoryRouter><UsuariosPanel /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText('Permisos por rol')).toBeInTheDocument();
     });

@@ -18,6 +18,9 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useConfirm from '../../hooks/useConfirm'; /* AUDIT UX 16-jul (U16-baja) */
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
+/* Presentaciones de MP — MISMO catálogo que las OCs de Arely (jul 2026, pedido
+   dueño: "200 kg de OMYA son 8 sacos"). presEnvases(v, kg) → "8 sacos". */
+import { PRESENTACIONES, presEnvases } from '../compras/presentaciones';
 
 const TIPO_LABEL = { mp: 'MP', envase: 'Envase', tapa: 'Tapa', pta: 'PT Americano' };
 /* PTA (18-jul, pedido dueño vía Josué): producto terminado AMERICANO que llega
@@ -212,13 +215,18 @@ function _sugerirLineaDesdeNota(nota, mpNames) {
 }
 
 /* ─── Editor de líneas (lo que llegó) — compartido crear/revisar ───────────── */
-function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts, ptaCat, readOnly, onMPSeleccionada }) {
+/* `agregarColapsado` (jul 2026, feedback dueño): con partidas precargadas de una
+   OC, el formulario de "agregar otra" se esconde tras un botón — sus campos
+   vacíos parecían pendientes de llenar cuando ya no falta nada. */
+function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts, ptaCat, readOnly, onMPSeleccionada, agregarColapsado = false }) {
   const [tipo, setTipo] = useState('mp');
+  const [editorAbierto, setEditorAbierto] = useState(!agregarColapsado);
+  useEffect(() => { setEditorAbierto(!agregarColapsado); }, [agregarColapsado]);
   /* Borrador POR PESTAÑA (fix crítico jul 2026): cada tipo (mp/envase/tapa/pta)
      recuerda lo que estabas escribiendo → cambiar de sub-pestaña YA NO borra la
      info del anterior. Antes era un solo estado compartido que se reseteaba. */
   const [draft, setDraft] = useState({
-    mp:     { sel: '', cant: '', uni: 'kg', lote: '', costoKg: '' },
+    mp:     { sel: '', cant: '', uni: 'kg', lote: '', costoKg: '', presentacion: '' },
     envase: { sel: '', cant: '', uni: 'pz' },
     tapa:   { sel: '', cant: '', uni: 'pz' },
     pta:    { sel: '', cant: '', uni: 'totes', almacen: '1', pres: 'totes' },
@@ -263,7 +271,7 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
       const lt = (d.lote || '').trim();
       const ck = Number(d.costoKg) > 0 ? +Number(d.costoKg).toFixed(4) : null;
       const nombre = `${d.sel}${lt ? ` · Lote ${lt}` : ''}${ck ? ` · $${ck}/kg` : ''}`;
-      linea = { tipo: 'mp', mp: d.sel, nombre, cantidad: c, unidad: d.uni || 'kg', ...(lt ? { lote: lt } : {}), ...(ck ? { costoKg: ck } : {}) };
+      linea = { tipo: 'mp', mp: d.sel, nombre, cantidad: c, unidad: d.uni || 'kg', ...(lt ? { lote: lt } : {}), ...(ck ? { costoKg: ck } : {}), ...(d.presentacion ? { presentacion: d.presentacion } : {}) };
     } else if (tipo === 'envase') {
       const o = envaseOpts.find(x => x.value === d.sel);
       if (!o) return;
@@ -282,21 +290,90 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
       linea = { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, cantidad: c, unidad: d.uni || 'pz' };
     }
     setLineas([...(lineas || []), linea]);
-    setD({ sel: '', cant: '', lote: '', costoKg: '', __auto: null }); /* limpia SOLO esta pestaña tras agregar */
+    setD({ sel: '', cant: '', lote: '', costoKg: '', presentacion: '', __auto: null }); /* limpia SOLO esta pestaña tras agregar */
   };
 
   const quitar = (i) => setLineas(lineas.filter((_, idx) => idx !== i));
+
+  /* Confirmar el PESO inline (jul 2026, pedido dueño): la cantidad de cada
+     partida se edita directo en el renglón — sin quitar y re-agregar. */
+  const actualizarCantidad = (i, val) => {
+    const v = val === '' ? '' : Number(val);
+    setLineas(lineas.map((l, idx) => idx === i ? { ...l, cantidad: v } : l));
+  };
+  /* Presentación TAMBIÉN inline (feedback dueño 24-jul): default de la OC,
+     Enrique la corrige si el proveedor mandó otro empaque. Los bultos se
+     calculan solos (kg ÷ tamaño). */
+  const actualizarPresentacion = (i, val) => {
+    setLineas(lineas.map((l, idx) => {
+      if (idx !== i) return l;
+      const next = { ...l };
+      if (val) next.presentacion = val; else delete next.presentacion;
+      return next;
+    }));
+  };
+  /* Lote del proveedor TAMBIÉN inline (feedback dueño 24-jul): el lote viene
+     impreso en el saco/tambo — se captura sobre el renglón precargado. */
+  const actualizarLote = (i, val) => {
+    setLineas(lineas.map((l, idx) => {
+      if (idx !== i) return l;
+      const lt = String(val);
+      const next = { ...l };
+      if (lt.trim()) next.lote = lt; else delete next.lote;
+      return next;
+    }));
+  };
 
   return (
     <div>
       {(lineas || []).length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           {lineas.map((l, i) => (
-            <div key={i} style={S.lineChip}>
+            <div key={i} style={{ ...S.lineChip, flexWrap: 'wrap' }}>
               <span style={S.lineTipo}>{TIPO_LABEL[l.tipo] || l.tipo}</span>
               <span style={{ flex: 1, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</span>
               {l.__sugerida && <span style={S.sugTag}>sugerida</span>}
-              <span style={{ fontWeight: 600 }}>{fmt(l.cantidad)} {l.unidad}</span>
+              {readOnly ? (
+                <span style={{ fontWeight: 600 }}>
+                  {fmt(l.cantidad)} {l.unidad}
+                  {l.tipo === 'mp' && presEnvases(l.presentacion, l.cantidad) ? ` · ${presEnvases(l.presentacion, l.cantidad)}` : ''}
+                </span>
+              ) : (
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 600, flexShrink: 0, flexWrap: 'wrap' }}>
+                  {l.tipo === 'mp' && (
+                    <input
+                      value={l.lote || ''} placeholder="Lote"
+                      onChange={e => actualizarLote(i, e.target.value)}
+                      aria-label={`Lote de ${l.nombre}`}
+                      style={{ width: 88, padding: '6px 8px', border: '1.5px solid var(--lp-border-subtle,#dfe5e2)', borderRadius: 8, fontSize: 12.5, fontFamily: 'inherit', background: 'var(--lp-bg-raised,#fff)', color: 'inherit', boxSizing: 'border-box' }}
+                    />
+                  )}
+                  {l.tipo === 'mp' && (
+                    <select
+                      value={l.presentacion || ''}
+                      onChange={e => actualizarPresentacion(i, e.target.value)}
+                      aria-label={`Presentación de ${l.nombre}`}
+                      style={{ maxWidth: 128, padding: '6px 4px', border: '1.5px solid var(--lp-border-subtle,#dfe5e2)', borderRadius: 8, fontSize: 12, fontFamily: 'inherit', background: 'var(--lp-bg-raised,#fff)', color: 'inherit', boxSizing: 'border-box' }}
+                    >
+                      {PRESENTACIONES.map(p => (
+                        <option key={p.v} value={p.v}>{p.v ? p.lbl : 'Presentación…'}</option>
+                      ))}
+                    </select>
+                  )}
+                  <input
+                    type="number" inputMode="decimal" min="0" value={l.cantidad}
+                    onChange={e => actualizarCantidad(i, e.target.value)}
+                    aria-label={`Cantidad de ${l.nombre}`}
+                    style={{ width: 76, padding: '6px 8px', border: '1.5px solid var(--lp-border-subtle,#dfe5e2)', borderRadius: 8, fontSize: 13, fontWeight: 650, textAlign: 'right', fontFamily: 'inherit', background: 'var(--lp-bg-raised,#fff)', color: 'inherit', boxSizing: 'border-box' }}
+                  />
+                  {l.unidad}
+                  {l.tipo === 'mp' && presEnvases(l.presentacion, l.cantidad) && (
+                    <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--lp-brand-700,#0F6E56)', whiteSpace: 'nowrap' }}>
+                      = {presEnvases(l.presentacion, l.cantidad)}
+                    </span>
+                  )}
+                </span>
+              )}
               {!readOnly && (
                 <button onClick={() => quitar(i)} aria-label="Quitar" style={S.chipDel}>✕</button>
               )}
@@ -304,7 +381,17 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
           ))}
         </div>
       )}
-      {!readOnly && (
+      {!readOnly && !editorAbierto && (
+        <button
+          type="button"
+          onClick={() => setEditorAbierto(true)}
+          style={{ width: '100%', padding: '11px 12px', border: '1.5px dashed var(--lp-border-strong,#c6cfca)', borderRadius: 10, background: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--lp-text-secondary,#5a6b63)', fontFamily: 'inherit' }}
+          data-id="ingresos.btn.agregar-partida"
+        >
+          + Agregar otra partida (algo que llegó fuera de la OC)
+        </button>
+      )}
+      {!readOnly && editorAbierto && (
         <div style={S.lineForm}>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {['mp', 'envase', 'tapa', 'pta'].map(t => (
@@ -344,6 +431,20 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
           {tipo === 'mp' && (
             <input type="number" inputMode="decimal" min="0" value={d.costoKg || ''} onChange={e => setD({ costoKg: e.target.value, __auto: null })} placeholder="Costo por kg de esta factura (opcional)" style={{ ...S.input, marginTop: 6 }} />
           )}
+          {/* Presentación (jul 2026): en qué empaque llegó — los bultos se
+              calculan solos al capturar los kg (ej. 200 kg saco 25 = 8 sacos). */}
+          {tipo === 'mp' && (
+            <select value={d.presentacion || ''} onChange={e => setD({ presentacion: e.target.value })} style={{ ...S.input, marginTop: 6 }}>
+              {PRESENTACIONES.map(p => (
+                <option key={p.v} value={p.v}>{p.v ? p.lbl : 'Presentación (opcional)…'}</option>
+              ))}
+            </select>
+          )}
+          {tipo === 'mp' && presEnvases(d.presentacion, Number(d.cant)) && (
+            <div style={{ fontSize: 11.5, color: 'var(--lp-brand-700,#0F6E56)', fontWeight: 700, marginTop: 4 }}>
+              = {presEnvases(d.presentacion, Number(d.cant))}
+            </div>
+          )}
           {tipo === 'mp' && d.__auto && (
             <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 4, lineHeight: 1.4 }}>
               Precio prellenado del ERP (${d.__auto.costoKg}/kg{d.__auto.proveedor ? ` · ${d.__auto.proveedor}` : ''}) — corrígelo si la factura trae otro.
@@ -382,7 +483,11 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
      entrar DOBLE si Arely además la recibe por Compras. El usuario puede
      vincular el ingreso a esa OC (referencia). Best-effort: almacén no puede
      leer OCs (403) → sin aviso, sin romper nada. */
-  const [ocsActivas, setOcsActivas] = useState([]);
+  /* null = cargando o sin permiso de leer OCs (almacén viejo) → no pintar nada.
+     [] = cargó y NO hay OCs pendientes → pintar el bloque con estado vacío
+     (jul 2026, feedback dueño: "no veo lo de ¿llegó una OC?" — el selector
+     escondido hacía indescubrible la función cuando no había OCs activas). */
+  const [ocsActivas, setOcsActivas] = useState(null);
   const [ocVinculada, setOcVinculada] = useState(null);
   useEffect(() => {
     let alive = true;
@@ -398,8 +503,122 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
   const ocMatch = useMemo(() => {
     const mpsCapturadas = (lineas || []).filter(l => l.tipo === 'mp').map(l => String(l.mp || '').trim().toUpperCase());
     if (!mpsCapturadas.length) return null;
-    return ocsActivas.find(o => (o.items || []).some(it => mpsCapturadas.includes(String(it.mp || '').trim().toUpperCase()))) || null;
+    return (ocsActivas || []).find(o => (o.items || []).some(it => mpsCapturadas.includes(String(it.mp || '').trim().toUpperCase()))) || null;
   }, [lineas, ocsActivas]);
+
+  /* PRELLENADO desde la OC (jul 2026, pedido dueño): Arely ya capturó materiales
+     Y precios en la orden — al elegirla aquí se cargan proveedor + partidas
+     (kg PENDIENTES si hubo entregas parciales) con su costo/kg. Quien recibe
+     solo AJUSTA cantidades a lo que realmente llegó. Al registrarse/aprobarse,
+     la OC se marca recibida sola (conciliación backend) — nadie captura doble. */
+  const aplicarOC = (id) => {
+    if (!id) { setOcVinculada(null); return; }
+    const oc = (ocsActivas || []).find(o => o.id === id || o.codigo === id);
+    if (!oc) { setOcVinculada(null); return; }
+    setOcVinculada(oc.id || oc.codigo);
+    if (oc.proveedor) setProveedor(oc.proveedor);
+    /* # factura y monto también se precargan (jul 2026: "Enrique solo confirma
+       el peso y firma"): la referencia que capturó Compras al aprobar suele SER
+       el número de factura (crédito); el monto = total registrado o estimado
+       kg × precio de cada partida pendiente. Editables por si difieren. */
+    if (oc.numFactura || oc.referenciaPago) setNumFactura(String(oc.numFactura || oc.referenciaPago));
+    const lineasOC = (oc.items || []).map(it => {
+      const pend = Math.max(0, (Number(it.kg) || 0) - (Number(it.kg_recibidos) || 0));
+      const cant = pend > 0 ? pend : (Number(it.kg) || 0);
+      const ck = Number(it.precioUnitario) > 0 ? +Number(it.precioUnitario).toFixed(4) : null;
+      /* Presentación por DEFAULT la que cargó Arely en la OC. 'otro' no tiene
+         tamaño (no se pueden derivar bultos) → viaja como texto libre. */
+      const esOtro = it.presentacion === 'otro';
+      return {
+        tipo: 'mp', mp: it.mp, cantidad: cant, unidad: 'kg',
+        nombre: `${it.mp}${ck ? ` · $${ck}/kg` : ''}${esOtro && it.presentacionOtro ? ` · ${it.presentacionOtro}` : ''}`,
+        ...(ck ? { costoKg: ck } : {}),
+        ...(it.presentacion && !esOtro ? { presentacion: it.presentacion } : {}),
+        ...(esOtro && it.presentacionOtro ? { presentacionOtro: it.presentacionOtro } : {}),
+      };
+    }).filter(l => l.mp && l.cantidad > 0);
+    if (lineasOC.length) setLineas(lineasOC);
+    const estimado = Number(oc.totalFacturaConIva) > 0
+      ? Number(oc.totalFacturaConIva)
+      : lineasOC.reduce((s, l) => s + (Number(l.cantidad) || 0) * (Number(l.costoKg) || 0), 0);
+    if (estimado > 0) setMonto(String(+estimado.toFixed(2)));
+  };
+
+  /* OC seleccionada + ¿trae comprobante? → la factura ya vive en el sistema. */
+  const ocSelObj = useMemo(
+    () => (ocsActivas || []).find(o => o.id === ocVinculada || o.codigo === ocVinculada) || null,
+    [ocsActivas, ocVinculada]
+  );
+  const facturaDeOC = !!(ocSelObj && ocSelObj.comprobantePdf);
+
+  /* FALTANTE vs la OC: si el peso confirmado cubre menos de lo pendiente, se
+     pide confirmación explícita (mismo criterio que Compras→Recibir): cerrar
+     la OC con badge FALTANTE o dejarla abierta por el resto. */
+  const [confirmFaltante, setConfirmFaltante] = useState(false);
+  const [dejarAbierta, setDejarAbierta] = useState(false);
+  const faltanteOC = useMemo(() => {
+    if (!ocSelObj) return 0;
+    const capturado = {};
+    (lineas || []).filter(l => l.tipo === 'mp').forEach(l => {
+      const k = String(l.mp || '').trim().toUpperCase();
+      capturado[k] = (capturado[k] || 0) + (Number(l.cantidad) || 0);
+    });
+    return +((ocSelObj.items || []).reduce((s, it) => {
+      const pend = Math.max(0, (Number(it.kg) || 0) - (Number(it.kg_recibidos) || 0));
+      const cap = capturado[String(it.mp || '').trim().toUpperCase()] || 0;
+      const f = pend - cap;
+      return s + (f > 0.0001 ? f : 0);
+    }, 0)).toFixed(3);
+  }, [ocSelObj, lineas]);
+  /* Cambió el peso → re-confirmar. */
+  useEffect(() => { setConfirmFaltante(false); }, [lineas]);
+
+  /* Firma de quien recibe (solo con OC vinculada — es la recepción formal).
+     Mismo canvas que RecibirOCModal. */
+  const firmaRef = useRef(null);
+  const drawingRef = useRef(false);
+  const [hasFirma, setHasFirma] = useState(false);
+  useEffect(() => {
+    if (!ocVinculada) { setHasFirma(false); return; }
+    const c = firmaRef.current;
+    if (!c) return;
+    c.width = c.offsetWidth * 2;
+    c.height = 140 * 2;
+    const ctx = c.getContext('2d');
+    ctx.scale(2, 2);
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = '#1a1815';
+  }, [ocVinculada]);
+  const _xyFirma = (e) => {
+    const rect = firmaRef.current.getBoundingClientRect();
+    return {
+      x: (e.touches ? e.touches[0].clientX : e.clientX) - rect.left,
+      y: (e.touches ? e.touches[0].clientY : e.clientY) - rect.top,
+    };
+  };
+  const startDraw = (e) => {
+    e.preventDefault();
+    drawingRef.current = true;
+    const { x, y } = _xyFirma(e);
+    const ctx = firmaRef.current.getContext('2d');
+    ctx.beginPath(); ctx.moveTo(x, y);
+    setHasFirma(true);
+  };
+  const draw = (e) => {
+    if (!drawingRef.current) return;
+    e.preventDefault();
+    const { x, y } = _xyFirma(e);
+    const ctx = firmaRef.current.getContext('2d');
+    ctx.lineTo(x, y); ctx.stroke();
+  };
+  const endDraw = () => { drawingRef.current = false; };
+  const clearFirma = () => {
+    const c = firmaRef.current;
+    if (!c) return;
+    c.getContext('2d').clearRect(0, 0, c.width, c.height);
+    setHasFirma(false);
+  };
 
   const onFile = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -416,18 +635,29 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
   const guardar = async () => {
     setErr('');
     if (!proveedor.trim()) return setErr('Escribe el proveedor');
-    if (!facturaData) return setErr('Toma o adjunta la foto de la factura');
+    /* Con OC vinculada el comprobante de la OC sirve de factura → foto opcional. */
+    if (!facturaData && !facturaDeOC) return setErr('Toma o adjunta la foto de la factura');
     /* Renglón OBLIGATORIO (pedido dueño jul 2026): quien registra captura QUÉ y
        CUÁNTO llegó → al revisar ya viene cargado y el admin SOLO aprueba (no
        recaptura). Sin línea el admin veía el editor vacío = confusión. */
     if (!lineas.length) return setErr('Agrega al menos un producto: qué llegó y cuánto (el admin solo lo aprueba)');
+    /* Con el peso editable inline, una cantidad borrada o en 0 se detecta AQUÍ
+       (el backend la descartaría en silencio). */
+    if (lineas.some(l => !(Number(l.cantidad) > 0))) return setErr('Hay partidas con cantidad vacía o en 0 — confirma el peso o quítalas');
+    if (ocVinculada && !hasFirma) return setErr('Falta la firma de quien recibe');
+    /* Llega MENOS de lo pendiente en la OC → primera pulsación muestra el aviso
+       de faltante; la segunda confirma (patrón de Compras→Recibir). */
+    if (ocVinculada && faltanteOC > 0.01 && !confirmFaltante) { setConfirmFaltante(true); return; }
     setSaving(true);
     try {
       const r = await api.crearIngreso({
         proveedor: proveedor.trim(), numFactura: numFactura.trim(),
         monto: Number(monto) > 0 ? Number(monto) : null,
-        nota: nota.trim(), lineas, facturaBase64: facturaData,
+        nota: nota.trim(), lineas,
+        ...(facturaData ? { facturaBase64: facturaData } : {}),
         ...(ocVinculada ? { ocId: ocVinculada } : {}),
+        ...(ocVinculada && faltanteOC > 0.01 ? { ocCerrarConFaltante: !dejarAbierta } : {}),
+        ...(hasFirma && firmaRef.current ? { firmaBase64: firmaRef.current.toDataURL('image/png') } : {}),
       });
       if (r && r.ok) onSaved(r.ingreso);
       else setErr((r && r.error) || 'No se pudo crear');
@@ -450,6 +680,38 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
           <button onClick={onClose} style={S.x}>✕</button>
         </div>
         <div style={S.sheetBody}>
+          {/* ¿La entrega corresponde a una OC de Compras? → prellenar TODO.
+              El bloque se pinta SIEMPRE que la lista cargó (aunque esté vacía):
+              escondido era indescubrible (feedback dueño 24-jul). */}
+          {Array.isArray(ocsActivas) && (
+            <>
+              <label style={S.lbl}>¿Llegó una orden de compra?</label>
+              {ocsActivas.length > 0 ? (
+                <>
+                  <select value={ocVinculada || ''} onChange={e => aplicarOC(e.target.value)} style={S.input} data-id="ingresos.sel.oc">
+                    <option value="">No — entrega suelta</option>
+                    {ocsActivas.map(o => (
+                      <option key={o.id} value={o.id}>
+                        {(o.codigo || o.id)} · {o.proveedor || '?'} · {(o.items || []).length} partida(s)
+                      </option>
+                    ))}
+                  </select>
+                  {ocVinculada && (
+                    <div style={{ background: 'var(--lp-brand-50,#e9f6f1)', border: '1.5px solid var(--lp-brand-600,#1D9E75)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--lp-brand-700,#0F6E56)', marginBottom: 10 }}>
+                      Se precargaron las partidas <strong>con los precios de la OC</strong>. Ajusta las cantidades a lo que realmente llegó (quita la partida y re-agrégala si difiere).
+                      Al registrarse, la OC se marcará <strong>recibida automáticamente</strong> — ya no la reciban por Compras.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={{ background: 'var(--lp-bg-sunken,#f2f4f3)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--lp-text-tertiary,#8a948f)', marginBottom: 10 }} data-id="ingresos.sel.oc.vacio">
+                  No hay órdenes de compra <strong>aprobadas pendientes de llegar</strong>. Cuando Compras apruebe una,
+                  aparecerá aquí para precargar proveedor, materiales y precios con un clic.
+                </div>
+              )}
+            </>
+          )}
+
           <label style={S.lbl}>Proveedor *</label>
           <input value={proveedor} onChange={e => setProveedor(e.target.value)} placeholder="Ej. Limplast, NRW Chemie…" style={S.input} />
 
@@ -464,7 +726,13 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
             </div>
           </div>
 
-          <label style={S.lbl}>Foto de la factura *</label>
+          <label style={S.lbl}>Foto de la factura {facturaDeOC ? '(opcional)' : '*'}</label>
+          {facturaDeOC && !facturaData && (
+            <div style={{ background: 'var(--lp-brand-50,#e9f6f1)', borderRadius: 10, padding: '9px 12px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--lp-brand-700,#0F6E56)', marginBottom: 8 }}>
+              La factura de la OC <strong>ya está adjunta</strong> (el comprobante que subió Compras al aprobar).
+              Toma foto solo si quieres evidencia adicional de la entrega.
+            </div>
+          )}
           <input ref={fileRef} type="file" accept="image/*,application/pdf" capture="environment" onChange={onFile} style={{ display: 'none' }} />
           <button onClick={() => fileRef.current && fileRef.current.click()} style={S.fotoBtn}>
             <IconCam />{facturaData ? 'Cambiar foto' : 'Tomar / adjuntar factura'}
@@ -472,10 +740,11 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
           {facturaPreview && <img src={facturaPreview} alt="Factura" style={S.preview} />}
           {esPdf && <div style={S.pdfOk}>PDF adjunto ✓</div>}
 
-          <label style={S.lbl}>¿Qué llegó? * <span style={{ color: 'var(--lp-text-tertiary,#8a948f)', fontWeight: 400 }}>(producto y cantidad — así el admin solo aprueba)</span></label>
-          <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} onMPSeleccionada={mpElegida} />
+          <label style={S.lbl}>¿Qué llegó? * <span style={{ color: 'var(--lp-text-tertiary,#8a948f)', fontWeight: 400 }}>{ocVinculada ? '(confirma el peso de cada partida y anota el lote del saco)' : '(producto y cantidad — así el admin solo aprueba)'}</span></label>
+          <LineasEditor lineas={lineas} setLineas={setLineas} {...catalogs} onMPSeleccionada={mpElegida} agregarColapsado={!!ocVinculada} />
 
-          {ocMatch && (
+          {/* Aviso reactivo de posible doble entrada — solo si NO se vinculó ya una OC arriba. */}
+          {ocMatch && !ocVinculada && (
             <div style={{ background: 'var(--lp-warning-50,#fdf6e3)', border: '1.5px solid var(--lp-warning-600,#b98900)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--lp-warning-700,#8a6a00)', marginTop: 4 }}>
               <strong>Ojo:</strong> esta MP está en la OC activa <strong>{ocMatch.codigo || ocMatch.id}</strong> ({ocMatch.proveedor || '?'}).
               Si esta entrega ES esa OC, mejor recíbela en <strong>Compras → Recibir</strong> (si además se registra aquí, el stock entraría DOBLE).
@@ -490,15 +759,46 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
             </div>
           )}
 
+          {/* Firma de quien recibe — la recepción formal de la OC (jul 2026):
+              con OC vinculada, Enrique SOLO confirma el peso arriba y firma aquí.
+              La firma viaja al expediente de la OC al cerrarse. */}
+          {ocVinculada && (
+            <>
+              <label style={S.lbl}>Firma de quien recibe *</label>
+              <canvas
+                ref={firmaRef}
+                style={{ width: '100%', height: 140, border: '1.5px dashed var(--lp-border-strong,#c6cfca)', borderRadius: 10, touchAction: 'none', background: 'var(--lp-bg-raised,#fff)', boxSizing: 'border-box', display: 'block' }}
+                onMouseDown={startDraw} onMouseMove={draw} onMouseUp={endDraw} onMouseLeave={endDraw}
+                onTouchStart={startDraw} onTouchMove={draw} onTouchEnd={endDraw}
+              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4, marginBottom: 8 }}>
+                <span style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)' }}>{hasFirma ? 'Firma capturada ✓' : 'Firma dentro del recuadro'}</span>
+                <button type="button" onClick={clearFirma} style={{ background: 'none', border: '1px solid var(--lp-border-subtle,#dfe5e2)', borderRadius: 8, padding: '5px 10px', fontSize: 12, cursor: 'pointer', color: 'var(--lp-text-secondary,#5a6b63)', fontFamily: 'inherit' }}>Borrar firma</button>
+              </div>
+            </>
+          )}
+
           <label style={S.lbl}>Nota</label>
           <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} placeholder="Observaciones…" style={{ ...S.input, resize: 'vertical' }} />
+
+          {/* Aviso de FALTANTE vs la OC (2ª pulsación confirma) */}
+          {confirmFaltante && faltanteOC > 0.01 && (
+            <div style={{ background: 'var(--lp-warning-50,#fdf6e3)', border: '1.5px solid var(--lp-warning-600,#b98900)', borderRadius: 10, padding: '10px 12px', fontSize: 12.5, lineHeight: 1.5, color: 'var(--lp-warning-700,#8a6a00)', marginTop: 8 }}>
+              Está llegando <strong>menos de lo pedido</strong> en la OC: faltan <strong>{fmt(faltanteOC)} kg</strong>.
+              Al confirmar, la OC se cerrará con badge <strong>FALTANTE</strong> (igual que en Compras) — el faltante NO se reordena solo.
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontWeight: 600 }}>
+                <input type="checkbox" checked={dejarAbierta} onChange={e => setDejarAbierta(e.target.checked)} />
+                Mejor dejar la OC ABIERTA — el resto llegará en otra entrega
+              </label>
+            </div>
+          )}
 
           {err && <div style={S.err}>{err}</div>}
         </div>
         <div style={{ ...S.sheetFoot, ...(isDesktop ? {} : S.sheetFootMobile) }}>
           <button onClick={onClose} disabled={saving} style={{ ...S.btnGhost, ...(isDesktop ? {} : S.btnMobileGhost) }}>Cancelar</button>
           <button onClick={guardar} disabled={saving} style={{ ...S.btnPrimary, ...(isDesktop ? {} : S.btnMobilePrimary), opacity: saving ? 0.6 : 1 }}>
-            {saving ? 'Guardando…' : 'Registrar ingreso'}
+            {saving ? 'Guardando…' : confirmFaltante && faltanteOC > 0.01 ? (dejarAbierta ? 'Registrar (OC abierta)' : 'Confirmar con faltante') : 'Registrar ingreso'}
           </button>
         </div>
       </div>
@@ -538,7 +838,14 @@ function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetHead}>
           <div>
-            <div style={{ fontSize: 17, fontWeight: 650 }}>Revisar <span style={{ fontFamily: MONO, fontSize: 15 }}>{ing.folio}</span></div>
+            <div style={{ fontSize: 17, fontWeight: 650 }}>
+              Revisar <span style={{ fontFamily: MONO, fontSize: 15 }}>{ing.folio}</span>
+              {ing.ocId && (
+                <span style={{ marginLeft: 8, display: 'inline-flex', padding: '2px 9px', fontSize: 11, fontWeight: 700, borderRadius: 999, background: 'var(--lp-brand-50,#e9f6f1)', color: 'var(--lp-brand-700,#0F6E56)', verticalAlign: 'middle' }}>
+                  OC {ing.ocId} — al aprobar se marca recibida
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 2 }}>{ing.proveedor} · subió {ing.usuario}</div>
           </div>
           <button onClick={onClose} style={S.x}>✕</button>
@@ -1035,12 +1342,20 @@ export default function IngresosPage() {
                   {fechaHumana(ing.fechaCreacion)} · {ing.usuario}
                   {ing.numFactura ? ` · Factura #${ing.numFactura}` : ''}
                   {nL === 0 ? ' · sin partidas aún' : ''}
+                  {ing.ocId && (
+                    <span style={{ marginLeft: 6, display: 'inline-flex', padding: '1px 8px', fontSize: 10.5, fontWeight: 700, borderRadius: 999, background: 'var(--lp-brand-50,#e9f6f1)', color: 'var(--lp-brand-700,#0F6E56)', verticalAlign: 'middle' }}>
+                      OC {ing.ocId}
+                    </span>
+                  )}
                 </div>
 
                 {nL > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 9 }}>
                     {ing.lineas.map((l, i) => (
-                      <span key={i} style={S.miniLine}>{l.nombre} · <span style={{ fontWeight: 650 }}>{fmt(l.cantidad)} {l.unidad}</span></span>
+                      <span key={i} style={S.miniLine}>
+                        {l.nombre} · <span style={{ fontWeight: 650 }}>{fmt(l.cantidad)} {l.unidad}</span>
+                        {l.tipo === 'mp' && presEnvases(l.presentacion, l.cantidad) ? <span style={{ color: 'var(--lp-brand-700,#0F6E56)', fontWeight: 650 }}> · {presEnvases(l.presentacion, l.cantidad)}</span> : null}
+                      </span>
                     ))}
                   </div>
                 )}

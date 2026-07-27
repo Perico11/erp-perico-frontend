@@ -148,7 +148,9 @@ const S = {
   },
   btn: (primary, disabled) => ({
     padding: '10px 18px', minHeight: 44,
-    borderRadius: 8, border: 'none',
+    /* el `border` real se define abajo según primary/disabled — aquí había un
+       duplicado que quedaba pisado (en un objeto literal gana la última clave) */
+    borderRadius: 8,
     fontSize: 13, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
     background: disabled ? 'var(--lp-bg-base)'
               : primary ? 'var(--lp-success-600)' : 'var(--lp-bg-raised)',

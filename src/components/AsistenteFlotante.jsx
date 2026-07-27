@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuthOpcional } from '../context/AuthContext';
 import api from '../services/api';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import { medidaACubetas, etiquetaMedida } from '../utils/ptMedidas';
@@ -325,7 +325,7 @@ function BotText({ text }) {
 }
 
 export default function AsistenteFlotante() {
-  let auth = null; try { auth = useAuth(); } catch { /* sin provider */ }
+  const auth = useAuthOpcional();   /* null fuera del provider, sin lanzar */
   const user = auth?.user || null;
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -960,7 +960,7 @@ export default function AsistenteFlotante() {
             const vivo = document.querySelector(`[data-id="${entry.dataId}"]`) || t;
             const clickable = vivo.closest('button, a, [role="button"]') || vivo.querySelector('button, a, [role="button"]') || vivo;
             clickable.click();
-          } catch (_) {}
+          } catch {}
         }, 550);
       } else if (tries >= 20) {
         clearInterval(poll);

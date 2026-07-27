@@ -169,7 +169,7 @@ export default function CostosMPPanel() {
         });
         cargar();
       }, 600);
-    } catch (ex) {
+    } catch {
       setEdits(p => ({ ...p, [it.nombre]: { ...e, savingState: 'err' } }));
     }
   };

@@ -75,7 +75,7 @@ function darken(hex, amount = 0.12) {
     g = Math.max(0, Math.floor(g * (1 - amount)));
     b = Math.max(0, Math.floor(b * (1 - amount)));
     return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0').toUpperCase();
-  } catch (e) { return hex; }
+  } catch { return hex; }
 }
 
 /* === Estilos === */
@@ -279,7 +279,7 @@ export default function BrandingPanel() {
         } else {
           setSaveStatus('error');
         }
-      } catch (e) {
+      } catch {
         if (mountedRef.current) setSaveStatus('error');
       }
     }, 700);
@@ -315,7 +315,7 @@ export default function BrandingPanel() {
         window.dispatchEvent(new CustomEvent('branding-updated', { detail: r.data }));
         setTimeout(() => mountedRef.current && setSaveStatus('idle'), 1800);
       }
-    } catch (e) { setSaveStatus('error'); }
+    } catch { setSaveStatus('error'); }
   };
 
   /* Cleanup timer al desmontar */

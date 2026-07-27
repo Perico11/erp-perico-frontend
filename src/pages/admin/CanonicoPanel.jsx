@@ -96,7 +96,7 @@ export default function CanonicoPanel() {
       try {
         const d = await api.getCanonicoDelta();
         setDelta(d);
-      } catch (e) { /* sin delta ok */ }
+      } catch { /* sin delta ok */ }
     } catch (e) {
       if (e?.status === 404) {
         setCanonico(null); /* aún no existe */

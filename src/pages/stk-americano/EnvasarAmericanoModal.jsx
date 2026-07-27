@@ -5,6 +5,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import api from '../../services/api';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import useVaciadores from '../../hooks/useVaciadores';
+/* DISEÑO ÚNICO de envasado (jul 2026): bloques compartidos por las 4 pantallas. */
+import { Contador, TopeHint } from '../../components/envasado/EnvasarUI';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* AUDIT UX 16-jul (U14): autoFocus solo con puntero fino (mouse/trackpad) — en
@@ -57,6 +60,8 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
   const [loteSel, setLoteSel] = useState(() => (color && color.totes && color.totes[0] && color.totes[0].codigoLote) || '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* Vaciador responsable (jul 2026) — mismo desplegable que los demás sheets. */
+  const { vaciadores, envasadorId, elegir: elegirVaciador, elegido: vaciadorElegido } = useVaciadores();
 
   useEffect(() => {
     let alive = true;
@@ -99,6 +104,16 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
   /* Tote registrado seleccionado (18-jul): su disponible manda sobre el granel. */
   const totesReg = (color && color.totes) || [];
   const toteSel = totesReg.find(t => t.codigoLote === loteSel) || null;
+  /* Tope + cuello de botella (diseño único jul 2026): el menor de pintura,
+     envases y tapas — y se dice cuál es. */
+  const limitesAm = [
+    toteSel
+      ? { n: Math.floor((Number(toteSel.litros) || 0) / (pres.ml / 1000)), motivo: 'la pintura del tote elegido' }
+      : { n: Math.floor(litrosDisp / (pres.ml / 1000)), motivo: 'la pintura a granel' },
+    ...(subSel ? [{ n: subSel.stock, motivo: 'los envases en Terán' }] : []),
+    ...(pres.usaTapa && tapaSel ? [{ n: tapaSel.stock, motivo: 'las tapas en Terán' }] : []),
+  ];
+  const maxUnidAm = Math.max(0, Math.min(...limitesAm.map(l => l.n)));
   const excedeLitros = litros > litrosDisp + 0.001;
   const excedeTote = toteSel && litros > (Number(toteSel.litros) || 0) + 0.001;
   const excedeEnvase = subSel && n > subSel.stock;
@@ -111,7 +126,7 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
     if (!puede) return;
     setSaving(true); setErr('');
     try {
-      const r = await api.envasarStkAmericano({ almacen, key: color.key, nombre: color.nombre, medida, unidades: n, subKey, tapaKey: pres.usaTapa ? tapaKey : undefined, loteExistente: loteSel || undefined });
+      const r = await api.envasarStkAmericano({ almacen, key: color.key, nombre: color.nombre, medida, unidades: n, subKey, tapaKey: pres.usaTapa ? tapaKey : undefined, loteExistente: loteSel || undefined, envasadoPor: vaciadorElegido?.nombre || undefined });
       onSaved && onSaved(r && r.lote); onClose();
     } catch (e) { setErr(humanizeError(e)); setSaving(false); } /* AUDIT UX 16-jul (U4) */
   };
@@ -131,14 +146,14 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
 
           {!env ? <div style={S.hint}>Cargando envases…</div> : (
             <>
-              <label style={S.label}>Presentación</label>
+              <label style={S.label}>En qué se envasa</label>
               <div style={S.seg}>
                 {PRESENTACIONES.map(p => (
                   <button key={p.medida} type="button" style={S.segBtn(medida === p.medida)} onClick={() => setMedida(p.medida)} data-id={`stkAmericano.envasar.pres.${p.medida}`}>{p.label}</button>
                 ))}
               </div>
 
-              <label style={S.label}>Envase ({pres.label} · {(pres.ml / 1000).toLocaleString('es-MX')} L) — stock en Terán</label>
+              <label style={S.label}>Envase (stock de Terán)</label>
               <select style={S.select} value={subKey} onChange={e => setSubKey(e.target.value)} data-id="stkAmericano.envasar.envase">
                 {envases.length === 0 && <option value="">— sin envases en esta categoría —</option>}
                 {envases.map(e => <option key={e.key} value={e.key} disabled={e.stock <= 0}>{e.nombre} · {nf(e.stock)} en Terán{e.stock <= 0 ? ' (sin stock — transfiere con OT)' : ''}</option>)}
@@ -180,8 +195,20 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
                   : 'Todas las cubetas/galones de esta tanda llevan el lote del tote elegido (cubeta o galón). "Nuevo tote" genera uno.'}
               </div>
 
-              <label style={S.label}># de {pres.plural} a envasar</label>
-              <input style={S.inputSm} type="number" inputMode="numeric" step="1" min="1" value={unidades} onChange={e => setUnidades(e.target.value)} placeholder="0" autoFocus={FINE_POINTER} data-id="stkAmericano.envasar.unidades" />
+              {/* Vaciador responsable (jul 2026) — mismo desplegable que los
+                  demás sheets de envasado. */}
+              <label style={S.label}>Quién envasó</label>
+              <select style={S.select} value={envasadorId} onChange={e => elegirVaciador(e.target.value)}
+                data-id="stkAmericano.envasar.vaciador">
+                <option value="">Sin especificar</option>
+                {vaciadores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+              </select>
+
+              <label style={S.label}>Cuántas {pres.plural}</label>
+              {/* DISEÑO ÚNICO (jul 2026): mismo contador y aviso de tope que las
+                  otras 3 pantallas — components/envasado/EnvasarUI. */}
+              <Contador valor={unidades} onChange={(v) => setUnidades(String(v))} max={maxUnidAm} min={0} dataId="stkAmericano.envasar.unidades" />
+              <TopeHint limites={limitesAm} />
 
               <div style={S.resumen(excedeLitros || excedeTote || excedeEnvase || excedeTapa)}>
                 {n > 0 ? (

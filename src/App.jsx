@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ToastProvider } from './components/ui/Toast';
 import { PedidosNotifProvider } from './context/PedidosNotifContext';
+import { ChatNotifProvider } from './context/ChatNotifContext';
 import AppLayout from './components/layout/AppLayout';
 import VersionChecker from './components/VersionChecker';
 import PushPrompt from './components/PushPrompt';
@@ -15,12 +16,16 @@ import LoginPage from './pages/login/LoginPage';
 import DashboardPage from './pages/dashboard/DashboardPage';
 
 /* Las demás páginas se cargan bajo demanda → bundle inicial mucho más pequeño */
-const InventarioPage      = lazy(() => import('./pages/inventario/InventarioPage'));
+/* JUL 2026 (simplificación menús): 4 rutas montan HUBS — para admin son vistas
+   internas (?vista=); para los demás roles el hub devuelve su página directa,
+   idéntica a antes. Las rutas satélite (/pronostico, /sat, /pos-aliases,
+   /conteo, /ingresos, /entregas, /recoleccion, /laboratorio) siguen vivas. */
+const InventarioHubPage   = lazy(() => import('./pages/inventario/InventarioHubPage'));
 const OrdenesPage         = lazy(() => import('./pages/ordenes/OrdenesPage'));
-const FormulasPage        = lazy(() => import('./pages/formulas/FormulasPage'));
+const FormulasHubPage     = lazy(() => import('./pages/formulas/FormulasHubPage'));
 const ProduccionPage      = lazy(() => import('./pages/produccion/ProduccionPage'));
 const TrazabilidadPage    = lazy(() => import('./pages/trazabilidad/TrazabilidadPage'));
-const ComprasPage         = lazy(() => import('./pages/compras/ComprasPage'));
+const ComprasHubPage      = lazy(() => import('./pages/compras/ComprasHubPage'));
 const RecoleccionPage     = lazy(() => import('./pages/recoleccion/RecoleccionPage'));
 const AdminPage           = lazy(() => import('./pages/admin/AdminPage'));
 const CycleCountPage      = lazy(() => import('./pages/cycle-count/CycleCountPage'));
@@ -31,11 +36,14 @@ const CycleCountPage      = lazy(() => import('./pages/cycle-count/CycleCountPag
 const AlmacenPage         = lazy(() => import('./pages/almacen/AlmacenPage'));
 const FlujoPage           = lazy(() => import('./pages/flujo/FlujoPage'));
 const NotificacionesPage  = lazy(() => import('./pages/notificaciones/NotificacionesPage'));
-const DevolucionesPage    = lazy(() => import('./pages/devoluciones/DevolucionesPage'));
+/* JUL 2026 (simplificación menús): /devoluciones monta el HUB — para admin son
+   2 vistas (cliente PT · proveedor MP, ?vista=pt|mp); para técnico/almacén se ve
+   idéntico a antes (solo PT, sin selector). /devoluciones-mp sigue viva. */
+const DevolucionesHubPage = lazy(() => import('./pages/devoluciones/DevolucionesHubPage'));
 const DevolucionesMPPage  = lazy(() => import('./pages/devoluciones-mp/DevolucionesMPPage'));
 const EntregasPage        = lazy(() => import('./pages/entregas/EntregasPage'));
 const PedidosPage         = lazy(() => import('./pages/pedidos/PedidosPage'));
-const TransferenciasPage  = lazy(() => import('./pages/transferencias/TransferenciasPage'));
+const LogisticaHubPage    = lazy(() => import('./pages/transferencias/LogisticaHubPage'));
 const IngresosPage        = lazy(() => import('./pages/ingresos/IngresosPage'));
 /* StkAmericanoPage retirada del router (dueño 16-jul): el americano vive en
    Inventarios > Americano Terán / Alm. 2; las rutas viejas redirigen abajo. */
@@ -46,6 +54,8 @@ const SeguridadPage       = lazy(() => import('./pages/seguridad/SeguridadPage')
 const PronosticoPage      = lazy(() => import('./pages/pronostico/PronosticoPage'));
 const SATPage             = lazy(() => import('./pages/sat/SATPage'));
 const PosAliasesPage      = lazy(() => import('./pages/pos-aliases/PosAliasesPage'));
+/* Chat interno entre usuarios (jul 2026): general + DMs + imágenes + menciones. */
+const ChatPage            = lazy(() => import('./pages/chat/ChatPage'));
 
 /* Fallback mientras carga la página solicitada */
 function PageLoader() {
@@ -143,6 +153,8 @@ export default function App() {
               el Sidebar/BottomNav (badge) como el AppLayout (modal manager)
               consuman el mismo estado. Solo se activa para rol 'tecnico'. */}
           <PedidosNotifProvider>
+          {/* Badge global de chat sin leer (todos los roles) */}
+          <ChatNotifProvider>
           {/* Avisa cuando hay un deploy nuevo (evita pantalla blanca por caché vieja) */}
           <VersionChecker />
           {/* Ofrece activar notificaciones del teléfono al iniciar sesión (Web Push) */}
@@ -163,8 +175,8 @@ export default function App() {
                   AUDIT 15-jul-2026: 'compras' también fuera — su permiso formulas es
                   false (K11: IP del laboratorio) y el backend le responde 403: entrar
                   por URL directa solo le daba una pantalla de errores. */}
-              <Route path="formulas"       element={<RoleRoute roles={['admin']}><ErrorBoundary><FormulasPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="inventario"     element={<RoleRoute roles={['admin','tecnico','compras','almacen','inventario']}><ErrorBoundary><InventarioPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="formulas"       element={<RoleRoute roles={['admin']}><ErrorBoundary><FormulasHubPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="inventario"     element={<RoleRoute roles={['admin','tecnico','compras','almacen','inventario']}><ErrorBoundary><InventarioHubPage /></ErrorBoundary></RoleRoute>} />
               {/* STK AMERICANO (jul 2026): vive en Inventarios > Americano Terán / Alm. 2
                   (decisión dueño 16-jul). Las rutas viejas siguen vivas como redirect
                   para links/QRs/hábitos guardados. */}
@@ -172,14 +184,14 @@ export default function App() {
               <Route path="stk-americano-2" element={<Navigate to="/inventario?tab=stkAmericano2" replace />} />
               <Route path="ordenes"        element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><OrdenesPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pedidos"        element={<RoleRoute roles={['admin','almacen','tecnico']}><ErrorBoundary><PedidosPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="transferencias" element={<RoleRoute roles={['admin','almacen','inventario','tecnico']}><ErrorBoundary><TransferenciasPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="transferencias" element={<RoleRoute roles={['admin','almacen','inventario','tecnico']}><ErrorBoundary><LogisticaHubPage /></ErrorBoundary></RoleRoute>} />
               <Route path="ingresos"       element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><IngresosPage /></ErrorBoundary></RoleRoute>} />
               <Route path="flujo"          element={<RoleRoute roles={['admin','tecnico','almacen','recolector']}><ErrorBoundary><FlujoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="produccion"     element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><ProduccionPage /></ErrorBoundary></RoleRoute>} />
               {/* P2 (21-jul-2026): ruta vieja → vista "En fábrica" de Almacén */}
               <Route path="stock-fabrica"  element={<StockFabricaRedirect />} />
               <Route path="recoleccion"    element={<RoleRoute roles={['admin','recolector','almacen']}><ErrorBoundary><RecoleccionPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="compras"        element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><ComprasPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="compras"        element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><ComprasHubPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pronostico"     element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><PronosticoPage /></ErrorBoundary></RoleRoute>} />
               <Route path="sat"            element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><SATPage /></ErrorBoundary></RoleRoute>} />
               <Route path="pos-aliases"    element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><PosAliasesPage /></ErrorBoundary></RoleRoute>} />
@@ -192,8 +204,10 @@ export default function App() {
                   la vista fábrica; el gate por vista vive en AlmacenPage). */}
               <Route path="almacen"        element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><AlmacenPage /></ErrorBoundary></RoleRoute>} />
               <Route path="notificaciones" element={<Suspense fallback={<PageLoader />}><ErrorBoundary><NotificacionesPage /></ErrorBoundary></Suspense>} />
+              {/* Chat interno: todos los roles autenticados. */}
+              <Route path="chat"           element={<Suspense fallback={<PageLoader />}><ErrorBoundary><ChatPage /></ErrorBoundary></Suspense>} />
               <Route path="laboratorio"    element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><LaboratorioPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="devoluciones"   element={<RoleRoute roles={['admin','compras','almacen','tecnico']}><ErrorBoundary><DevolucionesPage /></ErrorBoundary></RoleRoute>} />
+              <Route path="devoluciones"   element={<RoleRoute roles={['admin','compras','almacen','tecnico']}><ErrorBoundary><DevolucionesHubPage /></ErrorBoundary></RoleRoute>} />
               <Route path="devoluciones-mp" element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><DevolucionesMPPage /></ErrorBoundary></RoleRoute>} />
               <Route path="entregas"       element={<RoleRoute roles={['admin','almacen']}><ErrorBoundary><EntregasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="reportes"       element={<RoleRoute roles={['admin','inventario','compras']}><ErrorBoundary><ReportesPage /></ErrorBoundary></RoleRoute>} />
@@ -204,6 +218,7 @@ export default function App() {
             {/* Catch-all: URL no existe → login si no hay sesión, dashboard si sí */}
             <Route path="*" element={<SmartFallback />} />
           </Routes>
+          </ChatNotifProvider>
           </PedidosNotifProvider>
         </ToastProvider>
       </AuthProvider>

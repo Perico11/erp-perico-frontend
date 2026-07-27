@@ -183,3 +183,19 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be inside AuthProvider');
   return ctx;
 }
+
+/* Variante TOLERANTE: devuelve null fuera del provider en vez de lanzar.
+
+   Existe para los componentes que pueden montarse sin AuthProvider (tests,
+   widgets sueltos). Antes esos hacían `try { useAuth() } catch {}`, que es una
+   violación de las reglas de los hooks: un hook dentro de un try/catch puede
+   alterar el orden de llamada entre renders, y de ese orden depende TODO el
+   estado del componente. Funcionaba de casualidad porque el error solo ocurre
+   según dónde esté montado, no según el render.
+
+   `useContext` nunca lanza, así que la llamada es incondicional y el patrón
+   defensivo se conserva. `useAuth` sigue siendo estricta a propósito: para el
+   99% de los componentes, estar fuera del provider ES un error y debe gritar. */
+export function useAuthOpcional() {
+  return useContext(AuthContext);
+}

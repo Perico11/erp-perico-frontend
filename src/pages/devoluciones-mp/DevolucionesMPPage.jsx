@@ -100,7 +100,9 @@ const ESTADO_BADGE = {
 
 const fmtMoney = (n) => (n == null || n === '') ? '—' : '$' + Number(n).toLocaleString('es-MX');
 
-export default function DevolucionesMPPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista dentro del hub
+   /devoluciones del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function DevolucionesMPPage({ embedded = false }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [searchParams] = useSearchParams();
@@ -154,9 +156,9 @@ export default function DevolucionesMPPage() {
   if (isDesktop) {
     return (
       <>
-        <TopBar title="Devoluciones a proveedor" />
+        {!embedded && <TopBar title="Devoluciones a proveedor" />}
         <div style={S.wrapDesk}>
-          <div style={S.h1}>Devoluciones</div>
+          {!embedded && <div style={S.h1}>Devoluciones</div>}
           <div style={S.psub}>Materia prima → proveedor</div>
 
           <div style={S.toolbarRow}>
@@ -197,7 +199,7 @@ export default function DevolucionesMPPage() {
   /* ── Móvil (1:1 actual): botón + tabs + cards + bottom-sheets ── */
   return (
     <>
-      <TopBar title="Devoluciones a proveedor" />
+      {!embedded && <TopBar title="Devoluciones a proveedor" />}
       <div style={S.wrap}>
         {/* tsub del mockup: "MP a proveedor · N por gestionar" con conteo en vivo */}
         <div style={S.tsub}>MP a proveedor · {counts.por_gestionar} por gestionar</div>

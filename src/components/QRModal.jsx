@@ -559,7 +559,7 @@ export function QRScanner({ onResult, onClose }) {
       try {
         const mod = await import('jsqr');
         jsqrModuleRef.current = mod.default || mod;
-      } catch (e) {
+      } catch {
         setErr('No se pudo cargar el lector de QR. Ingresa el código manualmente abajo.');
         return;
       }

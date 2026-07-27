@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import PageTabs from '../../components/ui/PageTabs';
@@ -10,6 +10,10 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import QRModal from '../../components/QRModal';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+/* Catálogo de vaciadores (jul 2026): quién envasó físicamente el sublote. */
+import useVaciadores from '../../hooks/useVaciadores';
+/* DISEÑO ÚNICO de envasado (jul 2026): bloques compartidos por las 4 pantallas. */
+import { EU, Contador, TopeHint, TapaSelect, QuienEnvaso, PresPills } from '../../components/envasado/EnvasarUI';
 import { ESTADO_SUBLOTE_LABEL, ESTADO_SUBLOTE_COLOR, ESTADO_LOTE_LABEL } from '../../lib/loteTransiciones';
 import {
   ESTADO_LOTE_RECOLECCION,
@@ -20,7 +24,7 @@ import {
   ESTADO_LOTE_TRANSFERIDO_O_ENTREGADO,
 } from '../../lib/estados';
 import PruebaBadge from '../../components/ui/PruebaBadge';
-import { qrSvg, qrDataUrl } from '../../lib/qrGenerator';
+import { qrDataUrl } from '../../lib/qrGenerator';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ── Iconos line SVG (sin emojis — DS verde) ───────────────────────── */
@@ -460,6 +464,8 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   const [qty, setQty] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  /* Vaciador responsable del envasado (jul 2026). */
+  const { vaciadores, envasadorId, elegir: elegirVaciador, camposSublote } = useVaciadores();
   /* Sheet responsive (mockup): bottom-sheet radio 26 en móvil, modal centrado
      en escritorio. Solo presentación — firma/props/payload intactos. */
   const isDesktop = useIsDesktop();
@@ -595,6 +601,9 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
         litrosRestante: isTote ? litExact : 0,
         tapa: usaTapa ? (tapaInfo?.nombre || null) : null,
         tapaKey: usaTapa ? tapaEfectiva : null,
+        /* Quién envasó físicamente (jul 2026) — `usuario` lo pone el server y
+           es quien registró; esto es el responsable del envasado. */
+        ...camposSublote,
         ub: 'fabrica',
         esMerma: false,
         fase: isTote ? 1 : 2,
@@ -675,7 +684,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
             </div>
           )}
 
-          <div style={S.sec}>Presentación</div>
+          <div style={S.sec}>En qué se envasa</div>
           {/* Mockup .presgrid/.pres: tarjetas fila (icono en tile + nombre +
              capacidad mono), 2 columnas. Auto-completar marca/tapa sigue igual
              al cambiar de tipo (efecto del setTipo). La regla TOTE-indivisible
@@ -716,37 +725,29 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
 
           {!isTote && (
             <>
-              <div style={S.sec}>
-                Marca · {tipo === 'cubeta' ? 'cubeta' : tipo === 'galon' ? 'galón' : tipo === 'litro' ? 'litro' : 'envase'} a usar
-              </div>
+              <div style={S.sec}>Envase (stock de fábrica)</div>
               {subcatList.length === 0 ? (
                 <div style={{ padding: 10, background: 'var(--lp-warning-50)', borderRadius: 8, fontSize: 12, color: 'var(--lp-warning-700)', marginBottom: 12 }}>
                   No hay subcategorías de {tipo} registradas. Pídele a admin que las dé de alta.
                 </div>
               ) : (
-                /* Mockup .seg/.segb: pills segmentadas (selección oscura).
-                   Mismo dominio que el viejo <select>: valorSubcat(s) → subKey. */
-                <div style={S.seg}>
+                /* DISEÑO ÚNICO (jul 2026): mismo desplegable que las otras 3
+                   pantallas de envasado (components/envasado/EnvasarUI). */
+                <select
+                  style={EU.select}
+                  value={marca}
+                  onChange={e => setMarca(e.target.value)}
+                  data-id="stock.sel.envase"
+                >
                   {subcatList.map(s => {
-                    const on = marca === (s.marca || s.nombre);
-                    const sinStock = s.stock <= 0;
+                    const v = s.marca || s.nombre;
                     return (
-                      <button
-                        key={s.key}
-                        type="button"
-                        disabled={sinStock}
-                        onClick={() => setMarca(s.marca || s.nombre)}
-                        style={S.segb(on, sinStock)}
-                        title={`${s.nombre} — stock ${s.stock}`}
-                      >
-                        {s.nombre}
-                        <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 11, opacity: .75 }}>
-                          {sinStock ? 'sin stock' : s.stock}
-                        </span>
-                      </button>
+                      <option key={s.key} value={v} disabled={s.stock <= 0}>
+                        {s.nombre} · {s.stock <= 0 ? 'sin stock' : `${s.stock} en fábrica`}
+                      </option>
                     );
                   })}
-                </div>
+                </select>
               )}
               {stockEnvaseInsuf && (
                 <div style={{ marginTop: 8, fontSize: 11.5, fontWeight: 600, color: 'var(--lp-danger-600)' }}>
@@ -756,68 +757,32 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
             </>
           )}
 
+          {/* DISEÑO ÚNICO (jul 2026): tapa como desplegable + bolita del color,
+              igual que en las otras 3 pantallas. El "Auto" de la marca sigue
+              vigente: si no eliges, se usa la tapa sugerida (tapaEfectiva). */}
           {usaTapa && Object.keys(tapas).length > 0 && (
-            <>
-              <div style={S.sec}>Tapa (cubeta requiere tapa)</div>
-              {/* La marca AUTOCOMPLETA la tapa (chip "Auto" del mockup) y sigue
-                 siendo editable eligiendo otra. Texto libre NO aplica: la tapa
-                 debe existir en catálogo para validar y descontar stock. */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 6 }}>
-                {Object.entries(tapas).map(([k, t]) => {
-                  const stock = t.stock || 0;
-                  const cantidadActual = parseInt(qty) || 0;
-                  const sinStock = stock <= 0;
-                  const insuficiente = !sinStock && cantidadActual > 0 && stock < cantidadActual;
-                  const isSelected = tapaEfectiva === k;
-                  const isDefault = tapaSugerida === k;
-                  return (
-                    <button
-                      key={k}
-                      type="button"
-                      onClick={() => setTapaKey(k)}
-                      disabled={sinStock}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px',
-                        border: '1.5px solid ' + (isSelected ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)'),
-                        borderRadius: 12, minHeight: 44,
-                        background: isSelected
-                          ? 'color-mix(in srgb, var(--lp-brand-600) 8%, var(--lp-bg-raised))'
-                          : (sinStock ? 'var(--lp-bg-sunken)' : 'var(--lp-bg-raised)'),
-                        cursor: sinStock ? 'not-allowed' : 'pointer',
-                        opacity: sinStock ? 0.5 : 1,
-                        fontSize: 11, textAlign: 'left',
-                        fontFamily: 'var(--lp-font-sans)',
-                      }}
-                      title={t.nombre + ' — stock: ' + stock}
-                    >
-                      <span style={{
-                        width: 14, height: 14, borderRadius: '50%',
-                        background: t.color || '#999',
-                        border: '1.5px solid var(--lp-border-subtle)',
-                        flexShrink: 0,
-                      }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{t.color_nombre || t.nombre}</div>
-                        <div style={{
-                          fontSize: 11,
-                          color: sinStock || insuficiente ? 'var(--lp-danger-600)' : 'var(--lp-text-tertiary)',
-                          fontFamily: 'var(--lp-font-mono)',
-                          fontWeight: insuficiente ? 700 : 400,
-                        }}>
-                          {sinStock ? 'sin stock' : 'stock ' + stock}
-                        </div>
-                      </div>
-                      {isDefault && !tapaKey && (
-                        <span style={S.autochip}>Auto</span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            </>
+            <TapaSelect
+              opciones={Object.entries(tapas).map(([k, t]) => ({
+                value: k,
+                color: t.color || undefined,
+                disabled: (t.stock || 0) <= 0,
+                label: `${t.color_nombre || t.nombre} · ${(t.stock || 0) <= 0 ? 'sin stock' : `${t.stock} en fábrica`}${tapaSugerida === k ? ' (sugerida)' : ''}`,
+              }))}
+              valor={tapaEfectiva}
+              onChange={setTapaKey}
+              dataId="stock.sel.tapa"
+              nota={tapaSugerida && !tapaKey ? 'Sugerida por la marca elegida — puedes cambiarla.' : null}
+            />
           )}
 
-          <div style={S.sec}>{isTote ? 'Litros a envasar' : 'Cantidad'}</div>
+          {/* Vaciador responsable (jul 2026, pedido dueño): queda grabado en el
+              sublote y se ve al escanear su QR. El catálogo lo administra el
+              admin en Usuarios ▸ Vaciadores. Opcional: si aún no hay catálogo
+              cargado, el envasado no se frena. */}
+          <QuienEnvaso vaciadores={vaciadores} valor={envasadorId} onChange={elegirVaciador}
+            dataId="stock.sel.vaciador" nota="Queda grabado en cada sublote de este envasado." />
+
+          <div style={S.sec}>{isTote ? 'Cuántos litros' : `Cuántas ${tipo === 'cubeta' ? 'cubetas' : tipo === 'galon' ? 'galones' : 'unidades'}`}</div>
           {isTote ? (
             /* TOTE = litros directos (regla indivisible: se sugiere todo el lote) */
             <input style={{ ...S.fieldInput, marginBottom: 0, fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 18, textAlign: 'center', height: 48 }}
@@ -826,28 +791,23 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
               placeholder={`Ej: ${Math.min(rest, 1000).toFixed(0)}`}
               value={qty} onChange={e => setQty(e.target.value)} />
           ) : (
-            /* Mockup .stepper2: − / valor mono 26 / + (el centro sigue siendo
-               input editable para teclear directo) */
-            <div style={S.stepper2}>
-              <button type="button" aria-label="Menos"
-                style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) <= 1)}
-                disabled={maxUnidades < 1 || (parseInt(qty) || 0) <= 1}
-                onClick={() => {
-                  const cur = parseInt(qty) || 0;
-                  setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur - 1))));
-                }}>−</button>
-              <input className="lp-qval" style={S.qval} type="number" inputMode="numeric"
-                min="1" step="1" max={maxUnidades}
-                placeholder={`Ej: ${Math.min(maxUnidades, 30)}`}
-                value={qty} onChange={e => setQty(e.target.value)} />
-              <button type="button" aria-label="Más"
-                style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades)}
-                disabled={maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades}
-                onClick={() => {
-                  const cur = parseInt(qty) || 0;
-                  setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur + 1))));
-                }}>+</button>
-            </div>
+            /* DISEÑO ÚNICO (jul 2026): mismo contador que las otras 3. */
+            <Contador
+              valor={qty}
+              onChange={(v) => setQty(String(v))}
+              max={maxUnidades}
+              min={0}
+              dataId="stock.qty.envasar"
+            />
+          )}
+          {/* Aviso del tope + QUÉ lo limita — antes solo se veía "máx N" sin
+              decir si faltaba pintura, envases o tapas. */}
+          {!isTote && (
+            <TopeHint limites={[
+              { n: Math.floor(rest / (litPorUnidad || 1)), motivo: 'la pintura disponible' },
+              ...(subcatActual ? [{ n: subcatActual.stock, motivo: 'los envases en fábrica' }] : []),
+              ...(usaTapa && tapaInfo ? [{ n: tapaInfo.stock || 0, motivo: 'las tapas en fábrica' }] : []),
+            ]} />
           )}
           {/* Cálculo visible: litros usados / restantes / máximo (mockup .qhint) */}
           <div style={S.qhint}>
@@ -933,9 +893,12 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
   );
   const [tipo, setTipo] = useState('cubeta');
   const [marca, setMarca] = useState('');
+  const [tapaKeyManual, setTapaKeyManual] = useState(''); /* override de la tapa sugerida */
   const [qty, setQty] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  /* Vaciador responsable (jul 2026) — mismo desplegable que en Envasar. */
+  const { vaciadores, envasadorId, elegir: elegirVaciador, camposSublote } = useVaciadores();
   /* Sheet responsive (mockup) — solo presentación, payload/SM intactos */
   const isDesktop = useIsDesktop();
   useEffect(() => { injectSheetCSS(); }, []);
@@ -995,7 +958,12 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
      (antes este camino no descontaba nada). Tapa solo para cubeta (default
      por marca, mismo patrón que EnvasadoModal). */
   const subcatReenv = subcatListReenv.find(s => valorSubcatReenv(s) === marca) || null;
-  const tapaKeyReenv = (tipo === 'cubeta' && marca && envases?.tapa_default) ? (envases.tapa_default[marca] || null) : null;
+  /* DISEÑO ÚNICO (jul 2026): la tapa ya NO se resuelve en silencio. Se sugiere
+     por marca (como antes) pero es VISIBLE y editable, igual que en "Envasar
+     lote". Sin UI, el operador no sabía qué tapa se estaba descontando. */
+  const usaTapaReenv = tipo === 'cubeta';
+  const tapaSugeridaReenv = (usaTapaReenv && marca && envases?.tapa_default) ? (envases.tapa_default[marca] || null) : null;
+  const tapaKeyReenv = usaTapaReenv ? (tapaKeyManual || tapaSugeridaReenv || null) : null;
   /* AUDIT UX 16-jul (U9): sin envases con stock en la ubicación → hint accionable */
   const sinEnvasesEnLugar = subcatListReenv.length > 0 && !subcatListReenv.some(s => s.stock > 0);
 
@@ -1031,6 +999,9 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
         lit: litExact,
         litrosOriginal: litExact,
         litrosRestante: 0,
+        /* Quién envasó físicamente (jul 2026) — el backend lo acepta en la
+           whitelist del hijo de reenvasarTote. */
+        ...camposSublote,
         subKey: subcatReenv?.key || null,
         tapaKey: tapaKeyReenv,
         tapa: tapaKeyReenv ? (envases?.tapas?.[tapaKeyReenv]?.nombre || null) : null,
@@ -1116,34 +1087,34 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
             </div>
           )}
 
-          {/* Mockup .seg: presentación retail segmentada (sin TOTE — un tote
-             no se re-envasa en otro tote) */}
-          <div style={S.sec}>Presentación retail</div>
-          <div style={S.seg}>
-            {[['cubeta', 'Cubeta 19L'], ['galon', 'Galón 3.785L'], ['litro', 'Litro 1L']].map(([k, lbl]) => (
-              <button key={k} type="button" style={S.segb(tipo === k, false)} onClick={() => setTipo(k)}>
-                {lbl}
-              </button>
-            ))}
-          </div>
+          {/* DISEÑO ÚNICO (jul 2026): mismas pastillas de presentación que
+              "Envasar lote" (sin TOTE — un tote no se re-envasa en otro tote). */}
+          <div style={S.sec}>En qué se envasa</div>
+          <PresPills
+            opciones={[
+              { id: 'cubeta', nombre: 'Cubeta', sub: '19 L' },
+              { id: 'galon', nombre: 'Galón', sub: '3.785 L' },
+              { id: 'litro', nombre: 'Litro', sub: '1 L' },
+            ]}
+            valor={tipo}
+            onChange={setTipo}
+            dataId="stock.pres.reenvase"
+          />
 
-          {/* AUDIT UX 16-jul (U9): marca OBLIGATORIA (antes "(opcional)") —
-              el envase físico usado se valida y descuenta en el backend vía
-              subKey. Opciones = subcategorías reales del tipo, con stock. */}
-          <div style={S.sec}>
-            Marca · {tipo === 'cubeta' ? 'cubeta' : tipo === 'galon' ? 'galón' : 'litro'} a usar (stock de {lugarReenvLbl})
-          </div>
+          {/* AUDIT UX 16-jul (U9): envase OBLIGATORIO — el backend lo valida y
+              descuenta vía subKey. Opciones = subcategorías reales, con stock. */}
+          <div style={S.sec}>Envase (stock de {lugarReenvLbl})</div>
           {subcatListReenv.length === 0 ? (
             <div style={{ padding: 10, background: 'var(--lp-warning-50)', borderRadius: 8, fontSize: 12, color: 'var(--lp-warning-700)', marginBottom: 0 }}>
               No hay subcategorías de {tipo} registradas. Pídele a admin que las dé de alta.
             </div>
           ) : (
             <>
-              <select style={{ ...S.fieldSelect, marginBottom: 0 }} value={marca} onChange={e => setMarca(e.target.value)}>
+              <select style={EU.select} value={marca} onChange={e => setMarca(e.target.value)} data-id="stock.sel.envase-reenvase">
                 <option value="">— Elegir envase —</option>
                 {subcatListReenv.map(s => (
                   <option key={s.key} value={valorSubcatReenv(s)} disabled={s.stock <= 0}>
-                    {s.nombre}{s.stock <= 0 ? ' — sin stock' : ` — stock ${s.stock}`}
+                    {s.nombre} · {s.stock <= 0 ? 'sin stock' : `${s.stock} en ${lugarReenvLbl}`}
                   </option>
                 ))}
               </select>
@@ -1156,27 +1127,41 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
             </>
           )}
 
-          <div style={S.sec}>Cantidad</div>
-          <div style={S.stepper2}>
-            <button type="button" aria-label="Menos"
-              style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) <= 1)}
-              disabled={maxUnidades < 1 || (parseInt(qty) || 0) <= 1}
-              onClick={() => {
-                const cur = parseInt(qty) || 0;
-                setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur - 1))));
-              }}>−</button>
-            <input className="lp-qval" style={S.qval} type="number" inputMode="numeric"
-              min="1" step="1" max={maxUnidades}
-              placeholder={`Ej: ${Math.min(maxUnidades, 20)}`}
-              value={qty} onChange={e => setQty(e.target.value)} />
-            <button type="button" aria-label="Más"
-              style={S.qbtn(maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades)}
-              disabled={maxUnidades < 1 || (parseInt(qty) || 0) >= maxUnidades}
-              onClick={() => {
-                const cur = parseInt(qty) || 0;
-                setQty(String(Math.max(1, Math.min(Math.max(1, maxUnidades), cur + 1))));
-              }}>+</button>
-          </div>
+          {/* DISEÑO ÚNICO (jul 2026): la tapa se ve y se elige, como en las otras
+              3 pantallas. Antes se resolvía sola por la marca y el operador no
+              sabía qué tapa se le estaba descontando del stock. */}
+          {usaTapaReenv && Object.keys(envases?.tapas || {}).length > 0 && (
+            <TapaSelect
+              opciones={Object.entries(envases.tapas).map(([k, t]) => {
+                const st = lugarReenv === 'teran' ? (Number(t.teran) || 0) : (Number(t.stock) || 0);
+                return {
+                  value: k, color: t.color || undefined, disabled: st <= 0,
+                  label: `${t.color_nombre || t.nombre} · ${st <= 0 ? 'sin stock' : `${st} en ${lugarReenvLbl}`}${tapaSugeridaReenv === k ? ' (sugerida)' : ''}`,
+                };
+              })}
+              valor={tapaKeyReenv || ''}
+              onChange={setTapaKeyManual}
+              dataId="stock.sel.tapa-reenvase"
+              nota={tapaSugeridaReenv && !tapaKeyManual ? 'Sugerida por el envase elegido — puedes cambiarla.' : null}
+            />
+          )}
+
+          <QuienEnvaso vaciadores={vaciadores} valor={envasadorId} onChange={elegirVaciador}
+            dataId="stock.sel.vaciador-reenvase" nota="Queda grabado en cada sublote que salga de este tote." />
+
+          <div style={S.sec}>Cuántas {tipo === 'cubeta' ? 'cubetas' : tipo === 'galon' ? 'galones' : 'unidades'}</div>
+          {/* DISEÑO ÚNICO (jul 2026): mismo contador y mismo aviso de tope. */}
+          <Contador valor={qty} onChange={(v) => setQty(String(v))} max={maxUnidades} min={0} dataId="stock.qty.reenvase" />
+          <TopeHint limites={[
+            { n: Math.floor(litDisponible / (litPorUnidad || 1)), motivo: 'la pintura del tote' },
+            ...(subcatReenv ? [{ n: subcatReenv.stock, motivo: `los envases en ${lugarReenvLbl}` }] : []),
+            ...(usaTapaReenv && tapaKeyReenv && envases?.tapas?.[tapaKeyReenv]
+              ? [{ n: lugarReenv === 'teran'
+                    ? (Number(envases.tapas[tapaKeyReenv].teran) || 0)
+                    : (Number(envases.tapas[tapaKeyReenv].stock) || 0),
+                  motivo: `las tapas en ${lugarReenvLbl}` }]
+              : []),
+          ]} />
           <div style={S.qhint}>
             Usa <b style={S.qhintB}>{litTotal.toFixed(1)} L</b>
             {' '}· quedan en tote <b style={{ ...S.qhintB, ...((litDisponible - litTotal) < 0 ? { color: 'var(--lp-danger-600)' } : {}) }}>{Math.max(0, litDisponible - litTotal).toFixed(1)} L</b>
@@ -1639,7 +1624,9 @@ function SublotesList({ lote, sublotes, canAnular, onAnularSublote }) {
         const estColor = s.cancelado ? '#b3261e' : (ESTADO_SUBLOTE_COLOR[s.estado] || '#0f7a5a');
         const iconColor = s.esMerma ? '#b3261e' : isTote ? '#9a6a13' : '#0f7a5a';
         const iconBg = s.esMerma ? 'rgba(179,38,30,.10)' : isTote ? 'rgba(182,121,29,.12)' : 'rgba(15,122,90,.12)';
-        const detalle = [isTote ? 'Tote' : `${s.qty} ${s.tipo}`, s.lit != null ? `${s.lit} L` : null, s.marca || null, s.ub === 'teran' ? 'Terán' : 'Fábrica'].filter(Boolean).join(' · ');
+        /* +envasadoPor (jul 2026): quién lo envasó viaja con el sublote y se lee
+           aquí y al escanear su QR — `usuario` es quien lo registró. */
+        const detalle = [isTote ? 'Tote' : `${s.qty} ${s.tipo}`, s.lit != null ? `${s.lit} L` : null, s.marca || null, s.ub === 'teran' ? 'Terán' : 'Fábrica', s.envasadoPor ? `Envasó: ${s.envasadoPor}` : null].filter(Boolean).join(' · ');
         const puedeAnular = onAnularSublote && canAnular && !s.esMerma && !s.cancelado
           && ESTADO_LOTE_RECOLECCION.includes(s.estado) && s.ub !== 'teran' && hijosDelTote.length === 0;
         return (

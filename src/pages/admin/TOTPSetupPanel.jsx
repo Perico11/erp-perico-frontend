@@ -11,7 +11,6 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
 import { qrDataUrl } from '../../lib/qrGenerator';
 
 const S = {
@@ -61,7 +60,9 @@ const S = {
   },
   btn: (kind) => ({
     padding: '10px 20px', fontSize: 13, fontWeight: 700, borderRadius: 8,
-    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+    /* el `border` real se define abajo según `kind` — este duplicado quedaba
+       pisado por el de más abajo (en un objeto literal gana la última clave) */
+    cursor: 'pointer', fontFamily: 'inherit',
     background: kind === 'primary' ? 'var(--lp-brand-600)' : kind === 'danger' ? '#DC2626' : 'var(--lp-bg-base)',
     color: kind === 'primary' || kind === 'danger' ? '#fff' : 'var(--lp-text-primary)',
     marginRight: 8,

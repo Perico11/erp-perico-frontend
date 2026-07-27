@@ -23,6 +23,18 @@ import { QRScanner } from '../../components/QRModal';
 import humanizeError from '../../utils/humanizeError';
 
 const LBL_PRES = { cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador' };
+/* Quien TRANSPORTA y entrega en la sucursal (rol 'recolector'). Se resuelve del
+   padrón de usuarios para que el documento siga bien si cambia la persona; el
+   respaldo es el titular actual. */
+const RECOLECTOR_FALLBACK = 'Luis Lara';
+function useRecolector() {
+  const { data } = useApiData(() => api.getUsuarios(), null, 0);
+  return useMemo(() => {
+    const arr = Array.isArray(data) ? data : (data?.data || data?.usuarios || []);
+    const u = (arr || []).find(x => x && x.rol === 'recolector' && !x.eliminado);
+    return (u && (u.nombre || '').trim()) || RECOLECTOR_FALLBACK;
+  }, [data]);
+}
 const PRES_PT = ['cubeta', 'galon', 'litro', 'atomizador750'];
 const nf = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return (iso || '').slice(0, 16); } };
@@ -68,7 +80,9 @@ const S = {
 };
 
 /* ── Remisión imprimible (patrón PrintOCOverlay: siempre claro, aislada en print) ── */
-function RemisionOverlay({ entrega, onClose }) {
+export function RemisionOverlay({ entrega, onClose }) {
+  /* Hook ANTES del early-return (regla de hooks). */
+  const recolector = useRecolector();
   if (!entrega) return null;
   const INK = '#16241F', MUT = '#6b6560', BRAND = '#0F6E56';
   return (
@@ -92,6 +106,10 @@ function RemisionOverlay({ entrega, onClose }) {
         .lp-ent-tbl td.lote{ font-family:var(--lp-font-mono); font-size:10px; color:#444; word-break:break-word; padding-right:8px; line-height:1.5; }
         .lp-ent-firma{ margin-top:72px; display:flex; justify-content:space-between; gap:28px; }
         .lp-ent-firma div{ flex:1; border-top:1px solid ${INK}; padding-top:6px; font-size:11px; color:${MUT}; text-align:center; line-height:1.7; }
+        /* Recepción del material: firma CENTRADA debajo de las dos de salida
+           (pedido dueño 26-jul). Mismo alto de aire para firmar a mano. */
+        .lp-ent-firma2{ margin-top:60px; display:flex; justify-content:center; }
+        .lp-ent-firma2 div{ width:46%; border-top:1px solid ${INK}; padding-top:6px; font-size:11px; color:${MUT}; text-align:center; line-height:1.7; }
         .lp-ent-btns{ display:flex; gap:10px; width:100%; max-width:560px; }
         .lp-ent-btn{ flex:1; height:46px; border-radius:12px; border:none; cursor:pointer; font-family:var(--lp-font-sans); font-size:13.5px; font-weight:600; }
         .lp-ent-btn.ghost{ background:#fff; color:${MUT}; border:1px solid rgba(0,0,0,.12); }
@@ -117,7 +135,8 @@ function RemisionOverlay({ entrega, onClose }) {
           </div>
         </div>
         <div className="lp-ent-row"><span className="k">Tienda destino</span><span className="v">{entrega.tienda}</span></div>
-        <div className="lp-ent-row"><span className="k">Entregó (CEDIS)</span><span className="v">{entrega.usuario}</span></div>
+        <div className="lp-ent-row"><span className="k">Salida (CEDIS)</span><span className="v">{entrega.usuario}</span></div>
+        <div className="lp-ent-row"><span className="k">Entregó en sucursal</span><span className="v">{recolector}</span></div>
         <table className="lp-ent-tbl">
           <thead><tr><th style={{ width: 26 }}>#</th><th>Producto</th><th>Lote</th><th>Presentación</th><th className="r">Cantidad</th></tr></thead>
           <tbody>
@@ -143,8 +162,14 @@ function RemisionOverlay({ entrega, onClose }) {
           <span className="v" style={{ fontFamily: 'var(--lp-font-mono)' }}>{(entrega.lineas || []).reduce((a, l) => a + (Number(l.cantidad) || 0), 0)}</span>
         </div>
         {entrega.nota ? <div className="lp-ent-row"><span className="k">Nota</span><span className="v">{entrega.nota}</span></div> : null}
+        {/* Firmas (pedido dueño 26-jul): arriba SALIDA del CEDIS (Josué) y
+            ENTREGÓ A la sucursal (Luis, quien transporta); abajo centrada la
+            RECEPCIÓN del material en la tienda. */}
         <div className="lp-ent-firma">
-          <div>Entregó — CEDIS Terán<br />{entrega.usuario} · nombre y firma</div>
+          <div>Salida — CEDIS Terán<br />{entrega.usuario} · nombre y firma</div>
+          <div>Entregó a {entrega.tienda}<br />{recolector} · nombre y firma</div>
+        </div>
+        <div className="lp-ent-firma2">
           <div>Recibió — {entrega.tienda}<br />nombre, firma y fecha</div>
         </div>
       </div>
@@ -387,7 +412,9 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
   );
 }
 
-export default function EntregasPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub "Logística"
+   (/transferencias) del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function EntregasPage({ embedded = false }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const canCrear = !!user && ['admin', 'almacen'].includes(user.rol);
@@ -409,7 +436,7 @@ export default function EntregasPage() {
 
   return (
     <>
-      <TopBar title="Entregas a tiendas" />
+      {!embedded && <TopBar title="Entregas a tiendas" />}
       <div style={S.wrap}>
         <div style={S.kpis}>
           <div style={S.kpi}><div style={S.kpiLbl}>Entregas hoy</div><div style={S.kpiVal}>{deHoy.length}</div></div>

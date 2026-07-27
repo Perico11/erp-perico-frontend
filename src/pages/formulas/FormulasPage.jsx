@@ -905,7 +905,9 @@ function FormulaCard({ id, formula, isAdmin, oculta, onOcultar, onRename, onEdit
 /* ═══════════════════════════════════════════════════════════════════ */
 /* MAIN PAGE                                                          */
 /* ═══════════════════════════════════════════════════════════════════ */
-export default function FormulasPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub "Fórmulas
+   y lab" (/formulas) del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function FormulasPage({ embedded = false }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.rol === 'admin';
@@ -978,7 +980,7 @@ export default function FormulasPage() {
   if (!ndaOk) {
     return (
       <>
-        <TopBar title="Fórmulas" />
+        {!embedded && <TopBar title="Fórmulas" />}
         <NDAModal user={user} context="formulas" onAccept={() => setNdaOk(true)} onReject={() => navigate('/')} />
       </>
     );
@@ -987,7 +989,7 @@ export default function FormulasPage() {
   if (loading) {
     return (
       <>
-        <TopBar title="Fórmulas" />
+        {!embedded && <TopBar title="Fórmulas" />}
         <div style={S.spinner}><div className="lp-spinner" /></div>
       </>
     );
@@ -995,7 +997,7 @@ export default function FormulasPage() {
 
   return (
     <>
-      <TopBar title="Fórmulas" />
+      {!embedded && <TopBar title="Fórmulas" />}
       <SecureView context="formulas">
       <div style={S.wrap}>
         {error && (

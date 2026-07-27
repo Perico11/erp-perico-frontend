@@ -357,7 +357,9 @@ function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, alignEnd 
 }
 
 /* ════════════════ MAIN ════════════════ */
-export default function DevolucionesPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista dentro del hub
+   /devoluciones del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function DevolucionesPage({ embedded = false }) {
   const { can, user } = useAuth();
   const isDesktop = useIsDesktop();
   /* FIX jun 2026 (L3): useConfirm reemplaza window.prompt — éste queda
@@ -468,9 +470,9 @@ export default function DevolucionesPage() {
 
   return (
     <div>
-      <TopBar title="Devoluciones" />
+      {!embedded && <TopBar title="Devoluciones" />}
       <div style={S.wrap}>
-        <h1 style={S.h1}>Devoluciones</h1>
+        {!embedded && <h1 style={S.h1}>Devoluciones</h1>}
         <div style={S.psub}>Producto terminado regresado por el cliente — recepción en fábrica, disposición y nota de crédito.</div>
 
         {err && <div style={S.err}>{err}</div>}

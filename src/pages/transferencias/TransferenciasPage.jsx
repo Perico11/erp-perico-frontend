@@ -166,7 +166,9 @@ function descLineaCantidad(l) {
 /* ═══════════════════════════════════════════════════════════════════════════
    MAIN PAGE
    ═══════════════════════════════════════════════════════════════════════════ */
-export default function TransferenciasPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub "Logística"
+   (/transferencias) del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function TransferenciasPage({ embedded = false }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
@@ -335,7 +337,7 @@ export default function TransferenciasPage() {
   if (loading && !data) {
     return (
       <>
-        <TopBar title="Transferencias" />
+        {!embedded && <TopBar title="Transferencias" />}
         <div style={S.spinner}><div className="lp-spinner" /></div>
       </>
     );
@@ -343,7 +345,7 @@ export default function TransferenciasPage() {
 
   return (
     <>
-      <TopBar title="Transferencias" />
+      {!embedded && <TopBar title="Transferencias" />}
       <div style={isDesktop ? S.wrapDesktop : S.wrapMobile}>
 
         {/* Saludo + contador (TopBar no trae subtitle) */}
@@ -1127,18 +1129,24 @@ function OTQRPrintModal({ ot, onClose }) {
     }).join('');
     const logo = `${location.origin}/logos/logo-perico-green.svg`;
     const G = '#0f7a5a';
-    const firmas = [
-      { name: 'Enrique Gamboa García', role: 'Entregado', place: 'Almacén Huertas' },
-      { name: 'Luis Jonathan Lara', role: 'Recolectado', place: 'Almacén Huertas' },
-      { name: 'Rodolfo Casanova', role: 'Recibido en almacén', place: 'Almacén Terán' },
-      { name: 'Arely L. Meza', role: 'Recibido en recepción', place: 'Recepción Terán' },
-    ].map(f => `
+    /* Firmas (pedido dueño 26-jul, mismo criterio que la remisión de tiendas):
+       arriba la SALIDA del origen y quien ENTREGA en el destino (Luis, el que
+       transporta); abajo, centradas, las firmas de RECEPCIÓN del material. */
+    const _sg = (f) => `
       <div class="sg">
         <div class="sgline"></div>
         <div class="sgname">${esc(f.name)}</div>
         <div class="sgrole">${esc(f.role)}</div>
         <div class="sgplace">${esc(f.place)}</div>
-      </div>`).join('');
+      </div>`;
+    const firmasSalida = [
+      { name: 'Enrique Gamboa García', role: 'Salida', place: 'Almacén Huertas' },
+      { name: 'Luis Jonathan Lara', role: 'Entregó en Almacén Terán', place: 'Recolección y traslado' },
+    ].map(_sg).join('');
+    const firmasRecepcion = [
+      { name: 'Rodolfo Casanova', role: 'Recibido en almacén', place: 'Almacén Terán' },
+      { name: 'Arely L. Meza', role: 'Recibido en recepción', place: 'Recepción Terán' },
+    ].map(_sg).join('');
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Transferencia ${esc(ot.folio)}</title>
       <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
       <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
@@ -1188,6 +1196,8 @@ function OTQRPrintModal({ ot, onClose }) {
         .firmas { margin-top:auto; padding-top:12px; }
         .firmas .lbl { font-size:11px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:500; margin-bottom:16px; text-align:center; }
         .fgrid { display:grid; grid-template-columns:1fr 1fr; gap:16px 40px; }
+        /* Recepción: centrada debajo de las firmas de salida (26-jul). */
+        .fgrid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px 40px; width:74%; margin:26px auto 0; }
         .sg { text-align:center; } .sgline { border-bottom:1px solid #16201c; height:24px; }
         .sgname { font-size:13px; font-weight:500; color:#16201c; margin-top:6px; } .sgrole { font-size:11px; font-weight:500; color:${G}; margin-top:3px; } .sgplace { font-size:10px; color:#5a6b63; margin-top:1px; }
         .pie { margin-top:14px; padding-top:10px; border-top:1px solid rgba(0,0,0,.08); display:flex; justify-content:space-between; font-size:9px; color:#9aa8a2; }
@@ -1251,7 +1261,8 @@ function OTQRPrintModal({ ot, onClose }) {
 
         <div class="firmas">
           <div class="lbl">Firmas de conformidad</div>
-          <div class="fgrid">${firmas}</div>
+          <div class="fgrid">${firmasSalida}</div>
+          <div class="fgrid2">${firmasRecepcion}</div>
         </div>
 
         <div class="pie">

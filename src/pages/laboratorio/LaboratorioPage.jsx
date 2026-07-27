@@ -29,7 +29,9 @@ const S = {
 
 const TABS_VALIDOS = ['pruebas', 'materias'];
 
-export default function LaboratorioPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub "Fórmulas
+   y lab" (/formulas) del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function LaboratorioPage({ embedded = false }) {
   /* Deep-linking por ?tab= (replica patrón InventarioPage): el bot puede abrir
      /laboratorio?tab=materias directo en Materias Primas. ?tab= inválido → default. */
   const [searchParams] = useSearchParams();
@@ -60,7 +62,7 @@ export default function LaboratorioPage() {
 
   return (
     <>
-      <TopBar title="Laboratorio" />
+      {!embedded && <TopBar title="Laboratorio" />}
       <div style={S.page}>
       <div style={S.header}>
         <p style={S.subtitle}>Pruebas de reformulación y nuevas materias primas — datos aislados del sistema principal.</p>

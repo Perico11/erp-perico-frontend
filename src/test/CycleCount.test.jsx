@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import CycleCountPage from '../pages/cycle-count/CycleCountPage';
 
 vi.mock('../services/api', () => ({
@@ -49,14 +50,14 @@ describe('CycleCountPage', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('muestra la sesión activa del usuario actual', async () => {
-    render(<CycleCountPage />);
+    render(<MemoryRouter><CycleCountPage /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText('CC-abc123')).toBeInTheDocument();
     });
   });
 
   it('muestra los KPIs de la sesión: total, contados, varianzas', async () => {
-    render(<CycleCountPage />);
+    render(<MemoryRouter><CycleCountPage /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText('Total items')).toBeInTheDocument();
       expect(screen.getByText('Contados')).toBeInTheDocument();
@@ -65,7 +66,7 @@ describe('CycleCountPage', () => {
   });
 
   it('renderiza los items de la sesión activa', async () => {
-    render(<CycleCountPage />);
+    render(<MemoryRouter><CycleCountPage /></MemoryRouter>);
     await waitFor(() => {
       expect(screen.getByText('W-5916')).toBeInTheDocument();
       expect(screen.getByText('AGUA')).toBeInTheDocument();
@@ -74,7 +75,7 @@ describe('CycleCountPage', () => {
   });
 
   it('botón Finalizar conteo está visible', async () => {
-    render(<CycleCountPage />);
+    render(<MemoryRouter><CycleCountPage /></MemoryRouter>);
     await waitFor(() => {
       /* Rediseño verde: el botón ahora rotula "Finalizar conteo (firma PIN)". */
       expect(screen.getByText(/Finalizar conteo/)).toBeInTheDocument();

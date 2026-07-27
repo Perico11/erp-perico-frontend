@@ -1326,7 +1326,9 @@ function ErrBox({ msg, onRetry }) {
  *   handleCrearOCFromMRP guarda el prefill y, si está en modo pronóstico, navega a /compras
  *   con el prefill en el state de la ruta para que OCsTabResponsive abra "Levantar OC".
  */
-export default function ComprasPage({ mode = 'compras' }) {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub /compras
+   del admin (patrón AlmacenPage). Solo suprime su TopBar propio. */
+export default function ComprasPage({ mode = 'compras', embedded = false }) {
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1443,7 +1445,7 @@ export default function ComprasPage({ mode = 'compras' }) {
 
   return (
     <>
-      <TopBar title={esPronostico ? 'Pronóstico' : 'Compras'} />
+      {!embedded && <TopBar title={esPronostico ? 'Pronóstico' : 'Compras'} />}
       <div style={S.wrap}>
         {/* Encabezado del mockup: h1+sub en escritorio (Pronóstico) / tsub con conteos (Compras) */}
         {esPronostico ? (

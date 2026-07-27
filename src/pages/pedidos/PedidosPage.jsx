@@ -7,7 +7,6 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
-import HelpHint from '../../components/HelpHint';
 import Cronometro from '../../components/Cronometro';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import NuevoPedidoModal from './NuevoPedidoModal';
@@ -819,7 +818,7 @@ export default function PedidosPage() {
         setErr(`Stock MP insuficiente para producir ${p.producto} ×${p.cantidad}: ${falt}${(v.faltantes || []).length > 4 ? ' …' : ''}. Recibe MP o ajusta inventario antes de iniciar.`);
         return;
       }
-    } catch (e) {
+    } catch {
       /* Si la validación falla (red/endpoint), NO bloquear el flujo. */
     } finally {
       setBusyId('');

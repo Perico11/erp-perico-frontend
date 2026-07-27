@@ -173,8 +173,8 @@ const api = {
         : { producto, cantidad, nota }),
   /* Reenvasar PT del pool de Terán: convierte `origen` (tote/granel) en `destinos`
      [{tipo,qty,subKey,tapaKey}] consumiendo envases de Terán. No cambia el total. */
-  reenvasarPTTeran: (producto, origen, destinos, nota) =>
-    request('POST', '/api/inventario/pt/reenvasar-teran', { producto, origen, destinos, nota }),
+  reenvasarPTTeran: (producto, origen, destinos, nota, extra) =>
+    request('POST', '/api/inventario/pt/reenvasar-teran', { producto, origen, destinos, nota, ...(extra || {}) }),
   /* ── Entregas a tiendas (jul 2026): la baja del CEDIS al entregar ── */
   getEntregas: () => request('GET', '/api/entregas'),
   crearEntrega: (payload) => request('POST', '/api/entregas/crear', payload),
@@ -291,8 +291,8 @@ const api = {
     request('POST', '/api/stk-americano/color', { almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }),
   salidaStkAmericano: ({ almacen, key, nombre, presentacion, cantidad, nota }) =>
     request('POST', '/api/stk-americano/salida', { almacen, key, nombre, presentacion, cantidad, nota }),
-  envasarStkAmericano: ({ almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente }) =>
-    request('POST', '/api/stk-americano/envasar', { almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente }),
+  envasarStkAmericano: ({ almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, envasadoPor }) =>
+    request('POST', '/api/stk-americano/envasar', { almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, envasadoPor }),
   eliminarStkAmericano: ({ almacen, key, nombre, motivo }) =>
     request('POST', '/api/stk-americano/eliminar', { almacen, key, nombre, motivo }),
   urlImportStkAmericano: (almacen) => API_BASE + '/api/stk-americano/importar' + (almacen && almacen !== '1' ? '?almacen=' + almacen : ''),
@@ -483,7 +483,24 @@ const api = {
   aprobarOC: (data) => request('POST', '/api/compras/oc/aprobar', data),
   registrarPagoOC: (data) => request('POST', '/api/compras/oc/registrar-pago', data),
 
+  /* ── Vaciadores / envasadores (jul 2026): quién envasó cada lote ── */
+  getVaciadores: () => request('GET', '/api/vaciadores'),
+  crearVaciador: (nombre) => request('POST', '/api/vaciadores', { nombre }),
+  eliminarVaciador: (id) => request('POST', '/api/vaciadores/eliminar', { id }),
+
+  /* ── Chat interno (jul 2026) ── */
+  getChatResumen: () => request('GET', '/api/chat/resumen'),
+  getChatMensajes: (canal, antes) => request('GET', '/api/chat/mensajes?canal=' + encodeURIComponent(canal) + (antes ? '&antes=' + encodeURIComponent(antes) : '')),
+  enviarChat: (data) => request('POST', '/api/chat/enviar', data),
+  marcarChatLeido: (canal) => request('POST', '/api/chat/leer', { canal }),
+  chatImagenUrl: (file) => API_BASE + '/api/chat/imagen/' + encodeURIComponent(file) + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  getChatStickers: () => request('GET', '/api/chat/stickers'),
+  subirChatSticker: (nombre, imagenBase64) => request('POST', '/api/chat/stickers', { nombre, imagenBase64 }),
+  eliminarChatSticker: (id) => request('POST', '/api/chat/stickers/eliminar', { id }),
+  chatStickerUrl: (file) => API_BASE + '/api/chat/sticker/' + encodeURIComponent(file) + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+
   /* ── Reports ── */
+  getReporteOperacion: (dias) => request('GET', '/api/reports/operacion?dias=' + (dias || 30)),
   getReportProduction: (year) => request('GET', `/api/reports/production-monthly?year=${year}`),
   getReportProfitability: () => request('GET', '/api/reports/profitability'),
   getReportValuation: () => request('GET', '/api/reports/inventory-valuation'),
