@@ -16,9 +16,18 @@ import { PT_MEDIDAS, ptMedidaDef, medidaACubetas } from '../../utils/ptMedidas';
    Campos .flabel/.finput (48px, radio 12, fondo tile, focus borde verde),
    acciones Cancelar (ghost) + Crear pedido (primario) repartidas.
 
+   MULTI-PRODUCTO (28-jul-2026, pedido del dueño): la sucursal pide varios
+   colores de un jalón y capturarlos de uno en uno obligaba a reabrir el sheet
+   por cada producto. Ahora el sheet junta VARIOS renglones (producto + medida +
+   cantidad) con solicitante y modo prueba compartidos, y al guardar crea UN
+   PEDIDO POR RENGLÓN — el modelo no cambia: producción sigue trabajando por
+   fórmula/bacha, así que un "pedido multi-producto" real no existe aguas abajo;
+   lo multi es la CAPTURA. Los id van 'PA-<ts+i>' (mismo esquema, sin colisión
+   dentro del lote).
+
    LÓGICA INTACTA: validaciones, confirm de esPrueba (useConfirm — no
-   window.confirm, ver Sprint G-4), id 'PA-', api.upsertPedido, datalist de
-   fórmulas con parse multi-shape. Campos que el mockup OMITE y se CONSERVAN:
+   window.confirm, ver Sprint G-4), api.upsertPedido, datalist de fórmulas
+   con parse multi-shape. Campos que el mockup OMITE y se CONSERVAN:
    Solicitante (obligatorio) y el checkbox Modo prueba.
    ═══════════════════════════════════════════════════════════════════════ */
 
@@ -45,7 +54,7 @@ const S = {
     background: 'var(--lp-bg-raised)',
     borderRadius: isDesktop ? 18 : '24px 24px 0 0',
     width: '100%',
-    maxWidth: isDesktop ? 440 : 'none',
+    maxWidth: isDesktop ? 460 : 'none',
     /* FIX jun 2026 v3: altura contra el viewport VISIBLE real (teclado/barra
        del navegador incluidos) — con 92vh el sheet "cabía" sin overflow en
        teléfono y no había nada que scrollear. */
@@ -76,6 +85,23 @@ const S = {
     background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-primary)',
     fontFamily: 'inherit', boxSizing: 'border-box',
   },
+  /* Renglón de producto: caja hundida; los inputs adentro van en bg-raised
+     para no fundirse con el fondo de la caja. */
+  linea: { background: 'var(--lp-bg-sunken)', borderRadius: 14, padding: '10px 12px 14px', marginTop: 10 },
+  lineaHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', minHeight: 28 },
+  lineaTag: { fontSize: 11, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--lp-text-tertiary)' },
+  quitarBtn: {
+    width: 30, height: 30, borderRadius: 8, border: 'none', cursor: 'pointer',
+    background: 'transparent', color: 'var(--lp-danger-600)', fontSize: 17, lineHeight: 1,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+  },
+  labelIn: { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '10px 2px 6px' },
+  addBtn: {
+    width: '100%', marginTop: 12, minHeight: 44, padding: '10px',
+    fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+    border: '1.5px dashed var(--lp-border-default)', borderRadius: 12,
+    background: 'transparent', color: 'var(--lp-text-secondary)',
+  },
   btn: (primary) => ({
     flex: 1, minHeight: 46, padding: '0 16px',
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -98,15 +124,16 @@ const S = {
 /* AUDIT UX 16-jul (U18): clave localStorage del último solicitante usado */
 const LS_ULTIMO_SOLICITANTE = 'pp_ultimo_solicitante';
 
+const nuevaLinea = (producto = '') => ({ producto, medida: 'cubeta', cantidad: '' });
+
 export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto = null, pedidos = [] }) {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
   useBodyScrollLock(); /* el body no scrollea mientras el sheet está abierto */
-  /* Si llega prefillProducto (desde Inventario → "Pedir reposición"), inicializa el campo */
-  const [producto, setProducto] = useState(prefillProducto || '');
-  const [cantidad, setCantidad] = useState('');
-  const [medida, setMedida] = useState('cubeta'); /* tote/cubeta/galón/litro/atomizador */
+  /* Renglones producto+medida+cantidad. Si llega prefillProducto (desde
+     Inventario → "Pedir reposición"), inicializa el primero. */
+  const [lineas, setLineas] = useState(() => [nuevaLinea(prefillProducto || '')]);
   /* AUDIT UX 16-jul (U18): arranca con el último solicitante usado (se teclea
      igual siempre — el operario solo lo cambia cuando pide alguien distinto). */
   const [solicitante, setSolicitante] = useState(() => {
@@ -117,6 +144,12 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   const [confirm, ConfirmEl] = useConfirm();
+
+  const setLinea = (idx, campo, valor) =>
+    setLineas(prev => prev.map((l, i) => (i === idx ? { ...l, [campo]: valor } : l)));
+  const addLinea = () => setLineas(prev => [...prev, nuevaLinea()]);
+  const quitarLinea = (idx) => setLineas(prev => prev.filter((_, i) => i !== idx));
+
   /* P2 (21-jul-2026): "¿transferir en vez de producir?" — si el producto ya
      tiene stock en FÁBRICA, sugerir traerlo con una OT (con la línea
      prellenada) en lugar de lanzar una producción nueva. Best-effort: si el
@@ -130,16 +163,16 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
     return () => { alive = false; };
   }, []);
   const puedeCrearOT = ['admin', 'almacen', 'inventario'].includes(user?.rol);
-  const stockFabInfo = useMemo(() => {
-    const q = producto.trim().toUpperCase();
+  const stockFabDe = (l) => {
+    const q = l.producto.trim().toUpperCase();
     if (!q) return null;
     const key = Object.keys(ptFabrica).find(k => k.trim().toUpperCase() === q);
     if (!key) return null;
     const fab = Number(ptFabrica[key]?.qty) || 0;
     if (fab <= 0) return null;
-    const pedidasCub = cantidad && parseInt(cantidad) > 0 ? Math.round(medidaACubetas(medida, parseInt(cantidad))) : 0;
+    const pedidasCub = l.cantidad && parseInt(l.cantidad) > 0 ? Math.round(medidaACubetas(l.medida, parseInt(l.cantidad))) : 0;
     return { key, fab, pedidasCub, cubre: pedidasCub > 0 && fab >= pedidasCub };
-  }, [producto, ptFabrica, cantidad, medida]);
+  };
   /* AUDIT UX 16-jul (U18): datalist con los solicitantes de los últimos pedidos
      (máx 6 únicos, más reciente primero) — los pedidos llegan de la página padre. */
   const solicitantesRecientes = useMemo(() => {
@@ -190,10 +223,17 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
   }, []);
 
   const handleSave = async () => {
-    if (!producto.trim()) return setErr('Selecciona el producto');
-    const cantMed = parseInt(cantidad);
-    if (!cantMed || cantMed < 1) return setErr('Cantidad debe ser un número mayor a 0');
-    const cant = Math.round(medidaACubetas(medida, cantMed)); /* cubeta-equivalente para producción */
+    /* Renglones totalmente vacíos se ignoran (se agregó de más y no se llenó);
+       uno a medias sí es error — nombrando cuál, que con 4 abiertos no se ve. */
+    const conAlgo = lineas
+      .map((l, idx) => ({ ...l, idx }))
+      .filter(l => l.producto.trim() || String(l.cantidad).trim());
+    if (conAlgo.length === 0) return setErr('Captura al menos un producto');
+    for (const l of conAlgo) {
+      if (!l.producto.trim()) return setErr(`Producto ${l.idx + 1}: selecciona el producto`);
+      const c = parseInt(l.cantidad);
+      if (!c || c < 1) return setErr(`Producto ${l.idx + 1} (${l.producto.trim()}): cantidad debe ser un número mayor a 0`);
+    }
     if (!solicitante.trim()) return setErr('Indica el solicitante');
 
     /* Sprint G-4: useConfirm en lugar de window.confirm nativo.
@@ -201,7 +241,8 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
        pedido se creaba como REAL aunque el usuario quisiera PRUEBA. */
     if (esPrueba) {
       const ok = await confirm(
-        'Modo PRUEBA activado. NO descuenta materia prima, NO suma producto terminado, el lote queda marcado como prueba.',
+        'Modo PRUEBA activado. NO descuenta materia prima, NO suma producto terminado, ' +
+        (conAlgo.length > 1 ? `los ${conAlgo.length} pedidos quedan marcados como prueba.` : 'el lote queda marcado como prueba.'),
         { title: 'Confirmar modo prueba', confirmText: 'Activar prueba', danger: false }
       );
       if (!ok) return;
@@ -209,30 +250,51 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
 
     setSaving(true);
     setErr('');
+    /* UN pedido por renglón, secuencial (el backend serializa con mutex y
+       notifica al técnico por cada uno). Si uno falla a la mitad, los ya
+       creados se QUITAN del form y el error dice cuáles entraron — reintentar
+       solo crea los que faltan, sin duplicar. */
+    const creadosIdx = [];
     try {
-      const id = 'PA-' + Date.now().toString(36).toUpperCase();
-      const pedido = {
-        id,
-        producto: producto.trim(),
-        cantidad: cant,
-        medida,
-        medidaQty: cantMed,
-        solicitante: solicitante.trim(),
-        esPrueba,
-        estado: 'pendiente',
-        fecha: new Date().toISOString(),
-        creadoPor: user?.nombre || 'Usuario',
-      };
-      await api.upsertPedido(pedido);
+      const base = Date.now();
+      for (let i = 0; i < conAlgo.length; i++) {
+        const l = conAlgo[i];
+        const cantMed = parseInt(l.cantidad);
+        const pedido = {
+          id: 'PA-' + (base + i).toString(36).toUpperCase(),
+          producto: l.producto.trim(),
+          cantidad: Math.round(medidaACubetas(l.medida, cantMed)), /* cubeta-equivalente para producción */
+          medida: l.medida,
+          medidaQty: cantMed,
+          solicitante: solicitante.trim(),
+          esPrueba,
+          estado: 'pendiente',
+          fecha: new Date().toISOString(),
+          creadoPor: user?.nombre || 'Usuario',
+        };
+        await api.upsertPedido(pedido);
+        creadosIdx.push(l.idx);
+      }
       /* AUDIT UX 16-jul (U18): recordar el solicitante para el próximo pedido */
       try { localStorage.setItem(LS_ULTIMO_SOLICITANTE, solicitante.trim()); } catch { /* noop */ }
       onCreated?.();
     } catch (e) {
-      setErr(humanizeError(e));
+      if (creadosIdx.length) {
+        const hechos = conAlgo.filter(l => creadosIdx.includes(l.idx)).map(l => l.producto.trim());
+        setLineas(prev => {
+          const rest = prev.filter((_, idx) => !creadosIdx.includes(idx));
+          return rest.length ? rest : [nuevaLinea()];
+        });
+        setErr(`Se crearon ${creadosIdx.length}: ${hechos.join(', ')}. El siguiente falló: ${humanizeError(e)} — corrige y vuelve a guardar (solo se crean los que faltan).`);
+      } else {
+        setErr(humanizeError(e));
+      }
     } finally {
       setSaving(false);
     }
   };
+
+  const numValidos = lineas.filter(l => l.producto.trim() && parseInt(l.cantidad) > 0).length;
 
   return (
     <div style={S.overlay(isDesktop, shown)}>
@@ -246,7 +308,7 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         <div style={{ ...S.head, flexShrink: 0 }}>
           <div>
             <div style={S.title}>Nuevo pedido</div>
-            <div style={S.sub}>Captura el producto y la cantidad. Quedará pendiente para producción.</div>
+            <div style={S.sub}>Captura productos y cantidades. Quedarán pendientes para producción.</div>
           </div>
           <button onClick={onClose} style={S.closeBtn} aria-label="Cerrar">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -257,84 +319,104 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         <div style={S.sheetBody}>
         {err && <div style={S.err}>{err}</div>}
 
-        <label style={S.label} htmlFor="np-prod">Producto *</label>
-        <input
-          id="np-prod"
-          className="np-finput"
-          style={S.input}
-          list="formulas-list"
-          value={producto}
-          onChange={(e) => setProducto(e.target.value)}
-          placeholder="Ej. Vinílica blanca 19L"
-          /* AUDIT UX 16-jul (U14): autoFocus solo en escritorio — en móvil el
-             teclado abre ANTES de pintar el sheet y tapa los botones (regla
-             documentada en components/ui/Modal.jsx). */
-          autoFocus={isDesktop}
-        />
+        {lineas.map((l, i) => {
+          const stockFabInfo = stockFabDe(l);
+          const inputIn = { ...S.input, background: 'var(--lp-bg-raised)' };
+          return (
+            <div key={i} style={S.linea} data-id="pedidos.nuevo.linea">
+              <div style={S.lineaHead}>
+                <span style={S.lineaTag}>Producto {lineas.length > 1 ? i + 1 : ''}</span>
+                {lineas.length > 1 && (
+                  <button style={S.quitarBtn} onClick={() => quitarLinea(i)} title="Quitar este producto" aria-label={'Quitar producto ' + (i + 1)}>×</button>
+                )}
+              </div>
+
+              <label style={{ ...S.labelIn, marginTop: 2 }} htmlFor={'np-prod-' + i}>Producto *</label>
+              <input
+                id={'np-prod-' + i}
+                className="np-finput"
+                style={inputIn}
+                list="formulas-list"
+                value={l.producto}
+                onChange={(e) => setLinea(i, 'producto', e.target.value)}
+                placeholder="Ej. Vinílica blanca 19L"
+                /* AUDIT UX 16-jul (U14): autoFocus solo en escritorio — en móvil el
+                   teclado abre ANTES de pintar el sheet y tapa los botones (regla
+                   documentada en components/ui/Modal.jsx). */
+                autoFocus={isDesktop && i === 0}
+              />
+
+              <label style={S.labelIn}>Medida *</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 4 }}>
+                {PT_MEDIDAS.map((m) => {
+                  const on = l.medida === m.key;
+                  return (
+                    <button key={m.key} type="button" onClick={() => setLinea(i, 'medida', m.key)}
+                      style={{ height: 34, padding: '0 11px', borderRadius: 999, cursor: 'pointer',
+                        fontFamily: 'var(--lp-font-sans)', fontSize: 12, fontWeight: on ? 600 : 500,
+                        border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
+                        background: on ? 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)' : 'var(--lp-bg-raised)',
+                        color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap' }}>
+                      {m.label}
+                    </button>
+                  );
+                })}
+              </div>
+              <label style={S.labelIn} htmlFor={'np-qty-' + i}>Cantidad ({ptMedidaDef(l.medida)?.label || 'unidades'}) *</label>
+              <input
+                id={'np-qty-' + i}
+                className="np-finput"
+                style={inputIn}
+                type="number"
+                inputMode="numeric"
+                min="1"
+                value={l.cantidad}
+                onChange={(e) => setLinea(i, 'cantidad', e.target.value)}
+                placeholder="52"
+              />
+              {l.medida !== 'cubeta' && l.cantidad && parseInt(l.cantidad) > 0 && (
+                <div style={{ marginTop: 4, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+                  = <strong>{Math.round(medidaACubetas(l.medida, parseInt(l.cantidad)))}</strong> cubetas-equivalente
+                </div>
+              )}
+
+              {/* P2 (21-jul-2026): sugerencia "transferir en vez de producir" */}
+              {stockFabInfo && (
+                <div style={{
+                  marginTop: 8, padding: '10px 12px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.5,
+                  background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)',
+                  border: '1.5px solid color-mix(in srgb, var(--lp-brand-600) 45%, transparent)',
+                  color: 'var(--lp-brand-700)',
+                }}>
+                  Hay <strong>{stockFabInfo.fab.toLocaleString('es-MX')} cub</strong> de {stockFabInfo.key} en <strong>Fábrica</strong>
+                  {stockFabInfo.cubre
+                    ? ' — alcanza para este pedido: puedes traerlas con una transferencia en vez de producir.'
+                    : stockFabInfo.pedidasCub > 0
+                      ? ` (pides ${stockFabInfo.pedidasCub}) — podrías traer esas y producir solo el resto.`
+                      : ' — considera traerlas con una transferencia antes de producir más.'}
+                  {puedeCrearOT && (
+                    <button
+                      type="button"
+                      data-id="pedidos.btn.crear-ot-en-vez"
+                      onClick={() => navigate('/transferencias?nueva=' + encodeURIComponent(JSON.stringify({ tipo: 'pt', producto: stockFabInfo.key, nombre: stockFabInfo.key, unidad: 'cub' })))}
+                      style={{ display: 'block', marginTop: 8, padding: '7px 12px', borderRadius: 999, border: '1px solid var(--lp-brand-600)', background: 'transparent', color: 'var(--lp-brand-700)', cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}
+                    >
+                      Crear transferencia en su lugar →
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
         <datalist id="formulas-list">
           {formulas.map((f, i) => <option key={i} value={f.nombre || f} />)}
         </datalist>
 
-        <label style={S.label}>Medida *</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-          {PT_MEDIDAS.map((m) => {
-            const on = medida === m.key;
-            return (
-              <button key={m.key} type="button" onClick={() => setMedida(m.key)}
-                style={{ height: 34, padding: '0 11px', borderRadius: 999, cursor: 'pointer',
-                  fontFamily: 'var(--lp-font-sans)', fontSize: 12, fontWeight: on ? 600 : 500,
-                  border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
-                  background: on ? 'color-mix(in srgb, var(--lp-brand-600) 14%, transparent)' : 'var(--lp-bg-raised)',
-                  color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)', whiteSpace: 'nowrap' }}>
-                {m.label}
-              </button>
-            );
-          })}
-        </div>
-        <label style={S.label} htmlFor="np-qty">Cantidad ({ptMedidaDef(medida)?.label || 'unidades'}) *</label>
-        <input
-          id="np-qty"
-          className="np-finput"
-          style={S.input}
-          type="number"
-          inputMode="numeric"
-          min="1"
-          value={cantidad}
-          onChange={(e) => setCantidad(e.target.value)}
-          placeholder="52"
-        />
-        {medida !== 'cubeta' && cantidad && parseInt(cantidad) > 0 && (
-          <div style={{ marginTop: -4, marginBottom: 6, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-            = <strong>{Math.round(medidaACubetas(medida, parseInt(cantidad)))}</strong> cubetas-equivalente
-          </div>
-        )}
-
-        {/* P2 (21-jul-2026): sugerencia "transferir en vez de producir" */}
-        {stockFabInfo && (
-          <div style={{
-            marginTop: 8, padding: '10px 12px', borderRadius: 12, fontSize: 12.5, lineHeight: 1.5,
-            background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)',
-            border: '1.5px solid color-mix(in srgb, var(--lp-brand-600) 45%, transparent)',
-            color: 'var(--lp-brand-700)',
-          }}>
-            Hay <strong>{stockFabInfo.fab.toLocaleString('es-MX')} cub</strong> de {stockFabInfo.key} en <strong>Fábrica</strong>
-            {stockFabInfo.cubre
-              ? ' — alcanza para este pedido: puedes traerlas con una transferencia en vez de producir.'
-              : stockFabInfo.pedidasCub > 0
-                ? ` (pides ${stockFabInfo.pedidasCub}) — podrías traer esas y producir solo el resto.`
-                : ' — considera traerlas con una transferencia antes de producir más.'}
-            {puedeCrearOT && (
-              <button
-                type="button"
-                data-id="pedidos.btn.crear-ot-en-vez"
-                onClick={() => navigate('/transferencias?nueva=' + encodeURIComponent(JSON.stringify({ tipo: 'pt', producto: stockFabInfo.key, nombre: stockFabInfo.key, unidad: 'cub' })))}
-                style={{ display: 'block', marginTop: 8, padding: '7px 12px', borderRadius: 999, border: '1px solid var(--lp-brand-600)', background: 'transparent', color: 'var(--lp-brand-700)', cursor: 'pointer', fontSize: 12.5, fontWeight: 600 }}
-              >
-                Crear transferencia en su lugar →
-              </button>
-            )}
-          </div>
-        )}
+        <button style={S.addBtn} onClick={addLinea} data-id="pedidos.nuevo.btn.agregar-producto">
+          + Agregar otro producto
+        </button>
 
         <label style={S.label} htmlFor="np-sol">Solicitante *</label>
         <input
@@ -372,7 +454,7 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         <div style={S.sheetFooter}>
           <button style={S.btn(false)} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={S.btn(true)} onClick={handleSave} disabled={saving}>
-            {saving ? 'Guardando…' : 'Crear pedido'}
+            {saving ? 'Guardando…' : numValidos > 1 ? `Crear ${numValidos} pedidos` : 'Crear pedido'}
           </button>
         </div>
       </div>
