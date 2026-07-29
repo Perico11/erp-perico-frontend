@@ -146,11 +146,14 @@ export default function QRModal({ lote, onClose }) {
 
   const fmt = FORMATOS.find(f => f.v === formato) || FORMATOS[0];
 
-  const payload = JSON.stringify({
-    t: 'perico-lote', cod: codigo,
-    p: lote.producto || lote.nombre,
-    cant: lote.cantidad, f: lote.fecha,
-  });
+  /* 28-jul-2026 (pedido dueño): el QR llevaba los DATOS adentro (JSON con
+     producto/cantidad/fecha) — cualquier lector genérico los mostraba a quien
+     tuviera la cubeta, cliente final incluido. Ahora codifica solo la URL
+     /qr/<código> del dominio: la página exige la clave de planta antes de
+     enseñar nada. El escáner interno sigue leyendo los JSON de etiquetas
+     viejas (rama JSON.parse en handleResult) y el backend extrae el código
+     de la URL en /api/sublotes/scan(-bulk). */
+  const payload = `${window.location.origin}/qr/${encodeURIComponent(codigo)}`;
   /* QR generado LOCAL (sin quickchart.io). Funciona offline, sin latencia,
      sin riesgo de CSP/bloqueo. */
   const qrUrlPreview = qrDataUrl(payload, { scale: 8, margin: 2, ecLevel: 'M' });

@@ -566,6 +566,99 @@ function FirmasPanel() {
    sheets de Envasar y Re-envasar. Al envasar, el nombre se COPIA al sublote,
    así que dar de baja a alguien nunca altera la historia de lotes viejos.
    ═══════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   QrAccesoPanel — clave de planta de los QR físicos (28-jul-2026, dueño).
+
+   Las cubetas viajan con el cliente: la página /qr/<cod> ya NO muestra nada
+   sin la clave. El empleado de piso (sin usuario del ERP) la teclea UNA vez
+   en su teléfono y le queda guardada `dias` días. Cambiarla aquí la ROTA:
+   todos los teléfonos vuelven a pedirla (las cookies viejas se invalidan).
+   ═══════════════════════════════════════════════════════════════════════ */
+function QrAccesoPanel() {
+  const [info, setInfo] = useState(null);
+  const [clave, setClave] = useState('');
+  const [dias, setDias] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const cargar = useCallback(() => {
+    api.getQrAcceso()
+      .then(r => setInfo(r || {}))
+      .catch(e => setErr(e?.data?.error || e.message));
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const guardar = async () => {
+    const c = clave.trim();
+    if (c.length < 4 || c.length > 12) { setErr('La clave debe tener entre 4 y 12 caracteres'); return; }
+    setSaving(true); setErr(''); setMsg('');
+    try {
+      await api.setQrAcceso(c, dias ? parseInt(dias) : undefined);
+      setClave('');
+      setMsg(info?.configurada
+        ? 'Clave rotada. Todos los teléfonos volverán a pedirla en el próximo escaneo.'
+        : 'Clave activada. Compártela con el personal de piso.');
+      cargar();
+    } catch (e) {
+      setErr(e?.data?.error || e.message);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      {err && <div style={S.err}>{err}</div>}
+      {msg && <div style={{ background: 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)', color: 'var(--lp-brand-700)', padding: '10px 12px', borderRadius: 10, fontSize: 12.5, marginBottom: 12, fontWeight: 600 }}>{msg}</div>}
+
+      <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 14, maxWidth: 620 }}>
+        Los QR pegados a cubetas y totes abren <strong>sistema.pinturaselperico.com/qr/…</strong>. Sin esta clave,
+        quien escanee (un cliente, por ejemplo) solo ve el código de la etiqueta. El personal de piso
+        <strong> sin usuario del ERP</strong> la escribe una vez en su teléfono y le queda guardada.
+        Cambiarla aquí obliga a todos los teléfonos a pedirla de nuevo.
+      </div>
+
+      <div style={{ ...S.metricCard, maxWidth: 620, marginBottom: 14, padding: '14px 16px' }}>
+        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>
+          Estado: <strong style={{ color: info?.configurada ? 'var(--lp-brand-700)' : 'var(--lp-danger-600)' }}>
+            {info == null ? 'cargando…' : info.configurada ? 'ACTIVA' : 'SIN CONFIGURAR — los QR no muestran información'}
+          </strong>
+          {info?.configurada && info.actualizadaEn && (
+            <span> · definida el {String(info.actualizadaEn).slice(0, 10)} por {info.por || '—'} · vigencia {info.dias} días por teléfono</span>
+          )}
+        </div>
+      </div>
+
+      <div style={{ ...S.toolbar, maxWidth: 620 }}>
+        <input
+          style={S.search}
+          type="text"
+          inputMode="numeric"
+          placeholder={info?.configurada ? 'Nueva clave (rota la actual)…' : 'Clave de planta (4–12 caracteres)…'}
+          value={clave}
+          maxLength={12}
+          onChange={(e) => setClave(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }}
+          data-id="admin.input.qr-clave"
+        />
+        <input
+          style={{ ...S.search, maxWidth: 130 }}
+          type="number"
+          min="1"
+          max="365"
+          placeholder={'Días (' + (info?.dias || 90) + ')'}
+          value={dias}
+          onChange={(e) => setDias(e.target.value)}
+          title="Días que la clave queda guardada en cada teléfono"
+        />
+        <button style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }} onClick={guardar} disabled={saving}
+          data-id="admin.btn.guardar-qr-clave">
+          {saving ? 'Guardando…' : info?.configurada ? 'Rotar clave' : 'Activar clave'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function VaciadoresPanel() {
   const [lista, setLista] = useState([]);
   const [nombre, setNombre] = useState('');
@@ -736,13 +829,14 @@ export default function UsuariosPanel() {
     { id: 'usuarios', label: 'Usuarios del sistema', style: (a) => tabStyle(a) },
     { id: 'vaciadores', label: 'Vaciadores', style: (a) => tabStyle(a) },
     { id: 'firmas', label: 'Firmas de documentos', style: (a) => tabStyle(a) },
+    { id: 'qr', label: 'QR cubetas', style: (a) => tabStyle(a) },
   ];
 
   return (
     <div>
       <PageTabs tabs={tabsSeccion} activeTab={seccion} onChange={setSeccion} style={{ marginBottom: 16 }} />
 
-      {seccion === 'firmas' ? <FirmasPanel /> : seccion === 'vaciadores' ? <VaciadoresPanel /> : (
+      {seccion === 'firmas' ? <FirmasPanel /> : seccion === 'vaciadores' ? <VaciadoresPanel /> : seccion === 'qr' ? <QrAccesoPanel /> : (
     <div>
       {err && <div style={S.err}>{err}</div>}
 

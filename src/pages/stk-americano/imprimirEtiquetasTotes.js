@@ -42,7 +42,9 @@ export default function imprimirEtiquetasTotes(items) {
   const esc = (s) => String(s || '').replace(/</g, '&lt;');
   let labels = '';
   lista.forEach((it, i) => {
-    const payload = JSON.stringify({ t: 'perico-lote', cod: it.cod, p: it.producto });
+    /* 28-jul-2026: URL /qr/<cod> en vez de JSON-con-datos — misma razón que
+       QRModal (la etiqueta viaja pegada al tote; la página exige clave). */
+    const payload = `${window.location.origin}/qr/${encodeURIComponent(it.cod)}`;
     const qr = qrDataUrl(payload, { scale: 10, margin: 2, ecLevel: 'M' });
     labels += `<div class="page"><div class="label">
       <img src="${qr}" />

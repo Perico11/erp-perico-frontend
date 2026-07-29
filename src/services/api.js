@@ -486,6 +486,11 @@ const api = {
      pasa por "Registrar pago" (contado, o crédito ya pagado). */
   corregirImportesOC: (data) => request('POST', '/api/compras/oc/corregir-importes', data),
 
+  /* Clave de planta de los QR físicos (28-jul-2026): admin define/rota la
+     clave con la que empleados SIN usuario ven la ficha en /qr/<cod>. */
+  getQrAcceso: () => request('GET', '/api/qr-acceso'),
+  setQrAcceso: (clave, dias) => request('POST', '/api/qr-acceso', { clave, ...(dias ? { dias } : {}) }),
+
   /* ── Vaciadores / envasadores (jul 2026): quién envasó cada lote ── */
   getVaciadores: () => request('GET', '/api/vaciadores'),
   crearVaciador: (nombre) => request('POST', '/api/vaciadores', { nombre }),
