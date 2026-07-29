@@ -1127,7 +1127,14 @@ export default function PedidosPage() {
           prefillProducto={prefillProducto}
           pedidos={pedidos} /* AUDIT UX 16-jul (U18): datalist de solicitantes recientes */
           onClose={() => { setShowNuevo(false); setPrefillProducto(null); }}
-          onCreated={() => { setShowNuevo(false); setPrefillProducto(null); reload(); }}
+          /* fuePrueba (28-jul-2026): los pedidos prueba viven en la pestaña
+             "Pruebas", NO en Activos — el dueño creó una prueba, la lista que
+             miraba no cambió y reportó "no funcionó". Al crear pruebas ahora
+             brincamos a esa pestaña para que VEA lo que acaba de crear. */
+          onCreated={(fuePrueba) => {
+            setShowNuevo(false); setPrefillProducto(null); reload();
+            if (fuePrueba) setTab('pruebas');
+          }}
         />
       )}
 

@@ -330,7 +330,10 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
       }
       /* AUDIT UX 16-jul (U18): recordar el solicitante para el próximo pedido */
       try { localStorage.setItem(LS_ULTIMO_SOLICITANTE, solicitante.trim()); } catch { /* noop */ }
-      onCreated?.();
+      /* Los pedidos prueba viven en la pestaña "Pruebas" (bucket aparte) — el
+         padre usa este flag para brincar a esa pestaña y que el operario VEA
+         lo que acaba de crear (si no, "no pasó nada" a simple vista). */
+      onCreated?.(esPrueba);
     } catch (e) {
       if (creados > 0) {
         const hechos = finales.slice(0, creados).map(l => l.producto);
