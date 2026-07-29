@@ -25,6 +25,9 @@ import {
 } from '../../lib/estados';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import { qrDataUrl } from '../../lib/qrGenerator';
+/* URL pública impresa en el QR — dominio principal (29-jul-2026). Antes se
+   armaba con window.location.origin: imprimir desde dev grababa localhost. */
+import { qrPublicUrl } from '../../lib/qrPublicUrl';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ── Iconos line SVG (sin emojis — DS verde) ───────────────────────── */
@@ -40,17 +43,8 @@ const Icon = {
   qcHold: (p = {}) => (<svg width={p.s || 16} height={p.s || 16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>),
 };
 
-/* Construye la URL pública del QR de un sublote. Mirror de _generarQRPayload del backend. */
-function buildQrUrl(cod) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : '';
-  let base = '';
-  try {
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) {
-      base = String(import.meta.env.BASE_URL).replace(/\/$/, '');
-    }
-  } catch {}
-  return `${origin}${base}/qr/${encodeURIComponent(cod)}`;
-}
+/* Mirror de _generarQRPayload del backend — vive en lib/qrPublicUrl. */
+const buildQrUrl = qrPublicUrl;
 
 /* ── Helpers ── */
 const B = (bg, fg) => ({
@@ -1244,7 +1238,10 @@ export function SubloteQRPrintModal({ payload, onClose }) {
   ];
   const fmt = FMT.find(f => f.v === formato) || FMT[0];
 
-  const qrUrl = sublote.qrPayload || buildQrUrl(sublote.cod);
+  /* SIEMPRE la URL nueva (no el qrPayload guardado): los sublotes viejos traen
+     grabada la URL del subdominio — reimprimir debe salir ya con el dominio
+     principal. El escaneo no cambia: el backend extrae el código por path. */
+  const qrUrl = buildQrUrl(sublote.cod);
   /* QR generado LOCAL — sin depender de quickchart.io u otro servicio externo.
      Esto resuelve el bug de "QR no carga" y permite imprimir offline. */
   const qrUrlPreview = qrDataUrl(qrUrl, { scale: 8, margin: 2, ecLevel: 'M' });

@@ -5,6 +5,7 @@
    claves del QRModal, así la config se comparte).
    items: [{ cod, producto, litros }] */
 import { qrDataUrl } from '../../lib/qrGenerator';
+import { qrPublicUrl } from '../../lib/qrPublicUrl';
 
 const FORMATOS = {
   '50x25': { wMm: 50, hMm: 25, qrMm: 21 },
@@ -42,9 +43,10 @@ export default function imprimirEtiquetasTotes(items) {
   const esc = (s) => String(s || '').replace(/</g, '&lt;');
   let labels = '';
   lista.forEach((it, i) => {
-    /* 28-jul-2026: URL /qr/<cod> en vez de JSON-con-datos — misma razón que
-       QRModal (la etiqueta viaja pegada al tote; la página exige clave). */
-    const payload = `${window.location.origin}/qr/${encodeURIComponent(it.cod)}`;
+    /* 28-jul-2026: URL en vez de JSON-con-datos — misma razón que QRModal (la
+       etiqueta viaja pegada al tote; la página exige clave). 29-jul: dominio
+       principal vía lib/qrPublicUrl. */
+    const payload = qrPublicUrl(it.cod);
     const qr = qrDataUrl(payload, { scale: 10, margin: 2, ecLevel: 'M' });
     labels += `<div class="page"><div class="label">
       <img src="${qr}" />
