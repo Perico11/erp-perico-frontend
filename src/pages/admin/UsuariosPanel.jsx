@@ -611,10 +611,10 @@ function QrAccesoPanel() {
       {msg && <div style={{ background: 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)', color: 'var(--lp-brand-700)', padding: '10px 12px', borderRadius: 10, fontSize: 12.5, marginBottom: 12, fontWeight: 600 }}>{msg}</div>}
 
       <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 14, maxWidth: 620 }}>
-        Los QR pegados a cubetas y totes abren <strong>sistema.pinturaselperico.com/qr/…</strong>. Sin esta clave,
-        quien escanee (un cliente, por ejemplo) solo ve el código de la etiqueta. El personal de piso
-        <strong> sin usuario del ERP</strong> la escribe una vez en su teléfono y le queda guardada.
-        Cambiarla aquí obliga a todos los teléfonos a pedirla de nuevo.
+        Los QR pegados a cubetas y totes abren <strong>pinturaselperico.com/QR/…</strong> (la página web,
+        no el sistema). Sin esta clave, quien escanee (un cliente, por ejemplo) solo ve el código de la
+        etiqueta. El personal de piso <strong>sin usuario del ERP</strong> la escribe una vez en su teléfono
+        y le queda guardada. Cambiarla aquí obliga a todos los teléfonos a pedirla de nuevo.
       </div>
 
       <div style={{ ...S.metricCard, maxWidth: 620, marginBottom: 14, padding: '14px 16px' }}>
