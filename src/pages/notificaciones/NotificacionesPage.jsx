@@ -94,6 +94,8 @@ const TECH_LABELS = {
   ot_pendiente_surtir: 'Transferencia por surtir',
   ot_pendiente_recibir: 'Transferencia por recibir',
   recoleccion_envejecida: 'Recolección atorada',
+  produccion_sin_capturar: 'Producción sin registrar',
+  lote_sin_descuento_mp: 'Lote sin descuento de MP',
 };
 const FILE_LABELS = {
   inventario: 'Inventario',

@@ -563,6 +563,13 @@ const api = {
     request('POST', '/api/maestro-mp/estado', { mp, estado }),
   setMaestroMPCampo: (mp, campo, valor) =>
     request('POST', '/api/maestro-mp', { mp, campo, valor }),
+  /* Catálogo de proveedores (autocompletar del selector de reasignación). */
+  getProveedores: () => request('GET', '/api/proveedores'),
+  /* Reasigna el proveedor de UNA MP escribiendo las DOS caras del índice
+     (maestro + proveedores_catalogo). No renombra al proveedor: las demás MPs
+     que surta se quedan como están. */
+  reasignarProveedorMP: (mp, proveedor, leadTimeDias) =>
+    request('POST', '/api/maestro-mp/proveedor', { mp, proveedor, leadTimeDias }),
   eliminarMP: (mp, forzar) =>
     request('POST', '/api/mp/eliminar', { mp, forzar }),
   sustituirMP: (mpOriginal, mpSustituta) =>
