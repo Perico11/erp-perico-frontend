@@ -587,6 +587,10 @@ const api = {
     request('POST', '/api/cycle-count/agregar-item', { sesionId, nombre, stockFisico, unidad }),
   cycleCountFinalizar: (sesionId, pin) =>
     request('POST', '/api/cycle-count/finalizar', { sesionId, pin }),
+  /* Conteo BASE (inventario canónico desde cero): al firmar FIJA el stock de las
+     MP contadas y deja intactas las no contadas. No pasa por aprobación. */
+  cycleCountFinalizarBase: (sesionId, pin, motivo) =>
+    request('POST', '/api/cycle-count/finalizar-base', { sesionId, pin, motivo }),
   cycleCountAprobar: (sesionId, causasPorItem) =>
     request('POST', '/api/cycle-count/aprobar', { sesionId, causasPorItem }),
 

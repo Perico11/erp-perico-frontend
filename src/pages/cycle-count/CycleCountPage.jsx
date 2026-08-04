@@ -233,6 +233,9 @@ const CATEGORIAS = [
 const TIPOS = [
   { v: 'completo', label: 'Completo (todos)' },
   { v: 'aleatorio', label: 'Aleatorio (~30%)' },
+  /* `base` (ago-2026): solo MP. Al firmar FIJA la existencia contada como la
+     nueva base de la que producción descuenta — sin pasar por aprobación. */
+  { v: 'base', label: 'Inventario base' },
 ];
 
 /* Umbral de varianza que dispara aprobación admin (espejo del backend). */
@@ -259,12 +262,25 @@ function StartModal({ onStart, onClose, loading, isDesktop }) {
           <SegmentedControl value={tipo} onChange={setTipo}
             options={TIPOS.map(t => ({ value: t.v, label: t.label }))} color="brand" />
         </div>
+        {/* El conteo base cambia las reglas del juego: fija en vez de ajustar y
+            no pasa por aprobación. Decirlo ANTES de abrir la sesión, no después. */}
+        {tipo === 'base' && (
+          <div style={{ background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)', padding: 12, borderRadius: 10, fontSize: 12.5, lineHeight: 1.55, marginBottom: 8 }}>
+            <strong>Inventario base — solo materia prima.</strong> Al cerrar y firmar,
+            la cantidad que captures <strong>sustituye</strong> la existencia del sistema
+            (no se suma ni se resta), y de ahí en adelante producción descuenta sobre
+            esa base. Se aplica al instante, sin aprobación.
+            <div style={{ marginTop: 6 }}>
+              Las materias primas que no cuentes <strong>se quedan como están</strong>.
+            </div>
+          </div>
+        )}
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose} disabled={loading}
             data-id="conteo.btn.cancelar-iniciar" data-rol="inventario,admin">Cancelar</button>
-          <button style={S.act2(true)} onClick={() => onStart(categoria, tipo)} disabled={loading}
+          <button style={S.act2(true)} onClick={() => onStart(categoria, tipo === 'base' ? 'base' : tipo)} disabled={loading || (tipo === 'base' && categoria !== 'mp')}
             data-id="conteo.btn.iniciar-sesion" data-rol="inventario,admin">
-            {loading ? 'Iniciando…' : 'Iniciar conteo'}
+            {loading ? 'Iniciando…' : (tipo === 'base' && categoria !== 'mp') ? 'Base solo aplica a MP' : 'Iniciar conteo'}
           </button>
         </div>
       </div>
@@ -1098,19 +1114,37 @@ export default function CycleCountPage({ embedded = false }) {
   };
 
   const handleFinalizar = async (sesionId) => {
-    /* CANDADO: PIN del contador como firma digital de cierre de sesión. */
+    /* El conteo BASE no va a aprobación: al firmar FIJA el inventario. El aviso
+       tiene que decir exactamente eso, con los números de esta sesión, porque
+       después ya no hay vuelta atrás desde la UI. */
+    const ses = sesiones.find(s => s.id === sesionId) || sesionActiva;
+    const esBase = ses?.tipo === 'base';
+    const contados = (ses?.items || []).filter(i => i.stockFisico !== null && i.stockFisico !== undefined).length;
+    const sinContar = (ses?.items || []).length - contados;
+
     const pin = await confirm(
-      'Vas a finalizar la sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ cerraste estos números. Ingresa tu PIN para confirmar.',
+      esBase
+        ? `Vas a FIJAR el inventario base de materia prima.\n\n`
+          + `· ${contados} materia(s) prima(s) quedarán con la cantidad que capturaste.\n`
+          + `· ${sinContar} sin contar: conservan su existencia actual.\n\n`
+          + `Producción empezará a descontar desde estos números. Se aplica de inmediato, sin aprobación. Ingresa tu PIN para firmar.`
+        : 'Vas a finalizar la sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ cerraste estos números. Ingresa tu PIN para confirmar.',
       {
-        title: 'Firmar y finalizar sesión',
-        confirmText: 'Firmar y finalizar',
-        danger: false,
+        title: esBase ? 'Firmar y fijar inventario base' : 'Firmar y finalizar sesión',
+        confirmText: esBase ? 'Firmar y fijar' : 'Firmar y finalizar',
+        danger: !!esBase,
         prompt: { label: 'Tu PIN', placeholder: '0000', required: true, minLength: 4, maxLength: 6, rows: 1, numeric: true, password: true },
       }
     );
     if (!pin) return;
     try {
-      await api.cycleCountFinalizar(sesionId, pin);
+      if (esBase) {
+        const r = await api.cycleCountFinalizarBase(sesionId, pin);
+        setToast(`Inventario base fijado · ${r.fijadas} MP` + (r.sinContar ? ` · ${r.sinContar} sin contar` : ''));
+        setTimeout(() => setToast(''), 5000);
+      } else {
+        await api.cycleCountFinalizar(sesionId, pin);
+      }
       cargar();
     } catch (e) {
       setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
