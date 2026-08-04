@@ -782,7 +782,10 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
     <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Ajustar existencia</div>
-        <div style={S.shS}>{item.nombre}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
+        {/* `ubicLabel` (envases/tapas): dice a QUÉ ubicación se va a escribir.
+            Sin él, desde la vista "Total" no había forma de saber que el ajuste
+            aterriza en Fábrica y no en el total que se ve arriba. */}
+        <div style={S.shS}>{item.nombre}{item.ubicLabel ? ` · ${item.ubicLabel}` : ''}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
         <div style={S.bigsis}>
           <div style={S.bigK}>Existencia actual</div>
           <div style={S.bigV}>
@@ -2087,9 +2090,23 @@ export default function InventarioPage({ embedded = false }) {
   const handleAdjustEnv = useCallback((item) => {
     /* La sub-vista activa decide a qué ubicación escribe el ajuste: en "Terán"
        fija `teran`; en Fábrica/Total fija `stock` (Fábrica). Antes SIEMPRE escribía
-       Fábrica aunque estuvieras viendo Terán (confuso). */
+       Fábrica aunque estuvieras viendo Terán (confuso).
+
+       FIX ago-2026: en la sub-vista "Total" el renglón muestra la SUMA
+       (Fábrica + Terán + tránsito) pero el ajuste escribe SOLO Fábrica. El sheet
+       recibía esa suma como "existencia actual", así que se veía p.ej. 2,840
+       (todos en Terán) mientras el guardado iba a Fábrica, que tenía 0 — y
+       teclear "1000" no dejaba el total en 1000 sino que INFLABA el inventario.
+       Ahora el sheet recibe la cantidad de la ubicación DESTINO y la nombra en
+       el subtítulo: lo que ves es lo que editas. */
     const ubic = envSubtab === 'teran' ? 'teran' : 'fabrica';
-    setAjusteItem({ tipo: 'env', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: item.unidad || 'pz', _env: { ...item._env, ubic } });
+    const qtyDestino = ubic === 'teran' ? (item._env?.teran || 0) : (item._env?.fabrica || 0);
+    setAjusteItem({
+      tipo: 'env', nombre: item.nombre, qty: qtyDestino, min: item.inv.min || 0,
+      unidad: item.unidad || 'pz',
+      ubicLabel: ubic === 'teran' ? 'Terán' : 'Fábrica',
+      _env: { ...item._env, ubic },
+    });
   }, [envSubtab]);
   const handleSaveEnv = useCallback(async (ref, qty, min) => {
     try {
