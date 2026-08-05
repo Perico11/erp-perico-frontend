@@ -244,6 +244,9 @@ const UMBRAL = 5;
 function StartModal({ onStart, onClose, loading, isDesktop }) {
   const [categoria, setCategoria] = useState('mp');
   const [tipo, setTipo] = useState('completo');
+  /* PT por ubicación (5-ago-2026, reinventario): Terán se cuenta por PIEZAS.
+     Default Terán — ahí vive el grueso del PT y ahí nacen los descuadres. */
+  const [ubicacion, setUbicacion] = useState('teran');
   /* MÓVIL: este componente sólo se monta cuando está abierto → lock siempre activo
      mientras vive. Congela el fondo (anti scroll-chaining) y publica --pp-vvh. */
   useBodyScrollLock(true);
@@ -257,6 +260,19 @@ function StartModal({ onStart, onClose, loading, isDesktop }) {
           <SegmentedControl value={categoria} onChange={setCategoria}
             options={CATEGORIAS.map(c => ({ value: c.v, label: c.label }))} color="brand" />
         </div>
+        {categoria === 'pt' && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={S.flbl}>Ubicación</label>
+            <SegmentedControl value={ubicacion} onChange={setUbicacion}
+              options={[{ value: 'teran', label: 'Almacén Terán' }, { value: 'fabrica', label: 'Fábrica' }]} color="brand" />
+            {ubicacion === 'teran' && (
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
+                Se cuenta por <strong>piezas</strong> (totes llenos, litros del tote a medias,
+                cubetas, galones…) — el sistema hace las conversiones.
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ marginBottom: 8 }}>
           <label style={S.flbl}>Tipo de conteo</label>
           <SegmentedControl value={tipo} onChange={setTipo}
@@ -278,7 +294,7 @@ function StartModal({ onStart, onClose, loading, isDesktop }) {
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose} disabled={loading}
             data-id="conteo.btn.cancelar-iniciar" data-rol="inventario,admin">Cancelar</button>
-          <button style={S.act2(true)} onClick={() => onStart(categoria, tipo === 'base' ? 'base' : tipo)} disabled={loading || (tipo === 'base' && categoria !== 'mp')}
+          <button style={S.act2(true)} onClick={() => onStart(categoria, tipo === 'base' ? 'base' : tipo, categoria === 'pt' ? ubicacion : undefined)} disabled={loading || (tipo === 'base' && categoria !== 'mp')}
             data-id="conteo.btn.iniciar-sesion" data-rol="inventario,admin">
             {loading ? 'Iniciando…' : (tipo === 'base' && categoria !== 'mp') ? 'Base solo aplica a MP' : 'Iniciar conteo'}
           </button>
@@ -296,18 +312,41 @@ function StartModal({ onStart, onClose, loading, isDesktop }) {
    que el mockup y se registra el conteo del item. Si varianza > umbral, el
    item queda flagged y la sesión irá a aprobación de admin al finalizar.
    ════════════════════════════════════════════════════════════════════════════ */
-function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
+function CountSheet({ item, isDesktop, onClose, onRegistrar, esTeranPT }) {
   const [val, setVal] = useState(
     item.stockFisico !== null && item.stockFisico !== undefined ? String(item.stockFisico) : ''
   );
+  /* PT-Terán: se cuenta por PIEZAS (como está el almacén: totes llenos, litros
+     del tote a medias, cubetas, galones…). El cub-equiv lo calcula el server;
+     aquí solo un preview en vivo. Prefill si el item ya se contó. */
+  const pz0 = item.piezas || {};
+  const [piezas, setPiezas] = useState({
+    tote: pz0.tote != null && pz0.tote > 0 ? String(pz0.tote) : '',
+    granelLitros: pz0.granelLitros != null && pz0.granelLitros > 0 ? String(pz0.granelLitros) : '',
+    cubeta: pz0.cubeta != null && pz0.cubeta > 0 ? String(pz0.cubeta) : '',
+    galon: pz0.galon != null && pz0.galon > 0 ? String(pz0.galon) : '',
+    litro: pz0.litro != null && pz0.litro > 0 ? String(pz0.litro) : '',
+    atm: pz0.atm != null && pz0.atm > 0 ? String(pz0.atm) : '',
+  });
+  const setPz = (k, v) => setPiezas(p => ({ ...p, [k]: v }));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   /* MÓVIL: sólo se monta cuando está abierto → lock siempre activo mientras vive.
      Congela el fondo y publica --pp-vvh (el sheet la usa en su maxHeight). */
   useBodyScrollLock(true);
 
-  const f = parseFloat(val);
-  const showVar = !isNaN(f);
+  /* cub-equiv de las piezas (espejo de lib/reenvasePT del backend) */
+  const cubEqPiezas = esTeranPT
+    ? +((Number(piezas.tote) || 0) * 52 + (Number(piezas.granelLitros) || 0) / 19
+      + (Number(piezas.cubeta) || 0) + (Number(piezas.galon) || 0) * (3785 / 19000)
+      + (Number(piezas.litro) || 0) * (946 / 19000) + (Number(piezas.atm) || 0) * (750 / 19000)).toFixed(2)
+    : null;
+  const algunaPieza = esTeranPT && Object.values(piezas).some(v => v !== '' && Number(v) > 0);
+  const vacioExplicito = esTeranPT && Object.values(piezas).every(v => v === '' || Number(v) === 0)
+    && Object.values(piezas).some(v => v !== ''); /* capturó ceros a propósito */
+
+  const f = esTeranPT ? Number(cubEqPiezas) : parseFloat(val);
+  const showVar = esTeranPT ? (algunaPieza || vacioExplicito) : !isNaN(f);
   const sis = Number(item.stockSistema) || 0;
   const diff = showVar ? f - sis : 0;
   const vp = showVar ? (sis === 0 ? (f === 0 ? 0 : 100) : ((f - sis) / sis) * 100) : 0;
@@ -315,6 +354,26 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
   const vColor = vp === 0 ? 'var(--lp-success-600)' : alta ? 'var(--lp-danger-600)' : 'var(--lp-warning-600)';
 
   const guardar = async () => {
+    if (esTeranPT) {
+      if (!algunaPieza && !vacioExplicito) { setErr('Captura las piezas contadas (o 0 explícito si no hay nada)'); return; }
+      setErr('');
+      setSaving(true);
+      try {
+        await onRegistrar(item.key, null, {
+          tote: Number(piezas.tote) || 0,
+          granelLitros: Number(piezas.granelLitros) || 0,
+          cubeta: Number(piezas.cubeta) || 0,
+          galon: Number(piezas.galon) || 0,
+          litro: Number(piezas.litro) || 0,
+          atm: Number(piezas.atm) || 0,
+        });
+      } catch (e) {
+        setErr(humanizeError(e));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (val === '' || isNaN(f) || f < 0) { setErr('Ingresa un físico válido'); return; }
     setErr('');
     setSaving(true);
@@ -330,10 +389,21 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
     }
   };
 
+  const pzField = (k, lbl, hint) => (
+    <div key={k}>
+      <label style={{ ...S.flbl, fontSize: 11.5 }}>{lbl}</label>
+      <input style={{ ...S.finQty, height: 42, fontSize: 16, marginBottom: 0 }} type="number" inputMode="decimal" min="0"
+        step={k === 'granelLitros' ? '0.1' : '1'} value={piezas[k]} placeholder="0"
+        onChange={(e) => setPz(k, e.target.value)}
+        data-id={`conteo.input.pz-${k}`} data-rol="inventario,admin" />
+      {hint && <div style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>{hint}</div>}
+    </div>
+  );
+
   return (
     <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
-        <div style={S.shH}>Conteo físico</div>
+        <div style={S.shH}>Conteo físico{esTeranPT ? ' · Terán' : ''}</div>
         <div style={S.shS}>{item.nombre}{item.ubicacion ? ' · ' + item.ubicacion : ''}</div>
 
         <div style={S.bigsis}>
@@ -341,14 +411,33 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
           <div style={S.bigV}>{item.stockSistema} {item.unidad}</div>
         </div>
 
-        <label style={S.flbl}>¿Cuánto contaste físicamente?</label>
-        {/* AUDIT UX 16-jul (U14): autoFocus solo con puntero fino (mouse) —
-            en el teléfono el teclado brincaba y tapaba los botones del sheet. */}
-        <input style={S.finQty} type="number" inputMode="decimal" min="0" step="0.01"
-          value={val} autoFocus={FINE_POINTER} placeholder="0"
-          onChange={(e) => setVal(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }}
-          data-id="conteo.input.fisico" data-rol="inventario,admin" />
+        {esTeranPT ? (
+          <>
+            <label style={S.flbl}>¿Qué piezas contaste? (el sistema convierte)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              {pzField('tote', 'Totes LLENOS', '52 cub c/u')}
+              {pzField('granelLitros', 'Litros en tote a medias', 'lee el nivel del tote')}
+              {pzField('cubeta', 'Cubetas (19 L)')}
+              {pzField('galon', 'Galones')}
+              {pzField('litro', 'Litros (botella)')}
+              {pzField('atm', 'Atomizadores 750')}
+            </div>
+            <div style={{ padding: '9px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 10, fontSize: 12.5, color: 'var(--lp-text-secondary)', marginBottom: 4 }}>
+              Total contado: <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{cubEqPiezas} cub-eq</strong>
+            </div>
+          </>
+        ) : (
+          <>
+            <label style={S.flbl}>¿Cuánto contaste físicamente?</label>
+            {/* AUDIT UX 16-jul (U14): autoFocus solo con puntero fino (mouse) —
+                en el teléfono el teclado brincaba y tapaba los botones del sheet. */}
+            <input style={S.finQty} type="number" inputMode="decimal" min="0" step="0.01"
+              value={val} autoFocus={FINE_POINTER} placeholder="0"
+              onChange={(e) => setVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }}
+              data-id="conteo.input.fisico" data-rol="inventario,admin" />
+          </>
+        )}
 
         {showVar && (
           <div style={S.varbox(vColor)}>
@@ -671,7 +760,7 @@ function estadoDeItem(item) {
 }
 
 /* ── Fila de tabla escritorio (input físico inline + acción Contar) ── */
-function ItemRowDesktop({ item, onRegistrar, onContar }) {
+function ItemRowDesktop({ item, onRegistrar, onContar, esTeranPT }) {
   const [val, setVal] = useState(
     item.stockFisico !== null && item.stockFisico !== undefined ? String(item.stockFisico) : ''
   );
@@ -696,10 +785,19 @@ function ItemRowDesktop({ item, onRegistrar, onContar }) {
       <td style={{ ...S.tdMut, color: 'var(--lp-text-tertiary)' }}>{item.ubicacion || '—'}</td>
       <td style={{ ...S.td, ...S.tdMono, ...S.thR, color: 'var(--lp-text-secondary)' }}>{item.stockSistema}</td>
       <td style={{ ...S.td, ...S.thR }}>
-        <input style={S.inputCount} type="number" inputMode="decimal" min="0" step="0.01"
-          value={val} onChange={(e) => setVal(e.target.value)} onBlur={guardar}
-          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} placeholder="—" disabled={saving}
-          data-id="conteo.input.fisico-inline" data-rol="inventario,admin" />
+        {/* Terán se captura por PIEZAS en el sheet ("Contar") — un solo número
+           inline no puede expresar totes/litros/cubetas. */}
+        {esTeranPT ? (
+          <span style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}
+            title="Conteo por piezas — usa el botón Contar">
+            {item.stockFisico != null ? item.stockFisico + ' cub-eq' : 'por piezas →'}
+          </span>
+        ) : (
+          <input style={S.inputCount} type="number" inputMode="decimal" min="0" step="0.01"
+            value={val} onChange={(e) => setVal(e.target.value)} onBlur={guardar}
+            onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} placeholder="—" disabled={saving}
+            data-id="conteo.input.fisico-inline" data-rol="inventario,admin" />
+        )}
       </td>
       <td style={{ ...S.td, ...S.thR, ...S.tdMono, fontWeight: 700, color: varianzaColor(item) }}>
         {item.varianza == null ? '—'
@@ -772,9 +870,11 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
   const nCont = (sesion.items || []).length - nProg;
   const nFlag = (sesion.items || []).filter(i => i.flagged).length;
   /* Badge de tipo para las cards móvil (mockup .tipo: MP / PT) */
-  const tipoBadge = sesion.categoria === 'mp' ? 'MP' : sesion.categoria === 'pt' ? 'PT' : 'ENV';
+  const esTeranPT = sesion.categoria === 'pt' && sesion.ubicacion === 'teran';
+  const tipoBadge = sesion.categoria === 'mp' ? 'MP' : sesion.categoria === 'pt' ? (esTeranPT ? 'PT·TERÁN' : 'PT') : 'ENV';
 
-  const tituloAmigable = `Conteo de ${CATEGORIAS.find(c => c.v === sesion.categoria)?.label || sesion.categoria}`;
+  const tituloAmigable = `Conteo de ${CATEGORIAS.find(c => c.v === sesion.categoria)?.label || sesion.categoria}`
+    + (sesion.categoria === 'pt' ? (esTeranPT ? ' — Almacén Terán' : ' — Fábrica') : '');
   const tipoLabel = TIPOS.find(t => t.v === sesion.tipo)?.label || sesion.tipo;
 
   return (
@@ -869,7 +969,7 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
             </tr></thead>
             <tbody>
               {items.map(item => (
-                <ItemRowDesktop key={item.key} item={item} onRegistrar={onRegistrar} onContar={onContar} />
+                <ItemRowDesktop key={item.key} item={item} onRegistrar={onRegistrar} onContar={onContar} esTeranPT={esTeranPT} />
               ))}
             </tbody>
           </table>
@@ -1066,7 +1166,7 @@ export default function CycleCountPage({ embedded = false }) {
     [sesiones]
   );
 
-  const handleStart = async (categoria, tipo) => {
+  const handleStart = async (categoria, tipo, ubicacion) => {
     /* CANDADO: PIN del contador al ABRIR la sesión (firma de apertura). */
     const pin = await confirm(
       'Vas a iniciar una sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ abriste estos números. Ingresa tu PIN para confirmar.',
@@ -1081,7 +1181,7 @@ export default function CycleCountPage({ embedded = false }) {
     setStarting(true);
     setErr('');
     try {
-      await api.cycleCountIniciar(categoria, tipo, pin);
+      await api.cycleCountIniciar(categoria, tipo, pin, ubicacion);
       setShowStart(false);
       cargar();
     } catch (e) {
@@ -1091,9 +1191,9 @@ export default function CycleCountPage({ embedded = false }) {
     }
   };
 
-  const handleRegistrar = async (sesionId, itemKey, stockFisico) => {
+  const handleRegistrar = async (sesionId, itemKey, stockFisico, piezas) => {
     try {
-      const r = await api.cycleCountRegistrar(sesionId, itemKey, stockFisico);
+      const r = await api.cycleCountRegistrar(sesionId, itemKey, stockFisico, piezas);
       setSesiones(prev => prev.map(s => {
         if (s.id !== sesionId) return s;
         const items = s.items.map(i => i.key === itemKey ? r.item : i);
@@ -1278,7 +1378,7 @@ export default function CycleCountPage({ embedded = false }) {
               <SesionActiva
                 sesion={sesionActiva}
                 isDesktop={isDesktop}
-                onRegistrar={(itemKey, stockFisico) => handleRegistrar(sesionActiva.id, itemKey, stockFisico)}
+                onRegistrar={(itemKey, stockFisico, piezas) => handleRegistrar(sesionActiva.id, itemKey, stockFisico, piezas)}
                 onFinalizar={handleFinalizar}
                 onAgregarMP={() => setShowAddMP(true)}
                 onContar={(item) => setItemParaContar(item)}
@@ -1318,9 +1418,10 @@ export default function CycleCountPage({ embedded = false }) {
             key={itemParaContar.key}
             item={itemParaContar}
             isDesktop={isDesktop}
+            esTeranPT={sesionActiva.categoria === 'pt' && sesionActiva.ubicacion === 'teran'}
             onClose={() => setItemParaContar(null)}
-            onRegistrar={async (itemKey, stockFisico) => {
-              await handleRegistrar(sesionActiva.id, itemKey, stockFisico);
+            onRegistrar={async (itemKey, stockFisico, piezas) => {
+              await handleRegistrar(sesionActiva.id, itemKey, stockFisico, piezas);
               /* AUDIT UX 16-jul (U11): auto-avanzar al siguiente ítem SIN contar
                  — antes volvía a la lista y Burgos buscaba el siguiente a mano. */
               const next = (sesionActiva.items || []).find(i => i && i.stockFisico == null && i.key !== itemKey);

@@ -295,6 +295,10 @@ const api = {
     request('POST', '/api/stk-americano/envasar', { almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, envasadoPor }),
   eliminarStkAmericano: ({ almacen, key, nombre, motivo }) =>
     request('POST', '/api/stk-americano/eliminar', { almacen, key, nombre, motivo }),
+  /* Censo de totes abiertos (5-ago): le pone folio al granel que ya está en piso.
+     409 con requiereConfirmacion si lo declarado no cuadra con el sistema. */
+  censarTotesAmericano: ({ almacen, key, nombre, totes, confirmarAjuste, nota }) =>
+    request('POST', '/api/stk-americano/censo-totes', { almacen, key, nombre, totes, confirmarAjuste, nota }),
   urlImportStkAmericano: (almacen) => API_BASE + '/api/stk-americano/importar' + (almacen && almacen !== '1' ? '?almacen=' + almacen : ''),
   /* Ajuste inline de UN producto terminado (qty + min) con audit.
      CANDADO REFORZADO: backend exige sesionConteoFolio o codigoTOTP de
@@ -579,10 +583,12 @@ const api = {
 
   /* ── Cycle Count ── */
   getCycleCounts: () => request('GET', '/api/cycle-count'),
-  cycleCountIniciar: (categoria, tipo, pin) =>
-    request('POST', '/api/cycle-count/iniciar', { categoria, tipo, pin }),
-  cycleCountRegistrar: (sesionId, itemKey, stockFisico) =>
-    request('POST', '/api/cycle-count/registrar', { sesionId, itemKey, stockFisico }),
+  cycleCountIniciar: (categoria, tipo, pin, ubicacion) =>
+    request('POST', '/api/cycle-count/iniciar', { categoria, tipo, pin, ...(ubicacion ? { ubicacion } : {}) }),
+  /* PT-Terán: se manda `piezas` (totes/granelLitros/cubetas/…) y el server
+     calcula el cub-equiv; el resto de conteos mandan stockFisico directo. */
+  cycleCountRegistrar: (sesionId, itemKey, stockFisico, piezas) =>
+    request('POST', '/api/cycle-count/registrar', { sesionId, itemKey, ...(piezas ? { piezas } : { stockFisico }) }),
   cycleCountAgregarItem: (sesionId, nombre, stockFisico, unidad) =>
     request('POST', '/api/cycle-count/agregar-item', { sesionId, nombre, stockFisico, unidad }),
   cycleCountFinalizar: (sesionId, pin) =>
