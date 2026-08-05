@@ -77,7 +77,9 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
   const [totalFactura, setTotalFactura] = useState(
     oc.totalFacturaConIva != null ? String(oc.totalFacturaConIva) : ''
   );
-  const [fleteOverride, setFleteOverride] = useState(
+  /* Flete: captura MANUAL de Arely (decisión del dueño 5-ago-2026) — sin
+     sugerencia $5/kg; ese factor es solo para aproximar costos de fórmulas. */
+  const [flete, setFlete] = useState(
     oc.fleteEstimadoMxn != null ? String(oc.fleteEstimadoMxn) : ''
   );
   const [saving, setSaving] = useState(false);
@@ -95,15 +97,11 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
     return () => { alive = false; };
   }, []);
 
-  const totalKg = useMemo(() => items.reduce((s, i) => s + (Number(i.kg) || 0), 0), [items]);
-  const fleteAuto = useMemo(() => Math.round(totalKg * 5 * 100) / 100, [totalKg]);
-
   const updateItem = (idx, field, value) => {
     setItems(items.map((it, i) => i === idx ? { ...it, [field]: value } : it));
   };
   const removeItem = (idx) => setItems(items.filter((_, i) => i !== idx));
   const addItem = () => setItems([...items, { mp: '', kg: 0, presentacion: 'saco_25', presentacionOtro: '', kg_recibidos: null, esNueva: true }]);
-  const usarAuto = () => setFleteOverride(String(fleteAuto));
 
   const guardar = async () => {
     setErr('');
@@ -126,8 +124,8 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
       if (totalFactura !== '' && !isNaN(Number(totalFactura))) {
         payload.totalFacturaConIva = Number(totalFactura);
       }
-      if (fleteOverride !== '' && !isNaN(Number(fleteOverride))) {
-        payload.fleteEstimadoMxn = Number(fleteOverride);
+      if (flete !== '' && !isNaN(Number(flete))) {
+        payload.fleteEstimadoMxn = Number(flete);
       }
       await api.editOC(payload);
       onSaved && onSaved();
@@ -230,14 +228,10 @@ export default function EditOCModal({ oc, onClose, onSaved }) {
         </div>
 
         <div style={S.fieldGroup}>
-          <label style={S.label}>Flete estimado (MXN)</label>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input style={{ ...S.input, flex: 1 }} type="number" inputMode="decimal" min="0" step="0.01" value={fleteOverride} onChange={(e) => setFleteOverride(e.target.value)} placeholder={String(fleteAuto)} />
-            <button onClick={usarAuto} style={{ padding: '10px 14px', fontSize: 12, border: '1.5px solid var(--lp-border-subtle)', borderRadius: 8, background: 'transparent', cursor: 'pointer' }}>Auto</button>
-          </div>
+          <label style={S.label}>Flete (MXN)</label>
+          <input style={S.input} type="number" inputMode="decimal" min="0" step="0.01" value={flete} onChange={(e) => setFlete(e.target.value)} placeholder="0.00" />
           <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4 }}>
-            Auto: ${fleteAuto.toLocaleString('es-MX')} ({totalKg} kg × $5 MXN/kg)
-            {fleteOverride !== '' && Number(fleteOverride) !== fleteAuto && ' · override manual activo'}
+            Costo real del envío según transportista — varía por MP, se captura manual.
           </div>
         </div>
 

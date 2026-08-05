@@ -226,8 +226,10 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   });
   const [prioridad, setPrioridad] = useState('media');
   const [notas, setNotas] = useState('');
+  /* Flete: captura MANUAL de Arely (decisión del dueño 5-ago-2026). El $/kg de
+     la config es SOLO para aproximar el costo de fórmulas — no se sugiere aquí:
+     el flete real varía según la MP y lo cotiza el transportista. */
   const [fleteEstimado, setFleteEstimado] = useState('');
-  const [fleteOverride, setFleteOverride] = useState(false);
   const [creating, setCreating] = useState(false);
   /* AUDIT UX 16-jul (U7): error de validación inline (en el footer pegajoso,
      siempre visible) en vez de alert() nativo bloqueante. */
@@ -283,21 +285,6 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
     const provObj = catalog.proveedores[proveedor];
     return Array.isArray(provObj) ? provObj : (provObj?.mps || []);
   }, [proveedor, catalog]);
-
-  const totalKg = useMemo(() => {
-    return items.reduce((s, it) => s + (Number(it.kg) || 0), 0);
-  }, [items]);
-
-  const sugeridoFlete = useMemo(() => {
-    return Math.round(totalKg * 5 * 100) / 100;
-  }, [totalKg]);
-
-  /* Auto-update flete if not overridden */
-  useEffect(() => {
-    if (!fleteOverride) {
-      setFleteEstimado(sugeridoFlete.toFixed(2));
-    }
-  }, [sugeridoFlete, fleteOverride]);
 
   const handleAddItem = () => {
     /* AUDIT UX 16-jul (U7): validación inline en vez de alert() */
@@ -629,9 +616,9 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           </select>
         </div>
 
-        {/* Flete */}
+        {/* Flete — captura manual (varía según la MP; lo cotiza el transportista) */}
         <div style={S.fleteBox}>
-          <label style={S.label}>Flete estimado total (MXN)</label>
+          <label style={S.label}>Flete total (MXN)</label>
           <div style={S.fleteInputGroup}>
             <span style={{ fontSize: 14, fontWeight: 600 }}>$</span>
             <input
@@ -642,28 +629,15 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
                 /* Mantener el texto crudo mientras se escribe (NO toFixed por
                    tecla — eso reescribía a "0.00" y hacía imposible teclear).
                    Se parsea a número solo al levantar la OC. */
-                const raw = e.target.value;
-                setFleteEstimado(raw);
-                setFleteOverride(Number(raw) !== sugeridoFlete);
+                setFleteEstimado(e.target.value);
               }}
               min="0"
               step="any"
               placeholder="0.00"
             />
-            <button
-              style={{ ...S.btn, ...S.btnSmall, ...S.btnSecondary }}
-              onClick={() => {
-                setFleteOverride(false);
-                setFleteEstimado(sugeridoFlete.toFixed(2));
-              }}
-              title="Restaurar al cálculo automático"
-            >
-              Auto
-            </button>
           </div>
           <div style={S.fleteHint}>
-            Sugerido: ${(sugeridoFlete).toFixed(2)} ({totalKg} kg × $5 MXN/kg)
-            {fleteOverride && ' · ajuste manual activo'}
+            Costo real del envío según transportista · se puede corregir al pagar
           </div>
         </div>
 

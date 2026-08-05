@@ -89,9 +89,9 @@ export default function ImportesOCFields({ ctl, titulo = 'Importes de la factura
         <div style={S.row}>
           <div style={{ minWidth: 0 }}>
             <div style={S.campo}>Flete</div>
-            <div style={S.sub}>
-              {Number(oc.fleteAutoMxn) > 0 ? 'Auto: ' + money(oc.fleteAutoMxn) : 'Costo del envío'}
-            </div>
+            {/* Sin referencia "Auto" — el flete es captura manual de Arely
+               (el $/kg de la config solo aproxima costos de fórmulas). */}
+            <div style={S.sub}>Costo del envío (factura del transportista)</div>
           </div>
           <div style={S.priceWrap}>
             <input
