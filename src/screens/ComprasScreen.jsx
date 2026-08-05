@@ -1,7 +1,7 @@
 // ComprasScreen.jsx — Compras / OCs de materia prima (presentacional). 1:1 con el mockup
 // Claude Design (cards en grid) + adiciones críticas (Editar/Eliminar en Activas, Ver
 // comprobante, badge Solicitud, buscador). SOLO contenido + estado de UI; cero fetch/lógica.
-// Props: data{ocs:[{cod,mp,qty,sol?,prov,monto,entrega,estado,vencida?,porVencer?,pago?,comp?,solicitud?}]},
+// Props: data{ocs:[{cod,mp,qty,sol?,prov,monto,producto?,flete?,entrega,estado,vencida?,porVencer?,pago?,comp?,solicitud?}]},
 //   onNuevaOC, onAprobarOC(cod), onEditarOC(cod), onEliminarOC(cod), onRecibirMP(cod),
 //   onRegistrarPago(cod), onCorregirImportes(cod), onImprimirOC(cod), onVerComprobante(cod),
 //   can, role, isDesktop.
@@ -132,7 +132,11 @@ export default function ComprasScreen({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7, margin: '12px 0' }}>
                   {o.estado === 'porAprobar' && o.sol && <Row k="Solicitó" v={o.sol} />}
                   <Row k="Proveedor" v={o.prov} />
-                  {o.monto && <Row k="Monto" v={o.monto} />}
+                  {/* Desglose MP + Flete cuando existen ambos — el flete va en
+                      factura aparte (transportista) y ANTES se perdía del total. */}
+                  {o.producto && o.flete && <Row k="Materias primas" v={o.producto} />}
+                  {o.producto && o.flete && <Row k="Flete" v={o.flete} />}
+                  {o.monto && <Row k={o.producto && o.flete ? 'Monto total' : 'Monto'} v={o.monto} />}
                   {o.entrega && <Row k="Entrega" v={o.vencida ? `${o.entrega} · ${o.vencida} tarde` : o.entrega} color={o.vencida ? C.danger : undefined} />}
                   {o.pago === 'contado' && <Row k="Pago" v={`Contado${o.comp ? ' · ' + o.comp : ''}`} color={C.ok} />}
                   {o.vencida && <div style={{ fontSize: 13, fontWeight: 600, color: C.danger }}>Crédito vencido · {o.vencida} de retraso</div>}

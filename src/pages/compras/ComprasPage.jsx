@@ -161,31 +161,30 @@ function fmtMoney(n) {
   return '$' + num.toLocaleString('es-MX', { maximumFractionDigits: 0 });
 }
 
-/* Monto a mostrar en la columna/línea: factura real > estimado por items > flete. */
-function _ocMonto(oc) {
-  if (Number(oc.totalFacturaConIva) > 0) return fmtMoney(oc.totalFacturaConIva);
-  const est = (oc.items || []).reduce((s, it) => {
-    const kg = Number(it.kg) || 0;
-    const p = Number(it.precioUnitario) || 0;
-    return s + kg * p;
-  }, 0);
-  const flete = Number(oc.fleteEstimadoMxn) || 0;
-  const total = est + flete;
-  if (total > 0) return fmtMoney(total);
-  return null;
+/* Base de MERCANCÍA de la OC: factura real > estimado por items (`precioUnitario`
+   lo enriquece el server desde el costoBase del maestro). */
+function _ocBaseProducto(oc) {
+  if (Number(oc.totalFacturaConIva) > 0) return Number(oc.totalFacturaConIva);
+  return (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
 }
 
-/* Desglose para la card: PRODUCTO (precio base × kg — `precioUnitario` lo
-   enriquece el server desde el costoBase del maestro) y FLETE por separado.
-   Arely veía SOLO el flete; ahora se muestran ambos + total. Con factura real
-   registrada, manda el total (no desglosamos). */
+/* Monto TOTAL de la OC = mercancía + flete, SIEMPRE. El flete viaja en factura
+   APARTE (transportista, `numFacturaFlete`), así que la factura del proveedor NO
+   lo trae: con factura real registrada también se suma. (OC-1785880633051:
+   $43,949.50 factura + $4,119.44 flete Potosinos = $48,068.94 — antes la card
+   mostraba solo la factura y el flete desaparecía del total.) */
+function _ocMonto(oc) {
+  const total = _ocBaseProducto(oc) + (Number(oc.fleteEstimadoMxn) || 0);
+  return total > 0 ? fmtMoney(total) : null;
+}
+
+/* Desglose para la card: MATERIAS PRIMAS (factura real o estimado) y FLETE por
+   separado, para que se vea de dónde sale el total. */
 function _ocProducto(oc) {
-  if (Number(oc.totalFacturaConIva) > 0) return null;
-  const prod = (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
+  const prod = _ocBaseProducto(oc);
   return prod > 0 ? fmtMoney(prod) : null;
 }
 function _ocFleteFmt(oc) {
-  if (Number(oc.totalFacturaConIva) > 0) return null;
   const f = Number(oc.fleteEstimadoMxn) || 0;
   return f > 0 ? fmtMoney(f) : null;
 }
@@ -245,6 +244,10 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       sol: oc.solicitadoPor || oc.solicitante || undefined,
       prov: oc.proveedor || '—',
       monto: _ocMonto(oc) || '',
+      /* Desglose (solo si hay flete Y mercancía): la card muestra MP + Flete y
+         el Monto total; sin desglose, el Monto solo. */
+      producto: _ocProducto(oc) || '',
+      flete: _ocFleteFmt(oc) || '',
       entrega: _fmtEntrega(oc.fechaEntrega),
       estado: bucket,
       vencida, porVencer,

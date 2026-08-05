@@ -58,7 +58,12 @@ export default function PrintOCOverlay({ oc, onClose }) {
   const items = Array.isArray(oc.items) ? oc.items : [];
   const flete = Number(oc.fleteEstimadoMxn) || 0;
   const estimado = items.reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
-  const total = Number(oc.totalFacturaConIva) > 0 ? Number(oc.totalFacturaConIva) : (estimado + flete);
+  /* Mercancía: factura real > estimado por partidas. El flete se suma SIEMPRE —
+     viaja en factura aparte del transportista, la del proveedor no lo incluye.
+     (Antes, con factura registrada, el renglón de flete se pintaba pero el
+     Total lo ignoraba: documento que no cuadraba consigo mismo.) */
+  const facturaReal = Number(oc.totalFacturaConIva) > 0 ? Number(oc.totalFacturaConIva) : 0;
+  const total = (facturaReal || estimado) + flete;
   const autorizo = oc.aprobadaPor || oc.aprobadoPor || 'Compras';
 
   return (
@@ -135,6 +140,15 @@ export default function PrintOCOverlay({ oc, onClose }) {
                 </tr>
               );
             })}
+            {/* Con factura real y partidas sin precio (Arely captura el total,
+                no el $/kg), este renglón hace que la tabla cuadre con el Total. */}
+            {facturaReal > 0 && estimado === 0 && (
+              <tr>
+                <td style={{ color: MUT }}>Materias primas (factura)</td>
+                <td className="r">—</td>
+                <td className="r">{fmt$(facturaReal)}</td>
+              </tr>
+            )}
             {flete > 0 && (
               <tr>
                 <td style={{ color: MUT }}>Flete estimado</td>
