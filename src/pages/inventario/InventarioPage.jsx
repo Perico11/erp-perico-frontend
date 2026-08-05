@@ -3157,9 +3157,10 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
     })
     .sort((a, b) => a[0].localeCompare(b[0]));
 
-  /* Totales agregados */
+  /* Totales agregados — TOTEs en Terán cuenta PIEZAS físicas (llenos + a
+     medias) cuando el backend las trae; el escalar solo trae los llenos. */
   const totales = productos.reduce((acc, [, d]) => {
-    acc.tote   += d.tote   || 0;
+    acc.tote   += (ubicacion !== 'fabrica' && d.totesFisicos?.total > 0) ? d.totesFisicos.total : (d.tote || 0);
     acc.cubeta += d.cubeta || 0;
     acc.galon  += d.galon  || 0;
     acc.litro  += d.litro  || 0;
@@ -3330,12 +3331,36 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
                     </span>
                   ))}
                 </span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
+                {/* TOTE (Terán): PIEZAS físicas (llenos + a medias) desde sublotes —
+                   antes mostraba solo teranPres.tote (llenos) y el tote a medias
+                   "desaparecía" a la columna Granel (reporte dueño 5-ago-2026). */}
+                {(() => {
+                  const tf = !esFabrica ? d.totesFisicos : null;
+                  const piezas = tf && tf.total > 0 ? tf.total : (d.tote || 0);
+                  const sub = tf && tf.parciales > 0 ? `${tf.llenos} llenos · ${tf.parciales} a medias` : null;
+                  return (
+                    <span style={{ textAlign: 'right' }}
+                      title={sub ? `${piezas} totes físicos: ${sub}. El contenido restante de los totes a medias es la columna Granel.` : undefined}>
+                      <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: piezas > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{piezas}</span>
+                      {sub && <span style={{ display: 'block', fontSize: 9.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.2 }}>{sub}</span>}
+                    </span>
+                  );
+                })()}
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
                 <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.atm || 0)    > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.atm    || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 16, fontWeight: 600, color: (d.granel || 0) > 0 ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)' }} title={(d.granel || 0) > 0 ? `${Math.round(d.granel)} cub-equiv a granel (tote abierto)` : ''}>{(d.granel || 0) > 0 ? Math.round(d.granel) : 0}</span>
+                {/* Granel = cub-equiv que queda DENTRO de totes a medias (no es
+                   una presentación aparte) — el tooltip lo aclara. */}
+                <span style={{ textAlign: 'right' }}
+                  title={(d.granel || 0) > 0
+                    ? `${Math.round(d.granel)} cub-equiv a granel${(d.totesFisicos?.parciales || 0) > 0 ? ` — es el contenido restante de ${d.totesFisicos.parciales} tote(s) a medias, no producto suelto` : ' (tote abierto al reenvasar)'}`
+                    : ''}>
+                  <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 16, fontWeight: 600, color: (d.granel || 0) > 0 ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)' }}>{(d.granel || 0) > 0 ? Math.round(d.granel) : 0}</span>
+                  {(d.granel || 0) > 0 && (d.totesFisicos?.parciales || 0) > 0 && (
+                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.2 }}>en tote a medias</span>
+                  )}
+                </span>
                 <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
                   {canPedir && (
                     <button
