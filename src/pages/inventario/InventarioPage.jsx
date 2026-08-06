@@ -2553,7 +2553,7 @@ export default function InventarioPage({ embedded = false }) {
                 onAgregar={(ubic) => setAgregarPtUbic({ ubicacion: ubic })}
                 onEliminarTeran={handleEliminarPTTeran}
                 onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : undefined}
-                onReenvasar={canReenvasar ? (producto, scalar) => setReenvasarTeran({ producto, scalar }) : undefined}
+                onReenvasar={canReenvasar ? (producto, scalar, totes) => setReenvasarTeran({ producto, scalar, totes }) : undefined}
               />
             )}
           </>
@@ -2748,6 +2748,7 @@ export default function InventarioPage({ embedded = false }) {
         <ReenvasarTeranModal
           producto={reenvasarTeran.producto}
           scalar={reenvasarTeran.scalar}
+          totes={reenvasarTeran.totes}
           envData={envData?.data || envData}
           isDesktop={isDesktop}
           onClose={() => setReenvasarTeran(null)}
@@ -3015,9 +3016,24 @@ const reenvCubEq = (p, n) => p === 'granel' ? (Number(n) || 0) : (REENV_ML[p] ? 
 const REENV_TIPO_LBL = { tote: 'Tote', cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador', granel: 'Granel' };
 const REENV_TIPO_CAT = { cubeta: 'cubeta', galon: 'galon', litro: 'litro', atomizador750: 'otros' };
 
-function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, onDone }) {
-  const origenes = Object.entries(scalar || {}).filter(([p, n]) => reenvCubEq(p, n) > 0.001).map(([p]) => p);
-  const [origen, setOrigen] = useState(origenes[0] || 'tote');
+function ReenvasarTeranModal({ producto, scalar, totes, envData, isDesktop, onClose, onDone }) {
+  /* TOTES FÍSICOS (ago 2026, reporte dueño): el origen "tote" sale de los totes
+     reales del espejo (tote_activo + litrosRestante) — un tote a medias SIGUE
+     siendo tote elegible hasta vaciarse (paridad Americano). El contador del
+     pool (teranPres.tote) ya no decide las opciones; el pool solo pone el tope
+     contable. Sin totes físicos → comportamiento previo (granel/presentaciones). */
+  const totesFisicos = ((totes && totes.detalle) || []).filter(t => (Number(t.litrosRestante) || 0) > 0.01);
+  const hayTotes = totesFisicos.length > 0;
+  const fmtL = (x) => (Math.round((Number(x) || 0) * 10) / 10).toLocaleString('es-MX');
+  const origenes = Object.entries(scalar || {})
+    .filter(([p, n]) => reenvCubEq(p, n) > 0.001 && (!hayTotes || (p !== 'tote' && p !== 'granel')))
+    .map(([p]) => p);
+  /* Valor del select: 'tote::<cod>' = tote físico; si no, presentación del pool. */
+  const [origenSel, setOrigenSel] = useState(hayTotes ? 'tote::' + totesFisicos[0].cod : (origenes[0] || 'tote'));
+  const toteSel = origenSel.startsWith('tote::')
+    ? (totesFisicos.find(t => 'tote::' + t.cod === origenSel) || null)
+    : null;
+  const origen = toteSel ? 'tote' : origenSel;
   const destinoOpts = ['cubeta', 'galon', 'litro', 'atomizador750'].filter(t => t !== origen);
   const [destinoTipo, setDestinoTipo] = useState(destinoOpts[0] || 'cubeta');
   const [qty, setQty] = useState('');
@@ -3037,16 +3053,31 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   const tapaList = Object.entries(tapas);
 
   const n = parseInt(qty, 10);
+  /* Tope contable = POOL (lo que el backend valida). El tote elegido es la pieza
+     física: si la tanda lo excede, el resto sale FEFO del siguiente (así se
+     rellena la última cubeta en la vida real) — se avisa, no se bloquea. */
   const dispCub = reenvCubEq(origen, scalar?.[origen] || 0) + (origen !== 'granel' ? (Number(scalar?.granel) || 0) : 0);
   const producedCub = !isNaN(n) && n > 0 ? reenvCubEq(destinoTipo, n) : 0;
   const valido = !isNaN(n) && n > 0 && producedCub <= dispCub + 0.01;
   const restante = Math.max(0, dispCub - producedCub);
+  const toteLitros = toteSel ? (Number(toteSel.litrosRestante) || 0) : 0;
+  const excedeTote = !!toteSel && valido && producedCub * 19 > toteLitros + 0.5;
 
   /* Tope + cuello de botella (diseño único jul 2026): cuántas caben por
      material disponible, por envases y por tapas — el menor manda y se dice
      cuál es. Antes solo fallaba al guardar. */
   const subSelTeran = subs.find(([sk]) => sk === subKey);
   const tapaSelTeran = tapaList.find(([tk]) => tk === tapaKey);
+  /* DISEÑO ÚNICO (ago 2026): la tapa se SUGIERE por la marca del envase elegido
+     —igual que en "Envasar lote" y en el re-envase de Stock Fábrica— pero queda
+     visible y editable. Antes arrancaba vacía y "— sin tapa —" era el default,
+     así que la tapa física salía del almacén sin descontarse. */
+  const marcaEnvSel = subSelTeran ? (subSelTeran[1].marca || null) : null;
+  useEffect(() => {
+    if (!usaTapa || tapaKey || !marcaEnvSel) return;
+    const sug = envData?.tapa_default?.[marcaEnvSel];
+    if (sug && tapas[sug]) setTapaKey(sug);
+  }, [usaTapa, tapaKey, marcaEnvSel, envData, tapas]);
   const cubEqUnidad = reenvCubEq(destinoTipo, 1) || 1;
   const limitesTeran = [
     { n: Math.floor(dispCub / cubEqUnidad), motivo: 'la pintura disponible' },
@@ -3057,10 +3088,18 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
 
   const submit = async () => {
     if (!valido || saving) return;
+    /* El envase es OBLIGATORIO: sin `subKey` el backend no descuenta el envase
+       físico (mismo guard que el re-envase de Stock Fábrica). El servidor
+       también lo rechaza — esto solo evita el viaje. */
+    if (!subKey) return setErr('Elige el envase que estás usando — su stock se descuenta de Terán');
+    if (n > Math.round(Number(subSelTeran?.[1]?.teran) || 0)) {
+      return setErr(`Stock insuficiente de "${subSelTeran?.[1]?.nombre || subKey}" en Terán: hay ${Math.round(Number(subSelTeran?.[1]?.teran) || 0)}, necesitas ${n}`);
+    }
     setSaving(true); setErr('');
     try {
-      const destinos = [{ tipo: destinoTipo, qty: n, subKey: subKey || null, tapaKey: usaTapa ? (tapaKey || null) : null }];
-      const r = await api.reenvasarPTTeran(producto, origen, destinos, null, camposSublote);
+      const destinos = [{ tipo: destinoTipo, qty: n, subKey, tapaKey: usaTapa ? (tapaKey || null) : null }];
+      const r = await api.reenvasarPTTeran(producto, origen, destinos, null,
+        { ...(camposSublote || {}), ...(toteSel ? { toteCod: toteSel.cod } : {}) });
       onDone(r);
     } catch (e) { setErr(e?.data?.error || e.message || 'No se pudo reenvasar'); setSaving(false); }
   };
@@ -3073,11 +3112,16 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
         <div style={S.shH}>Envasar en Terán</div>
         <div style={S.shS}>{producto}</div>
         <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Convierte un <strong>tote</strong> (o granel) en cubetas/galones. No cambia el total de pintura — solo su forma. Consume envases vacíos del stock de <strong>Terán</strong>; lo que sobra de un tote abierto queda <strong>a granel</strong>. Al terminar se abre la <strong>etiqueta QR</strong> de la tanda para imprimir.
+          Convierte un <strong>tote</strong> (o granel) en cubetas/galones. No cambia el total de pintura — solo su forma. Consume envases vacíos del stock de <strong>Terán</strong>. El tote elegido queda <strong>a medias con sus litros restantes</strong> y sigue apareciendo aquí hasta vaciarse. Al terminar se abre la <strong>etiqueta QR</strong> de la tanda para imprimir.
         </div>
 
-        <label style={S.flbl}>Origen</label>
-        <select style={selStyle} value={origen} onChange={e => setOrigen(e.target.value)}>
+        <label style={S.flbl}>{hayTotes ? 'De qué tote' : 'Origen'}</label>
+        <select style={selStyle} value={origenSel} onChange={e => setOrigenSel(e.target.value)} data-id="inventario.sel.origen">
+          {totesFisicos.map(t => (
+            <option key={t.cod} value={'tote::' + t.cod}>
+              Tote {t.cod} · {fmtL(t.litrosRestante)} L disp.{(Number(t.litrosRestante) || 0) < 982 ? ' (a medias)' : ''}
+            </option>
+          ))}
           {origenes.map(p => (
             <option key={p} value={p}>{REENV_TIPO_LBL[p] || p} — {p === 'granel' ? `${Math.round(scalar[p])} cub` : `${scalar[p]} (${Math.round(reenvCubEq(p, scalar[p]))} cub)`} disp.</option>
           ))}
@@ -3105,9 +3149,14 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
           }))}
           valor={subKey}
           onChange={setSubKey}
-          vacio="— sin descontar envase —"
+          vacio="— elige el envase —"
           dataId="inventario.sel.envase"
         />
+        {!subKey && (
+          <div style={{ marginTop: -4, marginBottom: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+            Obligatorio: su stock se descuenta del pool de Terán.
+          </div>
+        )}
 
         {usaTapa && (
           <TapaSelect
@@ -3131,15 +3180,21 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
         <TopeHint limites={limitesTeran} />
 
         <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6 }}>
-          Disponible en <strong>{REENV_TIPO_LBL[origen] || origen}</strong>: <strong>{Math.round(dispCub)} cub-equiv</strong><br />
+          {toteSel
+            ? <>Tote <strong>{toteSel.cod}</strong>: <strong>{fmtL(toteLitros)} L</strong> disponibles<br /></>
+            : <>Disponible en <strong>{REENV_TIPO_LBL[origen] || origen}</strong>: <strong>{Math.round(dispCub)} cub-equiv</strong><br /></>}
           Producirás: <strong>{n > 0 ? n : 0} {(REENV_TIPO_LBL[destinoTipo] || '').toLowerCase()}</strong> = {producedCub ? (producedCub < 10 ? producedCub.toFixed(2) : Math.round(producedCub)) : 0} cub-equiv<br />
-          {valido && <>Quedará a granel: <strong>~{Math.round(restante)} cub</strong></>}
+          {valido && (toteSel
+            ? (excedeTote
+              ? <>El tote elegido no alcanza: los <strong>{fmtL(producedCub * 19 - toteLitros)} L</strong> extra salen del siguiente tote (FEFO).</>
+              : <>Le quedarán al tote: <strong>~{fmtL(Math.max(0, toteLitros - producedCub * 19))} L</strong> (sigue como tote a medias)</>)
+            : <>Quedará a granel: <strong>~{Math.round(restante)} cub</strong></>)}
         </div>
 
         {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
+          <button style={{ ...S.act2(true), opacity: valido && subKey && !saving ? 1 : 0.5 }} disabled={!valido || !subKey || saving} onClick={submit}>
             {saving ? 'Envasando…' : 'Envasar'}
           </button>
         </div>
@@ -3384,7 +3439,7 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
                   {reenvasable(d) && (
                     <button
                       type="button" data-id="inventario.btn.reenvasar-teran" data-rol="admin,tecnico,almacen"
-                      onClick={() => onReenvasar(nombre, d.teranPresScalar)}
+                      onClick={() => onReenvasar(nombre, d.teranPresScalar, d.totesFisicos)}
                       title="Envasar: convertir tote/granel en cubetas o galones (consume envases de Terán) e imprimir etiqueta QR"
                       style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
                     >Envasar</button>
