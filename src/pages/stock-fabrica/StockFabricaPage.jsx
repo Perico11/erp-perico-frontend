@@ -28,6 +28,10 @@ import { qrDataUrl } from '../../lib/qrGenerator';
 /* URL pública impresa en el QR — dominio principal (29-jul-2026). Antes se
    armaba con window.location.origin: imprimir desde dev grababa localhost. */
 import { qrPublicUrl } from '../../lib/qrPublicUrl';
+/* DISEÑO ÚNICO de la etiqueta impresa (5-ago-2026). La etiqueta del SUBLOTE
+   —la que más se imprime, una por cubeta— se había quedado fuera de la
+   unificación y seguía saliendo con el layout viejo. */
+import { etiquetaCss, etiquetaHtml, abreviaPresentacion } from '../../lib/etiquetaLote';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ── Iconos line SVG (sin emojis — DS verde) ───────────────────────── */
@@ -1250,30 +1254,35 @@ export function SubloteQRPrintModal({ payload, onClose }) {
   const producto = (lote?.producto || lote?.nombre || '').slice(0, 40);
   const fecha = new Date().toISOString().slice(0, 10);
   const presentacion = sublote.env || tipo || '';
-  const marca = sublote.marca || '';
+
+  /* Banda del diseño único: la presentación sale del TIPO del sublote
+     (cubeta/galón/litro), NUNCA de `env` — "19L Estándar" es el nombre del
+     envase de una cubeta e imprimiría LT en cubetas. */
+  const presEtiq = isTote ? 'TOTE' : abreviaPresentacion(sublote.tipo || tipo);
+  const envasadorEtiq = String(sublote.envasadoPor || '').trim();
+  /* Los litros solo tienen sentido en el tote (es granel): en una cubeta la
+     etiqueta va pegada a UNA pieza, y poner el total del sublote engaña. */
+  const metaBase = [fecha, isTote && litTotal ? `${Number(litTotal).toLocaleString('es-MX')} L` : '']
+    .filter(Boolean).join(' · ');
 
   const imprimir = () => {
     const n = Math.max(1, Math.min(999, parseInt(copias) || 1));
     const w = window.open('', '_blank', 'width=800,height=900');
     if (!w) { alert('Habilita popups para imprimir'); return; }
-    const prodSafe = producto.replace(/</g, '&lt;');
-    const marcaSafe = marca.replace(/</g, '&lt;');
-    const presSafe = presentacion.replace(/</g, '&lt;');
+    /* DISEÑO ÚNICO (5-ago): banda con presentación + folio grande + envasador.
+       Vive en lib/etiquetaLote — aquí solo se arma el contexto de cada copia. */
+    const etiqueta = (i) => etiquetaHtml({
+      qrSrc: qrUrlPrint, producto, pres: presEtiq, codigo: sublote.cod,
+      envasador: envasadorEtiq, fmt,
+      meta: n > 1 ? `${metaBase}${metaBase ? ' · ' : ''}${i + 1}/${n}` : metaBase,
+    });
 
     let html;
     if (fmt.isSheet) {
       const total = fmt.cols * fmt.rows;
       let labels = '';
       for (let i = 0; i < n; i++) {
-        labels += `<div class="cell">
-          <img src="${qrUrlPrint}" />
-          <div class="info">
-            <div class="prod">${prodSafe}</div>
-            <div class="pres">${presSafe}${marcaSafe ? ' · ' + marcaSafe : ''}</div>
-            <div class="cod">${sublote.cod}</div>
-            <div class="meta">${fecha} · ${i + 1}/${n}</div>
-          </div>
-        </div>`;
+        labels += `<div class="cell">${etiqueta(i)}</div>`;
         if ((i + 1) % total === 0 && i + 1 < n) labels += '<div class="page-break"></div>';
       }
       html = `<!DOCTYPE html><html><head><title>QR ${sublote.cod} (${n})</title>
@@ -1282,15 +1291,8 @@ export function SubloteQRPrintModal({ payload, onClose }) {
           body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
           .grid { display: grid; grid-template-columns: repeat(${fmt.cols}, 1fr); gap: 0; }
           .cell { width: ${fmt.wMm}mm; height: ${fmt.hMm}mm; border: 0.3mm dashed #ccc;
-                  box-sizing: border-box; padding: 2mm; display: flex; align-items: center;
-                  gap: 2mm; page-break-inside: avoid; }
-          .cell img { width: ${fmt.qrMm}mm; height: ${fmt.qrMm}mm; }
-          .info { flex: 1; min-width: 0; font-size: 7pt; line-height: 1.25; }
-          .prod { font-weight: bold; font-size: 8pt; overflow: hidden;
-                  text-overflow: ellipsis; white-space: nowrap; }
-          .pres { font-size: 7pt; color: #444; }
-          .cod { font-family: monospace; font-weight: bold; font-size: 7pt; margin-top: 1mm; }
-          .meta { color: #666; font-size: 6pt; }
+                  box-sizing: border-box; page-break-inside: avoid; }
+          ${etiquetaCss(fmt, '.cell')}
           .page-break { break-after: page; flex-basis: 100%; }
           @media print { .cell { border: none; } }
         </style></head><body>
@@ -1300,15 +1302,7 @@ export function SubloteQRPrintModal({ payload, onClose }) {
     } else {
       let labels = '';
       for (let i = 0; i < n; i++) {
-        labels += `<div class="ticket"><div class="inner">
-          <img src="${qrUrlPrint}" />
-          <div class="info">
-            <div class="prod">${prodSafe}</div>
-            <div class="pres">${presSafe}${marcaSafe ? ' · ' + marcaSafe : ''}</div>
-            <div class="cod">${sublote.cod}</div>
-            <div class="meta">${fecha}${n > 1 ? ' · ' + (i + 1) + '/' + n : ''}</div>
-          </div>
-        </div></div>`;
+        labels += `<div class="ticket"><div class="inner">${etiqueta(i)}</div></div>`;
       }
       /* RT-420ME/RT-420MME: `rotacion` (0/90/180/270°) gira el contenido dentro de
          la etiqueta. En 90/270 la PÁGINA usa las medidas intercambiadas (hMm×wMm)
@@ -1333,16 +1327,8 @@ export function SubloteQRPrintModal({ payload, onClose }) {
           .ticket:last-child { page-break-after: auto; }
           .inner { position: absolute; top: 0; left: 0;
                    width: ${fmt.wMm}mm; height: ${fmt.hMm}mm; box-sizing: border-box;
-                   padding: ${fmt.compact ? '1.5mm' : '2mm'}; display: flex; align-items: center;
-                   gap: ${fmt.compact ? '1.5mm' : '2mm'};
                    ${innerRot} }
-          .inner img { width: ${fmt.qrMm}mm; height: ${fmt.qrMm}mm; }
-          .info { flex: 1; min-width: 0; line-height: ${fmt.compact ? 1.15 : 1.3}; }
-          .prod { font-weight: bold; font-size: ${fmt.compact ? '6.5pt' : '9pt'}; overflow: hidden;
-                  text-overflow: ellipsis; white-space: nowrap; }
-          .pres { font-size: ${fmt.compact ? '5.5pt' : '7pt'}; color: #444; margin: ${fmt.compact ? '0.5mm' : '1mm'} 0; }
-          .cod { font-family: monospace; font-weight: bold; font-size: ${fmt.compact ? '6pt' : '8pt'}; }
-          .meta { color: #666; font-size: ${fmt.compact ? '5pt' : '6pt'}; margin-top: ${fmt.compact ? '0.5mm' : '1mm'}; }
+          ${etiquetaCss(fmt, '.inner')}
         </style></head><body>
         ${labels}
         <script>setTimeout(() => window.print(), 400);</script>
@@ -1365,21 +1351,53 @@ export function SubloteQRPrintModal({ payload, onClose }) {
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4 }} aria-label="Cerrar">{Icon.x({ s: 18 })}</button>
         </div>
         <div style={S.modalBody}>
+          {/* Vista previa FIEL a lo que sale de la impresora (mismo criterio que el
+              QRModal del lote): papel blanco y tinta negra fijos, porque
+              representa el objeto físico y no la UI — igual en claro y oscuro. */}
           <div style={{
             display: 'flex', flexDirection: 'column', alignItems: 'center',
             background: 'var(--lp-bg-sunken)', borderRadius: 'var(--lp-radius-sm)',
             padding: 16, marginBottom: 16,
           }}>
-            <img src={qrUrlPreview} alt={`QR ${sublote.cod}`}
-              style={{ width: 180, height: 180, background: 'var(--lp-bg-raised)',
-                       border: '1.5px solid var(--lp-border-subtle)', borderRadius: 6 }} />
-            <div style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 13, fontWeight: 700,
-                          marginTop: 10, textAlign: 'center', wordBreak: 'break-all' }}>
-              {sublote.cod}
+            <div style={{
+              width: '100%', maxWidth: 300, background: '#fff', color: '#000',
+              borderRadius: 3, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.18)',
+              fontFamily: 'system-ui, sans-serif',
+            }}>
+              {/* Sin fondo negro: la térmica no imprime backgrounds (ver
+                  lib/etiquetaLote). Recuadro + regla gruesa, que son BORDES. */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '4px 6px', borderBottom: '3px solid #000' }}>
+                {presEtiq && (
+                  <span style={{ fontSize: 15, fontWeight: 700, lineHeight: 1, flexShrink: 0, letterSpacing: '.02em', border: '1.5px solid #000', borderRadius: 3, padding: '1px 5px' }}>
+                    {presEtiq}
+                  </span>
+                )}
+                <span style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'uppercase' }}>
+                  {producto}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 6px' }}>
+                <img src={qrUrlPreview} alt={`QR ${sublote.cod}`}
+                  style={{ width: 76, height: 76, flexShrink: 0, imageRendering: 'pixelated' }} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 20, fontWeight: 700, letterSpacing: '-.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {sublote.cod}
+                  </div>
+                  {envasadorEtiq && (
+                    <div style={{ fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      Envasó: <b>{envasadorEtiq}</b>
+                    </div>
+                  )}
+                  {metaBase && (
+                    <div style={{ fontSize: 10, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {metaBase}
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 4,
-                          lineHeight: 1.5, textAlign: 'center' }}>
-              {producto}<br/>
+            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 10, lineHeight: 1.5, textAlign: 'center' }}>
+              Así sale impresa · {fmt.label}<br/>
               {isTote
                 ? <>TOTE granel · <strong>{litTotal?.toFixed(1)} L</strong></>
                 : <>{q} × {presentacion} · <strong>{litTotal?.toFixed(1)} L</strong></>
