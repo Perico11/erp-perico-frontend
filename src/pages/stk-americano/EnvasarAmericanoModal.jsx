@@ -56,8 +56,10 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
   const [tapaKey, setTapaKey] = useState('');
   const [unidades, setUnidades] = useState('');
   /* Lote del tote: PRE-SELECCIONA el tote registrado más viejo (FEFO) — desde el
-     18-jul los totes entran con lote asignado y ya no se adivina. '' = nuevo. */
-  const [loteSel, setLoteSel] = useState(() => (color && color.totes && color.totes[0] && color.totes[0].codigoLote) || '');
+     18-jul los totes entran con lote asignado y ya no se adivina. '' = granel sin
+     censar (único caso que el backend deja envasar sin tote). Lo fija el efecto
+     de abajo, que además corrige la selección si ese tote se acabó. */
+  const [loteSel, setLoteSel] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   /* Vaciador responsable (jul 2026) — mismo desplegable que los demás sheets. */
@@ -101,9 +103,24 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
   const litrosDisp = Number(color?.totesLitros) || 0;
   const subSel = envases.find(e => e.key === subKey);
   const tapaSel = tapasList.find(t => t.key === tapaKey);
-  /* Tote registrado seleccionado (18-jul): su disponible manda sobre el granel. */
-  const totesReg = (color && color.totes) || [];
+  /* Tote registrado seleccionado (18-jul): su disponible manda sobre el granel.
+     Orden FEFO real por fecha de ingreso — el arreglo crudo puede venir alterado
+     por transferencias entre almacenes. */
+  const totesReg = useMemo(
+    () => ((color && color.totes) || [])
+      .filter(t => (Number(t.litros) || 0) > 0.01)
+      .slice() /* copia: .sort() muta y `color` viene por props */
+      .sort((a, b) => String(a.fecha || '').localeCompare(String(b.fecha || ''))),
+    [color]
+  );
   const toteSel = totesReg.find(t => t.codigoLote === loteSel) || null;
+
+  /* El tote elegido tiene que existir: al abrir cae en el más viejo (FEFO) y, si
+     un refresh lo dejó vacío, se recoloca solo en vez de mandar un lote muerto. */
+  useEffect(() => {
+    if (!totesReg.length) { setLoteSel(''); return; }
+    if (!totesReg.some(t => t.codigoLote === loteSel)) setLoteSel(totesReg[0].codigoLote);
+  }, [totesReg]); // eslint-disable-line
   /* Tope + cuello de botella (diseño único jul 2026): el menor de pintura,
      envases y tapas — y se dice cuál es. */
   const limitesAm = [
@@ -171,28 +188,22 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
                 </>
               )}
 
-              <label style={S.label}>Lote del tote</label>
+              <label style={S.label}>De qué tote</label>
               <select style={S.select} value={loteSel} onChange={e => setLoteSel(e.target.value)} data-id="stkAmericano.envasar.lote">
-                {totesReg.length > 0 && (
-                  <optgroup label="Totes con lote asignado — elige el que abres">
-                    {totesReg.map(t => (
-                      <option key={t.codigoLote} value={t.codigoLote}>{t.codigoLote} · {nf(t.litros)} L disponibles</option>
-                    ))}
-                  </optgroup>
-                )}
-                <option value="">➕ Nuevo tote — el sistema genera el lote</option>
-                {(color.lotes || []).filter(l => !totesReg.some(t => t.codigoLote === l.codigoLote)).length > 0 && (
-                  <optgroup label="Tandas anteriores (acumular al mismo lote)">
-                    {(color.lotes || []).filter(l => !totesReg.some(t => t.codigoLote === l.codigoLote)).map(l => (
-                      <option key={l.codigoLote} value={l.codigoLote}>{l.codigoLote} · {(l.cubetas || 0)} cub · {(l.galones || 0)} gal</option>
-                    ))}
-                  </optgroup>
+                {totesReg.length > 0 ? (
+                  totesReg.map(t => (
+                    <option key={t.codigoLote} value={t.codigoLote}>
+                      {t.codigoLote} · {nf(t.litros)} L disponibles{t.loteProveedor ? ` · lote ${t.loteProveedor}` : ''}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">Granel sin folio — el sistema genera uno</option>
                 )}
               </select>
               <div style={S.hint}>
                 {totesReg.length > 0
-                  ? 'Cada tote llegó con su lote asignado (su etiqueta ya existe): elige el tote que estás abriendo y las cubetas/galones heredan ese lote.'
-                  : 'Todas las cubetas/galones de esta tanda llevan el lote del tote elegido (cubeta o galón). "Nuevo tote" genera uno.'}
+                  ? 'Cada tote tiene su folio: elige el que estás abriendo y las cubetas/galones lo heredan. Si tardas tres días en vaciarlo, las tres tandas quedan bajo el MISMO folio.'
+                  : <>Este color todavía tiene litros sin identificar. Regístralos con <strong>“Registrar totes abiertos”</strong> para que el envasado quede amarrado a un tote.</>}
               </div>
 
               {/* Vaciador responsable (jul 2026) — mismo desplegable que los

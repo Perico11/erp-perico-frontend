@@ -1,7 +1,8 @@
 /* TransferirAmericanoModal — transferencia SIMPLE entre almacenes americanos
    (el Almacén 2 es extensión del Almacén 1 — decisión dueño 18-jul-2026).
    Mueve cubetas / galones / litros de totes de un color al otro almacén; los
-   lotes viajan con las unidades (lo hace el backend, FEFO).
+   lotes viajan con las unidades y —desde el 5-ago— los TOTES viajan con su folio
+   cuando se mueven litros (lo hace el backend, FEFO).
    Regla UX 18-jul: el click FUERA no cierra (solo X / Cancelar). */
 import { useState } from 'react';
 import api from '../../services/api';
@@ -94,7 +95,7 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
             {Number.isFinite(n) && n > 0 ? (
               excede
                 ? `Solo hay ${nf(dispSel)} ${pres} disponibles en ${LBL_ALM[deAlmacen]}.`
-                : <>Se moverán <strong>{nf(n)} {esLitros ? 'L' : pres}</strong> al {LBL_ALM[aAlmacen]}. {!esLitros && 'Los lotes viajan con las unidades.'}</>
+                : <>Se moverán <strong>{nf(n)} {esLitros ? 'L' : pres}</strong> al {LBL_ALM[aAlmacen]}. {esLitros ? 'Los totes viajan con su folio (FEFO): el lote no cambia al cruzar.' : 'Los lotes viajan con las unidades.'}</>
             ) : 'Indica cuánto se transfiere.'}
           </div>
           {err && <div style={S.err}>{err}</div>}

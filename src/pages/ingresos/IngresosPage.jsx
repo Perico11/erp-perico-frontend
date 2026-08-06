@@ -229,7 +229,7 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
     mp:     { sel: '', cant: '', uni: 'kg', lote: '', costoKg: '', presentacion: '' },
     envase: { sel: '', cant: '', uni: 'pz' },
     tapa:   { sel: '', cant: '', uni: 'pz' },
-    pta:    { sel: '', cant: '', uni: 'totes', almacen: '1', pres: 'totes' },
+    pta:    { sel: '', cant: '', uni: 'totes', almacen: '1', pres: 'totes', loteProv: '' },
   });
   const d = draft[tipo];
   const setD = (patch) => setDraft(prev => ({ ...prev, [tipo]: { ...prev[tipo], ...patch } }));
@@ -282,6 +282,9 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
       linea = {
         tipo: 'pta', almacen: d.almacen, producto: d.sel, presentacion: d.pres,
         cantidad: c, unidad: uni,
+        /* Lote del FABRICANTE americano (5-ago): opcional, solo para totes.
+           Se guarda en cada tote del embarque junto a nuestro folio. */
+        ...(d.pres === 'totes' && (d.loteProv || '').trim() ? { loteProveedor: d.loteProv.trim() } : {}),
         nombre: `${d.sel} → ${PTA_ALM_LABEL[d.almacen]}`,
       };
     } else {
@@ -290,7 +293,7 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
       linea = { tipo: 'tapa', tapaKey: o.tapaKey, nombre: o.nombre, cantidad: c, unidad: d.uni || 'pz' };
     }
     setLineas([...(lineas || []), linea]);
-    setD({ sel: '', cant: '', lote: '', costoKg: '', presentacion: '', __auto: null }); /* limpia SOLO esta pestaña tras agregar */
+    setD({ sel: '', cant: '', lote: '', costoKg: '', presentacion: '', loteProv: '', __auto: null }); /* limpia SOLO esta pestaña tras agregar */
   };
 
   const quitar = (i) => setLineas(lineas.filter((_, idx) => idx !== i));
@@ -419,9 +422,13 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
           <input list="ing-opts" value={d.sel} onChange={e => onSelMP(e.target.value)}
             placeholder={tipo === 'mp' ? 'Materia prima…' : tipo === 'envase' ? 'Envase…' : tipo === 'pta' ? 'Color / producto americano…' : 'Tapa…'} style={{ ...S.input, ...(tipo === 'pta' ? { marginTop: 6 } : {}) }} />
           {tipo === 'pta' && d.pres === 'totes' && (
-            <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 4, lineHeight: 1.4 }}>
-              Cantidad = número de <strong>totes</strong> (1000 L c/u). Cada tote entra con su <strong>lote asignado</strong> — la etiqueta se imprime desde que llega.
-            </div>
+            <>
+              <input value={d.loteProv || ''} onChange={e => setD({ loteProv: e.target.value })}
+                placeholder="Lote del fabricante americano (opcional)" maxLength={60} style={{ ...S.input, marginTop: 6 }} />
+              <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 4, lineHeight: 1.4 }}>
+                Cantidad = número de <strong>totes</strong> (1000 L c/u). Cada tote entra con su <strong>folio</strong> — la etiqueta se imprime desde que llega. El lote del fabricante queda ligado por si hay que reclamarle.
+              </div>
+            </>
           )}
           {/* Lote + costo/kg OPCIONALES de la MP (jul 2026, pedido dueño). Solo MP.
               El costo/kg alimenta el promedio ponderado del costo del sistema. */}

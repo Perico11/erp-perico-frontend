@@ -21,6 +21,7 @@ import imprimirEtiquetasTotes from './imprimirEtiquetasTotes';
 import SalidaAmericanoModal from './SalidaAmericanoModal';
 import EnvasarAmericanoModal from './EnvasarAmericanoModal';
 import TransferirAmericanoModal from './TransferirAmericanoModal';
+import CensoTotesModal from './CensoTotesModal';
 
 const S = {
   wrap: { fontFamily: 'var(--lp-font-sans)' },
@@ -67,6 +68,7 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
   const [salidaColor, setSalidaColor] = useState(null);
   const [envasarColor, setEnvasarColor] = useState(null);
   const [transferirColor, setTransferirColor] = useState(null);
+  const [censoColor, setCensoColor] = useState(null);
   const [printLote, setPrintLote] = useState(null);
   const [toast, setToast] = useState('');
   const [confirm, ConfirmEl] = useConfirm();
@@ -103,13 +105,28 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
       if (c.cubetas > 0 || c.galones > 0 || c.totesLitros > 0) {
         items.push({ label: `Transferir al ${almacen === '2' ? 'Americano Terán (Alm. 1)' : 'Almacén 2'}`, color: 'var(--lp-brand-700)', onClick: () => setTransferirColor(c) });
       }
+      /* Censo (5-ago): mientras queden litros sin tote, el envasado no puede
+         amarrarse a un folio. Se ofrece justo donde duele. */
+      if ((c.granelSinLote || 0) > 0.01) {
+        items.push({ label: `Registrar totes abiertos (${nf(c.granelSinLote)} L sin folio)`, color: 'var(--lp-warn-700, #B45309)', onClick: () => setCensoColor(c) });
+      }
       if (c.cubetas > 0) items.push({ label: 'Salida de cubetas', onClick: () => setSalidaColor({ ...c, _pres: 'cubetas' }) });
       if (c.galones > 0) items.push({ label: 'Salida de galones', onClick: () => setSalidaColor({ ...c, _pres: 'galones' }) });
       if (c.totesLitros > 0) items.push({ label: 'Salida de litros (totes)', onClick: () => setSalidaColor({ ...c, _pres: 'litros' }) });
     }
+    /* Una entrada POR PRESENTACIÓN (5-ago): la etiqueta ya imprime CBT/GLN en la
+       banda, así que un lote con cubetas Y galones no puede salir en un solo
+       trabajo — serían etiquetas mintiendo sobre la mitad del lote. */
     (c.lotes || []).slice(-6).reverse().forEach(l => {
-      const tot = (Number(l.cubetas) || 0) + (Number(l.galones) || 0);
-      items.push({ label: `Etiquetas ${l.codigoLote} (${tot})`, color: 'var(--lp-info-700, var(--lp-info-600))', onClick: () => setPrintLote({ codigoLote: l.codigoLote, producto: c.nombre, unidades: tot }) });
+      [['cubeta', 'CBT', Number(l.cubetas) || 0], ['galon', 'GLN', Number(l.galones) || 0]]
+        .filter(([, , qty]) => qty > 0)
+        .forEach(([medida, ab, qty]) => {
+          items.push({
+            label: `Etiquetas ${l.codigoLote} · ${ab} (${qty})`,
+            color: 'var(--lp-info-700, var(--lp-info-600))',
+            onClick: () => setPrintLote({ codigoLote: l.codigoLote, producto: c.nombre, unidades: qty, medida, envasadoPor: l.envasadoPor, fecha: l.actualizado || l.fecha }),
+          });
+        });
     });
     if (canDelete) items.push({ label: 'Eliminar color', color: 'var(--lp-danger-600)', onClick: () => handleEliminar(c) });
     return items;
@@ -281,12 +298,24 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
           onSaved={(r) => { showToast(`${nf(r.cantidad)} ${r.presentacion === 'litros' ? 'L' : r.presentacion} → Almacén ${r.aAlmacen}`); reload && reload(); }}
         />
       )}
+      {censoColor && (
+        <CensoTotesModal
+          color={censoColor}
+          almacen={almacen}
+          onClose={() => setCensoColor(null)}
+          onSaved={(r) => { showToast(`${r.lotes.length} tote(s) registrados · ${r.lotes.join(', ')}`); reload && reload(); }}
+        />
+      )}
       {printLote && (
         <QRModal
           lote={{
             codigo: printLote.codigoLote, codigoLote: printLote.codigoLote,
-            producto: `${printLote.producto}${printLote.medida ? ' · ' + (printLote.medida === 'cubeta' ? 'Cubeta' : 'Galón') : ''}`,
-            cantidad: printLote.unidades, fecha: printLote.fecha,
+            /* El producto va limpio: la presentación la pinta la banda de la
+               etiqueta (diseño único 5-ago), ya no se concatena al nombre. */
+            producto: printLote.producto,
+            presentacion: printLote.medida,
+            envasadoPor: printLote.envasadoPor,
+            cantidad: printLote.unidades, fecha: printLote.fecha, litros: printLote.litros,
           }}
           onClose={() => setPrintLote(null)}
         />

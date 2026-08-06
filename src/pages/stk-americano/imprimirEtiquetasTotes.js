@@ -6,6 +6,7 @@
    items: [{ cod, producto, litros }] */
 import { qrDataUrl } from '../../lib/qrGenerator';
 import { qrPublicUrl } from '../../lib/qrPublicUrl';
+import { etiquetaCss, etiquetaHtml } from '../../lib/etiquetaLote';
 
 const FORMATOS = {
   '50x25': { wMm: 50, hMm: 25, qrMm: 21 },
@@ -40,7 +41,6 @@ export default function imprimirEtiquetasTotes(items) {
     : 'none';
 
   const fecha = new Date().toISOString().slice(0, 10);
-  const esc = (s) => String(s || '').replace(/</g, '&lt;');
   let labels = '';
   lista.forEach((it, i) => {
     /* 28-jul-2026: URL en vez de JSON-con-datos — misma razón que QRModal (la
@@ -48,14 +48,13 @@ export default function imprimirEtiquetasTotes(items) {
        principal vía lib/qrPublicUrl. */
     const payload = qrPublicUrl(it.cod);
     const qr = qrDataUrl(payload, { scale: 10, margin: 2, ecLevel: 'M' });
-    labels += `<div class="page"><div class="label">
-      <img src="${qr}" />
-      <div class="info">
-        <div class="prod">${esc(it.producto)}</div>
-        <div class="cod">${esc(it.cod)}</div>
-        <div class="meta">TOTE · ${Number(it.litros) ? Number(it.litros).toLocaleString('es-MX') + ' L · ' : ''}${fecha} · ${i + 1}/${lista.length}</div>
-      </div>
-    </div></div>`;
+    /* DISEÑO ÚNICO (5-ago): el tote lleva TOTE en la banda; el envasador aquí no
+       aplica (nadie lo ha envasado todavía) y su renglón simplemente no sale. */
+    labels += `<div class="page"><div class="label">${etiquetaHtml({
+      qrSrc: qr, producto: it.producto, pres: 'TOTE', codigo: it.cod, fmt,
+      envasador: '',
+      meta: `${Number(it.litros) ? Number(it.litros).toLocaleString('es-MX') + ' L · ' : ''}${fecha} · ${i + 1}/${lista.length}`,
+    })}</div></div>`;
   });
 
   const html = `<!DOCTYPE html><html><head><title>Etiquetas de totes (${lista.length})</title>
@@ -67,15 +66,10 @@ export default function imprimirEtiquetasTotes(items) {
       .label {
         position: absolute; top: 0; left: 0;
         width: ${fmt.wMm}mm; height: ${fmt.hMm}mm;
-        box-sizing: border-box; padding: 1.5mm;
-        display: flex; align-items: center; gap: 2mm;
+        box-sizing: border-box;
         transform-origin: 0 0; transform: ${tf};
       }
-      .label img { width: ${fmt.qrMm}mm; height: ${fmt.qrMm}mm; }
-      .info { flex: 1; min-width: 0; line-height: 1.25; overflow: hidden; }
-      .prod { font-weight: bold; font-size: 8pt; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .cod { font-family: monospace; font-weight: bold; font-size: 7.5pt; word-break: break-all; }
-      .meta { color: #666; font-size: 6pt; margin-top: 1mm; }
+      ${etiquetaCss(fmt, '.label')}
     </style></head><body>
     ${labels}
     <script>setTimeout(() => window.print(), 500);</script>
