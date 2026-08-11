@@ -7,6 +7,7 @@ import { useState } from 'react';
 import api from '../../services/api';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
+import { useAuthOpcional } from '../../context/AuthContext';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,12,8,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
@@ -29,6 +30,12 @@ const S = {
 export default function AltaAmericanoModal({ catalogo = [], color = null, almacen = '1', onClose, onSaved }) {
   useBodyScrollLock(true);
   const editando = !!color;
+  /* Renombrar un color al editar = SOLO Emmanuel (decisión dueño 11-ago tras
+     revertir el renombre masivo: la identidad del producto la dicta él, color
+     por color). El backend lo vuelve a validar — esto solo habilita el campo. */
+  const auth = useAuthOpcional();
+  const puedeRenombrar = editando && auth?.user?.rol === 'admin'
+    && String(auth?.user?.nombre || '').trim().toLowerCase() === 'emmanuel';
 
   const [nombre, setNombre] = useState(color?.nombre || '');
   const [cubetas, setCubetas] = useState(color ? String(color.cubetas ?? 0) : '');
@@ -46,10 +53,18 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
 
   const numOrUndef = (v) => (v === '' ? undefined : (Number.isFinite(parseFloat(v)) ? parseFloat(v) : undefined));
 
+  const nombreCambiado = editando && nombre.trim() !== String(color?.nombre || '').trim();
+
   const handleSave = async () => {
     if (!nombre.trim()) { setErr('Escribe el nombre del color'); return; }
     setSaving(true); setErr('');
     try {
+      /* Renombre manual (solo Emmanuel): primero se sustituye el nombre — el
+         viejo queda como alias y las importaciones no re-crean el duplicado —
+         y después se guardan las cantidades sobre la clave nueva. */
+      if (puedeRenombrar && nombreCambiado) {
+        await api.renombrarStkAmericano({ almacen, key: color.key, nuevoNombre: nombre.trim() });
+      }
       /* Alta = SUMAR (11-ago, pedido dueño): un tote que llega se agrega al
          stock existente del color. 'set' queda solo para Editar (corrección). */
       const r = await api.colorStkAmericano({
@@ -107,11 +122,17 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
         </div>
         <div style={S.body}>
           <label style={S.label}>Color / producto</label>
-          <input style={{ ...S.input, ...(editando ? { opacity: .7 } : {}) }} list="stk-am-catalogo" value={nombre}
-            disabled={editando} data-id="stkAmericano.color.nombre"
+          <input style={{ ...S.input, ...(editando && !puedeRenombrar ? { opacity: .7 } : {}) }} list="stk-am-catalogo" value={nombre}
+            disabled={editando && !puedeRenombrar} data-id="stkAmericano.color.nombre"
             onChange={e => setNombre(e.target.value)} placeholder="Escribe o selecciona un color..." autoComplete="off" />
           <datalist id="stk-am-catalogo">{catalogo.map(c => <option key={c} value={c} />)}</datalist>
           {!editando && <div style={S.hint}>{catalogo.length} color(es) registrados. Si ya existe, lo que captures se SUMA a su stock (para corregir cantidades usa Editar).</div>}
+          {puedeRenombrar && !nombreCambiado && <div style={S.hint}>Puedes corregir el nombre del color (solo tú). El nombre anterior queda como alias: importar con el nombre viejo cae aquí, sin duplicar.</div>}
+          {puedeRenombrar && nombreCambiado && (
+            <div style={{ ...S.hint, color: 'var(--lp-warning-700, #92400E)' }}>
+              Al guardar, "{color?.nombre}" pasará a llamarse "{nombre.trim()}" en este almacén. Folios de totes y tandas no cambian; el nombre viejo queda como alias.
+            </div>
+          )}
 
           <div style={S.row3}>
             <div>

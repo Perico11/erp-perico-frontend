@@ -296,6 +296,9 @@ const api = {
   transferirStkAmericano: (payload) => request('POST', '/api/stk-americano/transferir', payload),
   colorStkAmericano: ({ almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }) =>
     request('POST', '/api/stk-americano/color', { almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }),
+  /* Sustitución manual de nombre — backend la limita a Emmanuel (11-ago). */
+  renombrarStkAmericano: ({ almacen, key, nuevoNombre }) =>
+    request('POST', '/api/stk-americano/renombrar', { almacen, key, nuevoNombre }),
   salidaStkAmericano: ({ almacen, key, nombre, presentacion, cantidad, nota }) =>
     request('POST', '/api/stk-americano/salida', { almacen, key, nombre, presentacion, cantidad, nota }),
   envasarStkAmericano: ({ almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, deGranel, envasadoPor }) =>
