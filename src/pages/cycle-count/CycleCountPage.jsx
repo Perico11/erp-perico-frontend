@@ -109,6 +109,12 @@ const S = {
     borderRadius: 12, border: 'none', background: 'var(--lp-warning-600)', color: '#fff',
     cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
   },
+  btnDanger: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    minHeight: 40, padding: '0 16px', fontSize: 13, fontWeight: 700,
+    borderRadius: 10, border: 'none', background: 'var(--lp-danger-600)', color: '#fff',
+    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+  },
   /* KPI metric cards */
   metric: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 12, marginBottom: 16 },
   metricCard: { background: 'var(--lp-bg-sunken)', borderRadius: 14, padding: 14, textAlign: 'center' },
@@ -985,13 +991,16 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
   );
 }
 
-function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
+function HistorialCard({ sesion, onAprobar, onAnular, canAprobar, isDesktop }) {
   const [expanded, setExpanded] = useState(false);
   const fecha = new Date(sesion.fecha).toLocaleString('es-MX');
   const estadoChip = {
     activo: 'var(--lp-brand-600)',
     finalizado: 'var(--lp-warning-600)',
     aprobado: 'var(--lp-success-600)',
+    /* Anulado = rechazado sin aplicar — rojo suave, no el danger pleno: no es
+       una alarma activa, es un cierre. La sesión sigue visible en el historial. */
+    anulado: 'var(--lp-danger-400)',
   }[sesion.estado] || 'var(--lp-text-secondary)';
   const flaggedItems = (sesion.items || []).filter(i => i.flagged);
 
@@ -1019,6 +1028,15 @@ function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
             <span style={{ color: 'var(--lp-danger-700)', fontWeight: 600 }}> · {sesion.varianzas} varianzas</span>
           )}
         </div>
+        {/* El motivo del rechazo se queda a la vista: es la explicación que le
+            debe el admin a quien contó. */}
+        {sesion.estado === 'anulado' && (
+          <div style={{ fontSize: 12, color: 'var(--lp-danger-700)', marginTop: 6, lineHeight: 1.5, background: 'var(--lp-danger-50)', borderRadius: 8, padding: '6px 10px' }}>
+            <strong>Rechazado</strong>{sesion.anuladoPor ? ` por ${sesion.anuladoPor}` : ''}
+            {sesion.motivoAnulacion ? `: ${sesion.motivoAnulacion}` : ''}
+            {' '}· los ajustes NO se aplicaron al inventario
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -1027,6 +1045,15 @@ function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
           <button style={S.btnSuccess} onClick={() => onAprobar(sesion.id)}
             data-id="conteo.btn.aprobar-ajuste" data-rol="admin">
             {Icon.shield(16)}Aprobar ajuste
+          </button>
+        )}
+        {/* Rechazar conteo — la salida cuando los números son malos y aprobar
+            corrompería el inventario. También destraba sesiones activas
+            abandonadas (el contador no puede abrir otra mientras exista una). */}
+        {(sesion.estado === 'finalizado' || sesion.estado === 'activo') && canAprobar && onAnular && (
+          <button style={S.btnDanger} onClick={() => onAnular(sesion.id)}
+            data-id="conteo.btn.rechazar-conteo" data-rol="admin">
+            {Icon.flag(16)}Rechazar conteo
           </button>
         )}
         <ImportExportPrint
@@ -1285,6 +1312,31 @@ export default function CycleCountPage({ embedded = false }) {
     }
   };
 
+  /* RECHAZAR un conteo (admin): estado→anulado SIN tocar inventario. El motivo
+     es obligatorio (≥5 chars, lo exige también el backend) y queda visible en
+     el historial — es la explicación que se le debe al contador. */
+  const handleAnular = async (sesionId) => {
+    const ses = sesiones.find(s => s.id === sesionId);
+    const motivo = await confirm(
+      `Vas a RECHAZAR el conteo ${ses?.folio || sesionId}. Los ajustes NO se aplicarán al inventario y la sesión quedará como anulada (visible en el historial). Escribe el motivo del rechazo.`,
+      {
+        title: 'Rechazar conteo',
+        confirmText: 'Rechazar conteo',
+        danger: true,
+        prompt: { label: 'Motivo del rechazo', placeholder: 'Ej: números dobles, conteo con la báscula descalibrada…', required: true, minLength: 5, rows: 2 },
+      }
+    );
+    if (!motivo) return;
+    try {
+      await api.anularConteo(sesionId, motivo);
+      setToast('Conteo rechazado · sin cambios al inventario');
+      setTimeout(() => setToast(''), 4000);
+      cargar();
+    } catch (e) {
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
+    }
+  };
+
   const handleAprobarConCausas = async (causasPorItem) => {
     if (!sesionParaAprobar) return;
     setAprobandoConCausas(true);
@@ -1405,7 +1457,7 @@ export default function CycleCountPage({ embedded = false }) {
             <div style={S.empty}>Sin historial de conteos</div>
           ) : (
             historial.map(s => (
-              <HistorialCard key={s.id} sesion={s} onAprobar={handleAprobar}
+              <HistorialCard key={s.id} sesion={s} onAprobar={handleAprobar} onAnular={handleAnular}
                 canAprobar={can('admin') || user?.rol === 'admin'} isDesktop={isDesktop} />
             ))
           )

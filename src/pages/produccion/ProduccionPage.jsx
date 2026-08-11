@@ -243,12 +243,31 @@ const EstadoBadge = ({ color, label }) => (
 /* §9.1: los campos de QC vienen del backend; este modal es universal */
 /* (no por fórmula). Reskin verde, lógica intacta.                    */
 /* ═══════════════════════════════════════════════════════════════════ */
-function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
+
+/* Rangos QC default — ESPEJO de routes/produccion.js:241-243 (paso "QC
+   Pre-Envasado" del wizard). Son el FALLBACK cuando /api/produccion/steps no
+   responde en este contexto (rol sin acceso a la receta por NDA, fórmula sin
+   pasos generables): el aviso de fuera-de-rango nunca debe quedarse mudo,
+   porque este modal es el que LIBERA lotes en qc_hold. Brillo no tiene rango
+   default en el backend → sin validación. Si el backend cambia sus rangos,
+   actualizar aquí también. */
+const QC_RANGOS_DEFAULT = {
+  viscosidad: { min: 80, max: 120, rango: '80-120', unidad: 'KU' },
+  ph:         { min: 7.5, max: 9.5, rango: '7.5-9.5', unidad: '' },
+  densidad:   { min: 1.10, max: 1.50, rango: '1.10-1.50', unidad: 'g/mL' },
+};
+
+/* export con nombre: solo para poder testear el modal aislado (QCModalRangos.test) */
+export function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
   const [viscosidad, setViscosidad] = useState('');
   const [ph, setPh] = useState('');
   const [brillo, setBrillo] = useState('');
   const [densidad, setDensidad] = useState('');
   const [notas, setNotas] = useState('');
+  /* Justificación obligatoria cuando se aprueba con lecturas fuera de rango:
+     el override humano se permite (aviso, NO bloqueo duro) pero queda auditado
+     dentro de qcResultados del lote y del ledger qc_records. */
+  const [notaFuera, setNotaFuera] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -272,12 +291,72 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
     )) || null;
   }, [orden, lotes]);
 
+  /* Rangos por fórmula — la MISMA fuente que el wizard (FIX ago 2026): el
+     paso "QC Pre-Envasado" de /api/produccion/steps trae min/max por prueba.
+     Antes este modal aceptaba 130 KU sin aviso mientras el wizard mandaba a
+     qc_hold lo mismo. Si la receta no está disponible para esta sesión (403
+     del NDA — el endpoint es solo admin/tecnico) o la fórmula no genera
+     pasos, se quedan los defaults de arriba. */
+  const [rangos, setRangos] = useState(QC_RANGOS_DEFAULT);
+  const productoQc = orden?.formula || orden?.producto || lote?.producto || lote?.nombre || '';
+  useEffect(() => {
+    if (!productoQc) return;
+    let cancel = false;
+    (async () => {
+      try {
+        const r = await api.getProduccionSteps(productoQc, 1, 19);
+        if (cancel || !r?.ok || !Array.isArray(r.steps)) return;
+        const next = { ...QC_RANGOS_DEFAULT };
+        let hallado = false;
+        for (const s of r.steps) {
+          if (!s || s.type !== 'qc') continue;
+          for (const p of (s.pruebas || [])) {
+            if (p && p.id && (p.min != null || p.max != null)) {
+              next[p.id] = { min: p.min, max: p.max, rango: p.rango, unidad: p.unidad };
+              hallado = true;
+            }
+          }
+        }
+        if (hallado && !cancel) setRangos(next);
+      } catch { /* sin acceso a la receta → defaults */ }
+    })();
+    return () => { cancel = true; };
+  }, [productoQc]);
+
+  /* Campos QC universales — `rid` es el id canónico de la prueba en el paso
+     QC del backend (routes/produccion.js), para casar rango y lectura previa. */
+  const qcFields = [
+    { key: 'visc', rid: 'viscosidad', label: 'Viscosidad (KU)', step: '0.1', ph: 'Ej: 85', value: viscosidad, set: setViscosidad },
+    { key: 'ph',   rid: 'ph',         label: 'pH',              step: '0.1', ph: 'Ej: 8.5', value: ph,         set: setPh },
+    { key: 'bri',  rid: 'brillo',     label: 'Brillo (GU)',     step: '0.1', ph: 'Ej: 20', value: brillo,     set: setBrillo },
+    { key: 'den',  rid: 'densidad',   label: 'Densidad (g/mL)', step: '0.01', ph: 'Ej: 1.32', value: densidad, set: setDensidad },
+  ];
+
+  const fueraDeRango = (rid, val) => {
+    const r = rangos[rid];
+    if (!r || val === '' || val == null) return false;
+    const num = parseFloat(val);
+    if (isNaN(num)) return false;
+    return (r.min != null && num < r.min) || (r.max != null && num > r.max);
+  };
+  const camposFuera = qcFields.filter(f => fueraDeRango(f.rid, f.value));
+  const hayFuera = camposFuera.length > 0;
+  const notaFueraOk = notaFuera.trim().length >= 5;
+
+  /* Lecturas que el lote YA trae (wizard de producción / QC previos) — solo
+     mostrar, sin fetch nuevo: Enrique no re-captura a ciegas lo ya medido en
+     planta. server.js guarda el merge en lote.qcResultados (base qcReadings). */
+  const lecturasPrevias = lote?.qcResultados || lote?.qcReadings || orden?.qcResultados || null;
+
   const buildQcPayload = (resultado) => ({
     viscosidad: viscosidad ? parseFloat(viscosidad) : null,
     ph: ph ? parseFloat(ph) : null,
     brillo: brillo ? parseFloat(brillo) : null,
     densidad: densidad ? parseFloat(densidad) : null,
     notas: notas || '',
+    /* la justificación viaja DENTRO del objeto qc que ya viaja — server.js la
+       mergea a lote.qcResultados sin cambiar el shape de la transición */
+    ...(hayFuera && notaFuera.trim() ? { notaFueraDeRango: notaFuera.trim() } : {}),
     resultado,
     fecha: new Date().toISOString(),
     usuario: userName,
@@ -296,11 +375,18 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
     brillo: brillo ? parseFloat(brillo) : null,
     densidad: densidad ? parseFloat(densidad) : null,
     notas: notas || '',
+    ...(hayFuera && notaFuera.trim() ? { notaFueraDeRango: notaFuera.trim() } : {}),
     fecha: new Date().toISOString(),
     usuario: userName,
   });
 
   const handleApprove = async () => {
+    /* Override humano permitido, pero NUNCA silencioso: aprobar con lecturas
+       fuera de rango exige justificación (el botón ya viene deshabilitado;
+       este guard cubre el enter/submit programático). */
+    if (hayFuera && !notaFueraOk) {
+      return setError('Hay lecturas fuera de rango: escribe la justificación (mínimo 5 caracteres) para aprobar.');
+    }
     setSaving(true);
     setError('');
     try {
@@ -373,14 +459,6 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
     }
   };
 
-  /* Campos QC universales (no por fórmula) — vienen del backend / estándar */
-  const qcFields = [
-    { key: 'visc', label: 'Viscosidad (KU)', step: '0.1', ph: 'Ej: 85', value: viscosidad, set: setViscosidad },
-    { key: 'ph',   label: 'pH',              step: '0.1', ph: 'Ej: 8.5', value: ph,         set: setPh },
-    { key: 'bri',  label: 'Brillo (GU)',     step: '0.1', ph: 'Ej: 20', value: brillo,     set: setBrillo },
-    { key: 'den',  label: 'Densidad (g/mL)', step: '0.01', ph: 'Ej: 1.32', value: densidad, set: setDensidad },
-  ];
-
   return (
     <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
@@ -404,24 +482,69 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
           </div>
 
           {/* Grid QC 2 col — mockup .qcgrid/.qcf/.qci: tile suave, input mono
-             con focus verde (.lp-qci). */}
+             con focus verde (.lp-qci). Bajo cada campo: el rango exigido (el
+             mismo del wizard) + la lectura que el wizard ya dejó en el lote. */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-            {qcFields.map(f => (
-              <div key={f.key} style={{ padding: 12, borderRadius: 14, background: 'var(--lp-bg-sunken)' }}>
-                <label style={{ ...S.fieldLabel, marginBottom: 0 }}>{f.label}</label>
-                <input
-                  className="lp-qci"
-                  style={{
-                    width: '100%', height: 42, marginTop: 6, padding: '0 10px', borderRadius: 10,
-                    border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)',
-                    color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)', fontSize: 16,
-                    outline: 'none', boxSizing: 'border-box',
-                  }}
-                  type="number" inputMode="decimal"
-                  step={f.step} placeholder={f.ph} value={f.value} onChange={e => f.set(e.target.value)} />
-              </div>
-            ))}
+            {qcFields.map(f => {
+              const r = rangos[f.rid];
+              const fuera = fueraDeRango(f.rid, f.value);
+              const lecturaWizard = lecturasPrevias && lecturasPrevias[f.rid] != null && lecturasPrevias[f.rid] !== ''
+                ? lecturasPrevias[f.rid] : null;
+              return (
+                <div key={f.key} style={{ padding: 12, borderRadius: 14, background: 'var(--lp-bg-sunken)' }}>
+                  <label style={{ ...S.fieldLabel, marginBottom: 0 }}>{f.label}</label>
+                  <input
+                    className="lp-qci"
+                    style={{
+                      width: '100%', height: 42, marginTop: 6, padding: '0 10px', borderRadius: 10,
+                      /* ámbar = aviso (no bloqueo): la lectura salió del rango */
+                      border: fuera ? '1.5px solid var(--lp-warning-600)' : '1.5px solid var(--lp-border-subtle)',
+                      background: 'var(--lp-bg-raised)',
+                      color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-mono)', fontSize: 16,
+                      outline: 'none', boxSizing: 'border-box',
+                    }}
+                    type="number" inputMode="decimal"
+                    step={f.step} placeholder={f.ph} value={f.value} onChange={e => f.set(e.target.value)} />
+                  {r?.rango && (
+                    <div style={{
+                      fontSize: 11, marginTop: 5, fontFamily: 'var(--lp-font-mono)',
+                      fontWeight: fuera ? 700 : 500,
+                      color: fuera ? 'var(--lp-warning-700)' : 'var(--lp-text-secondary)',
+                    }}>
+                      {fuera ? 'Fuera de rango — ' : ''}Rango: {r.rango}{r.unidad ? ` ${r.unidad}` : ''}
+                    </div>
+                  )}
+                  {lecturaWizard != null && (
+                    <div style={{ fontSize: 11, marginTop: 3, color: 'var(--lp-text-secondary)' }}>
+                      Wizard: <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{String(lecturaWizard)}</span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+
+          {/* Aprobar con lecturas fuera de rango = decisión humana AUDITADA:
+             la justificación es obligatoria (≥5 chars) y viaja en el payload
+             de la transición (qc.notaFueraDeRango). */}
+          {hayFuera && (
+            <div style={{ marginBottom: 12, padding: 12, borderRadius: 12, background: 'var(--lp-warning-50)', border: '1px solid var(--lp-warning-100)' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-warning-700)', marginBottom: 6 }}>
+                Fuera de rango: {camposFuera.map(f => f.label).join(', ')}
+              </div>
+              <label style={S.fieldLabel} htmlFor="qc-nota-fuera">Justificación para aprobar (obligatoria)</label>
+              <textarea
+                id="qc-nota-fuera"
+                style={{
+                  width: '100%', minHeight: 64, marginTop: 4, padding: '8px 10px', borderRadius: 10,
+                  border: '1.5px solid var(--lp-warning-600)', background: 'var(--lp-bg-raised)',
+                  color: 'var(--lp-text-primary)', fontFamily: 'inherit', fontSize: 13,
+                  outline: 'none', boxSizing: 'border-box', resize: 'vertical',
+                }}
+                placeholder="Por qué se aprueba con lecturas fuera de rango (mínimo 5 caracteres)..."
+                value={notaFuera} onChange={e => setNotaFuera(e.target.value)} />
+            </div>
+          )}
 
           <label style={S.fieldLabel}>Notas / Observaciones</label>
           <input style={S.fieldInput} placeholder="Observaciones del QC..."
@@ -432,7 +555,9 @@ function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess }) {
           <button style={btn('danger')} disabled={saving} onClick={handleReject}>
             <IcoX size={15} /> Rechazar
           </button>
-          <button style={btn('success')} disabled={saving} onClick={handleApprove}>
+          {/* deshabilitado mientras haya fuera-de-rango sin justificar — el
+             handler repite el guard por si llega un submit programático */}
+          <button style={btn('success')} disabled={saving || (hayFuera && !notaFueraOk)} onClick={handleApprove}>
             {saving ? 'Guardando...' : <><IcoCheck size={15} /> Aprobar QC</>}
           </button>
         </div>

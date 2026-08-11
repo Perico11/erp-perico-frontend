@@ -612,6 +612,11 @@ const api = {
     request('POST', '/api/cycle-count/finalizar-base', { sesionId, pin, motivo }),
   cycleCountAprobar: (sesionId, causasPorItem) =>
     request('POST', '/api/cycle-count/aprobar', { sesionId, causasPorItem }),
+  /* Anular (RECHAZAR) un conteo sin aplicar ajustes — solo admin, motivo ≥5 chars.
+     Es la salida para conteos finalizados con números malos (aprobar los
+     corrompería) y para sesiones activas abandonadas que bloquean al contador. */
+  anularConteo: (id, motivo) =>
+    request('POST', '/api/cycle-count/anular', { id, motivo }),
 
   /* ── Sesiones log ── */
   getSesionesLog: () => request('GET', '/api/sesiones-log'),
