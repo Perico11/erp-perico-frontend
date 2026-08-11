@@ -39,6 +39,10 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
   const [nota, setNota] = useState(color?.nota || '');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* Folios de tote asignados por el backend al guardar el alta (11-ago): se
+     muestran en esta misma ventana, solo lectura — el sistema los emite y no
+     se repiten jamás. */
+  const [lotesAsignados, setLotesAsignados] = useState(null);
 
   const numOrUndef = (v) => (v === '' ? undefined : (Number.isFinite(parseFloat(v)) ? parseFloat(v) : undefined));
 
@@ -46,18 +50,53 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
     if (!nombre.trim()) { setErr('Escribe el nombre del color'); return; }
     setSaving(true); setErr('');
     try {
-      await api.colorStkAmericano({
+      /* Alta = SUMAR (11-ago, pedido dueño): un tote que llega se agrega al
+         stock existente del color. 'set' queda solo para Editar (corrección). */
+      const r = await api.colorStkAmericano({
         almacen,
         nombre: nombre.trim(),
         cubetas: numOrUndef(cubetas), galones: numOrUndef(galones), totesLitros: numOrUndef(totesLitros),
         proveedor: proveedor.trim() || undefined,
         costoLitro: costoLitro !== '' ? parseFloat(costoLitro) : undefined,
         nota: nota.trim() || undefined,
-        modo: 'set',
+        modo: editando ? 'set' : 'sumar',
       });
-      onSaved && onSaved(); onClose();
+      onSaved && onSaved();
+      if (!editando && Array.isArray(r?.lotes) && r.lotes.length) {
+        setLotesAsignados(r.lotes); setSaving(false);   /* la ventana se queda mostrando el folio */
+      } else {
+        onClose();
+      }
     } catch (e) { setErr(humanizeError(e)); setSaving(false); } /* AUDIT UX 16-jul (U4) */
   };
+
+  /* Pantalla de confirmación: el/los folios del tote recién dado de alta. */
+  if (lotesAsignados) {
+    return (
+      <div style={S.overlay}>
+        <div style={S.modal} onClick={e => e.stopPropagation()}>
+          <div style={S.header}>
+            <h3 style={S.title}>Color agregado — lote asignado</h3>
+            <button style={S.closeBtn} onClick={onClose} aria-label="Cerrar">×</button>
+          </div>
+          <div style={S.body}>
+            <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', lineHeight: 1.5 }}>
+              {nombre.trim()} quedó registrado. {lotesAsignados.length === 1 ? 'Su tote recibió este folio' : `Sus ${lotesAsignados.length} totes recibieron estos folios`} (asignado por el sistema — no se puede modificar ni se repetirá):
+            </div>
+            {lotesAsignados.map(l => (
+              <div key={l} data-id="stkAmericano.color.loteAsignado" style={{ marginTop: 10, padding: '14px 16px', borderRadius: 8, background: 'var(--lp-bg-sunken)', border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'JetBrains Mono, monospace', fontSize: 20, fontWeight: 700, letterSpacing: '.03em', textAlign: 'center' }}>
+                {l}
+              </div>
+            ))}
+            <div style={S.hint}>Anótalo o imprime su etiqueta desde "Etiquetas totes" — con él se elige el tote al envasar.</div>
+          </div>
+          <div style={S.footer}>
+            <button style={S.btn(true)} onClick={onClose} data-id="stkAmericano.color.loteListo">Listo</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={S.overlay}>
@@ -72,7 +111,7 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
             disabled={editando} data-id="stkAmericano.color.nombre"
             onChange={e => setNombre(e.target.value)} placeholder="Escribe o selecciona un color..." autoComplete="off" />
           <datalist id="stk-am-catalogo">{catalogo.map(c => <option key={c} value={c} />)}</datalist>
-          {!editando && <div style={S.hint}>{catalogo.length} color(es) registrados. Si ya existe, se actualizan sus cantidades.</div>}
+          {!editando && <div style={S.hint}>{catalogo.length} color(es) registrados. Si ya existe, lo que captures se SUMA a su stock (para corregir cantidades usa Editar).</div>}
 
           <div style={S.row3}>
             <div>
