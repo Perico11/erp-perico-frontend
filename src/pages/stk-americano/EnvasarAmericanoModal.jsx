@@ -114,28 +114,40 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
     [color]
   );
   const toteSel = totesReg.find(t => t.codigoLote === loteSel) || null;
+  /* GRANEL SIN FOLIO (11-ago, reporte dueño): un color puede tener totes
+     registrados Y litros sin identificar a la vez (Best Beige: 671 L y el único
+     tote con 12.5 L). Antes esos litros eran inenvasables — el selector solo
+     listaba totes. Ahora son una opción explícita: el backend les asigna folio
+     al envasar. */
+  const GRANEL = '__granel__';
+  const granelSinLote = color?.granelSinLote != null
+    ? Number(color.granelSinLote) || 0
+    : Math.max(0, +(litrosDisp - ((color && color.totes) || []).reduce((s, t) => s + (Number(t.litros) || 0), 0)).toFixed(2));
+  const granelDisp = totesReg.length ? granelSinLote : litrosDisp;
 
   /* El tote elegido tiene que existir: al abrir cae en el más viejo (FEFO) y, si
      un refresh lo dejó vacío, se recoloca solo en vez de mandar un lote muerto. */
   useEffect(() => {
     if (!totesReg.length) { setLoteSel(''); return; }
+    if (loteSel === GRANEL && granelSinLote > 0.01) return; /* elección válida */
     if (!totesReg.some(t => t.codigoLote === loteSel)) setLoteSel(totesReg[0].codigoLote);
-  }, [totesReg]); // eslint-disable-line
+  }, [totesReg, granelSinLote]); // eslint-disable-line
   /* Tope + cuello de botella (diseño único jul 2026): el menor de pintura,
      envases y tapas — y se dice cuál es. */
   const limitesAm = [
     toteSel
       ? { n: Math.floor((Number(toteSel.litros) || 0) / (pres.ml / 1000)), motivo: 'la pintura del tote elegido' }
-      : { n: Math.floor(litrosDisp / (pres.ml / 1000)), motivo: 'la pintura a granel' },
+      : { n: Math.floor(granelDisp / (pres.ml / 1000)), motivo: 'la pintura a granel sin folio' },
     ...(subSel ? [{ n: subSel.stock, motivo: 'los envases en Terán' }] : []),
     ...(pres.usaTapa && tapaSel ? [{ n: tapaSel.stock, motivo: 'las tapas en Terán' }] : []),
   ];
   const maxUnidAm = Math.max(0, Math.min(...limitesAm.map(l => l.n)));
   const excedeLitros = litros > litrosDisp + 0.001;
   const excedeTote = toteSel && litros > (Number(toteSel.litros) || 0) + 0.001;
+  const excedeGranel = !toteSel && litros > granelDisp + 0.001;
   const excedeEnvase = subSel && n > subSel.stock;
   const excedeTapa = pres.usaTapa && tapaSel && n > tapaSel.stock;
-  const puede = n > 0 && subKey && (!pres.usaTapa || tapaKey) && !excedeLitros && !excedeTote && !excedeEnvase && !excedeTapa;
+  const puede = n > 0 && subKey && (!pres.usaTapa || tapaKey) && !excedeLitros && !excedeTote && !excedeGranel && !excedeEnvase && !excedeTapa;
 
   if (!color) return null;
 
@@ -143,7 +155,7 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
     if (!puede) return;
     setSaving(true); setErr('');
     try {
-      const r = await api.envasarStkAmericano({ almacen, key: color.key, nombre: color.nombre, medida, unidades: n, subKey, tapaKey: pres.usaTapa ? tapaKey : undefined, loteExistente: loteSel || undefined, envasadoPor: vaciadorElegido?.nombre || undefined });
+      const r = await api.envasarStkAmericano({ almacen, key: color.key, nombre: color.nombre, medida, unidades: n, subKey, tapaKey: pres.usaTapa ? tapaKey : undefined, loteExistente: loteSel && loteSel !== GRANEL ? loteSel : undefined, deGranel: loteSel === GRANEL ? true : undefined, envasadoPor: vaciadorElegido?.nombre || undefined });
       onSaved && onSaved(r && r.lote); onClose();
     } catch (e) { setErr(humanizeError(e)); setSaving(false); } /* AUDIT UX 16-jul (U4) */
   };
@@ -191,18 +203,25 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
               <label style={S.label}>De qué tote</label>
               <select style={S.select} value={loteSel} onChange={e => setLoteSel(e.target.value)} data-id="stkAmericano.envasar.lote">
                 {totesReg.length > 0 ? (
-                  totesReg.map(t => (
-                    <option key={t.codigoLote} value={t.codigoLote}>
-                      {t.codigoLote} · {nf(t.litros)} L disponibles{t.loteProveedor ? ` · lote ${t.loteProveedor}` : ''}
-                    </option>
-                  ))
+                  <>
+                    {totesReg.map(t => (
+                      <option key={t.codigoLote} value={t.codigoLote}>
+                        {t.codigoLote} · {nf(t.litros)} L disponibles{t.loteProveedor ? ` · lote ${t.loteProveedor}` : ''}
+                      </option>
+                    ))}
+                    {granelSinLote > 0.01 && (
+                      <option value={GRANEL}>Granel sin folio · {nf(granelSinLote)} L (se le asigna folio)</option>
+                    )}
+                  </>
                 ) : (
                   <option value="">Granel sin folio — el sistema genera uno</option>
                 )}
               </select>
               <div style={S.hint}>
                 {totesReg.length > 0
-                  ? 'Cada tote tiene su folio: elige el que estás abriendo y las cubetas/galones lo heredan. Si tardas tres días en vaciarlo, las tres tandas quedan bajo el MISMO folio.'
+                  ? (loteSel === GRANEL
+                    ? <>Estos litros no traen folio: al envasar, el sistema les asigna UNO nuevo. Si sabes de qué totes físicos son, mejor regístralos antes con <strong>“Registrar totes abiertos”</strong>.</>
+                    : 'Cada tote tiene su folio: elige el que estás abriendo y las cubetas/galones lo heredan. Si tardas tres días en vaciarlo, las tres tandas quedan bajo el MISMO folio.')
                   : <>Este color todavía tiene litros sin identificar. Regístralos con <strong>“Registrar totes abiertos”</strong> para que el envasado quede amarrado a un tote.</>}
               </div>
 
@@ -224,8 +243,9 @@ export default function EnvasarAmericanoModal({ color, almacen = '1', onClose, o
               <div style={S.resumen(excedeLitros || excedeTote || excedeEnvase || excedeTapa)}>
                 {n > 0 ? (
                   <>
-                    <strong>{n} {pres.plural}</strong> = <strong>{nf(litros)} L</strong>{toteSel ? <> del tote <strong>{toteSel.codigoLote}</strong> (le quedan {nf(Math.max(0, (toteSel.litros || 0) - litros))} L)</> : <> del granel (quedan {nf(Math.max(0, litrosDisp - litros))} L)</>}.
+                    <strong>{n} {pres.plural}</strong> = <strong>{nf(litros)} L</strong>{toteSel ? <> del tote <strong>{toteSel.codigoLote}</strong> (le quedan {nf(Math.max(0, (toteSel.litros || 0) - litros))} L)</> : <> del granel sin folio (quedan {nf(Math.max(0, granelDisp - litros))} L)</>}.
                     {excedeTote && <div style={{ marginTop: 4 }}>Ese tote solo tiene {nf(toteSel.litros)} L.</div>}
+                    {!toteSel && excedeGranel && <div style={{ marginTop: 4 }}>El granel sin folio solo tiene {nf(granelDisp)} L; el resto está en los totes del selector.</div>}
                     {excedeLitros && <div style={{ marginTop: 4 }}>No hay tantos litros a granel.</div>}
                     {excedeEnvase && <div style={{ marginTop: 4 }}>No hay tantos envases en Terán ({subSel.stock}).</div>}
                     {excedeTapa && <div style={{ marginTop: 4 }}>No hay tantas tapas en Terán ({tapaSel.stock}).</div>}

@@ -298,8 +298,8 @@ const api = {
     request('POST', '/api/stk-americano/color', { almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }),
   salidaStkAmericano: ({ almacen, key, nombre, presentacion, cantidad, nota }) =>
     request('POST', '/api/stk-americano/salida', { almacen, key, nombre, presentacion, cantidad, nota }),
-  envasarStkAmericano: ({ almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, envasadoPor }) =>
-    request('POST', '/api/stk-americano/envasar', { almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, envasadoPor }),
+  envasarStkAmericano: ({ almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, deGranel, envasadoPor }) =>
+    request('POST', '/api/stk-americano/envasar', { almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, deGranel, envasadoPor }),
   eliminarStkAmericano: ({ almacen, key, nombre, motivo }) =>
     request('POST', '/api/stk-americano/eliminar', { almacen, key, nombre, motivo }),
   /* Censo de totes abiertos (5-ago): le pone folio al granel que ya está en piso.
