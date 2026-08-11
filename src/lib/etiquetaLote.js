@@ -146,6 +146,50 @@ export function codFontPt(codigo, fmt) {
   return pt;
 }
 
+/* ─── ETIQUETA DE TOTE — SIN QR (10-ago-2026, pedido dueño) ─────────────────
+   El tote se identifica A OJO: banda "TOTE + color" y el folio en grande
+   ocupando el resto de la etiqueta. Nada más — ni QR ni fecha: el tote se
+   elige de una lista al envasar, no se escanea.
+
+   El folio se autoajusta al ANCHO completo (no hay QR que le quite espacio) y
+   se topa con el alto del cuerpo; nunca se parte ni se corta. */
+export function codFontPtTote(codigo, fmt) {
+  const anchoMm = fmt.wMm - PAD_X * 2 - 1;
+  const altoMm = fmt.hMm - bandaMm(fmt.hMm) - 3;
+  const largo = Math.max(1, String(codigo || '').length);
+  const mmPorPt = 25.4 / 72;
+  const porAncho = anchoMm / (mmPorPt * 0.6 * largo);  /* mono ≈ 0.6em por carácter */
+  const porAlto = altoMm / (mmPorPt * 1.05);           /* una línea con su aire */
+  return +Math.max(8, Math.min(porAncho, porAlto)).toFixed(1);
+}
+
+export function etiquetaToteCss(fmt, sel = '.label') {
+  const banda = bandaMm(fmt.hMm);
+  const t = tipos(fmt.hMm);
+  return `
+  ${sel} { display: flex; flex-direction: column; padding: 0; overflow: hidden;
+    color: #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Misma regla que la etiqueta con QR: bordes, no fondos (la térmica no
+     imprime background-color — ver la nota de etiquetaCss). */
+  ${sel} .eb { display: flex; align-items: center; gap: 1.6mm;
+    padding: 0.5mm ${PAD_X}mm; height: ${banda}mm; box-sizing: border-box; flex-shrink: 0;
+    border-bottom: 0.6mm solid #000; }
+  ${sel} .eb-pres { font-size: ${t.pres}pt; font-weight: bold; line-height: 1; flex-shrink: 0;
+    letter-spacing: .02em; border: 0.35mm solid #000; border-radius: 0.7mm; padding: 0.2mm 0.9mm; }
+  ${sel} .eb-prod { font-size: ${t.prod}pt; font-weight: bold; line-height: 1.1;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+  ${sel} .et { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center;
+    padding: 0.8mm ${PAD_X}mm; }
+  ${sel} .et-cod { font-family: ui-monospace, monospace; font-weight: bold;
+    white-space: nowrap; letter-spacing: -.03em; line-height: 1; }`;
+}
+
+export function etiquetaToteHtml({ producto, codigo, fmt }) {
+  const pt = fmt ? codFontPtTote(codigo, fmt) : null;
+  return `<div class="eb"><span class="eb-pres">TOTE</span><span class="eb-prod">${escHtml(producto)}</span></div>
+    <div class="et"><div class="et-cod"${pt ? ` style="font-size:${pt}pt"` : ''}>${escHtml(codigo)}</div></div>`;
+}
+
 /* Markup de UNA etiqueta. Todo lo que falte simplemente no ocupa renglón.
    `fmt` es opcional: sin él, el folio usa el tamaño base de la hoja de estilo. */
 export function etiquetaHtml({ qrSrc, producto, pres, codigo, envasador, meta, fmt }) {

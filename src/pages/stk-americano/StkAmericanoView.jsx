@@ -22,6 +22,7 @@ import SalidaAmericanoModal from './SalidaAmericanoModal';
 import EnvasarAmericanoModal from './EnvasarAmericanoModal';
 import TransferirAmericanoModal from './TransferirAmericanoModal';
 import CensoTotesModal from './CensoTotesModal';
+import TotesColorModal from './TotesColorModal';
 
 const S = {
   wrap: { fontFamily: 'var(--lp-font-sans)' },
@@ -69,6 +70,7 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
   const [envasarColor, setEnvasarColor] = useState(null);
   const [transferirColor, setTransferirColor] = useState(null);
   const [censoColor, setCensoColor] = useState(null);
+  const [totesColor, setTotesColor] = useState(null);
   const [printLote, setPrintLote] = useState(null);
   const [toast, setToast] = useState('');
   const [confirm, ConfirmEl] = useConfirm();
@@ -101,6 +103,11 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
   const menuItems = (c) => {
     const items = [];
     if (canEdit) {
+      /* Totes del color (10-ago): lista con reimprimir etiqueta / transferir /
+         eliminar por tote. Es la acción de cabecera cuando hay piezas. */
+      if ((c.totes || []).length) {
+        items.push({ label: `Totes (${c.totes.length}) — etiquetas / transferir / eliminar`, color: 'var(--lp-brand-700)', onClick: () => setTotesColor(c.key) });
+      }
       /* Transferencia simple entre almacenes (Alm 2 = extensión del 1, 18-jul). */
       if (c.cubetas > 0 || c.galones > 0 || c.totesLitros > 0) {
         items.push({ label: `Transferir al ${almacen === '2' ? 'Americano Terán (Alm. 1)' : 'Almacén 2'}`, color: 'var(--lp-brand-700)', onClick: () => setTransferirColor(c) });
@@ -167,7 +174,7 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
                   style={{ ...S.btnAdd, background: 'var(--lp-bg-raised)', color: 'var(--lp-brand-700)', border: '1.5px solid var(--lp-brand-600)' }}
                   data-id="stkAmericano.btn.etiquetas-totes" data-rol="admin,almacen"
                   onClick={async () => {
-                    const ok = await confirm(`Se imprimirán ${items.length} etiquetas (una por tote, con su lote y QR). Usa el formato y rotación ya memorizados de la impresora.`, { title: 'Etiquetas de totes', confirmText: 'Imprimir' });
+                    const ok = await confirm(`Se imprimirán ${items.length} etiquetas (una por tote, SIN QR: folio en grande + color). Usa el formato y rotación ya memorizados de la impresora.`, { title: 'Etiquetas de totes', confirmText: 'Imprimir' });
                     if (ok) imprimirEtiquetasTotes(items);
                   }}>
                   Etiquetas totes ({items.length})
@@ -298,6 +305,23 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
           onSaved={(r) => { showToast(`${nf(r.cantidad)} ${r.presentacion === 'litros' ? 'L' : r.presentacion} → Almacén ${r.aAlmacen}`); reload && reload(); }}
         />
       )}
+      {/* Review 10-ago: el modal NO congela el color — lo deriva de los datos
+          vivos por key en cada render (los eventos WS recargan `colores`). Si
+          otro usuario envasó/transfirió mientras estaba abierto, los litros que
+          se muestran y confirman son los reales; si el color desapareció, el
+          modal se cierra solo. */}
+      {totesColor && (() => {
+        const vivo = colores.find(x => x.key === totesColor);
+        if (!vivo) return null;
+        return (
+          <TotesColorModal
+            color={vivo}
+            almacen={almacen}
+            onClose={() => setTotesColor(null)}
+            onChanged={(msg) => { setTotesColor(null); showToast(msg); reload && reload(); }}
+          />
+        );
+      })()}
       {censoColor && (
         <CensoTotesModal
           color={censoColor}

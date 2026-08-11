@@ -1,19 +1,19 @@
-/* imprimirEtiquetasTotes — impresión MASIVA de etiquetas de totes americanos
-   (18-jul, pedido dueño): una etiqueta por tote, cada una con SU QR/lote, todas
-   en un solo trabajo de impresión (rollo RT-420MME). Usa el formato y la
-   rotación memorizados de la impresora (pp_qr_formato / pp_qr_rot — las mismas
-   claves del QRModal, así la config se comparte).
-   items: [{ cod, producto, litros }] */
-import { qrDataUrl } from '../../lib/qrGenerator';
-import { qrPublicUrl } from '../../lib/qrPublicUrl';
-import { etiquetaCss, etiquetaHtml } from '../../lib/etiquetaLote';
+/* imprimirEtiquetasTotes — impresión de etiquetas de totes americanos.
+   Reescrita 10-ago-2026 (pedido dueño): la etiqueta del tote va SIN QR — solo
+   la banda "TOTE + color" y el folio en grande (USA-0050-03). El tote se
+   identifica a ojo y al envasar se elige de la lista; no se escanea.
+   Sirve igual para la impresión masiva (todos los totes) que para reimprimir
+   UNO desde el menú del color. Usa el formato y la rotación memorizados de la
+   impresora (pp_qr_formato / pp_qr_rot — las mismas claves del QRModal).
+   items: [{ cod, producto }] */
+import { etiquetaToteCss, etiquetaToteHtml } from '../../lib/etiquetaLote';
 
 const FORMATOS = {
-  '50x25': { wMm: 50, hMm: 25, qrMm: 21 },
-  '50x40': { wMm: 50, hMm: 40, qrMm: 22 },
-  '60x40': { wMm: 60, hMm: 40, qrMm: 24 },
-  '80x50': { wMm: 80, hMm: 50, qrMm: 30 },
-  '100x70': { wMm: 100, hMm: 70, qrMm: 40 },
+  '50x25': { wMm: 50, hMm: 25 },
+  '50x40': { wMm: 50, hMm: 40 },
+  '60x40': { wMm: 60, hMm: 40 },
+  '80x50': { wMm: 80, hMm: 50 },
+  '100x70': { wMm: 100, hMm: 70 },
 };
 
 export default function imprimirEtiquetasTotes(items) {
@@ -40,21 +40,9 @@ export default function imprimirEtiquetasTotes(items) {
     : rot === 270 ? `translateY(${fmt.wMm}mm) rotate(270deg)`
     : 'none';
 
-  const fecha = new Date().toISOString().slice(0, 10);
   let labels = '';
-  lista.forEach((it, i) => {
-    /* 28-jul-2026: URL en vez de JSON-con-datos — misma razón que QRModal (la
-       etiqueta viaja pegada al tote; la página exige clave). 29-jul: dominio
-       principal vía lib/qrPublicUrl. */
-    const payload = qrPublicUrl(it.cod);
-    const qr = qrDataUrl(payload, { scale: 10, margin: 2, ecLevel: 'M' });
-    /* DISEÑO ÚNICO (5-ago): el tote lleva TOTE en la banda; el envasador aquí no
-       aplica (nadie lo ha envasado todavía) y su renglón simplemente no sale. */
-    labels += `<div class="page"><div class="label">${etiquetaHtml({
-      qrSrc: qr, producto: it.producto, pres: 'TOTE', codigo: it.cod, fmt,
-      envasador: '',
-      meta: `${Number(it.litros) ? Number(it.litros).toLocaleString('es-MX') + ' L · ' : ''}${fecha} · ${i + 1}/${lista.length}`,
-    })}</div></div>`;
+  lista.forEach(it => {
+    labels += `<div class="page"><div class="label">${etiquetaToteHtml({ producto: it.producto, codigo: it.cod, fmt })}</div></div>`;
   });
 
   const html = `<!DOCTYPE html><html><head><title>Etiquetas de totes (${lista.length})</title>
@@ -69,7 +57,7 @@ export default function imprimirEtiquetasTotes(items) {
         box-sizing: border-box;
         transform-origin: 0 0; transform: ${tf};
       }
-      ${etiquetaCss(fmt, '.label')}
+      ${etiquetaToteCss(fmt, '.label')}
     </style></head><body>
     ${labels}
     <script>setTimeout(() => window.print(), 500);</script>

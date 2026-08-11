@@ -8,10 +8,11 @@
 
    Captura: manual (fuente → producto → presentación → cantidad) y/o ESCANEO del
    QR de las etiquetas (cada escaneo suma 1 unidad de esa línea). Un paso:
-   confirmar descuenta e imprime la remisión. Tienda = texto libre con
-   sugerencias de tiendas ya usadas. Roles: admin + almacén (Josué).
+   confirmar descuenta e imprime la remisión. Tienda = SELECT del catálogo de
+   sucursales (ago 2026; el alta es el botón "Agregar sucursal" — con texto
+   libre, "PALACO" y "palaco" eran dos tiendas). Roles: admin + almacén (Josué).
    ════════════════════════════════════════════════════════════════════════════ */
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -114,6 +115,11 @@ const S = {
   cartRow: { padding: '9px 12px', borderTop: '1px solid var(--lp-border-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, fontSize: 13 },
   del: { width: 28, height: 28, borderRadius: 6, border: 'none', background: 'var(--lp-danger-50, #FEE2E2)', color: 'var(--lp-danger-700, #991B1B)', cursor: 'pointer', fontSize: 14, lineHeight: 1 },
   err: { background: 'var(--lp-danger-50, #FEE2E2)', color: 'var(--lp-danger-700, #991B1B)', padding: '10px 12px', borderRadius: 8, fontSize: 12.5, marginTop: 12 },
+  hintVacio: { background: 'var(--lp-bg-sunken)', border: '1.5px dashed var(--lp-border-subtle)', color: 'var(--lp-text-secondary)', padding: '12px 14px', borderRadius: 10, fontSize: 12.5, lineHeight: 1.5 },
+  kebab: { width: 34, height: 34, borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)', background: 'var(--lp-bg-raised)', color: 'var(--lp-text-secondary)', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: 0 },
+  menu: { position: 'absolute', top: 38, right: 0, zIndex: 40, minWidth: 190, background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 10, boxShadow: '0 10px 28px rgba(0,0,0,.16)', overflow: 'hidden', display: 'flex', flexDirection: 'column' },
+  menuItem: { padding: '11px 14px', minHeight: 44, background: 'transparent', border: 'none', borderBottom: '1px solid var(--lp-border-subtle)', textAlign: 'left', fontSize: 13, fontWeight: 600, color: 'var(--lp-text-primary)', cursor: 'pointer', fontFamily: 'inherit' },
+  btnSec: { height: 42, padding: '0 16px', borderRadius: 10, cursor: 'pointer', fontSize: 13, fontWeight: 700, fontFamily: 'inherit', border: '1.5px solid var(--lp-brand-600)', background: 'transparent', color: 'var(--lp-brand-700)', display: 'inline-flex', alignItems: 'center', gap: 7 },
   act: (primary, dis) => ({ flex: 1, height: 46, borderRadius: 10, border: primary ? 'none' : '1.5px solid var(--lp-border-subtle)', cursor: dis ? 'not-allowed' : 'pointer', fontSize: 14, fontWeight: 700, fontFamily: 'inherit', opacity: dis ? 0.55 : 1, background: primary ? 'var(--lp-brand-600)' : 'var(--lp-bg-raised)', color: primary ? '#fff' : 'var(--lp-text-secondary)' }),
   toast: { position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 1300, background: 'var(--lp-text-primary)', color: 'var(--lp-bg-raised)', padding: '10px 18px', borderRadius: 999, fontSize: 13, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,.2)' },
 };
@@ -221,10 +227,24 @@ export function RemisionOverlay({ entrega, onClose }) {
 }
 
 /* ── Sheet Nueva Entrega ── */
-function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
+/* Líneas guardadas → forma que edita la hoja. El americano guarda el NOMBRE
+   del color y el backend lo normaliza a su clave (mayúsculas, espacios
+   colapsados), así que mandar el nombre es equivalente a mandar la clave. */
+function lineasAEditor(entrega) {
+  return (entrega?.lineas || []).map(l => (l.fuente === 'americano'
+    ? { fuente: 'americano', almacen: String(l.almacen || '1'), producto: l.key || l.producto, nombre: l.producto, presentacion: l.presentacion, cantidad: Number(l.cantidad) || 0 }
+    : { fuente: 'pt', producto: l.producto, presentacion: l.presentacion, cantidad: Number(l.cantidad) || 0 }
+  )).filter(l => l.cantidad > 0);
+}
+
+export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, onDone }) {
   useBodyScrollLock(true);
-  const [tienda, setTienda] = useState('');
-  const [lineas, setLineas] = useState([]);
+  /* MODO EDICIoN (ago 2026): la misma hoja corrige una entrega ya registrada
+     -- cantidades, producto y fuente (PT / Americano 1 / 2). El backend la
+     rehace de raiz: devuelve lo que salio y vuelve a sacar lo nuevo. */
+  const editando = !!entrega;
+  const [tienda, setTienda] = useState(entrega ? (entrega.tienda || '') : '');
+  const [lineas, setLineas] = useState(() => (entrega ? lineasAEditor(entrega) : []));
   const [fuente, setFuente] = useState('americano1'); /* americano1 | americano2 | pt */
   const [producto, setProducto] = useState('');
   const [presentacion, setPresentacion] = useState('cubeta');
@@ -255,7 +275,22 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
 
   const sel = catalogo.find(c => c.nombre === producto);
   const presOpts = fuente === 'pt' ? PRES_PT : ['cubeta', 'galon'];
-  const disp = sel ? (Number(sel.disp[presentacion]) || 0) : 0;
+  /* Al EDITAR, lo que esta entrega ya descontó vuelve a estar disponible: el
+     backend devuelve todo antes de aplicar lo nuevo. Sin esto la pantalla
+     diría "solo hay 0" para una entrega que se acaba de llevar las 10. */
+  const yaEnEstaEntrega = useMemo(() => {
+    const m = {};
+    (entrega?.lineas || []).forEach(l => {
+      const k = [l.fuente, l.almacen || '-', String(l.producto || '').toUpperCase(), l.presentacion].join('|');
+      m[k] = (m[k] || 0) + (Number(l.cantidad) || 0);
+    });
+    return m;
+  }, [entrega]);
+  const dispBase = sel ? (Number(sel.disp[presentacion]) || 0) : 0;
+  const devuelto = sel
+    ? (yaEnEstaEntrega[[fuente === 'pt' ? 'pt' : 'americano', fuente === 'pt' ? '-' : (fuente === 'americano2' ? '2' : '1'), String(sel.nombre || '').toUpperCase(), presentacion].join('|')] || 0)
+    : 0;
+  const disp = dispBase + devuelto;
   const n = parseInt(cantidad, 10) || 0;
 
   const addLinea = () => {
@@ -333,8 +368,10 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
     if (!puede) return;
     setSaving(true); setErr('');
     try {
-      const r = await api.crearEntrega({ tienda: tienda.trim(), lineas });
-      onDone(r?.entrega || null);
+      const r = editando
+        ? await api.editarEntrega(entrega.id || entrega.folio, { tienda: tienda.trim(), lineas })
+        : await api.crearEntrega({ tienda: tienda.trim(), lineas });
+      onDone(r?.entrega || null, editando);
     } catch (e) { setErr(humanizeError(e)); setSaving(false); }
   };
 
@@ -342,14 +379,29 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
     <div style={{ ...S.overlay, ...(isDesktop ? S.overlayDesk : {}) }}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
         <div style={S.shHead}>
-          <div style={S.shTitle}>Nueva entrega a tienda</div>
+          <div style={S.shTitle}>{editando ? `Editar entrega · ${entrega.folio}` : 'Nueva entrega a tienda'}</div>
           <button style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--lp-text-tertiary)', padding: 4, lineHeight: 1 }} onClick={onClose} aria-label="Cerrar">×</button>
         </div>
         <div style={S.shBody}>
+          {editando && (
+            <div style={{ ...S.hintVacio, marginTop: 8 }}>
+              Corregir la entrega <strong>rehace el movimiento</strong>: se devuelve al inventario lo que salió y se descuenta lo que dejes aquí. El folio y la fecha no cambian; vuelve a imprimir la remisión.
+            </div>
+          )}
+          {/* Ago 2026: la tienda se ELIGE, ya no se escribe. Con texto libre la
+              misma sucursal capturada distinto ("PALACO"/"palaco") partía el
+              historial en dos. Alta de sucursales: botón de la pantalla. */}
           <label style={S.lbl}>Tienda destino</label>
-          <input style={S.input} list="entregas-tiendas" value={tienda} onChange={e => setTienda(e.target.value)}
-            placeholder="Ej: Suc. Palaco" data-id="entregas.input.tienda" />
-          <datalist id="entregas-tiendas">{tiendasPrev.map(t => <option key={t} value={t} />)}</datalist>
+          {tiendasPrev.length === 0 ? (
+            <div style={S.hintVacio}>
+              No hay sucursales dadas de alta. Cierra y usa <strong>Agregar sucursal</strong> para registrar la primera.
+            </div>
+          ) : (
+            <select style={S.input} value={tienda} onChange={e => setTienda(e.target.value)} data-id="entregas.select.tienda">
+              <option value="">— elige la sucursal —</option>
+              {tiendasPrev.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
 
           <label style={S.lbl}>Agregar producto</label>
           <div style={S.seg}>
@@ -462,11 +514,155 @@ function NuevaEntregaSheet({ isDesktop, tiendasPrev, onClose, onDone }) {
         <div style={S.shFoot}>
           <button style={S.act(false, saving)} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={S.act(true, !puede)} onClick={confirmar} disabled={!puede} data-id="entregas.btn.confirmar" data-rol="admin,almacen">
-            {saving ? 'Registrando…' : `Entregar ${totalU > 0 ? totalU + ' u.' : ''} → descuenta`}
+            {saving
+              ? (editando ? 'Corrigiendo…' : 'Registrando…')
+              : (editando ? `Guardar cambios (${totalU} u.)` : `Entregar ${totalU > 0 ? totalU + ' u.' : ''} → descuenta`)}
           </button>
         </div>
       </div>
       {scanning && <QRScanner onResult={handleScan} onClose={() => setScanning(false)} />}
+    </div>
+  );
+}
+
+/* ── Alta de sucursal (ago 2026) ───────────────────────────────────────────
+   Dar de alta una tienda es un acto EXPLÍCITO y aparte de registrar la entrega:
+   así nadie crea una sucursal nueva por una errata al capturar. El duplicado
+   por mayúsculas lo rechaza el backend (409) y el mensaje se muestra tal cual. */
+export function NuevaSucursalSheet({ isDesktop, tiendas, onClose, onDone }) {
+  useBodyScrollLock(true);
+  const [nombre, setNombre] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const limpio = nombre.replace(/\s+/g, ' ').trim();
+  const yaExiste = tiendas.some(t => t.toUpperCase() === limpio.toUpperCase());
+
+  const guardar = async () => {
+    if (limpio.length < 2 || saving || yaExiste) return;
+    setSaving(true); setErr('');
+    try {
+      const r = await api.crearSucursal(limpio);
+      onDone((r?.tienda && r.tienda.nombre) || limpio);
+    } catch (e) { setErr(humanizeError(e)); setSaving(false); }
+  };
+
+  return (
+    <div style={{ ...S.overlay, ...(isDesktop ? S.overlayDesk : {}) }}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shHead}>
+          <div style={S.shTitle}>Agregar sucursal</div>
+          <button style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--lp-text-tertiary)', padding: 4, lineHeight: 1 }} onClick={onClose} aria-label="Cerrar">×</button>
+        </div>
+        <div style={S.shBody}>
+          <label style={S.lbl}>Nombre de la sucursal</label>
+          <input style={S.input} value={nombre} onChange={e => setNombre(e.target.value)} autoFocus
+            placeholder="Ej: PALACO" maxLength={120} data-id="entregas.input.sucursal"
+            onKeyDown={e => { if (e.key === 'Enter') guardar(); }} />
+          <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', marginTop: 8, lineHeight: 1.5 }}>
+            Quedará disponible en <strong>Tienda destino</strong> para todas las entregas.
+          </div>
+          {yaExiste && <div style={{ ...S.err, background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)' }}>Esa sucursal ya está dada de alta.</div>}
+          {err && <div style={S.err}>{err}</div>}
+        </div>
+        <div style={S.shFoot}>
+          <button style={S.act(false)} onClick={onClose} data-id="entregas.btn.cancelar-sucursal">Cancelar</button>
+          <button style={S.act(true, limpio.length < 2 || saving || yaExiste)} disabled={limpio.length < 2 || saving || yaExiste}
+            onClick={guardar} data-id="entregas.btn.guardar-sucursal">
+            {saving ? 'Guardando…' : 'Guardar sucursal'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Corregir la sucursal de una entrega ya registrada (ago 2026) ──────────
+   Equivocarse de tienda al capturar es un error de DESTINO: la mercancía que
+   salió es la misma, cambia a nombre de quién quedó. No devuelve ni descuenta
+   nada; el backend arrastra el cambio a los rastros y lo deja anotado en la
+   entrega. */
+export function CorregirTiendaSheet({ isDesktop, entrega, tiendas, onClose, onDone }) {
+  useBodyScrollLock(true);
+  const [tienda, setTienda] = useState(entrega.tienda || '');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const puede = !!tienda && tienda !== entrega.tienda && !saving;
+
+  const guardar = async () => {
+    if (!puede) return;
+    setSaving(true); setErr('');
+    try {
+      const r = await api.corregirTiendaEntrega(entrega.id || entrega.folio, tienda);
+      onDone((r?.entrega && r.entrega.tienda) || tienda);
+    } catch (e) { setErr(humanizeError(e)); setSaving(false); }
+  };
+
+  return (
+    <div style={{ ...S.overlay, ...(isDesktop ? S.overlayDesk : {}) }}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shHead}>
+          <div style={S.shTitle}>Corregir sucursal · {entrega.folio}</div>
+          <button style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--lp-text-tertiary)', padding: 4, lineHeight: 1 }} onClick={onClose} aria-label="Cerrar">×</button>
+        </div>
+        <div style={S.shBody}>
+          <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5, marginTop: 6 }}>
+            Registrada a nombre de <strong style={{ color: 'var(--lp-text-primary)' }}>{entrega.tienda}</strong>. Cambiar la sucursal <strong>no mueve inventario</strong>: lo entregado es lo mismo, solo se corrige el destino. Vuelve a imprimir la remisión si ya la habías sacado.
+          </div>
+          <label style={S.lbl}>Sucursal correcta</label>
+          {/* La actual va SIEMPRE en la lista aunque ya no esté en el catálogo:
+              si no, el select arrancaría en otra tienda y un guardado
+              distraído cambiaría el destino sin que nadie lo eligiera. */}
+          <select style={S.input} value={tienda} onChange={e => setTienda(e.target.value)} data-id="entregas.select.corregir-tienda">
+            {[...new Set([entrega.tienda, ...tiendas].filter(Boolean))].map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+          {err && <div style={S.err}>{err}</div>}
+        </div>
+        <div style={S.shFoot}>
+          <button style={S.act(false)} onClick={onClose} data-id="entregas.btn.cancelar-correccion">Cancelar</button>
+          <button style={S.act(true, !puede)} disabled={!puede} onClick={guardar} data-id="entregas.btn.guardar-correccion">
+            {saving ? 'Corrigiendo…' : 'Corregir sucursal'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ── Menú ⋮ de la entrega (ago 2026) ───────────────────────────────────────
+   Las acciones de una entrega ya hecha viven aquí en vez de llenar la tarjeta
+   de botones. Cierra al hacer click fuera o con Escape — es un desplegable, no
+   un modal (esos solo cierran con su X). */
+function MenuEntrega({ acciones }) {
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!abierto) return undefined;
+    const fuera = (e) => { if (ref.current && !ref.current.contains(e.target)) setAbierto(false); };
+    const esc = (e) => { if (e.key === 'Escape') setAbierto(false); };
+    document.addEventListener('mousedown', fuera);
+    document.addEventListener('keydown', esc);
+    return () => { document.removeEventListener('mousedown', fuera); document.removeEventListener('keydown', esc); };
+  }, [abierto]);
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button type="button" style={S.kebab} onClick={() => setAbierto(v => !v)}
+        aria-label="Opciones de la entrega" aria-haspopup="menu" aria-expanded={abierto}
+        data-id="entregas.btn.menu">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="12" cy="5" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="12" cy="19" r="1.9" />
+        </svg>
+      </button>
+      {abierto && (
+        <div role="menu" style={S.menu}>
+          {acciones.map(a => (
+            <button key={a.label} type="button" role="menuitem" style={S.menuItem}
+              onClick={() => { setAbierto(false); a.onClick(); }} data-id={a.dataId}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -478,6 +674,9 @@ export default function EntregasPage({ embedded = false }) {
   const isDesktop = useIsDesktop();
   const canCrear = !!user && ['admin', 'almacen'].includes(user.rol);
   const [sheet, setSheet] = useState(false);
+  const [sheetSucursal, setSheetSucursal] = useState(false);
+  const [corregir, setCorregir] = useState(null);
+  const [editar, setEditar] = useState(null);
   const [remision, setRemision] = useState(null);
   const [toast, setToast] = useState('');
 
@@ -508,10 +707,16 @@ export default function EntregasPage({ embedded = false }) {
             La <strong>baja del CEDIS</strong> ocurre aquí: cada entrega descuenta cubetas/galones (Americano y PT Terán) y deja remisión con folio.
           </div>
           {canCrear && (
-            <button style={S.btnAdd} onClick={() => setSheet(true)} data-id="entregas.btn.nueva" data-rol="admin,almacen">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-              Nueva entrega
-            </button>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button style={S.btnAdd} onClick={() => setSheet(true)} data-id="entregas.btn.nueva" data-rol="admin,almacen">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                Nueva entrega
+              </button>
+              <button style={S.btnSec} onClick={() => setSheetSucursal(true)} data-id="entregas.btn.nueva-sucursal" data-rol="admin,almacen">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>
+                Agregar sucursal
+              </button>
+            </div>
           )}
         </div>
 
@@ -523,9 +728,26 @@ export default function EntregasPage({ embedded = false }) {
               <div>
                 <span style={S.folio}>{e.folio}</span>
                 <span style={{ fontSize: 13.5, fontWeight: 700, marginLeft: 10 }}>{e.tienda}</span>
-                <div style={S.meta}>{fmtFecha(e.fecha)} · {e.usuario}</div>
+                <div style={S.meta}>
+                  {fmtFecha(e.fecha)} · {e.usuario}
+                  {/* Una corrección de destino se DECLARA: quien lea la entrega
+                      tiene que saber que antes decía otra sucursal. */}
+                  {(e.correcciones || []).filter(c => c.campo === 'tienda').slice(-1).map((c, i) => (
+                    <span key={i}> · <span style={{ color: 'var(--lp-warning-700, #92400E)' }}>corregida: antes {c.de}</span></span>
+                  ))}
+                </div>
               </div>
-              <button type="button" style={S.btnGhost} onClick={() => setRemision(e)} data-id="entregas.btn.remision">Remisión</button>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button type="button" style={S.btnGhost} onClick={() => setRemision(e)} data-id="entregas.btn.remision">Remisión</button>
+                {canCrear && (
+                  /* La remisión ya tiene su botón a la vista (es lo que más se
+                     usa): en el menú van solo las correcciones. */
+                  <MenuEntrega acciones={[
+                    { label: 'Editar entrega', dataId: 'entregas.menu.editar', onClick: () => setEditar(e) },
+                    { label: 'Cambiar sucursal', dataId: 'entregas.menu.corregir-tienda', onClick: () => setCorregir(e) },
+                  ]} />
+                )}
+              </div>
             </div>
             <div style={S.lineas}>
               {(e.lineas || []).map((l, i) => (
@@ -552,6 +774,45 @@ export default function EntregasPage({ embedded = false }) {
             reload();
             showToast(entrega ? `Entrega ${entrega.folio} registrada — inventario descontado` : 'Entrega registrada');
             if (entrega) setRemision(entrega);
+          }}
+        />
+      )}
+      {sheetSucursal && (
+        <NuevaSucursalSheet
+          isDesktop={isDesktop}
+          tiendas={tiendas}
+          onClose={() => setSheetSucursal(false)}
+          onDone={(nombre) => {
+            setSheetSucursal(false);
+            reload();
+            showToast(`Sucursal "${nombre}" dada de alta`);
+          }}
+        />
+      )}
+      {editar && (
+        <NuevaEntregaSheet
+          isDesktop={isDesktop}
+          tiendasPrev={tiendas}
+          entrega={editar}
+          onClose={() => setEditar(null)}
+          onDone={(e2) => {
+            setEditar(null);
+            reload();
+            showToast(`${editar.folio} corregida — inventario ajustado`);
+            if (e2) setRemision(e2);
+          }}
+        />
+      )}
+      {corregir && (
+        <CorregirTiendaSheet
+          isDesktop={isDesktop}
+          entrega={corregir}
+          tiendas={tiendas}
+          onClose={() => setCorregir(null)}
+          onDone={(nombre) => {
+            setCorregir(null);
+            reload();
+            showToast(`${corregir.folio} quedó a nombre de ${nombre}`);
           }}
         />
       )}

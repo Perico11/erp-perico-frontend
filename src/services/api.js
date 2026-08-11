@@ -179,6 +179,13 @@ const api = {
   getEntregas: () => request('GET', '/api/entregas'),
   crearEntrega: (payload) => request('POST', '/api/entregas/crear', payload),
   resolverEntregaQR: (cod) => request('GET', '/api/entregas/resolver?cod=' + encodeURIComponent(cod)),
+  /* Alta de sucursal (ago 2026): la tienda destino se elige del catálogo. */
+  crearSucursal: (nombre) => request('POST', '/api/entregas/tiendas', { nombre }),
+  /* Corregir la sucursal de una entrega ya registrada (no mueve inventario). */
+  corregirTiendaEntrega: (id, tienda) => request('POST', `/api/entregas/${encodeURIComponent(id)}/tienda`, { tienda }),
+  /* Editar lo entregado (cantidades, producto, fuente): el backend devuelve lo
+     que salió y vuelve a descontar lo nuevo. Mismo folio. */
+  editarEntrega: (id, payload) => request('POST', `/api/entregas/${encodeURIComponent(id)}/editar`, payload),
   /* Transferencia de envase/tapa Fábrica→Terán (Josué): mueve N piezas de stock
      (Fábrica) a teran. ref = { tipo:'envase', catKey, subKey } | { tipo:'tapa', tapaKey }. */
   transferirEnvaseATeran: (ref, cantidad, nota) =>
@@ -299,6 +306,12 @@ const api = {
      409 con requiereConfirmacion si lo declarado no cuadra con el sistema. */
   censarTotesAmericano: ({ almacen, key, nombre, totes, confirmarAjuste, nota }) =>
     request('POST', '/api/stk-americano/censo-totes', { almacen, key, nombre, totes, confirmarAjuste, nota }),
+  /* Menú del tote (10-ago): transferir UN tote completo (viaja con folio, lote
+     del fabricante y contador de tandas) o darlo de baja (ajuste confirmado). */
+  transferirToteAmericano: ({ de, a, key, nombre, codigoLote }) =>
+    request('POST', '/api/stk-americano/tote/transferir', { de, a, key, nombre, codigoLote }),
+  eliminarToteAmericano: ({ almacen, key, nombre, codigoLote, confirmar, nota }) =>
+    request('POST', '/api/stk-americano/tote/eliminar', { almacen, key, nombre, codigoLote, confirmar, nota }),
   urlImportStkAmericano: (almacen) => API_BASE + '/api/stk-americano/importar' + (almacen && almacen !== '1' ? '?almacen=' + almacen : ''),
   /* Ajuste inline de UN producto terminado (qty + min) con audit.
      CANDADO REFORZADO: backend exige sesionConteoFolio o codigoTOTP de
