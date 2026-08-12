@@ -2604,6 +2604,8 @@ export default function InventarioPage({ embedded = false }) {
                 ubicacion={ptSubtab}
                 data={ptUbiData?.data || ptUbiData}
                 lotes={lotesPorProductoUbic}
+                invPT={inventory?.pt || {}}
+                esAdmin={esAdmin}
                 query={query}
                 onQuery={setQuery}
                 canPedir={canPedirPT}
@@ -3262,7 +3264,149 @@ function ReenvasarTeranModal({ producto, scalar, totes, envData, isDesktop, onCl
   );
 }
 
-function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar }) {
+/* ── Fase 3 (ago 2026, "se cuenta lo que se puede tocar") ────────────────────
+   Tarjeta de PIEZAS por producto para las vistas Fábrica/Terán de PT: cubetas/
+   galones como chips grandes, cada tote como renglón físico con su folio y una
+   barra de litros, y la contabilidad (lotes, granel cub-equiv, residual/manual)
+   plegada en "Ver detalle". El descuadre contable-vs-piezas solo lo ve admin. */
+function PTPiezasCard({ nombre, d, ubicacion, esFabrica, acentColor, lotes, invPT, esAdmin, canPedir, onPedir, onTransferir, puedeReenvasar, onReenvasar, canEdit, onEliminarTeran }) {
+  const [detalle, setDetalle] = useState(false);
+  const fmtN = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
+  const tf = d.totesFisicos;
+  const chips = [
+    { n: d.cubeta, sing: 'cubeta', plur: 'cubetas' },
+    { n: d.galon, sing: 'galón', plur: 'galones' },
+    { n: d.litro, sing: 'litro', plur: 'litros' },
+    { n: d.atm, sing: 'atomizador', plur: 'atomizadores' },
+    { n: d.otros, sing: 'otra pieza', plur: 'otras piezas' },
+    /* tote como chip SOLO si no hay detalle físico (p.ej. residual capturado en
+       medida tote, sin sublote) — con detalle, cada tote es su propio renglón. */
+    ...(!(tf && tf.total > 0) && (Number(d.tote) || 0) > 0 ? [{ n: d.tote, sing: 'tote', plur: 'totes' }] : []),
+  ].filter(c => (Number(c.n) || 0) > 0);
+  const eq = Number(esFabrica ? invPT?.[nombre]?.qty : invPT?.[nombre]?.teran);
+  const granelSinTote = !(tf && tf.parciales > 0) && (Number(d.granel) || 0) > 0.5;
+  const lotesUbic = lotes?.[nombre.toUpperCase()]?.[ubicacion] || [];
+  const manual = Number(d.manual) || 0;
+  const residual = Number(d.residual) || 0;
+  const sinPiezas = chips.length === 0 && !(tf && tf.total > 0) && !granelSinTote;
+
+  return (
+    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--lp-border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 170 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--lp-text-primary)' }}>{nombre}</div>
+          {Number.isFinite(eq) && (
+            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>≈ {fmtN(eq)} cubetas en total</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {canPedir && (
+            <button onClick={() => onPedir(nombre)}
+              title={esFabrica ? 'Pedir producción para reponer en fábrica' : 'Pedir reposición a fábrica'}
+              style={{ ...S.btnGhost, minWidth: 92, color: acentColor, borderColor: `color-mix(in srgb, ${acentColor} 45%, transparent)` }}>Pedir</button>
+          )}
+          {/* Parte B (jun 2026): Josué transfiere PT de Fábrica → Terán (mueve inv.pt qty→teran). */}
+          {esFabrica && onTransferir && (
+            <button onClick={() => onTransferir(nombre)}
+              title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
+              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>→ Terán</button>
+          )}
+          {/* Envasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán)
+              + imprime el QR de la tanda (paridad Americano 1/2, jul 2026). */}
+          {puedeReenvasar && (
+            <button type="button" data-id="inventario.btn.reenvasar-teran" data-rol="admin,tecnico,almacen"
+              onClick={() => onReenvasar(nombre, d.teranPresScalar, d.totesFisicos)}
+              title="Envasar: convertir tote/granel en cubetas o galones (consume envases de Terán) e imprimir etiqueta QR"
+              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>Envasar</button>
+          )}
+        </div>
+      </div>
+
+      {chips.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          {chips.map(c => (
+            <span key={c.plur} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, background: 'var(--lp-bg-sunken)', borderRadius: 10, padding: '7px 12px' }}>
+              <span style={{ fontFamily: 'var(--lp-font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: 17, fontWeight: 700, color: 'var(--lp-text-primary)' }}>{fmtN(c.n)}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{Number(c.n) === 1 ? c.sing : c.plur}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Cada tote físico: folio + barra de litros. Lo que Josué/Enrique pueden tocar. */}
+      {(tf?.detalle || []).map(t => {
+        const rest = Number(t.litrosRestante) || 0;
+        const lleno = rest >= 982;
+        const pct = Math.min(100, Math.round((rest / 988) * 100));
+        return (
+          <div key={t.cod} style={{ marginTop: 8, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-brand-600) 7%, transparent)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-text-primary)', whiteSpace: 'nowrap' }}>
+              Tote <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, fontSize: 10.5, color: 'var(--lp-text-tertiary)' }}>{t.toteCod || t.codigoLote || t.cod}</span>
+            </span>
+            <span style={{ flex: 1, minWidth: 90, height: 8, borderRadius: 999, background: 'color-mix(in srgb, var(--lp-text-tertiary) 22%, transparent)', overflow: 'hidden' }}>
+              <span style={{ display: 'block', height: '100%', width: `${pct}%`, borderRadius: 999, background: 'var(--lp-brand-600)' }} />
+            </span>
+            <span style={{ fontFamily: 'var(--lp-font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-700)', whiteSpace: 'nowrap' }}>
+              {fmtN(rest)} L · {lleno ? 'lleno' : `al ${pct}%`}
+            </span>
+          </div>
+        );
+      })}
+
+      {granelSinTote && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--lp-warning-700)' }}>
+          Granel sin tote censado: ~{fmtN(d.granel)} cub-equivalente.
+        </div>
+      )}
+      {sinPiezas && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>Sin piezas registradas.</div>
+      )}
+
+      {/* Descuadre contable vs piezas (solo admin — el personal nunca ve dos números peleados) */}
+      {esAdmin && (Number(d.deficit) || 0) > 0.5 && (
+        <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 12, color: 'var(--lp-warning-700)' }}>
+          Descuadre: las piezas rastreadas suman <strong>{fmtN(d.cubEqTrack)}</strong> cub pero el contable dice <strong>{fmtN(d.cubEqContable)}</strong>. Hay que censar este producto.
+        </div>
+      )}
+
+      <button type="button" onClick={() => setDetalle(v => !v)}
+        style={{ marginTop: 10, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>
+        {detalle ? 'Ocultar detalle ▴' : 'Ver detalle ▾'}
+      </button>
+      {detalle && (
+        <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: 'var(--lp-bg-sunken)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {lotesUbic.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Lotes</span>
+              {lotesUbic.map((l, i) => (
+                <span key={(l.codigoLote || '') + i} title={'Lote ' + (l.codigoLote || '') + (l.estado ? ' · ' + l.estado : '')}
+                  style={{ fontSize: 10, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-700)', background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)', borderRadius: 5, padding: '1px 5px' }}>
+                  {l.codigoLote}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: 'var(--lp-text-secondary)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {(Number(d.granel) || 0) > 0 && <span title="Contenido restante dentro de totes a medias, en cubetas-equivalente">Granel: {fmtN(d.granel)} cub-eq</span>}
+            {residual > 0 && <span title="Stock cargado manual o de producciones previas a la trazabilidad — no se puede mover a Terán por el flujo de sublotes/QR">Sin lote: {fmtN(residual)} cub</span>}
+            {manual > 0 && <span title="Registrado a mano en Terán">Manual: {fmtN(manual)} cub</span>}
+            <span>Sublotes: {d.sublotes || 0}</span>
+          </div>
+          {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
+          {!esFabrica && canEdit && onEliminarTeran && manual > 0 && (
+            <button onClick={() => onEliminarTeran(nombre)}
+              title={`Quitar de Terán (${Math.round(manual)} cub manual). No afecta lotes rastreados ni el stock total.`}
+              style={{ ...S.btnGhost, alignSelf: 'flex-start', minWidth: 92, color: 'var(--lp-danger-600)', borderColor: 'color-mix(in srgb, var(--lp-danger-600) 45%, transparent)' }}>
+              Eliminar registro manual
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar, invPT, esAdmin }) {
   const bucket = data?.[ubicacion] || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => {
@@ -3271,10 +3415,10 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
     })
     .sort((a, b) => a[0].localeCompare(b[0]));
 
-  /* Totales agregados — TOTEs en Terán cuenta PIEZAS físicas (llenos + a
-     medias) cuando el backend las trae; el escalar solo trae los llenos. */
+  /* Totales agregados — TOTEs cuenta PIEZAS físicas (llenos + a medias) cuando
+     el backend trae el detalle (Fase 3: ya viene para ambas ubicaciones). */
   const totales = productos.reduce((acc, [, d]) => {
-    acc.tote   += (ubicacion !== 'fabrica' && d.totesFisicos?.total > 0) ? d.totesFisicos.total : (d.tote || 0);
+    acc.tote   += (d.totesFisicos?.total > 0) ? d.totesFisicos.total : (d.tote || 0);
     acc.cubeta += d.cubeta || 0;
     acc.galon  += d.galon  || 0;
     acc.litro  += d.litro  || 0;
@@ -3284,8 +3428,6 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
   }, { tote: 0, cubeta: 0, galon: 0, litro: 0, atm: 0, granel: 0 });
 
   const esFabrica = ubicacion === 'fabrica';
-  /* Grid: Producto · TOTE · Cub · Gal · Lt · ATM · Granel · Acción */
-  const gridCols = 'minmax(170px, 2fr) 60px 60px 60px 56px 56px 72px 132px';
   /* ¿Hay algo reenvasable en el pool ESCALAR de este renglón? (tote/granel/…) */
   const reenvasable = (d) => !esFabrica && !!onReenvasar && d.teranPresScalar
     && Object.entries(d.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
@@ -3372,149 +3514,27 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
           border: '1.5px solid var(--lp-border-subtle)',
           borderRadius: 'var(--lp-radius-md)', overflow: 'hidden',
         }}>
-          {/* Header de tabla */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: gridCols,
-            padding: '10px 14px',
-            background: 'var(--lp-bg-sunken)',
-            fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-            color: 'var(--lp-text-tertiary)', letterSpacing: '.05em',
-            borderBottom: '1px solid var(--lp-border-subtle)',
-          }}>
-            <span>Producto</span>
-            <span style={{ textAlign: 'right' }}>TOTE</span>
-            <span style={{ textAlign: 'right' }}>Cub</span>
-            <span style={{ textAlign: 'right' }}>Gal</span>
-            <span style={{ textAlign: 'right' }}>Lt</span>
-            <span style={{ textAlign: 'right' }}>ATM</span>
-            <span style={{ textAlign: 'right' }} title="Volumen suelto en cub-equiv (tote abierto al reenvasar)">Granel</span>
-            <span style={{ textAlign: 'right' }}>Acción</span>
-          </div>
-          {/* Filas */}
-          {productos.map(([nombre, d]) => {
-            const tieneResidual = (d.residual || 0) > 0;
-            const todoResidual = tieneResidual && (d.sublotes || 0) === 0;
-            return (
-              <div key={nombre} style={{
-                display: 'grid',
-                gridTemplateColumns: gridCols,
-                padding: '12px 14px',
-                borderBottom: '1px solid var(--lp-border-subtle)',
-                fontSize: 13, alignItems: 'center',
-              }}>
-                <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  {nombre}
-                  {tieneResidual && (
-                    <span
-                      title={todoResidual
-                        ? 'Stock cargado manualmente o de producciones previas a la trazabilidad — no se puede mover a Terán por el flujo de sublotes/QR.'
-                        : `${Math.round(d.residual)} cub sin lote (cargado manual / pre-trazabilidad). El resto sí está trackeado.`}
-                      style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                        background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)',
-                        border: '1px solid var(--lp-border-subtle)',
-                        textTransform: 'uppercase', letterSpacing: '.04em',
-                      }}
-                    >
-                      {todoResidual ? 'sin lote' : `+${Math.round(d.residual)} sin lote`}
-                    </span>
-                  )}
-                  {/* Sprint X: porción agregada a mano en Terán (eliminable) */}
-                  {!esFabrica && (Number(d.manual) || 0) > 0 && (
-                    <span
-                      title={`${Math.round(d.manual)} cub registradas a mano en Terán`}
-                      style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                        background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)',
-                        border: '1px solid var(--lp-brand-600)',
-                        textTransform: 'uppercase', letterSpacing: '.04em',
-                      }}
-                    >+{Math.round(d.manual)} manual</span>
-                  )}
-                  {/* Lote(s) con stock vivo en ESTA ubicación (jul 2026, pedido dueño:
-                      el lote aparece en Fábrica/Terán, no en Total). */}
-                  {(lotes?.[nombre.toUpperCase()]?.[ubicacion] || []).map((l, i) => (
-                    <span key={(l.codigoLote || '') + i} title={'Lote ' + (l.codigoLote || '') + (l.estado ? ' · ' + l.estado : '')}
-                      style={{
-                        fontSize: 10, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-700)',
-                        background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)',
-                        border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)', borderRadius: 5, padding: '1px 5px',
-                      }}>
-                      {l.codigoLote}
-                    </span>
-                  ))}
-                </span>
-                {/* TOTE (Terán): PIEZAS físicas (llenos + a medias) desde sublotes —
-                   antes mostraba solo teranPres.tote (llenos) y el tote a medias
-                   "desaparecía" a la columna Granel (reporte dueño 5-ago-2026). */}
-                {(() => {
-                  const tf = !esFabrica ? d.totesFisicos : null;
-                  const piezas = tf && tf.total > 0 ? tf.total : (d.tote || 0);
-                  const sub = tf && tf.parciales > 0 ? `${tf.llenos} llenos · ${tf.parciales} a medias` : null;
-                  return (
-                    <span style={{ textAlign: 'right' }}
-                      title={sub ? `${piezas} totes físicos: ${sub}. El contenido restante de los totes a medias es la columna Granel.` : undefined}>
-                      <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: piezas > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{piezas}</span>
-                      {sub && <span style={{ display: 'block', fontSize: 9.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.2 }}>{sub}</span>}
-                    </span>
-                  );
-                })()}
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.atm || 0)    > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.atm    || 0}</span>
-                {/* Granel = cub-equiv que queda DENTRO de totes a medias (no es
-                   una presentación aparte) — el tooltip lo aclara. */}
-                <span style={{ textAlign: 'right' }}
-                  title={(d.granel || 0) > 0
-                    ? `${Math.round(d.granel)} cub-equiv a granel${(d.totesFisicos?.parciales || 0) > 0 ? ` — es el contenido restante de ${d.totesFisicos.parciales} tote(s) a medias, no producto suelto` : ' (tote abierto al reenvasar)'}`
-                    : ''}>
-                  <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 16, fontWeight: 600, color: (d.granel || 0) > 0 ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)' }}>{(d.granel || 0) > 0 ? Math.round(d.granel) : 0}</span>
-                  {(d.granel || 0) > 0 && (d.totesFisicos?.parciales || 0) > 0 && (
-                    <span style={{ display: 'block', fontSize: 9.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.2 }}>en tote a medias</span>
-                  )}
-                </span>
-                <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  {canPedir && (
-                    <button
-                      onClick={() => onPedir(nombre)}
-                      title={esFabrica
-                        ? 'Pedir producción para reponer en fábrica'
-                        : 'Pedir reposición a fábrica'}
-                      style={{ ...S.btnGhost, minWidth: 96, color: acentColor, borderColor: `color-mix(in srgb, ${acentColor} 45%, transparent)` }}
-                    >Pedir</button>
-                  )}
-                  {/* Parte B (jun 2026): Josué transfiere PT de Fábrica → Terán (mueve inv.pt qty→teran). */}
-                  {esFabrica && onTransferir && (
-                    <button
-                      onClick={() => onTransferir(nombre)}
-                      title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
-                      style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
-                    >→ Terán</button>
-                  )}
-                  {/* Envasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán)
-                      + imprime el QR de la tanda (paridad Americano 1/2, jul 2026). */}
-                  {reenvasable(d) && (
-                    <button
-                      type="button" data-id="inventario.btn.reenvasar-teran" data-rol="admin,tecnico,almacen"
-                      onClick={() => onReenvasar(nombre, d.teranPresScalar, d.totesFisicos)}
-                      title="Envasar: convertir tote/granel en cubetas o galones (consume envases de Terán) e imprimir etiqueta QR"
-                      style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
-                    >Envasar</button>
-                  )}
-                  {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
-                  {!esFabrica && canEdit && onEliminarTeran && (Number(d.manual) || 0) > 0 && (
-                    <button
-                      onClick={() => onEliminarTeran(nombre)}
-                      title={`Quitar de Terán (${Math.round(d.manual)} cub manual). No afecta lotes rastreados ni el stock total.`}
-                      style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-danger-600)', borderColor: 'color-mix(in srgb, var(--lp-danger-600) 45%, transparent)' }}
-                    >Eliminar</button>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {/* Tarjetas de piezas (Fase 3) — una por producto */}
+          {productos.map(([nombre, d]) => (
+            <PTPiezasCard
+              key={nombre}
+              nombre={nombre}
+              d={d}
+              ubicacion={ubicacion}
+              esFabrica={esFabrica}
+              acentColor={acentColor}
+              lotes={lotes}
+              invPT={invPT}
+              esAdmin={esAdmin}
+              canPedir={canPedir}
+              onPedir={onPedir}
+              onTransferir={onTransferir}
+              puedeReenvasar={reenvasable(d)}
+              onReenvasar={onReenvasar}
+              canEdit={canEdit}
+              onEliminarTeran={onEliminarTeran}
+            />
+          ))}
         </div>
       )}
 
