@@ -21,6 +21,8 @@ import useVaciadores from '../../hooks/useVaciadores';
 /* DISEÑO ÚNICO de envasado (jul 2026): bloques compartidos por las 4 pantallas. */
 import { Sec, PresPills, EnvaseSelect, TapaSelect, QuienEnvaso, Contador, TopeHint } from '../../components/envasado/EnvasarUI';
 import { ESTADO_LOTE_OCULTO_INVENTARIO, ESTADO_LOTE_UBICACION_TERAN } from '../../lib/estados';
+/* Patrón único de ajuste (ago 2026): Fijar/Sumar/Restar + preview antes → después. */
+import { ModoAjusteSelector, AjustePreview, calcularTotalAjuste, etiquetaCampoAjuste, notaModoAjuste } from '../../components/AjusteModoControl';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
    Iconos abreviados estilo "tag" de 2 letras (sin emojis para consistencia
@@ -706,6 +708,10 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
+  /* Patrón único de ajuste (ago 2026): 'fijar' sustituye el total (default, es
+     lo que el endpoint espera); 'sumar'/'restar' operan sobre lo que hay y el
+     sheet calcula el total final antes de guardar. */
+  const [modo, setModo] = useState('fijar');
   /* Catálogo editable: nombre (PT y MP) + SKU (solo PT). Estos campos NO tocan
      stock: se guardan directo con auditoría.
        · PT  → /api/inventario/pt-meta (nombre + SKU; admin/inventario).
@@ -729,13 +735,31 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const cantMedidaNum = parseFloat(cantMedida);    /* PT: cantidad en la medida */
   const minNum = parseFloat(min);
   const esEnv = item.tipo === 'env';
-  /* PT: la existencia base (cubetas) se DERIVA de medida × cantidad. */
+  /* PT: el "actual" comparable para Sumar/Restar es la cantidad en la MEDIDA
+     guardada. Si el usuario captura en otra medida, no hay actual comparable
+     → se fuerza 'fijar' (captura el total en la medida nueva). */
+  const medidaActualKey = item.medida || 'cubeta';
+  const actualEnMedida = item.medidaQty != null ? item.medidaQty : (item.qty ?? 0);
+  const medidaCambiada = esPT && medidaEdit !== medidaActualKey;
+  const modoEfectivo = medidaCambiada ? 'fijar' : modo;
+  /* Total final en la unidad de captura (medida para PT, unidad directa MP/Env). */
+  const cantMedidaFinal = calcularTotalAjuste(modoEfectivo, actualEnMedida, cantMedida);
+  const qtyFinalDirecta = calcularTotalAjuste(modoEfectivo, item.qty ?? 0, qty);
+  /* PT: la existencia base (cubetas) se DERIVA de medida × cantidad (total final). */
   const qtyEfectiva = esPT
-    ? medidaACubetas(medidaEdit, isNaN(cantMedidaNum) ? 0 : cantMedidaNum)
-    : qtyNum;
+    ? medidaACubetas(medidaEdit, cantMedidaFinal == null ? 0 : cantMedidaFinal)
+    : (qtyFinalDirecta == null ? NaN : qtyFinalDirecta);
   const qtyValida = esPT
     ? (cantMedida !== '' && !isNaN(cantMedidaNum) && cantMedidaNum >= 0 && !!medidaEdit)
     : (qty !== '' && !isNaN(qtyNum) && qtyNum >= 0);
+  /* Cambiar de modo limpia el campo (sumar/restar) o precarga el total actual
+     (fijar), y regresa el foco al input. */
+  const cambiarModo = (m) => {
+    setModo(m);
+    if (esPT) setCantMedida(m === 'fijar' ? String(actualEnMedida) : '');
+    else setQty(m === 'fijar' ? String(item.qty ?? 0) : '');
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 0);
+  };
   const stockChanged = (qtyValida && qtyEfectiva !== (item.qty ?? 0))
     || (canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
   const nombreChanged = mostrarNombre && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
@@ -757,12 +781,26 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const handleSave = async () => {
     if (!puedeGuardar) return;
     setSaving(true);
+    /* Rastro del modo en el motivo: "Sumó 20 kg (300 → 320) — <motivo>". Así la
+       auditoría distingue un conteo (fijar) de una entrada/salida manual. */
+    const notaModo = stockChanged
+      ? notaModoAjuste(
+        modoEfectivo,
+        esPT ? actualEnMedida : (item.qty ?? 0),
+        esPT ? cantMedidaNum : qtyNum,
+        esPT ? cantMedidaFinal : qtyFinalDirecta,
+        esPT ? (ptMedidaDef(medidaEdit)?.plur || '') : item.unidad
+      )
+      : null;
+    const motivoFinal = notaModo
+      ? (motivo.trim() ? `${notaModo} — ${motivo.trim()}` : notaModo)
+      : motivo.trim();
     try {
       /* 3er arg = nuevo mínimo (solo si el rol puede editarlo; si no, se conserva el actual).
          4to arg = metadatos de catálogo (solo PT) + flags de qué cambió. */
       await onSave(
         qtyValida ? qtyEfectiva : (item.qty ?? 0),
-        motivo.trim(),
+        motivoFinal,
         canEditMin ? minNum : (item.min ?? 0),
         {
           stockChanged,
@@ -834,7 +872,8 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
               {PT_MEDIDAS.map(m => {
                 const on = medidaEdit === m.key;
                 return (
-                  <button key={m.key} type="button" onClick={() => setMedidaEdit(m.key)}
+                  <button key={m.key} type="button"
+                    onClick={() => { setMedidaEdit(m.key); if (m.key !== medidaActualKey && modo !== 'fijar') setModo('fijar'); }}
                     style={{ height: 36, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
                       fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 600 : 500,
                       border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
@@ -845,20 +884,36 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
                 );
               })}
             </div>
-            <label style={{ ...S.flbl, marginTop: 12 }}>Cantidad ({ptMedidaDef(medidaEdit)?.label || 'unidades'})</label>
-            <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
-              value={cantMedida} onChange={e => setCantMedida(e.target.value)} />
-            {medidaEdit !== 'cubeta' && qtyValida && (
-              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-                = <strong>{qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })}</strong> cubetas-equivalente
+            <label style={{ ...S.flbl, marginTop: 12 }}>Tipo de ajuste</label>
+            <ModoAjusteSelector modo={modoEfectivo} onModo={cambiarModo} soloFijar={medidaCambiada} dataIdBase="inventario.ajuste.modo" />
+            {medidaCambiada && (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+                Cambiaste la medida: captura el <strong>total</strong> en {ptMedidaDef(medidaEdit)?.plur || 'la medida nueva'} (Sumar/Restar solo aplican en la medida guardada).
               </div>
             )}
+            <label style={{ ...S.flbl, marginTop: 12 }}>{etiquetaCampoAjuste(modoEfectivo, ptMedidaDef(medidaEdit)?.plur || 'unidades')}</label>
+            <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
+              value={cantMedida} onChange={e => setCantMedida(e.target.value)} />
+            {medidaCambiada
+              ? <AjustePreview actual={item.qty ?? 0} nuevo={qtyValida ? qtyEfectiva : null} unidad="cub" />
+              : (
+                <AjustePreview actual={actualEnMedida} nuevo={cantMedidaFinal} unidad={ptMedidaDef(medidaEdit)?.plur || ''}
+                  extra={medidaEdit !== 'cubeta' && qtyValida ? (
+                    <div style={{ marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-sans)' }}>
+                      = <strong>{qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })}</strong> cubetas-equivalente
+                    </div>
+                  ) : null}
+                />
+              )}
           </>
         ) : (
           <>
-            <label style={{ ...S.flbl, marginTop: mostrarNombre ? 12 : 0 }}>Nueva cantidad</label>
+            <label style={{ ...S.flbl, marginTop: mostrarNombre ? 12 : 0 }}>Tipo de ajuste</label>
+            <ModoAjusteSelector modo={modo} onModo={cambiarModo} dataIdBase="inventario.ajuste.modo" />
+            <label style={{ ...S.flbl, marginTop: 12 }}>{etiquetaCampoAjuste(modo, item.unidad)}</label>
             <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
               value={qty} onChange={e => setQty(e.target.value)} />
+            <AjustePreview actual={item.qty ?? 0} nuevo={qtyFinalDirecta} unidad={item.unidad} />
           </>
         )}
         {canEditMin && (
@@ -885,7 +940,11 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
             disabled={!puedeGuardar || saving} onClick={handleSave}>
             {saving
               ? (modoPropuesta && stockChanged ? 'Enviando…' : 'Guardando…')
-              : (modoPropuesta && stockChanged ? 'Enviar a aprobación' : 'Guardar')}
+              : (modoPropuesta && stockChanged
+                ? 'Enviar a aprobación'
+                : (stockChanged && qtyValida
+                  ? `${modoEfectivo === 'fijar' ? 'Fijar' : 'Guardar'} total: ${qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })} ${esPT ? 'cub' : item.unidad}`
+                  : 'Guardar'))}
           </button>
         </div>
 
@@ -2417,7 +2476,7 @@ export default function InventarioPage({ embedded = false }) {
                 onQuery={setQuery}
                 canEdit={canEditMP}
                 onAgregar={() => setAgregarMpUbic({ ubicacion: mpSubtab })}
-                onFijar={(mp, nuevoQty) => handleSaveMPUbic(mp, mpSubtab, nuevoQty, 'fijar', `Conteo físico ${mpSubtab}`)}
+                onFijar={(mp, nuevoQty, nota) => handleSaveMPUbic(mp, mpSubtab, nuevoQty, 'fijar', nota ? `${nota} · ${mpSubtab}` : `Conteo físico ${mpSubtab}`)}
               />
             )}
             {mpSubtab === 'stock' && (
@@ -3576,46 +3635,64 @@ function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, 
   );
 }
 
-/* Fila editable de MP por almacén: "Ajustar" abre un input inline; al guardar
-   pasa por onFijar → handleSaveMPUbic → candado. */
+/* Fila editable de MP por almacén: "Ajustar" abre un editor inline con el patrón
+   único Fijar/Sumar/Restar + preview (ago 2026); al guardar pasa por
+   onFijar(total final) → handleSaveMPUbic → candado. */
 function MPUbicRow({ mp, qty, min, esTeran, canEdit, onFijar, acentColor }) {
   const [editing, setEditing] = useState(false);
+  const [modo, setModo] = useState('fijar');
   const [val, setVal] = useState(String(qty));
   const [saving, setSaving] = useState(false);
   useEffect(() => { setVal(String(qty)); }, [qty]);
   const low = min > 0 && qty <= min;
+  const totalFinal = calcularTotalAjuste(modo, qty, val);
+
+  const cambiarModo = (m) => { setModo(m); setVal(m === 'fijar' ? String(qty) : ''); };
+  const cerrar = () => { setVal(String(qty)); setModo('fijar'); setEditing(false); };
 
   const guardar = async () => {
     const n = parseFloat(val);
-    if (isNaN(n) || n < 0) return;
+    if (totalFinal == null || isNaN(n) || n < 0) return;
     setSaving(true);
-    try { await onFijar(mp, n); setEditing(false); }
+    try {
+      await onFijar(mp, totalFinal, notaModoAjuste(modo, qty, n, totalFinal, 'kg'));
+      setModo('fijar'); setEditing(false);
+    }
     catch { /* el wrapper ya alertó / canceló */ }
     finally { setSaving(false); }
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 2fr) 110px 90px 120px', padding: '12px 14px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13, alignItems: 'center' }}>
-      <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{mp}</span>
-      {editing ? (
-        <input type="number" inputMode="decimal" step="0.1" min="0" value={val} autoFocus
-          onChange={e => setVal(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') { setVal(String(qty)); setEditing(false); } }}
-          style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', padding: '6px 8px', borderRadius: 6, border: `1.5px solid ${acentColor}`, fontSize: 13, width: '100%', outline: 'none' }} />
-      ) : (
-        <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: low ? 'var(--lp-danger-600)' : qty > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{qty.toLocaleString('es-MX')}</span>
-      )}
-      <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{min > 0 ? min.toLocaleString('es-MX') : '—'}</span>
-      <span style={{ textAlign: 'right' }}>
-        {canEdit && (editing ? (
-          <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
-            <button onClick={guardar} disabled={saving} title="Guardar (candado)" style={{ padding: '5px 9px', borderRadius: 6, border: `1px solid ${acentColor}`, background: acentColor, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{saving ? '…' : '✓'}</button>
-            <button onClick={() => { setVal(String(qty)); setEditing(false); }} title="Cancelar" style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕</button>
-          </span>
+    <div style={{ borderBottom: '1px solid var(--lp-border-subtle)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 2fr) 110px 90px 120px', padding: '12px 14px', fontSize: 13, alignItems: 'center' }}>
+        <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{mp}</span>
+        {editing ? (
+          <input type="number" inputMode="decimal" step="0.1" min="0" value={val} autoFocus
+            placeholder={modo === 'sumar' ? '+ kg' : modo === 'restar' ? '− kg' : ''}
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') cerrar(); }}
+            style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', padding: '6px 8px', borderRadius: 6, border: `1.5px solid ${acentColor}`, fontSize: 13, width: '100%', outline: 'none' }} />
         ) : (
-          <button onClick={() => setEditing(true)} title={esTeran ? 'Fijar el stock de Terán (conteo físico) — no afecta producción' : 'Fijar el stock de producción en fábrica (conteo físico)'} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${acentColor}`, background: 'transparent', color: acentColor, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>Ajustar</button>
-        ))}
-      </span>
+          <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: low ? 'var(--lp-danger-600)' : qty > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{qty.toLocaleString('es-MX')}</span>
+        )}
+        <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{min > 0 ? min.toLocaleString('es-MX') : '—'}</span>
+        <span style={{ textAlign: 'right' }}>
+          {canEdit && (editing ? (
+            <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button onClick={guardar} disabled={saving || totalFinal == null} title="Guardar (candado)" style={{ padding: '5px 9px', borderRadius: 6, border: `1px solid ${acentColor}`, background: acentColor, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: totalFinal == null ? 0.5 : 1 }}>{saving ? '…' : '✓'}</button>
+              <button onClick={cerrar} title="Cancelar" style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕</button>
+            </span>
+          ) : (
+            <button onClick={() => setEditing(true)} title={esTeran ? 'Ajustar el stock de Terán (fijar, sumar o restar) — no afecta producción' : 'Ajustar el stock de producción en fábrica (fijar, sumar o restar)'} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${acentColor}`, background: 'transparent', color: acentColor, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>Ajustar</button>
+          ))}
+        </span>
+      </div>
+      {editing && (
+        <div style={{ padding: '0 14px 12px', maxWidth: 420, marginLeft: 'auto' }}>
+          <ModoAjusteSelector compact modo={modo} onModo={cambiarModo} dataIdBase="inventario.mpUbic.modo" />
+          <AjustePreview compact actual={qty} nuevo={totalFinal} unidad="kg" />
+        </div>
+      )}
     </div>
   );
 }

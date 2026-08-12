@@ -8,6 +8,10 @@ import api from '../../services/api';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { useAuthOpcional } from '../../context/AuthContext';
+/* Patrón único de ajuste (ago 2026): en Editar se elige Fijar/Sumar/Restar y
+   cada campo muestra su "antes → después"; el guardado sigue siendo modo 'set'
+   con los totales finales calculados aquí. */
+import { ModoAjusteSelector, calcularTotalAjuste } from '../../components/AjusteModoControl';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,12,8,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
@@ -27,6 +31,18 @@ const S = {
   alertErr: { background: 'var(--lp-danger-50, #FEE2E2)', color: 'var(--lp-danger-700, #991B1B)', padding: '10px 12px', borderRadius: 6, fontSize: 12, marginTop: 12 },
 };
 
+/* "120 → 140" bajo el campo (solo Editar, cuando el total cambia). */
+function MiniPrev({ actual, final }) {
+  if (final == null || final === actual) return null;
+  const fmt = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
+  const sube = final > actual;
+  return (
+    <div style={{ marginTop: 4, fontSize: 11, fontFamily: 'JetBrains Mono, monospace', color: 'var(--lp-text-tertiary)' }}>
+      {fmt(actual)} → <span style={{ fontWeight: 700, color: sube ? 'var(--lp-brand-700)' : 'var(--lp-danger-600, #DC2626)' }}>{fmt(final)}</span>
+    </div>
+  );
+}
+
 export default function AltaAmericanoModal({ catalogo = [], color = null, almacen = '1', onClose, onSaved }) {
   useBodyScrollLock(true);
   const editando = !!color;
@@ -41,6 +57,22 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
   const [cubetas, setCubetas] = useState(color ? String(color.cubetas ?? 0) : '');
   const [galones, setGalones] = useState(color ? String(color.galones ?? 0) : '');
   const [totesLitros, setTotesLitros] = useState(color ? String(color.totesLitros ?? 0) : '');
+  /* Editar: modo de ajuste único (fijar sustituye el total — default y contrato
+     del backend con 'set'; sumar/restar operan sobre el stock actual y aquí se
+     calcula el total final). Alta no lo usa: el alta siempre SUMA. */
+  const [modo, setModo] = useState('fijar');
+  const actualDe = { cubetas: Number(color?.cubetas) || 0, galones: Number(color?.galones) || 0, totesLitros: Number(color?.totesLitros) || 0 };
+  const cambiarModo = (m) => {
+    setModo(m);
+    if (m === 'fijar') {
+      setCubetas(String(color?.cubetas ?? 0)); setGalones(String(color?.galones ?? 0)); setTotesLitros(String(color?.totesLitros ?? 0));
+    } else {
+      setCubetas(''); setGalones(''); setTotesLitros('');
+    }
+  };
+  /* Total final por campo. Campo vacío = sin cambio (se manda undefined y el
+     backend no toca ese campo). */
+  const finalDe = (valor, actual) => (valor === '' ? undefined : calcularTotalAjuste(editando ? modo : 'fijar', actual, valor));
   const [proveedor, setProveedor] = useState(color?.proveedor || '');
   const [costoLitro, setCostoLitro] = useState(color?.costoLitro != null ? String(color.costoLitro) : '');
   const [nota, setNota] = useState(color?.nota || '');
@@ -57,6 +89,12 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
 
   const handleSave = async () => {
     if (!nombre.trim()) { setErr('Escribe el nombre del color'); return; }
+    if (editando && modo !== 'fijar' && !nombreCambiado
+      && finalDe(cubetas, actualDe.cubetas) === undefined
+      && finalDe(galones, actualDe.galones) === undefined
+      && finalDe(totesLitros, actualDe.totesLitros) === undefined) {
+      setErr(`Captura al menos una cantidad a ${modo === 'sumar' ? 'sumar' : 'restar'}`); return;
+    }
     setSaving(true); setErr('');
     try {
       /* Renombre manual (solo Emmanuel): primero se sustituye el nombre — el
@@ -66,11 +104,14 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
         await api.renombrarStkAmericano({ almacen, key: color.key, nuevoNombre: nombre.trim() });
       }
       /* Alta = SUMAR (11-ago, pedido dueño): un tote que llega se agrega al
-         stock existente del color. 'set' queda solo para Editar (corrección). */
+         stock existente del color. 'set' queda solo para Editar (corrección);
+         con Sumar/Restar el total final se calcula aquí y se manda como 'set'. */
       const r = await api.colorStkAmericano({
         almacen,
         nombre: nombre.trim(),
-        cubetas: numOrUndef(cubetas), galones: numOrUndef(galones), totesLitros: numOrUndef(totesLitros),
+        cubetas: editando ? finalDe(cubetas, actualDe.cubetas) : numOrUndef(cubetas),
+        galones: editando ? finalDe(galones, actualDe.galones) : numOrUndef(galones),
+        totesLitros: editando ? finalDe(totesLitros, actualDe.totesLitros) : numOrUndef(totesLitros),
         proveedor: proveedor.trim() || undefined,
         costoLitro: costoLitro !== '' ? parseFloat(costoLitro) : undefined,
         nota: nota.trim() || undefined,
@@ -134,18 +175,34 @@ export default function AltaAmericanoModal({ catalogo = [], color = null, almace
             </div>
           )}
 
+          {editando && (
+            <>
+              <label style={S.label}>Tipo de ajuste</label>
+              <ModoAjusteSelector modo={modo} onModo={cambiarModo} dataIdBase="stkAmericano.color.modo" />
+              <div style={S.hint}>
+                {modo === 'fijar'
+                  ? 'Lo que capture cada campo será el TOTAL del color (sustituye lo que hay).'
+                  : modo === 'sumar'
+                    ? 'Lo que captures se SUMA al stock actual de cada campo. Campo vacío = sin cambio.'
+                    : 'Lo que captures se RESTA al stock actual de cada campo. Campo vacío = sin cambio.'}
+              </div>
+            </>
+          )}
           <div style={S.row3}>
             <div>
               <label style={S.label}>Cubetas</label>
               <input style={S.inputSm} type="number" inputMode="numeric" step="1" min="0" value={cubetas} onChange={e => setCubetas(e.target.value)} placeholder="0" data-id="stkAmericano.color.cubetas" />
+              {editando && <MiniPrev actual={actualDe.cubetas} final={finalDe(cubetas, actualDe.cubetas)} />}
             </div>
             <div>
               <label style={S.label}>Galones</label>
               <input style={S.inputSm} type="number" inputMode="numeric" step="1" min="0" value={galones} onChange={e => setGalones(e.target.value)} placeholder="0" data-id="stkAmericano.color.galones" />
+              {editando && <MiniPrev actual={actualDe.galones} final={finalDe(galones, actualDe.galones)} />}
             </div>
             <div>
               <label style={S.label}>Litros (totes)</label>
               <input style={S.inputSm} type="number" inputMode="decimal" step="1" min="0" value={totesLitros} onChange={e => setTotesLitros(e.target.value)} placeholder="0" data-id="stkAmericano.color.litros" />
+              {editando && <MiniPrev actual={actualDe.totesLitros} final={finalDe(totesLitros, actualDe.totesLitros)} />}
             </div>
           </div>
           <div style={S.hint}>Litros a granel en totes (1000 L = 1 tote lleno; ej. 650 = tote al 65%, 4000 = 4 totes).</div>
