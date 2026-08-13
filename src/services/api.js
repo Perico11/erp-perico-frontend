@@ -658,8 +658,11 @@ const api = {
   getDevolucionesMP: () => request('GET', '/api/devoluciones/mp'),
   crearDevolucionMP: (data) => request('POST', '/api/devoluciones/mp/crear', data),
   cerrarDevolucionMP: (data) => request('POST', '/api/devoluciones/mp/cerrar', data),
+  /* P0 13-ago: SIN token daban 401 siempre (se abren en <a>/window.open, sin headers) */
   comprobanteDevolucionMPUrl: (id) =>
-    '/api/devoluciones/mp/' + encodeURIComponent(id) + '/comprobante',
+    API_BASE + '/api/devoluciones/mp/' + encodeURIComponent(id) + '/comprobante' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  devolucionNotaUrl: (id) =>
+    API_BASE + '/api/devoluciones/' + encodeURIComponent(id) + '/nota' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
 
   /* ── Ingresos de proveedor (recepción ligera con foto de factura) ── */
   getIngresos: () => request('GET', '/api/ingresos'),

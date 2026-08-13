@@ -591,16 +591,22 @@ export default function AsistenteFlotante() {
     await api.setMPUbicacion(it.k, 'fabrica', n, 'agregar', 'Agregado desde el asistente');
     return `Listo: agregué ${n} kg de ${it.k} al stock de Fábrica.`;
   }
-  /* Ejecuta la transferencia ya RESUELTA (PT o envase/tapa) → Terán. El descuento
-     real lo hace el backend (mutex + clamp); aquí solo disparamos el endpoint correcto.
-     Para PT pasa la `presentacion` (1 tote = 1 tote, NO 52 cubetas). */
+  /* P0 13-ago-2026 (análisis de flujos): el bot ya NO mueve stock directo — esa
+     vía (transferir-teran instantáneo) no dejaba folio ni firmas y era invisible
+     en la vista de tránsito. Ahora ARMA la MISMA OT que los botones: queda
+     'solicitada', Enrique la surte con su escaneo (con parciales) y almacén la
+     recibe. Un solo rigor por cualquier puerta. 1 tote = 1 tote (presentación). */
   async function accionTransferir(it, n) {
-    if (it.tipo === 'pt') {
-      await api.transferirPTaTeran(it.ref.producto, n, 'Transferido desde el asistente', it.presentacion);
-      return `Listo: transferí **${_etqPT(it.presentacion, n)}** de ${it.nombre} de Fábrica a Terán. 📦`;
-    }
-    await api.transferirEnvaseATeran(it.ref, n, 'Transferido desde el asistente');
-    return `Listo: transferí **${n} ${it.unidad}** de ${it.nombre} de Fábrica a Terán. 📦`;
+    const linea = it.tipo === 'pt'
+      ? { tipo: 'pt', producto: it.ref.producto, nombre: it.nombre, unidad: 'cub',
+          ...(it.presentacion ? { presentacion: it.presentacion, cantidadPresentacion: n, cantidad: medidaACubetas(it.presentacion, n) } : { cantidad: n }),
+          envasar: false }
+      : it.tipo === 'tapa'
+        ? { tipo: 'tapa', tapaKey: it.ref.tapaKey, nombre: it.nombre, cantidad: n, unidad: it.unidad }
+        : { tipo: 'envase', catKey: it.ref.catKey, subKey: it.ref.subKey, nombre: it.nombre, cantidad: n, unidad: it.unidad };
+    const r = await api.crearOT([linea], 'Solicitud armada desde el asistente');
+    const etq = it.tipo === 'pt' ? _etqPT(it.presentacion, n) : `${n} ${it.unidad}`;
+    return `Listo: creé la solicitud **${r?.folio || 'OT'}** por **${etq}** de ${it.nombre} (Fábrica → Terán). Enrique la surte con su escaneo y almacén la recibe; la hoja QR se imprime desde Transferencias. 📦`;
   }
   /* Propone una transferencia a Terán: resuelve el ítem (con presentación para
      PT), valida stock y pide CONFIRMACIÓN mostrando el ítem RESUELTO. La usan el
@@ -622,8 +628,7 @@ export default function AsistenteFlotante() {
       reemplazarUltimo(`Solo hay **${it.fabrica} ${uFab}** de ${it.nombre} en Fábrica${extra}. No transfiero de más.`);
       return;
     }
-    const quedan = +(it.fabrica - reqFab).toFixed(2);
-    reemplazarUltimo({ text: `Transferir **${etq}** de **${it.nombre}** de Fábrica a Terán (quedarían ${quedan} ${uFab} en Fábrica). ¿Confirmo?`, confirm: { tipo: 'transferir', it, n } });
+    reemplazarUltimo({ text: `Creo la **solicitud de transferencia (OT)** por **${etq}** de **${it.nombre}** Fábrica → Terán (hay ${it.fabrica} ${uFab} en Fábrica; se mueve al surtir/recibir). ¿Confirmo?`, confirm: { tipo: 'transferir', it, n } });
   }
   async function accionPin(nombreUser, pin) {
     const r = await api.getUsuarios().catch(() => null);

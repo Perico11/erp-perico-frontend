@@ -403,7 +403,9 @@ export default function DevolucionesPage({ embedded = false }) {
   });
 
   const verNota = useCallback((id) => {
-    window.open(`/api/devoluciones/${id}/nota`, '_blank');
+    /* P0 13-ago: window.open no manda headers — sin ?token= el backend
+       respondía "Sesion requerida" SIEMPRE. URL con token vía api. */
+    window.open(api.devolucionNotaUrl(id), '_blank');
   }, []);
 
   /* FIX jun 2026 (L2): Enrique recibe físicamente la devolución en fábrica. */

@@ -371,18 +371,19 @@ function DevCard({ d, onCerrar }) {
             </span>
             <span style={S.v}>{fmtMoney(d.montoEstimado)}</span>
           </div>
-          <button style={{ ...S.act, ...S.actDone }} disabled>
+          {/* P0 13-ago: badge de estado, no botón muerto */}
+          <div role="status" style={{ ...S.act, ...S.actDone }}>
             ✓ {d.cierreTipo === 'reembolso' ? 'Reembolso registrado' : 'Crédito registrado'}
-          </button>
+          </div>
           {d.cierreTipo === 'reembolso' && d.comprobanteArchivo && (
             <a style={S.link} href={api.comprobanteDevolucionMPUrl(d.id)} target="_blank" rel="noreferrer">Ver comprobante de pago →</a>
           )}
         </>
       )}
       {d.estado === 'merma' && (
-        <button style={{ ...S.act, ...S.actDone }} disabled>
+        <div role="status" style={{ ...S.act, ...S.actDone }}>
           Descartado como merma — sin nota de crédito
-        </button>
+        </div>
       )}
     </div>
   );

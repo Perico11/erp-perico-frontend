@@ -177,11 +177,9 @@ export default function PrintOCOverlay({ oc, onClose }) {
           {IPrint}Imprimir
         </button>
       </div>
-      {/* Acción existente conservada: documento formal generado por el backend */}
-      <button type="button" className="lp-psrv" data-id="compras.btn.imprimir-oc-servidor" data-rol="compras,admin"
-        onClick={() => window.open(`/api/compras/oc/${oc.id}/print`, '_blank')}>
-        Abrir versión del servidor
-      </button>
+      {/* P0 13-ago: "Abrir versión del servidor" RETIRADO — abría sin ?token=
+          (401 garantizado) y duplicaba este mismo documento con otra maqueta.
+          El overlay + Imprimir es la única vía. */}
     </div>
   );
 }

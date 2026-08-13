@@ -580,10 +580,11 @@ export default function AlmacenRecepcionPage({ embedded = false }) {
                         {QR_ICON} {isBusy ? 'Recibiendo…' : (esTote ? 'Escanear TOTE para recibir' : 'Escanear QR para recibir')}
                       </button>
                     ) : (
-                      <button style={{ ...actBase, ...S.actDone }} disabled>En camino — espera a que llegue</button>
+                      /* P0 13-ago: badges de estado, no botones muertos (eran <button disabled>) */
+                      <div role="status" style={{ ...actBase, ...S.actDone }}>En camino — espera a que llegue</div>
                     )
                   ) : (
-                    <button style={{ ...actBase, ...S.actDone }} disabled>✓ En stock Terán</button>
+                    <div role="status" style={{ ...actBase, ...S.actDone }}>✓ En stock Terán</div>
                   )}
                 </div>
               );
