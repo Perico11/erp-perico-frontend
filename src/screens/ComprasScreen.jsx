@@ -152,7 +152,17 @@ export default function ComprasScreen({
                     {/* P1 13-ago (una puerta de MP): Arely ya NO recibe — registra quien
                         tiene el material en las manos (fábrica, vía Ingresos con la OC
                         prellenada); aquí solo se LEE el resultado (kg y discrepancias). */}
-                    <span style={{ ...btn('done'), fontWeight: 600 }} title="La recepción física la registra fábrica en Ingresos; al aplicarse, esta OC se marca recibida sola">Esperando recepción de fábrica (Ingresos)</span>
+                    <span
+                      title="La recepción física la registra fábrica en Ingresos; al aplicarse, esta OC se marca recibida sola"
+                      style={{
+                        flex: '1 1 100%', display: 'inline-flex', alignItems: 'center',
+                        minHeight: 34, padding: '6px 12px', borderRadius: 'var(--lp-radius-md)',
+                        background: 'var(--lp-bg-sunken)', border: '1px dashed var(--lp-border-default)',
+                        color: 'var(--lp-text-tertiary)', fontSize: 12.5, fontWeight: 600,
+                        whiteSpace: 'normal', lineHeight: 1.4,
+                      }}>
+                      Recepción pendiente — la registra fábrica en Ingresos
+                    </span>
                     {o.pago !== 'contado' && o.pago !== 'credito-pagado' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} onClick={() => onRegistrarPago?.(o.cod)} style={btn('ghost')}>Registrar pago</button>}
                     {/* Contado / ya pagada: el pago se cerró al aprobar, así que la
                         corrección de importes (precio, flete) necesita puerta propia. */}
