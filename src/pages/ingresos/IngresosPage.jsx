@@ -12,6 +12,7 @@
    aprobar). Tema verde var(--lp-*).
    ═══════════════════════════════════════════════════════════════════════════ */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
@@ -473,7 +474,7 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
 }
 
 /* ─── Sheet: nuevo ingreso (técnico/almacén/admin) ─────────────────────────── */
-function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
+function CrearSheet({ catalogs, onClose, onSaved, isDesktop, prefillOC }) {
   const [proveedor, setProveedor] = useState('');
   const [numFactura, setNumFactura] = useState('');
   const [monto, setMonto] = useState('');
@@ -496,6 +497,18 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
      escondido hacía indescubrible la función cuando no había OCs activas). */
   const [ocsActivas, setOcsActivas] = useState(null);
   const [ocVinculada, setOcVinculada] = useState(null);
+  /* P1 13-ago (una puerta de MP): mini-QC opcional — lo que el "Recibir OC"
+     viejo capturaba y esta puerta no tenia. */
+  const [qcNota, setQcNota] = useState('');
+  /* Prefill desde /ingresos?oc=<id> ("Recibir MP" de Ordenes navega aqui):
+     al cargar las OCs activas, vincula la indicada una sola vez. */
+  const _prefillDone = useRef(false);
+  useEffect(() => {
+    if (!prefillOC || _prefillDone.current || !Array.isArray(ocsActivas)) return;
+    _prefillDone.current = true;
+    aplicarOC(prefillOC);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ocsActivas, prefillOC]);
   useEffect(() => {
     let alive = true;
     api.getOCs()
@@ -665,6 +678,7 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
         ...(ocVinculada ? { ocId: ocVinculada } : {}),
         ...(ocVinculada && faltanteOC > 0.01 ? { ocCerrarConFaltante: !dejarAbierta } : {}),
         ...(hasFirma && firmaRef.current ? { firmaBase64: firmaRef.current.toDataURL('image/png') } : {}),
+        ...(qcNota.trim() ? { qcNota: qcNota.trim() } : {}),
       });
       if (r && r.ok) onSaved(r.ingreso);
       else setErr((r && r.error) || 'No se pudo crear');
@@ -787,6 +801,12 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop }) {
 
           <label style={S.lbl}>Nota</label>
           <textarea value={nota} onChange={e => setNota(e.target.value)} rows={2} placeholder="Observaciones…" style={{ ...S.input, resize: 'vertical' }} />
+
+          {/* P1 13-ago: mini-QC opcional (heredado del "Recibir OC" viejo) */}
+          <label style={S.lbl}>Mini-QC de recepción (opcional)</label>
+          <textarea value={qcNota} onChange={e => setQcNota(e.target.value)} rows={2}
+            placeholder="Ej. sacos íntegros, sin humedad; tambo con abolladura leve…"
+            style={{ ...S.input, resize: 'vertical' }} data-id="ingresos.input.qc" />
 
           {/* Aviso de FALTANTE vs la OC (2ª pulsación confirma) */}
           {confirmFaltante && faltanteOC > 0.01 && (
@@ -1081,6 +1101,15 @@ export default function IngresosPage() {
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState('por_revisar');
   const [crear, setCrear] = useState(false);
+  /* P1 13-ago (una puerta de MP): /ingresos?oc=<id> (viene de "Recibir MP" en
+     Ordenes) abre el sheet con la OC ya vinculada. */
+  const [searchParams] = useSearchParams();
+  const prefillOC = searchParams.get('oc') || null;
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (prefillOC) setCrear(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillOC]);
   const [revisar, setRevisar] = useState(null);
   const [editar, setEditar] = useState(null); /* ingreso en edición (admin) */
   const [eliminando, setEliminando] = useState(null); /* id del ingreso que se está borrando */
@@ -1429,7 +1458,7 @@ export default function IngresosPage() {
       )}
 
       {crear && (
-        <CrearSheet catalogs={catalogs} isDesktop={isDesktop} onClose={() => setCrear(false)}
+        <CrearSheet catalogs={catalogs} isDesktop={isDesktop} prefillOC={prefillOC} onClose={() => setCrear(false)}
           onSaved={(ing) => { setCrear(false); showToast(`Ingreso ${ing.folio} registrado · queda por revisar`); load(); }} />
       )}
       {revisar && (

@@ -23,7 +23,7 @@ import AprobarOCModal from './components/AprobarOCModal';
 import RegistrarPagoModal from './components/RegistrarPagoModal';
 import CorregirImportesModal from './components/CorregirImportesModal';
 import EditOCModal from './components/EditOCModal';
-import RecibirOCModal from './components/RecibirOCModal';
+/* P1 13-ago (una puerta de MP): RecibirOCModal retirado — la recepción la registra fábrica en /ingresos (la OC se marca recibida sola) */
 import EliminarOCModal from './components/EliminarOCModal';
 import ComprobantesOCModal from './components/ComprobantesOCModal';
 /* Mockup integracion/Compras.html: documento de OC imprimible con partidas */
@@ -313,7 +313,6 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onAprobarOC={(cod) => openModal(cod, 'aprobar')}
         onEditarOC={(cod) => openModal(cod, 'editar')}
         onEliminarOC={(cod) => openModal(cod, 'eliminar')}
-        onRecibirMP={(cod) => openModal(cod, 'recibir')}
         onRegistrarPago={(cod) => openModal(cod, 'pago')}
         onCorregirImportes={(cod) => openModal(cod, 'importes')}
         onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) setPrintOC(oc); }}
@@ -326,7 +325,6 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       {active?.type === 'pago'     && <RegistrarPagoModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'importes' && <CorregirImportesModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'editar'   && <EditOCModal       oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
-      {active?.type === 'recibir'  && <RecibirOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'eliminar' && <EliminarOCModal   oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'comprobante' && <ComprobantesOCModal oc={active.oc} onClose={closeModal} />}
 

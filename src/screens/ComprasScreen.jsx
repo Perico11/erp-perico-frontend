@@ -149,7 +149,10 @@ export default function ComprasScreen({
                     {can('eliminarOC') && <button data-id="compras.btn.eliminar-oc" data-rol="admin" title="Solo admin" onClick={() => onEliminarOC?.(o.cod)} style={btn('danger')}>Eliminar</button>}
                   </>}
                   {o.estado === 'activa' && <>
-                    {can('recibirMP') && <button data-id="compras.btn.recibir-mp" data-rol={role} onClick={() => onRecibirMP?.(o.cod)} style={btn('primary')}><Ico d={I_CHECK} /> Recibir MP</button>}
+                    {/* P1 13-ago (una puerta de MP): Arely ya NO recibe — registra quien
+                        tiene el material en las manos (fábrica, vía Ingresos con la OC
+                        prellenada); aquí solo se LEE el resultado (kg y discrepancias). */}
+                    <span style={{ ...btn('done'), fontWeight: 600 }} title="La recepción física la registra fábrica en Ingresos; al aplicarse, esta OC se marca recibida sola">Esperando recepción de fábrica (Ingresos)</span>
                     {o.pago !== 'contado' && o.pago !== 'credito-pagado' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} onClick={() => onRegistrarPago?.(o.cod)} style={btn('ghost')}>Registrar pago</button>}
                     {/* Contado / ya pagada: el pago se cerró al aprobar, así que la
                         corrección de importes (precio, flete) necesita puerta propia. */}
