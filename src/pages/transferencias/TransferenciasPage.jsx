@@ -271,8 +271,10 @@ export default function TransferenciasPage({ embedded = false }) {
   /* Quién puede usar el hero "Leer QR": surtir (técnico) o recibir (almacén) o admin */
   const canScan = rol === 'admin' || rol === 'almacen' || rol === 'tecnico';
 
-  /* ── Ejecutar una acción sobre una OT (botón de card o confirmación) ── */
-  const ejecutar = useCallback(async (ot, accion, { skipConfirm } = {}) => {
+  /* ── Ejecutar una acción sobre una OT (botón de card o confirmación) ──
+     `parciales` = [{idx, cantidad}] en unidades de captura (la valida y aplica
+     el BACKEND; aquí solo se transporta lo capturado en el sheet). */
+  const ejecutar = useCallback(async (ot, accion, { skipConfirm, parciales } = {}) => {
     const LABEL = { surtir: 'Surtir', recibir: 'Recibir en Terán', cancelar: 'Cancelar OT' };
     const label = LABEL[accion] || accion;
     if (!skipConfirm) {
@@ -284,19 +286,29 @@ export default function TransferenciasPage({ embedded = false }) {
     }
     setBusy(ot.id);
     try {
-      const r = await api.escanearOT(ot.id, accion);
+      const r = await api.escanearOT(ot.id, accion, parciales);
       reload();
       if (r?.idempotente) showToast(`${ot.folio}: ${r.aviso || 'sin cambios'}`);
+      else if (parciales && parciales.length) showToast(`${ot.folio}: ${label.toLowerCase()} PARCIAL ✓ (faltantes registrados)`);
       else showToast(`${ot.folio}: ${label.toLowerCase()} ✓`);
     } catch (err) {
       showToast(humanizeError(err), true); /* AUDIT UX 16-jul (U4) */
       /* El 409 de la state machine ("La OT está en estado…") = otro teléfono
          ya la movió — refrescamos para que la card salte a su tab real. */
       if (err?.status === 409) reload();
+      throw err;
     } finally {
       setBusy(null);
     }
   }, [confirm, reload, showToast]);
+
+  /* Surtir/Recibir pasan por el sheet de PARCIALES (pedido dueño 13-ago tras la
+     OT-026): Enrique marca qué NO va y Josué qué NO llegó, línea por línea. */
+  const [parcialCtx, setParcialCtx] = useState(null); // { ot, accion }
+  const abrirAccion = useCallback((ot, accion) => {
+    if (accion === 'surtir' || accion === 'recibir') setParcialCtx({ ot, accion });
+    else ejecutar(ot, accion).catch(() => {});
+  }, [ejecutar]);
 
   /* ── Resultado del escáner: extraer otId, ubicar la OT, decidir acción ── */
   const handleScan = useCallback(async (result) => {
@@ -316,9 +328,10 @@ export default function TransferenciasPage({ embedded = false }) {
       setActiveTab(dest);
       return;
     }
-    /* El escaneo ES la confirmación física → no re-preguntamos. */
-    await ejecutar(ot, accion, { skipConfirm: true });
-  }, [ots, rol, ejecutar, showToast]);
+    /* El escaneo identifica la OT; el sheet de parciales ES la confirmación
+       física (ahí se marca qué no va / qué no llegó). */
+    abrirAccion(ot, accion);
+  }, [ots, rol, abrirAccion, showToast]);
 
   /* ── Tabs (móvil + escritorio comparten la lista, distinto estilo) ── */
   const TABS = [
@@ -426,7 +439,7 @@ export default function TransferenciasPage({ embedded = false }) {
                 rol={rol}
                 busy={busy === ot.id}
                 isDesktop={isDesktop}
-                onAccion={(accion) => ejecutar(ot, accion)}
+                onAccion={(accion) => abrirAccion(ot, accion)}
                 onPrint={() => setPrintOT(ot)}
                 onEditar={() => setEditOT(ot)}
               />
@@ -459,6 +472,20 @@ export default function TransferenciasPage({ embedded = false }) {
               showToast(`Solicitud creada: ${res?.folio || ''}`);
               if (res?.ot) setPrintOT(res.ot);   // ofrecer imprimir el QR de inmediato
             }
+          }}
+        />
+      )}
+
+      {/* Sheet de PARCIALES al surtir/recibir (qué no va / qué no llegó) */}
+      {parcialCtx && (
+        <ParcialSheet
+          isDesktop={isDesktop}
+          ot={parcialCtx.ot}
+          accion={parcialCtx.accion}
+          onClose={() => setParcialCtx(null)}
+          onConfirm={async (parciales) => {
+            await ejecutar(parcialCtx.ot, parcialCtx.accion, { skipConfirm: true, parciales });
+            setParcialCtx(null);
           }}
         />
       )}
@@ -541,7 +568,10 @@ function OTCard({ ot, rol, busy, onAccion, onPrint, onEditar }) {
       {/* Header: folio + estado */}
       <div style={C.head}>
         <span style={C.folio}>{ot.folio}</span>
-        <span style={C.estado(em)}><i style={C.estadoDot(em)} />{em.label}</span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {ot.parcial && <span style={C.parcialChip}>Parcial</span>}
+          <span style={C.estado(em)}><i style={C.estadoDot(em)} />{em.label}</span>
+        </span>
       </div>
 
       {/* Ruta */}
@@ -556,11 +586,19 @@ function OTCard({ ot, rol, busy, onAccion, onPrint, onEditar }) {
         {lineas.map((l, i) => {
           const c = CHIP_TIPO[l.tipo] || CHIP_TIPO.envase;
           const [qn, qr] = splitCantidad(l);
+          const falta = faltanteLabel(l);
           return (
-            <div key={i} style={{ ...C.itemRow, ...(i === lineas.length - 1 ? { borderBottom: 'none' } : null) }}>
-              <span style={C.itemTag(c)}>{tipoLabel(l)}</span>
-              <span style={C.itemName}>{l.nombre || l.producto || '—'}</span>
-              <span style={C.itemQty}><b style={C.itemQtyNum}>{qn}</b>{qr ? ' ' + qr : ''}</span>
+            <div key={i}>
+              <div style={{ ...C.itemRow, ...(i === lineas.length - 1 && !falta ? { borderBottom: 'none' } : { borderBottom: falta ? 'none' : undefined }) }}>
+                <span style={C.itemTag(c)}>{tipoLabel(l)}</span>
+                <span style={{ ...C.itemName, ...(l.noEnviado || l.noRecibido ? { textDecoration: 'line-through', opacity: 0.6 } : null) }}>{l.nombre || l.producto || '—'}</span>
+                <span style={C.itemQty}><b style={C.itemQtyNum}>{qn}</b>{qr ? ' ' + qr : ''}</span>
+              </div>
+              {falta && (
+                <div style={{ ...C.faltaNote, ...(i === lineas.length - 1 ? null : { borderBottom: '1px solid rgba(0,0,0,.05)' }) }}>
+                  {falta}
+                </div>
+              )}
             </div>
           );
         })}
@@ -655,7 +693,149 @@ const C = {
   btnNeutral: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: '#16201c', background: '#fff', border: '1px solid rgba(0,0,0,.08)', borderRadius: 14, padding: 12, minHeight: 46, boxShadow: '0 1px 2px rgba(0,0,0,.04)', whiteSpace: 'nowrap' },
   btnCancel: { gridColumn: '1 / -1', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, color: '#b3261e', background: 'rgba(179,38,30,.05)', border: '1px solid rgba(179,38,30,.18)', borderRadius: 14, padding: 12, minHeight: 46 },
   doneChip: { gridColumn: '1 / -1', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, background: 'rgba(15,122,90,.08)', border: '1px solid rgba(15,122,90,.18)', color: '#0f7a5a', borderRadius: 14, padding: 12, fontSize: 13, fontWeight: 500 },
+  parcialChip: { display: 'inline-flex', alignItems: 'center', fontSize: 11, fontWeight: 600, color: '#9a6a13', background: 'rgba(182,121,29,.14)', borderRadius: 99, padding: '4px 10px', whiteSpace: 'nowrap' },
+  faltaNote: { gridColumn: '1 / -1', fontSize: 11.5, color: '#9a6a13', padding: '0 4px 6px', fontStyle: 'italic' },
 };
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   PARCIALES (13-ago-2026, pedido dueño tras la OT-026): no siempre viaja todo
+   lo solicitado. Al SURTIR, Enrique marca qué no va (no sale de Fábrica); al
+   RECIBIR, Josué marca qué no llegó (el backend lo regresa a Fábrica). La
+   VALIDACIÓN y el movimiento son 100% backend; este sheet solo captura.
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* Cantidad de la línea en sus unidades de captura (tal cual se pidió). */
+function unidadesDeLinea(l) {
+  return (l && l.tipo === 'pt' && l.presentacion) ? (l.cantidadPresentacion != null ? l.cantidadPresentacion : l.cantidad) : (l ? l.cantidad : 0);
+}
+/* "2 totes" / "40 cubetas" / "12 pz" — nunca colapsar a cubetas frente al usuario. */
+function etiquetaUnidades(l, n) {
+  if (l && l.tipo === 'pt' && l.presentacion) return etiquetaMedida(l.presentacion, Number(n) || 0);
+  return `${(Number(n) || 0).toLocaleString('es-MX')} ${(l && l.unidad) || 'pz'}`;
+}
+/* Nota de faltante de una línea (registrada por el backend al surtir/recibir). */
+function faltanteLabel(l) {
+  if (!l) return null;
+  if (l.noEnviado) return 'No fue en el viaje';
+  if (l.noRecibido) return 'No llegó — regresó a Fábrica';
+  if (Number(l.faltoSurtir) > 0) return `Faltó al surtir: ${etiquetaUnidades(l, l.faltoSurtir)}`;
+  if (Number(l.faltoRecibir) > 0) return `No llegó ${etiquetaUnidades(l, l.faltoRecibir)} — regresó a Fábrica`;
+  return null;
+}
+
+function ParcialSheet({ isDesktop, ot, accion, onClose, onConfirm }) {
+  useBodyScrollLock(true);
+  const esSurtir = accion === 'surtir';
+  const lineas = Array.isArray(ot.lineas) ? ot.lineas : [];
+  const topes = lineas.map(l => Number(unidadesDeLinea(l)) || 0);
+  const [vals, setVals] = useState(() => topes.map(t => String(t)));
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+
+  const setVal = (i, v) => setVals(prev => prev.map((x, j) => (j === i ? v : x)));
+  const toggleNoVa = (i) => setVals(prev => prev.map((x, j) => (j === i ? (Number(x) === 0 ? String(topes[i]) : '0') : x)));
+
+  const nums = vals.map(v => Number(v));
+  const idxInvalida = nums.findIndex((n, i) => !Number.isFinite(n) || n < 0 || n > topes[i] + 0.001);
+  const parciales = nums
+    .map((n, i) => ({ idx: i, cantidad: n }))
+    .filter((p) => Math.abs(p.cantidad - topes[p.idx]) > 0.0001);
+  const todoCero = nums.every(n => !Number.isFinite(n) || n <= 0);
+
+  const confirmar = async () => {
+    if (idxInvalida >= 0) { setErr(`Línea ${idxInvalida + 1}: cantidad inválida (máximo ${topes[idxInvalida]}).`); return; }
+    if (todoCero) {
+      setErr(esSurtir
+        ? 'Nada marcado para surtir. Si el viaje no va, cancela la OT en lugar de surtirla en cero.'
+        : 'Nada marcado como recibido. Si no llegó nada, pide al admin cancelar la OT (regresa todo a Fábrica).');
+      return;
+    }
+    setErr('');
+    setSaving(true);
+    try {
+      await onConfirm(parciales.length ? parciales : undefined);
+    } catch (e) {
+      setErr(humanizeError(e));
+      setSaving(false);
+    }
+  };
+
+  const PZ = {
+    row: { display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0', borderBottom: '1px solid var(--lp-border-subtle, rgba(0,0,0,.07))' },
+    info: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
+    tag: { fontSize: 9, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', borderRadius: 99, padding: '3px 8px', color: '#0f7a5a', background: 'rgba(15,122,90,.12)', flexShrink: 0 },
+    name: { fontSize: 13, fontWeight: 600, textTransform: 'uppercase', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: 'var(--lp-text-primary)' },
+    pedido: { fontSize: 12, color: 'var(--lp-text-tertiary)', whiteSpace: 'nowrap', marginLeft: 'auto' },
+    ctrl: { display: 'flex', alignItems: 'center', gap: 10 },
+    input: (cero) => ({ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, fontSize: 15, fontFamily: 'var(--lp-font-mono)', border: cero ? '1.5px solid rgba(179,38,30,.45)' : '1px solid var(--lp-border, rgba(0,0,0,.14))', background: cero ? 'rgba(179,38,30,.05)' : 'var(--lp-bg-surface, #fff)', color: cero ? '#b3261e' : 'var(--lp-text-primary)' }),
+    unit: { fontSize: 12, color: 'var(--lp-text-tertiary)', whiteSpace: 'nowrap' },
+    noBtn: (activo) => ({ flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, borderRadius: 99, padding: '9px 14px', minHeight: 38, border: activo ? '1px solid rgba(179,38,30,.35)' : '1px solid var(--lp-border, rgba(0,0,0,.14))', color: activo ? '#fff' : '#b3261e', background: activo ? '#b3261e' : 'rgba(179,38,30,.06)', whiteSpace: 'nowrap' }),
+  };
+
+  const faltas = parciales.length;
+  const labelAccion = esSurtir ? 'Surtir' : 'Recibir en Terán';
+
+  return (
+    <div style={SH.overlay(isDesktop)}>
+      <div style={SH.sheet(isDesktop)}>
+        <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
+          <div style={SH.h}>{labelAccion} · {ot.folio}</div>
+          <div style={SH.s}>
+            {esSurtir
+              ? 'Marca lo que NO va en este viaje (botón "No va") o ajusta la cantidad que sí sube al camión. Lo no enviado se queda en Fábrica y queda registrado como faltante.'
+              : 'Confirma lo que llegó físicamente. Lo que marques como no llegado REGRESA a Fábrica en el sistema y queda registrado en la OT.'}
+          </div>
+        </div>
+
+        <div style={SH.body}>
+          {lineas.map((l, i) => {
+            const cero = Number(vals[i]) === 0;
+            const medida = (l.tipo === 'pt' && l.presentacion) ? (ptMedidaDef(l.presentacion)?.plur || l.presentacion) : (l.unidad || 'pz');
+            return (
+              <div key={i} style={{ ...PZ.row, ...(i === lineas.length - 1 ? { borderBottom: 'none' } : null) }}>
+                <div style={PZ.info}>
+                  <span style={PZ.tag}>{l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Env'}</span>
+                  <span style={PZ.name}>{l.nombre || l.producto || '—'}</span>
+                  <span style={PZ.pedido}>{esSurtir ? 'Solicitado' : 'En tránsito'}: {etiquetaUnidades(l, topes[i])}{l.envasar ? ' · ENVASAR' : ''}</span>
+                </div>
+                <div style={PZ.ctrl}>
+                  <input
+                    style={PZ.input(cero)} type="number" inputMode="decimal" min="0" max={topes[i]}
+                    value={vals[i]} onChange={(e) => setVal(i, e.target.value)}
+                    aria-label={`Cantidad de ${l.nombre || ''} que ${esSurtir ? 'sí va' : 'sí llegó'}`}
+                    data-id="transferencias.input.parcial" data-rol="admin,tecnico,almacen"
+                  />
+                  <span style={PZ.unit}>{medida}</span>
+                  <button type="button" style={PZ.noBtn(cero)} onClick={() => toggleNoVa(i)}
+                    data-id="transferencias.btn.no-va" data-rol="admin,tecnico,almacen">
+                    {cero ? 'Sí va' : (esSurtir ? 'No va' : 'No llegó')}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          <div style={{ ...SH.hint, marginTop: 14 }}>
+            {faltas === 0
+              ? (esSurtir ? 'Todo completo: las cantidades solicitadas van tal cual.' : 'Todo completo: llegó todo lo enviado.')
+              : `${faltas} línea${faltas > 1 ? 's' : ''} con faltante — ${esSurtir ? 'lo no enviado se queda en Fábrica' : 'lo no llegado regresa a Fábrica'} y queda registrado en la OT.`}
+          </div>
+
+          {err && <div style={SH.err}>{err}</div>}
+        </div>
+
+        <div style={SH.footer}>
+          <div style={SH.acts}>
+            <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
+            <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: saving ? 0.6 : 1 }} onClick={confirmar} disabled={saving}
+              data-id="transferencias.btn.confirmar-parcial" data-rol="admin,tecnico,almacen">
+              {saving ? 'Aplicando…' : (faltas === 0 ? `${labelAccion} completo` : `${labelAccion} parcial (${faltas} faltante${faltas > 1 ? 's' : ''})`)}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════
    CrearSheet — bottom-sheet (móvil) / modal (escritorio) para armar una OT.

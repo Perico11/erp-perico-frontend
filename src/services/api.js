@@ -193,7 +193,9 @@ const api = {
   /* ── Órdenes de Transferencia (OT) — flujo formal Fábrica↔Terán con escaneo ── */
   crearOT: (lineas, nota) => request('POST', '/api/transferencias/crear', { lineas, nota }),
   getOTs: (estado) => request('GET', '/api/transferencias' + (estado ? '?estado=' + encodeURIComponent(estado) : '')),
-  escanearOT: (otId, accion) => request('POST', '/api/transferencias/scan', { otId, accion }),
+  /* `parciales` (opcional): [{ idx, cantidad }] en unidades de captura de la línea —
+     surtir: lo que SÍ va (0 = no va) · recibir: lo que SÍ llegó (el resto regresa a Fábrica). */
+  escanearOT: (otId, accion, parciales) => request('POST', '/api/transferencias/scan', { otId, accion, ...(parciales && parciales.length ? { parciales } : {}) }),
   /* Editar/sustituir las líneas de una OT en 'Solicitada' (admin/almacen/tecnico). */
   editarOT: (otId, lineas, nota) => request('POST', '/api/transferencias/editar', { otId, lineas, nota }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
