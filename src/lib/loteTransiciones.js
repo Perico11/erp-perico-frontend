@@ -38,11 +38,17 @@ export const TRANSICIONES_SUBLOTE = {
      en caso de TOTE directo. Antes el banner "Recibir aquí" aparecía
      prematuramente y saltaba el paso de Luis. */
   escanearRecibirTeran:   { desde: ['en_camino','tote_activo'], a: '__auto__', roles: ['almacen','admin'] },
+  /* P1 13-ago-2026: marcha atrás de un escaneo de Luis hecho por error —
+     'en_camino' no tenía salida y el material quedaba "viajando" hasta que
+     un admin forzara transición. No toca inventario. Motivo obligatorio. */
+  cancelarEnCamino:       { desde: ['en_camino'], a: 'en_recoleccion', roles: ['recolector','almacen','admin'] },
   reenvasarTote:          { desde: ['tote_activo'], a: '__same__', roles: ['almacen','tecnico','admin'] },
   /* Cierre MANUAL del TOTE — DECISIÓN OWNER 10 jun 2026 (revierte la auto-merma):
      el remanente se registra como merma SOLO cuando admin/técnico lo decide.
-     Nota obligatoria (el guard vive en el backend; aquí solo gateo rol/estado). */
-  vaciarTote:             { desde: ['tote_activo'], a: 'tote_vaciado', roles: ['admin','tecnico'] },
+     Nota obligatoria (el guard vive en el backend; aquí solo gateo rol/estado).
+     P1 13-ago: +almacen (Josué opera los totes de Terán; sin él, un remanente
+     de 0.2 L bloqueaba el cierre del pedido para siempre). */
+  vaciarTote:             { desde: ['tote_activo'], a: 'tote_vaciado', roles: ['admin','tecnico','almacen'] },
   cancelarSublote:        { desde: ['envasado','en_recoleccion'], a: 'cancelado', roles: ['admin','almacen'] },
 };
 
@@ -68,6 +74,7 @@ export const LABELS_ACCION_SUBLOTE = {
   marcarRecoleccion:    'Marcar listo para recolectar',
   cancelarRecoleccion:  'Luis no disponible — regresar a envasado',
   escanearRecoger:      'Voy por él',
+  cancelarEnCamino:     'Escaneado por error — regresar a recolección',
   escanearRecibirTeran: 'Recibir',
   reenvasarTote:        'Re-envasar TOTE',
   vaciarTote:           'Vaciar TOTE (merma)',

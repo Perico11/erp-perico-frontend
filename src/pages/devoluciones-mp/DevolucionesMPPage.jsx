@@ -124,6 +124,18 @@ export default function DevolucionesMPPage({ embedded = false }) {
   /* { dev, tipo } — tipo viene del botón elegido (mockup: Nota de crédito | Reembolso) */
   const [cerrar, setCerrar] = useState(null);
 
+  /* P1 13-ago: registrada por error → cancelar repone la MP descontada (backend). */
+  const cancelarDev = async (d) => {
+    const motivo = window.prompt(`Cancelar la devolución ${d.id} (${d.mp}).\nSe repone la MP que se descontó al crearla.\n\nMotivo (obligatorio):`);
+    if (motivo === null) return;
+    try {
+      await api.cancelarDevolucionMP(d.id, String(motivo || ''));
+      reload();
+    } catch (e) {
+      window.alert(e?.message || 'No se pudo cancelar');
+    }
+  };
+
   const { data, loading, reload } = useApiData(() => api.getDevolucionesMP(), null, 60000);
   const { data: invData } = useApiData(() => api.getInventario(), null, 0);
   const { data: maestroData } = useApiData(() => api.getMaestroMP(), null, 0);
@@ -174,7 +186,7 @@ export default function DevolucionesMPPage({ embedded = false }) {
           ) : !visibles.length ? (
             <div style={S.empty}>Sin devoluciones aquí.</div>
           ) : (
-            <DevTable devs={visibles} onCerrar={(d, tipo) => setCerrar({ dev: d, tipo })} />
+            <DevTable devs={visibles} onCerrar={(d, tipo) => setCerrar({ dev: d, tipo })} onCancelar={cancelarDev} />
           )}
         </div>
 
@@ -222,7 +234,7 @@ export default function DevolucionesMPPage({ embedded = false }) {
         ) : !visibles.length ? (
           <div style={S.empty}>Sin devoluciones aquí.</div>
         ) : (
-          visibles.map(d => <DevCard key={d.id} d={d} onCerrar={(tipo) => setCerrar({ dev: d, tipo })} />)
+          visibles.map(d => <DevCard key={d.id} d={d} onCerrar={(tipo) => setCerrar({ dev: d, tipo })} onCancelar={() => cancelarDev(d)} />)
         )}
       </div>
 
@@ -245,7 +257,7 @@ export default function DevolucionesMPPage({ embedded = false }) {
 }
 
 /* ── Tabla de devoluciones (escritorio) — 1:1 SCREENS.devol ── */
-function DevTable({ devs, onCerrar }) {
+function DevTable({ devs, onCerrar, onCancelar }) {
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -299,6 +311,12 @@ function DevTable({ devs, onCerrar }) {
                         onClick={() => onCerrar(d, 'reembolso')}>
                         Reembolso
                       </button>
+                      {/* P1 13-ago: registrada por error → repone la MP */}
+                      <button type="button" data-id="devoluciones-mp.btn.cancelar" data-rol="admin,compras"
+                        style={{ ...S.actBtn, background: 'transparent', border: '1px solid var(--lp-danger-300, #f3b6b2)', color: 'var(--lp-danger-700, #B42318)' }}
+                        onClick={() => onCancelar && onCancelar(d)}>
+                        Cancelar
+                      </button>
                     </span>
                   )}
                   {d.estado === 'registrada' && (
@@ -324,7 +342,7 @@ function DevTable({ devs, onCerrar }) {
   );
 }
 
-function DevCard({ d, onCerrar }) {
+function DevCard({ d, onCerrar, onCancelar }) {
   const est = ESTADO_BADGE[d.estado] || ESTADO_BADGE.merma;
   const cantTxt = (d.cantidad != null ? d.cantidad + ' ' + (d.unidad || '') : '').trim();
   return (
@@ -360,6 +378,12 @@ function DevCard({ d, onCerrar }) {
               Reembolso
             </button>
           </div>
+          {/* P1 13-ago: registrada por error → repone la MP */}
+          <button style={{ ...S.act, ...S.actGhost, color: 'var(--lp-danger-700, #B42318)', borderColor: 'var(--lp-danger-300, #f3b6b2)' }}
+            data-id="devoluciones-mp.btn.cancelar" data-rol="compras,admin"
+            onClick={() => onCancelar && onCancelar()}>
+            Cancelar devolución
+          </button>
         </>
       )}
       {d.estado === 'registrada' && (

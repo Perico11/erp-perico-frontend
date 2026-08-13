@@ -281,8 +281,8 @@ const api = {
   solicitudMP: ({ mps, prioridad, notas, proveedorSugerido }) =>
     request('POST', '/api/ordenes-compra/solicitud', { mps, prioridad, notas, proveedorSugerido }),
   getEnvases: () => request('GET', '/api/envases'),
-  recepcionMP: (mp, cantidad, proveedor, nota, factura) =>
-    request('POST', '/api/inventario/recepcion-mp', { mp, cantidad, proveedor, nota, factura }),
+  /* P1 13-ago: wrapper recepcionMP ELIMINADO — sin caller desde el 21-jul; la
+     entrada de MP va por la OC (recibir) o por Ingresos. */
   /* Inventario INICIAL PT (baseline): para producto terminado que YA estaba
      en almacén antes de empezar a usar el ERP. No es producción ni recepción
      de lote — es carga inicial / corrección manual. Admite individual o masivo. */
@@ -653,6 +653,10 @@ const api = {
     request('POST', '/api/devoluciones/recibir', { devolucionId, recibidoPor, firma, qrEscaneado }),
   disponerDevolucion: (devolucionId, disposicion, nota) =>
     request('POST', '/api/devoluciones/disposicion', { devolucionId, disposicion, nota }),
+
+  /* P1 13-ago: cancelación de devoluciones (repone el stock descontado al crear) */
+  cancelarDevolucion: (devolucionId, motivo) => request('POST', '/api/devoluciones/cancelar', { devolucionId, motivo }),
+  cancelarDevolucionMP: (id, motivo) => request('POST', '/api/devoluciones/mp/cancelar', { id, motivo }),
 
   /* ── Devoluciones de MP → proveedor (Capa 3, Arely) ── */
   getDevolucionesMP: () => request('GET', '/api/devoluciones/mp'),

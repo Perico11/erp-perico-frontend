@@ -325,7 +325,7 @@ function DevolucionSheet({ isDesktop, onClose, onSaved }) {
 }
 
 /* ════════════════ Acciones por devolución (compartidas tabla/cards) ════════════════ */
-function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, alignEnd }) {
+function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, cancelar, alignEnd }) {
   return (
     <div style={alignEnd ? S.rowActions : { display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       <button style={S.btnGhost} onClick={() => verNota(d.id)} data-id="devoluciones.btn.ver-nota">Ver nota</button>
@@ -334,6 +334,14 @@ function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, alignEnd 
       {d.estado === 'pendiente' && (can('produccion') || can('admin')) && (
         <button style={S.btnSolidSm} onClick={() => recibir(d)} data-id="devoluciones.btn.recibir" data-rol="admin,tecnico">
           Recibí en fábrica
+        </button>
+      )}
+
+      {/* P1 13-ago: registrada por error → cancelar repone el PT descontado */}
+      {d.estado === 'pendiente' && cancelar && (
+        <button style={{ ...S.btnGhost, ...S.btnGhostDanger }} onClick={() => cancelar(d)}
+          data-id="devoluciones.btn.cancelar" data-rol="admin,tecnico,almacen">
+          Cancelar devolución
         </button>
       )}
 
@@ -468,7 +476,28 @@ export default function DevolucionesPage({ embedded = false }) {
   }, [cargar, confirm]);
 
   const lista = [...devs].reverse();
-  const accionProps = { can, verNota, recibir: recibirEnFabrica, disponer: disponerDevolucion, reembolsar: emitirReembolso };
+  /* P1 13-ago: una devolución registrada por error no tenía salida (el PT
+     quedaba descontado para siempre). Cancelar repone el stock (backend). */
+  const cancelarDevolucion = useCallback(async (dev) => {
+    const motivo = await confirm(
+      `Cancelar la devolución ${dev.id} (${dev.producto || 'N/D'}). Se repone el PT que se descontó al registrarla.`,
+      {
+        title: 'Cancelar devolución',
+        confirmText: 'Cancelar devolución',
+        danger: true,
+        prompt: { label: 'Motivo (obligatorio)', placeholder: 'Ej. se registró por error, el cliente no la devolvió…', required: true },
+      }
+    );
+    if (motivo === null || motivo === false) return;
+    try {
+      await api.cancelarDevolucion(dev.id, String(motivo || ''));
+      cargar();
+    } catch (e) {
+      setErr(humanizeError(e));
+    }
+  }, [confirm, cargar]);
+
+  const accionProps = { can, verNota, recibir: recibirEnFabrica, disponer: disponerDevolucion, reembolsar: emitirReembolso, cancelar: cancelarDevolucion };
 
   return (
     <div>

@@ -460,7 +460,7 @@ export default function AlmacenRecepcionPage({ embedded = false }) {
                         owner 10 jun 2026). El SM espejo gatea admin/técnico; Josué
                         (almacen) no lo ve. Botón secundario discreto, ancho auto. */}
                     {getAccionesSublote(tote, rol).includes('vaciarTote') && (
-                      <button type="button" data-id="recepcion.btn.vaciarTote" data-rol="admin,tecnico"
+                      <button type="button" data-id="recepcion.btn.vaciarTote" data-rol="admin,tecnico,almacen"
                         disabled={busy === tote.cod}
                         onClick={() => handleVaciarTote(tote)}
                         title={`Registrar los ${(typeof tote.litrosRestante === 'number' ? tote.litrosRestante : Number(tote.lit) || 0).toFixed(2)} L restantes como merma y vaciar el TOTE`}
