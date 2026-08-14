@@ -496,6 +496,8 @@ const api = {
   getMRP: () => request('GET', '/api/compras/mrp'),
   getOCs: () => request('GET', '/api/compras/oc'),
   createOC: (data) => request('POST', '/api/compras/oc', data),
+  /* P1 13-ago: válvula admin — deshace la recepción completa de una OC */
+  revertirRecepcionOC: (id, motivo) => request('POST', '/api/compras/oc/revertir-recepcion', { id, motivo }),
   editOC: (data) => request('POST', '/api/compras/oc/editar', data),
   recibirOC: (id, items, firma, recibidoPor, qcMP) =>
     request('POST', '/api/compras/oc/recibir', { id, items, firma, recibidoPor, qcMP }),

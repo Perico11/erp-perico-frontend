@@ -313,6 +313,19 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onAprobarOC={(cod) => openModal(cod, 'aprobar')}
         onEditarOC={(cod) => openModal(cod, 'editar')}
         onEliminarOC={(cod) => openModal(cod, 'eliminar')}
+        onRevertirRecepcion={async (cod) => {
+          /* P1 13-ago: válvula admin — deshace stock, costo, lotes MP y espejo */
+          const motivo = window.prompt('Revertir la recepción de esta OC.\nSe descuenta la MP recibida, se des-mezcla el costo y la OC regresa a Activas.\n\nMotivo (mínimo 10 caracteres):');
+          if (motivo === null) return;
+          try {
+            const r = await api.revertirRecepcionOC(cod, motivo);
+            const avisos = (r?.detalle || []).filter(d => d.aviso).map(d => `${d.mp}: ${d.aviso}`);
+            window.alert('Recepción revertida.' + (avisos.length ? '\n\nAVISOS:\n' + avisos.join('\n') : ''));
+            if (onRefresh) onRefresh();
+          } catch (e) {
+            window.alert(e?.message || 'No se pudo revertir');
+          }
+        }}
         onRegistrarPago={(cod) => openModal(cod, 'pago')}
         onCorregirImportes={(cod) => openModal(cod, 'importes')}
         onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) setPrintOC(oc); }}

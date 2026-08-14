@@ -39,7 +39,7 @@ function btn(kind) {
 }
 
 export default function ComprasScreen({
-  data = DEMO, onNuevaOC, onAprobarOC, onEditarOC, onEliminarOC, onRecibirMP, onRegistrarPago, onCorregirImportes, onImprimirOC, onVerComprobante,
+  data = DEMO, onNuevaOC, onAprobarOC, onEditarOC, onEliminarOC, onRecibirMP, onRegistrarPago, onCorregirImportes, onImprimirOC, onVerComprobante, onRevertirRecepcion,
   can = () => true, role, isDesktop = false, initialTab,
 }) {
   const ocs = (data && data.ocs) || DEMO.ocs;
@@ -190,6 +190,8 @@ export default function ComprasScreen({
                         pago" donde corregirlo — Editar tampoco (rechaza recibidas). */}
                     {!o.eliminada && o.pago !== 'credito' && can('compras') && <button data-id="compras.btn.corregir-importes" data-rol={role} title="Corregir precio, flete o total facturado" onClick={() => onCorregirImportes?.(o.cod)} style={btn('ghost')}>Corregir importes</button>}
                     {!o.eliminada && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver recepción, firma, factura y pago" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
+                    {/* P1 13-ago: válvula admin — deshace stock, costo, lotes MP y espejo; la OC regresa a Activas */}
+                    {!o.eliminada && can('eliminarOC') && onRevertirRecepcion && <button data-id="compras.btn.revertir-recepcion" data-rol="admin" title="Revertir la recepción completa (solo admin, con motivo)" onClick={() => onRevertirRecepcion?.(o.cod)} style={btn('danger')}>Revertir recepción</button>}
                     {!o.eliminada && can('compras') && <button data-id="compras.btn.abrir-imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
                   </>}
                 </div>
