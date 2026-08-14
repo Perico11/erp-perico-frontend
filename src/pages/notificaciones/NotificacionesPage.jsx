@@ -122,6 +122,7 @@ const TECH_LABELS = {
   costo_faltante: 'Costo no definido',
   conteo_varianza: 'Varianza en conteo',
   conteo_pendiente_aprobacion: 'Conteo por aprobar',
+  ajuste_stock_no_admin: 'Ajuste manual de stock',
   devolucion_mp_pendiente: 'Devolución a proveedor',
   rendimiento_bajo: 'Rendimiento bajo',
   lote_en_camino: 'Lote en camino',
