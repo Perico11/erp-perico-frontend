@@ -568,6 +568,11 @@ const api = {
   crearIngreso: (data) => request('POST', '/api/ingresos', data),
   revisarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/revisar', data),
   ingresoFacturaUrl: (id) => API_BASE + '/api/ingresos/' + encodeURIComponent(id) + '/factura' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  /* GD1105/ING-017 (ago 2026): cancelar con reversa + etiqueta de tote por lote.
+     Las URLs llevan ?token= porque se abren con window.open (sin headers). */
+  cancelarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/cancelar', data),
+  etiquetaToteUrl: (cod) => API_BASE + '/api/etiquetas/tote/' + encodeURIComponent(cod) + '/print' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  qrLoteUrl: (cod) => API_BASE + '/qr/' + encodeURIComponent(cod),
 
   /* ── SAT / CFDI ── */
   satParse: (xmlText) => request('POST', '/api/sat/parse', { xmlText }),

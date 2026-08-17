@@ -36,6 +36,21 @@ const IconDoc = () => (
     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
   </svg>
 );
+const IconDots = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="12" cy="5" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="12" cy="19" r="1.9" />
+  </svg>
+);
+const IconDotsH = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="5" cy="12" r="1.9" /><circle cx="12" cy="12" r="1.9" /><circle cx="19" cy="12" r="1.9" />
+  </svg>
+);
+const IconChevron = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="9 18 15 12 9 6" />
+  </svg>
+);
 const IconInbox = () => (
   <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--lp-text-tertiary,#8a948f)" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 10 }}>
     <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
@@ -56,7 +71,24 @@ const ESTADO_META = {
   por_revisar: { label: 'Por revisar', color: '#92610A', bg: '#FEF3C7' },
   recibido:    { label: 'Recibido',    color: '#0F6E56', bg: 'rgba(15,122,90,.12)' },
   rechazado:   { label: 'Rechazado',   color: '#B91C1C', bg: '#FEE2E2' },
+  cancelado:   { label: 'Cancelado',   color: '#6B7280', bg: '#F3F4F6' },
 };
+
+/* Lotes visibles de la tarjeta: los de trazabilidad (ya aprobados, con
+   etiqueta imprimible) o, si aún está por revisar, los capturados a mano en
+   las líneas (etiqueta disponible al aprobar). */
+function lotesDeIngreso(ing) {
+  if (Array.isArray(ing.lotesTrazabilidad) && ing.lotesTrazabilidad.length) return ing.lotesTrazabilidad;
+  const out = [];
+  (ing.lineas || []).forEach(l => (l.lotes || []).forEach(lt => out.push({
+    codigoLote: lt.codigoLote, cantidad: lt.cantidad, producto: l.nombre,
+    unidad: l.unidad,
+    presentacion: /tote/i.test(String(l.unidad || '') + String(l.nombre || '')) ? 'tote' : null,
+    pendiente: true,
+  })));
+  return out;
+}
+const unidadLote = (lt) => (lt.presentacion === 'tote' ? 'tote(s)' : (lt.unidad || 'u'));
 
 /* Reduce una imagen a JPEG ≤maxDim px (la factura solo necesita ser legible).
    Los PDF se mandan tal cual. Mantiene el body bajo el límite de 5 MB. */
@@ -101,6 +133,20 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
   const [sel, setSel] = useState('');
   const [cant, setCant] = useState('');
   const [uni, setUni] = useState('kg');
+  /* Lotes MANUALES por línea (pedido dueño ago 2026): el # de lote lo pone el
+     usuario; la suma de los lotes debe cuadrar con la cantidad de la línea. */
+  const [loteEdit, setLoteEdit] = useState(null);
+  const [loteCod, setLoteCod] = useState('');
+  const [loteCant, setLoteCant] = useState('');
+  const sumaLotes = (l) => (l.lotes || []).reduce((sum, x) => sum + (Number(x.cantidad) || 0), 0);
+  const agregarLote = (i) => {
+    const cod = loteCod.trim(); const c = Number(loteCant);
+    if (!cod || !(c > 0)) return;
+    setLineas(lineas.map((l, idx) => idx !== i ? l : { ...l, lotes: [...(l.lotes || []), { codigoLote: cod, cantidad: c }] }));
+    setLoteCod(''); setLoteCant('');
+  };
+  const quitarLote = (i, j) =>
+    setLineas(lineas.map((l, idx) => idx !== i ? l : { ...l, lotes: (l.lotes || []).filter((_, jj) => jj !== j) }));
 
   const opts = tipo === 'mp' ? mpNames.map(n => ({ value: n, label: n }))
     : tipo === 'envase' ? envaseOpts
@@ -131,12 +177,41 @@ function LineasEditor({ lineas, setLineas, mpNames, envaseOpts, tapaOpts, readOn
       {(lineas || []).length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
           {lineas.map((l, i) => (
-            <div key={i} style={S.lineChip}>
-              <span style={S.lineTipo}>{TIPO_LABEL[l.tipo] || l.tipo}</span>
-              <span style={{ flex: 1, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</span>
-              <span style={{ fontWeight: 600 }}>{fmt(l.cantidad)} {l.unidad}</span>
-              {!readOnly && (
-                <button onClick={() => quitar(i)} aria-label="Quitar" style={S.chipDel}>✕</button>
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={S.lineChip}>
+                <span style={S.lineTipo}>{TIPO_LABEL[l.tipo] || l.tipo}</span>
+                <span style={{ flex: 1, fontWeight: 500, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre}</span>
+                <span style={{ fontWeight: 600 }}>{fmt(l.cantidad)} {l.unidad}</span>
+                {l.tipo === 'mp' && !readOnly && (
+                  <button onClick={() => setLoteEdit(loteEdit === i ? null : i)} style={S.chipLotesBtn}>
+                    Lotes{(l.lotes || []).length ? ` (${l.lotes.length})` : ''}
+                  </button>
+                )}
+                {!readOnly && (
+                  <button onClick={() => quitar(i)} aria-label="Quitar" style={S.chipDel}>✕</button>
+                )}
+              </div>
+              {(l.lotes || []).length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, paddingLeft: 8 }}>
+                  {l.lotes.map((lt, j) => (
+                    <span key={j} style={S.loteChip}>
+                      <span style={{ fontFamily: MONO, fontWeight: 700 }}>{lt.codigoLote}</span>
+                      <span>· {fmt(lt.cantidad)}</span>
+                      {!readOnly && <button onClick={() => quitarLote(i, j)} aria-label="Quitar lote" style={S.chipDel}>✕</button>}
+                    </span>
+                  ))}
+                  {Math.abs(sumaLotes(l) - Number(l.cantidad)) > 0.01 && (
+                    <span style={S.loteWarn}>los lotes suman {fmt(sumaLotes(l))} de {fmt(l.cantidad)}</span>
+                  )}
+                </div>
+              )}
+              {loteEdit === i && !readOnly && (
+                <div style={S.loteForm}>
+                  <input value={loteCod} onChange={e => setLoteCod(e.target.value)} placeholder="# de lote (manual)" style={{ ...S.input, flex: 2 }} />
+                  <input type="number" inputMode="decimal" min="0" value={loteCant} onChange={e => setLoteCant(e.target.value)} placeholder="Cantidad" style={{ ...S.input, flex: 1 }} />
+                  <button onClick={() => agregarLote(i)} disabled={!loteCod.trim() || !(Number(loteCant) > 0)}
+                    style={{ ...S.addBtn, opacity: (!loteCod.trim() || !(Number(loteCant) > 0)) ? 0.5 : 1 }}>+ Lote</button>
+                </div>
               )}
             </div>
           ))}
@@ -322,6 +397,90 @@ function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
   );
 }
 
+/* ─── Menú kebab (⋮ tarjeta / … lote) — cierra al tocar fuera ─────────────── */
+function KebabMenu({ horizontal, label, items }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return undefined;
+    const cerrar = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', cerrar);
+    document.addEventListener('touchstart', cerrar);
+    return () => { document.removeEventListener('mousedown', cerrar); document.removeEventListener('touchstart', cerrar); };
+  }, [open]);
+  const visibles = (items || []).filter(Boolean);
+  if (visibles.length === 0) return null;
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button onClick={() => setOpen(o => !o)} aria-label={label || 'Opciones'} aria-expanded={open} style={S.kebabBtn}>
+        {horizontal ? <IconDotsH /> : <IconDots />}
+      </button>
+      {open && (
+        <div style={S.menu} role="menu">
+          {visibles.map((it, i) => (
+            <button key={i} role="menuitem" onClick={() => { setOpen(false); it.onClick(); }}
+              style={{ ...S.menuItem, ...(it.danger ? S.menuItemDanger : {}) }}>
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─── Sheet: cancelar ingreso (admin) — con reversa si ya sumó stock ───────── */
+function CancelarSheet({ ing, onClose, onDone, isDesktop }) {
+  const [motivo, setMotivo] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const habiaSumado = ing.estado === 'recibido';
+
+  const confirmar = async () => {
+    setErr('');
+    if (motivo.trim().length < 10) return setErr('Escribe el motivo (mínimo 10 caracteres — queda en auditoría)');
+    setBusy(true);
+    try {
+      const r = await api.cancelarIngreso(ing.id, { motivo: motivo.trim() });
+      if (r && r.ok) onDone(r);
+      else setErr((r && r.error) || 'No se pudo cancelar');
+    } catch (e) {
+      setErr(e?.data?.error || e?.message || 'No se pudo cancelar el ingreso');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div style={S.overlay} onClick={onClose}>
+      <div style={S.sheet} onClick={e => e.stopPropagation()}>
+        <div style={S.sheetHead}>
+          <div>
+            <div style={{ fontSize: 17, fontWeight: 650 }}>Cancelar <span style={{ fontFamily: MONO, fontSize: 15 }}>{ing.folio}</span></div>
+            <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 2 }}>{ing.proveedor} · subió {ing.usuario}</div>
+          </div>
+          <button onClick={onClose} style={S.x}>✕</button>
+        </div>
+        <div style={S.sheetBody}>
+          <div style={S.notaBox}>
+            {habiaSumado
+              ? 'Este ingreso YA sumó al inventario. Al cancelarlo se revierte exactamente lo que sumó (MP, envases, tapas) y sus lotes quedan cancelados.'
+              : `Este ingreso está "${(ESTADO_META[ing.estado] || { label: ing.estado }).label}" — nunca sumó inventario; solo quedará marcado como cancelado.`}
+          </div>
+          <label style={S.lbl}>Motivo *</label>
+          <textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
+            placeholder="Ej. Fue una prueba del sistema" style={{ ...S.input, resize: 'vertical' }} />
+          {err && <div style={S.err}>{err}</div>}
+        </div>
+        <div style={{ ...S.sheetFoot, ...(isDesktop ? {} : S.sheetFootMobile) }}>
+          <button onClick={onClose} disabled={busy} style={{ ...S.btnGhost, ...(isDesktop ? {} : S.btnMobileGhost) }}>Volver</button>
+          <button onClick={confirmar} disabled={busy} style={{ ...S.btnDanger, ...(isDesktop ? {} : S.btnMobilePrimary), opacity: busy ? 0.6 : 1 }}>
+            {busy ? 'Cancelando…' : (habiaSumado ? 'Cancelar y revertir stock' : 'Cancelar ingreso')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Página ───────────────────────────────────────────────────────────────── */
 export default function IngresosPage() {
   const { user } = useAuth();
@@ -332,6 +491,8 @@ export default function IngresosPage() {
   const [tab, setTab] = useState('por_revisar');
   const [crear, setCrear] = useState(false);
   const [revisar, setRevisar] = useState(null);
+  const [cancelar, setCancelar] = useState(null);
+  const [lotesAbiertos, setLotesAbiertos] = useState({});
   const [toast, setToast] = useState(null);
   const [catalogs, setCatalogs] = useState({ mpNames: [], envaseOpts: [], tapaOpts: [] });
 
@@ -386,7 +547,7 @@ export default function IngresosPage() {
   }, [items, tab, isAdmin]);
 
   const conteo = useMemo(() => {
-    const c = { por_revisar: 0, recibido: 0, rechazado: 0 };
+    const c = { por_revisar: 0, recibido: 0, rechazado: 0, cancelado: 0 };
     items.forEach(x => { if (c[x.estado] != null) c[x.estado]++; });
     return c;
   }, [items]);
@@ -411,6 +572,7 @@ export default function IngresosPage() {
             ['por_revisar', `Por revisar${conteo.por_revisar ? ` (${conteo.por_revisar})` : ''}`],
             ['recibido', 'Recibidos'],
             ['rechazado', 'Rechazados'],
+            ['cancelado', 'Cancelados'],
             ['todos', 'Todos'],
           ].map(([k, lbl]) => (
             <button key={k} onClick={() => setTab(k)} style={{ ...S.tab, ...(isDesktop ? {} : { minHeight: 38, padding: '8px 16px' }), ...(tab === k ? S.tabActive : {}) }}>{lbl}</button>
@@ -451,7 +613,25 @@ export default function IngresosPage() {
                       <span style={{ ...S.badge, color: em.color, background: em.bg }}>{em.label}</span>
                     </div>
                   </div>
-                  {Number(ing.monto) > 0 && <div style={S.monto}>${fmt(ing.monto)}</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                    {Number(ing.monto) > 0 && <div style={S.monto}>${fmt(ing.monto)}</div>}
+                    {/* Kebab ⋮ (pedido dueño ago 2026): las opciones de la
+                        tarjeta viven aquí — Ver factura, Imprimir etiqueta de
+                        tote, Revisar y Cancelar (con reversa). */}
+                    <KebabMenu label={'Opciones de ' + ing.folio} items={[
+                      { label: <span style={{ display: 'inline-flex', alignItems: 'center' }}><IconDoc />&nbsp;Ver factura</span>, onClick: () => window.open(api.ingresoFacturaUrl(ing.id), '_blank') },
+                      (Array.isArray(ing.lotesTrazabilidad) && ing.lotesTrazabilidad.length > 0) && {
+                        label: 'Imprimir etiqueta de tote',
+                        onClick: () => {
+                          const ls = ing.lotesTrazabilidad;
+                          if (ls.length === 1) window.open(api.etiquetaToteUrl(ls[0].codigoLote), '_blank');
+                          else setLotesAbiertos(prev => ({ ...prev, [ing.id]: true }));
+                        },
+                      },
+                      (isAdmin && ing.estado === 'por_revisar') && { label: 'Revisar y sumar al stock', onClick: () => setRevisar(ing) },
+                      (isAdmin && ing.estado !== 'cancelado') && { label: 'Cancelar ingreso', danger: true, onClick: () => setCancelar(ing) },
+                    ]} />
+                  </div>
                 </div>
 
                 <div style={S.meta}>
@@ -468,22 +648,71 @@ export default function IngresosPage() {
                   </div>
                 )}
 
+                {/* # de lote VISIBLES + desplegable (pedido dueño ago 2026):
+                    cada lote es una sub-tarjeta con su menú … (etiqueta/QR),
+                    sin ocupar una tarjeta principal por lote. */}
+                {(() => {
+                  const lts = lotesDeIngreso(ing);
+                  if (lts.length === 0) return null;
+                  const abierto = !!lotesAbiertos[ing.id];
+                  const totalU = lts.reduce((sum, l) => sum + (Number(l.cantidad) || 0), 0);
+                  return (
+                    <div style={{ marginTop: 10 }}>
+                      <button onClick={() => setLotesAbiertos(prev => ({ ...prev, [ing.id]: !abierto }))}
+                        aria-expanded={abierto} style={S.lotesToggle}>
+                        <span style={{ display: 'inline-flex', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}><IconChevron /></span>
+                        <span style={{ fontWeight: 650, whiteSpace: 'nowrap' }}>{lts.length} lote{lts.length === 1 ? '' : 's'}</span>
+                        <span style={{ color: 'var(--lp-text-secondary,#5a6b63)', whiteSpace: 'nowrap' }}>· {fmt(totalU)} {unidadLote(lts[0])}</span>
+                        <span style={{ fontFamily: MONO, fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, flex: 1, textAlign: 'right' }}>
+                          {lts.map(l => l.codigoLote).join(' · ')}
+                        </span>
+                      </button>
+                      {abierto && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                          {lts.map((lt) => (
+                            <div key={lt.codigoLote} style={S.loteCard}>
+                              <div style={{ minWidth: 0, flex: 1 }}>
+                                <div style={S.loteCod}>{lt.codigoLote}</div>
+                                <div style={S.loteMeta}>
+                                  {fmt(lt.cantidad)} {unidadLote(lt)}
+                                  {lt.producto ? ` · ${lt.producto}` : ''}
+                                  {lt.pendiente ? ' · etiqueta disponible al aprobar' : ''}
+                                </div>
+                              </div>
+                              {!lt.pendiente && (
+                                <KebabMenu horizontal label={'Opciones del lote ' + lt.codigoLote} items={[
+                                  { label: 'Imprimir etiqueta', onClick: () => window.open(api.etiquetaToteUrl(lt.codigoLote), '_blank') },
+                                  { label: 'Ver QR / trazabilidad', onClick: () => window.open(api.qrLoteUrl(lt.codigoLote), '_blank') },
+                                ]} />
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {ing.estado === 'recibido' && ing.revisadoPor && (
                   <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 9 }}>Sumado al stock por {ing.revisadoPor}</div>
                 )}
                 {ing.estado === 'rechazado' && (
                   <div style={{ fontSize: 12.5, color: '#B91C1C', marginTop: 9 }}>Rechazado{ing.notaRevision ? `: ${ing.notaRevision}` : ''}</div>
                 )}
+                {ing.estado === 'cancelado' && (
+                  <div style={{ fontSize: 12.5, color: '#6B7280', marginTop: 9 }}>
+                    Cancelado por {ing.canceladoPor || '?'}{ing.motivoCancelacion ? `: ${ing.motivoCancelacion}` : ''}
+                    {ing.reversa && ing.reversa.aplicada ? ' · inventario revertido' : ''}
+                  </div>
+                )}
 
-                {/* Acciones con área táctil real (la liga diminuta de antes era intocable) */}
-                <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 11 }}>
-                  <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer" style={S.verFacturaBtn}>
-                    <IconDoc /> Ver factura
-                  </a>
-                  {isAdmin && ing.estado === 'por_revisar' && (
+                {/* "Ver factura" y demás opciones viven en el kebab ⋮; el CTA
+                    visible queda solo para la acción principal del admin. */}
+                {isAdmin && ing.estado === 'por_revisar' && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 11 }}>
                     <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -492,7 +721,7 @@ export default function IngresosPage() {
 
       {/* FAB móvil: la acción principal SIEMPRE al alcance del pulgar, arriba
           del bottom-nav (misma convención de offset que Compras/Forecast). */}
-      {!isDesktop && !crear && !revisar && (
+      {!isDesktop && !crear && !revisar && !cancelar && (
         <button onClick={() => setCrear(true)} style={S.fab} aria-label="Nuevo ingreso">
           <IconPlus /> Nuevo ingreso
         </button>
@@ -501,6 +730,14 @@ export default function IngresosPage() {
       {crear && (
         <CrearSheet catalogs={catalogs} isDesktop={isDesktop} onClose={() => setCrear(false)}
           onSaved={(ing) => { setCrear(false); showToast(`Ingreso ${ing.folio} registrado · queda por revisar`); load(); }} />
+      )}
+      {cancelar && (
+        <CancelarSheet ing={cancelar} isDesktop={isDesktop} onClose={() => setCancelar(null)}
+          onDone={(r) => {
+            setCancelar(null);
+            showToast(r.mensaje || `${(r.ingreso && r.ingreso.folio) || ''}: cancelado`);
+            load();
+          }} />
       )}
       {revisar && (
         <RevisarSheet ing={revisar} catalogs={catalogs} isDesktop={isDesktop} onClose={() => setRevisar(null)}
@@ -532,6 +769,21 @@ const S = {
   meta: { fontSize: 13, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 8, lineHeight: 1.45 },
   /* "Ver factura" con área táctil real (antes era una liga de 12px) */
   verFacturaBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: BRAND, padding: '9px 14px', minHeight: 40, borderRadius: 9, border: '1px solid rgba(15,122,90,.28)', background: 'rgba(15,122,90,.06)', textDecoration: 'none', whiteSpace: 'nowrap', boxSizing: 'border-box' },
+  /* Kebab ⋮/… + menú de opciones (tarjeta y sub-tarjeta de lote) */
+  kebabBtn: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 40, height: 40, borderRadius: 9, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer', flexShrink: 0 },
+  menu: { position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 60, minWidth: 224, background: 'var(--lp-surface,#fff)', border: '1px solid var(--lp-border,rgba(0,0,0,.12))', borderRadius: 12, boxShadow: '0 10px 30px rgba(0,0,0,.14)', padding: 6, display: 'flex', flexDirection: 'column' },
+  menuItem: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, fontWeight: 550, textAlign: 'left', padding: '10px 12px', minHeight: 42, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--lp-text-primary,#16201c)', cursor: 'pointer', width: '100%' },
+  menuItemDanger: { color: '#B91C1C' },
+  /* Lotes desplegables de la tarjeta (# de lote visible + sub-tarjetas) */
+  lotesToggle: { display: 'flex', alignItems: 'center', gap: 7, width: '100%', minHeight: 42, padding: '8px 10px', fontSize: 12.5, borderRadius: 9, border: '1px dashed var(--lp-border,rgba(0,0,0,.16))', background: 'var(--lp-bg-base,#f7f8f6)', color: 'var(--lp-text-primary,#16201c)', cursor: 'pointer', textAlign: 'left', minWidth: 0, boxSizing: 'border-box' },
+  loteCard: { display: 'flex', alignItems: 'center', gap: 8, padding: '9px 8px 9px 12px', borderRadius: 10, border: '1px solid var(--lp-border,rgba(0,0,0,.1))', background: 'var(--lp-surface,#fff)', marginLeft: 14 },
+  loteCod: { fontFamily: MONO, fontSize: 13, fontWeight: 700, letterSpacing: '0.2px' },
+  loteMeta: { fontSize: 12, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 2 },
+  /* Editor de lotes manuales por línea (crear/revisar) */
+  chipLotesBtn: { fontSize: 11, fontWeight: 700, color: BRAND, background: 'rgba(15,122,90,.08)', border: '1px solid rgba(15,122,90,.25)', borderRadius: 6, padding: '3px 8px', cursor: 'pointer', whiteSpace: 'nowrap' },
+  loteChip: { display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 11.5, background: 'var(--lp-surface,#fff)', border: '1px solid var(--lp-border,rgba(0,0,0,.12))', borderRadius: 6, padding: '3px 8px' },
+  loteWarn: { fontSize: 11, color: '#92610A', background: '#FEF3C7', borderRadius: 6, padding: '3px 8px' },
+  loteForm: { display: 'flex', gap: 6, paddingLeft: 8 },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', color: 'var(--lp-text-secondary,#5a6b63)', padding: '52px 16px', fontSize: 14 },
   tab: { fontSize: 13, fontWeight: 500, padding: '6px 14px', borderRadius: 20, border: '1px solid var(--lp-border,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
   tabActive: { background: BRAND, color: '#fff', borderColor: BRAND },
