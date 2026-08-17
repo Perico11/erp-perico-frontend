@@ -713,6 +713,20 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
   /* Disponible por presentación en Fábrica del PT elegido (columnas tote/cubeta/galon/litro/atm). */
   const fabricaPres = (tipo === 'pt' && sel.trim() && fabricaBuckets[sel.trim()]) || {};
 
+  /* DESCUADRE de Fábrica (campos nuevos de pt-por-ubicacion, ago 2026).
+     Las píldoras "N disp." se calculan con los SUBLOTES rastreados en
+     trazabilidad; el surtido en cambio solo puede sacar de inv.pt[X].qty. Cuando
+     esas dos fuentes se separan, el modal ofrecía "Tote 1 disp." junto a
+     "Stock en Fábrica: 0 cub" sin explicar nada y sin decir qué hacer.
+       cubEquiv     → lo FÍSICO que describen las columnas, en cub-equivalente
+       transferible → inv.pt[X].qty, lo único que el surtido descuenta
+       descuadre    → cubEquiv − transferible (0 si cuadra)
+     Backends viejos no publican estos campos: sin ellos `hayDescuadre` queda en
+     false y el modal se comporta exactamente como antes. */
+  const fabFisicoCub = Number(fabricaPres.cubEquiv || 0);
+  const fabDescuadre = Number(fabricaPres.descuadre || 0);
+  const hayDescuadre = fabDescuadre > 0.5;
+
   /* Resuelve la selección actual a sus campos canónicos + stock + nombre */
   const resuelto = useMemo(() => {
     if (tipo === 'pt') {
@@ -738,6 +752,12 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
   }, [tipo, sel, invPt, envaseOpts, tapaOpts, ptPres, envasar]);
 
   const cantNum = Number(cantidad);
+  /* OJO: el stock NO entra en esta condición, a propósito. Crear una OT no mueve
+     inventario (lo dice el subtítulo del modal: "el inventario se mueve al surtir
+     y recibir, no ahora") — es una SOLICITUD, y entre pedirla y surtirla el stock
+     cambia. Bloquear aquí deja al usuario sin salida cuando el escalar viene
+     descuadrado: ve "Tote 1 disp." y no puede ni pedirlo. El guard autoritativo
+     vive en el backend, en el surtido (_mutarLineaInv). Aquí se AVISA, no se veta. */
   const puedeAgregar = !!(resuelto && resuelto.ok && Number.isFinite(cantNum) && cantNum > 0);
 
   /* Resetea el builder de línea a su estado vacío (tras agregar/guardar/cancelar). */
@@ -861,6 +881,17 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
           {resuelto && resuelto.ok && resuelto.stock != null && (
             <div style={SH.hint}>Stock en Fábrica: {resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad} (total cub-equiv.)</div>
           )}
+          {/* Físico ≠ transferible: se explica el porqué y qué hacer, en vez de
+              dejar al usuario mirando dos números que se contradicen. */}
+          {tipo === 'pt' && hayDescuadre && (
+            <div style={SH.warn}>
+              Hay {fabFisicoCub.toLocaleString('es-MX')} cub físicas en Fábrica pero solo{' '}
+              {(resuelto?.stock ?? 0).toLocaleString('es-MX')} cub cuadradas en inventario
+              ({fabDescuadre.toLocaleString('es-MX')} cub sin registrar).
+              Puedes crear la solicitud, pero <b>el surtido se rechazará</b> hasta reconciliar
+              en Inventario → PT → Fábrica → «Agregar a Fábrica».
+            </div>
+          )}
           {tipo === 'pt' && sel.trim() && resuelto && !resuelto.ok && (
             <div style={SH.hint}>Ese producto no está en inventario; elígelo de la lista.</div>
           )}
@@ -885,6 +916,9 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
                       <span style={SH.presPillLabel}>{m.label}</span>
                       <span style={{ ...SH.presPillDisp, ...(active ? SH.presPillDispOn : {}) }}>
                         {disp.toLocaleString('es-MX')} disp.
+                        {/* El conteo sale de trazabilidad; si el inventario no lo
+                            respalda, se marca para no prometer algo no surtible. */}
+                        {disp > 0 && hayDescuadre ? ' · sin cuadrar' : ''}
                       </span>
                     </button>
                   );
@@ -932,7 +966,9 @@ function CrearSheet({ isDesktop, inv, env, ptUbic, onClose, onSaved, initialSel,
           {tipo === 'pt' && cantNum > 0 && ptPres !== 'cubeta' && (
             <div style={SH.hint}>= {medidaACubetas(ptPres, cantNum).toLocaleString('es-MX')} cub equivalentes</div>
           )}
-          {resuelto && resuelto.ok && resuelto.stock != null
+          {/* Aviso de "excede", solo cuando NO hay descuadre: si lo hay, el bloque
+              de arriba ya explicó la causa real y este sería ruido redundante. */}
+          {resuelto && resuelto.ok && resuelto.stock != null && !hayDescuadre
             && (tipo === 'pt' ? medidaACubetas(ptPres, cantNum) : cantNum) > resuelto.stock && (
             <div style={SH.hint}>Excede el stock en Fábrica ({resuelto.stock.toLocaleString('es-MX')} {resuelto.unidad}); el surtido se rechazará si no alcanza.</div>
           )}
@@ -1344,6 +1380,9 @@ const SH = {
   area: { width: '100%', minHeight: 64, padding: '10px 14px', borderRadius: 12, background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', fontFamily: 'inherit', fontSize: 14.5, color: 'var(--lp-text-primary)', outline: 'none', boxSizing: 'border-box', resize: 'vertical' },
   row2: { display: 'flex', gap: 10 },
   hint: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 5 },
+  /* Aviso accionable (descuadre físico vs inventario): más fuerte que `hint`
+     porque pide una acción, pero no `err` — no es un error del usuario. */
+  warn: { fontSize: 11.5, lineHeight: 1.5, color: 'var(--lp-warning-700)', background: 'var(--lp-warning-100)', border: '1px solid var(--lp-warning-600)', borderRadius: 8, padding: '8px 10px', marginTop: 6 },
   addBtn: {
     width: '100%', height: 46, borderRadius: 12, border: 'none', cursor: 'pointer',
     background: 'var(--lp-brand-600)', color: '#fff', fontFamily: 'inherit', fontSize: 13.5, fontWeight: 700,
