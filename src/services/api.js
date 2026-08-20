@@ -682,6 +682,10 @@ const api = {
      anterior y aplica lo nuevo (ajusta el stock automáticamente). */
   editarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/editar', data),
   ingresoFacturaUrl: (id) => API_BASE + '/api/ingresos/' + encodeURIComponent(id) + '/factura' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  /* Etiqueta imprimible de un TOTE (folio USA-* o lote de producción) — página
+     @media print con QR del backend (routes/etiquetas.js). Lleva ?token= porque
+     se abre con window.open (sin headers). */
+  etiquetaToteUrl: (cod) => API_BASE + '/api/etiquetas/tote/' + encodeURIComponent(cod) + '/print' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
 
   /* ── SAT / CFDI ── */
   satParse: (xmlText) => request('POST', '/api/sat/parse', { xmlText }),

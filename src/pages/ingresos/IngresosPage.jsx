@@ -1413,8 +1413,27 @@ export default function IngresosPage() {
                       <span key={i} style={S.miniLine}>
                         {l.nombre} · <span style={{ fontWeight: 650 }}>{fmt(l.cantidad)} {l.unidad}</span>
                         {l.tipo === 'mp' && presEnvases(l.presentacion, l.cantidad) ? <span style={{ color: 'var(--lp-brand-700,#0F6E56)', fontWeight: 650 }}> · {presEnvases(l.presentacion, l.cantidad)}</span> : null}
+                        {/* Lote MANUAL en la tarjeta (pedido dueño 19-ago): el lote
+                            que se capturó a mano (MP: l.lote · totes: loteProveedor)
+                            se ve sin abrir el ingreso — es el dato de reclamo. */}
+                        {(l.loteProveedor || l.lote) ? <span style={{ fontFamily: MONO, fontWeight: 700 }}> · lote {l.loteProveedor || l.lote}</span> : null}
                       </span>
                     ))}
+                  </div>
+                )}
+
+                {/* Folios de TOTE generados por la partida (pta): cada tote entra
+                    etiquetado — un toque abre su etiqueta imprimible con QR
+                    (pedido dueño ago 2026, caso ING-017). */}
+                {(ing.lineas || []).some(l => Array.isArray(l.lotesTotes) && l.lotesTotes.length > 0) && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 7 }}>
+                    {(ing.lineas || []).flatMap((l, i) => (l.lotesTotes || []).map((cod, j) => (
+                      <a key={i + '-' + j} href={api.etiquetaToteUrl(cod)} target="_blank" rel="noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 999, border: '1px solid var(--lp-border-subtle,#dfe5e2)', background: 'var(--lp-bg-raised,#fff)', color: 'var(--lp-text-primary,#16201c)', fontSize: 11.5, fontWeight: 700, fontFamily: MONO, textDecoration: 'none' }}
+                        title={'Imprimir etiqueta de ' + cod}>
+                        {cod}{l.loteProveedor ? ' · ' + l.loteProveedor : ''} <span aria-hidden style={{ fontWeight: 400 }}>🖨</span>
+                      </a>
+                    )))}
                   </div>
                 )}
 
