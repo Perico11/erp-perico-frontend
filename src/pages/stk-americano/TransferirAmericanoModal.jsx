@@ -1,8 +1,18 @@
 /* TransferirAmericanoModal — transferencia SIMPLE entre almacenes americanos
    (el Almacén 2 es extensión del Almacén 1 — decisión dueño 18-jul-2026).
    Mueve cubetas / galones / litros de totes de un color al otro almacén; los
-   lotes viajan con las unidades y —desde el 5-ago— los TOTES viajan con su folio
-   cuando se mueven litros (lo hace el backend, FEFO).
+   lotes viajan con las unidades y los TOTES viajan con su folio cuando se
+   mueven litros.
+
+   ELEGIR EL TAMBO (21-ago-2026). Esta pantalla pedía LITROS y nada más, así que
+   con varios totes iguales el sistema escogía uno — y no tenía por qué ser el
+   que el almacenista cargó. Pasó: se quiso mandar a Terán el tote del lote
+   GD89563 y viajó otro, así que en Terán apareció material que no era el
+   esperado y la etiqueta habría salido con el lote equivocado. Hubo que
+   corregirlo a mano por SSH.
+   Ahora se elige el tote de una lista, igual que al envasar, y el backend
+   recibe `codigoLote`. "Automático" sigue disponible para granel suelto o
+   cuando da igual cuál sea.
    Regla UX 18-jul: el click FUERA no cierra (solo X / Cancelar). */
 import { useState } from 'react';
 import api from '../../services/api';
@@ -42,6 +52,8 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
   const primera = disp.litros > 0 ? 'litros' : disp.cubetas > 0 ? 'cubetas' : 'galones';
   const [pres, setPres] = useState(primera);
   const [cantidad, setCantidad] = useState('');
+  /* '' = automático (lo elige el backend). Si no, el folio del tote cargado. */
+  const [toteSel, setToteSel] = useState('');
   const [nota, setNota] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -50,7 +62,12 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
 
   const esLitros = pres === 'litros';
   const n = esLitros ? Number(cantidad) : parseInt(cantidad, 10);
-  const dispSel = disp[pres];
+  /* Sólo los totes con contenido: uno vacío no se puede cargar. */
+  const totes = esLitros ? (color.totes || []).filter(t => t && (Number(t.litros) || 0) > 0) : [];
+  const tote = totes.find(t => t.codigoLote === toteSel) || null;
+  /* Con un tambo elegido el techo es ESE tambo, no el granel del color: pedir
+     más saldría de otro tote y volveríamos al problema original. */
+  const dispSel = tote ? (Number(tote.litros) || 0) : disp[pres];
   const excede = Number.isFinite(n) && n > dispSel + 0.001;
   const puede = Number.isFinite(n) && n > 0 && !excede && !saving;
 
@@ -58,7 +75,11 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
     if (!puede) return;
     setSaving(true); setErr('');
     try {
-      await api.transferirStkAmericano({ key: color.key, nombre: color.nombre, de: deAlmacen, a: aAlmacen, presentacion: pres, cantidad: n, nota: nota || undefined });
+      await api.transferirStkAmericano({
+        key: color.key, nombre: color.nombre, de: deAlmacen, a: aAlmacen,
+        presentacion: pres, cantidad: n, nota: nota || undefined,
+        ...(tote ? { codigoLote: tote.codigoLote } : {}),
+      });
       onSaved && onSaved({ presentacion: pres, cantidad: n, aAlmacen });
       onClose();
     } catch (e) { setErr(humanizeError(e)); setSaving(false); }
@@ -78,9 +99,31 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
           <div style={S.seg}>
             {[['cubetas', `Cubetas (${nf(disp.cubetas)})`], ['galones', `Galones (${nf(disp.galones)})`], ['litros', `Litros totes (${nf(disp.litros)})`]].map(([v, l]) => (
               <button key={v} type="button" style={S.segBtn(pres === v, disp[v] <= 0)} disabled={disp[v] <= 0}
-                onClick={() => { setPres(v); setCantidad(''); }} data-id={`stkAmericano.transferir.pres.${v}`}>{l}</button>
+                onClick={() => { setPres(v); setCantidad(''); setToteSel(''); }} data-id={`stkAmericano.transferir.pres.${v}`}>{l}</button>
             ))}
           </div>
+
+          {esLitros && totes.length > 0 && (
+            <>
+              <label style={S.label}>Qué tambo se movió</label>
+              <select style={S.input} value={toteSel} data-id="stkAmericano.transferir.tote"
+                onChange={e => {
+                  const cod = e.target.value;
+                  setToteSel(cod);
+                  /* Mover un tambo COMPLETO es el caso normal: se precarga con
+                     sus litros para no teclear el número y equivocarse. */
+                  const t = totes.find(x => x.codigoLote === cod);
+                  setCantidad(t ? String(t.litros) : '');
+                }}>
+                <option value="">Automático — lo elige el sistema</option>
+                {totes.map(t => (
+                  <option key={t.codigoLote} value={t.codigoLote}>
+                    {t.codigoLote}{t.loteProveedor && t.loteProveedor !== t.codigoLote ? ` · lote ${t.loteProveedor}` : ''} — {nf(t.litros)} L
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
 
           <label style={S.label}>Cantidad {esLitros ? '(litros)' : ''}</label>
           <input style={S.input} type="number" inputMode="decimal" min="0" step={esLitros ? '0.01' : '1'}
@@ -94,8 +137,13 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
           <div style={S.resumen(excede)}>
             {Number.isFinite(n) && n > 0 ? (
               excede
-                ? `Solo hay ${nf(dispSel)} ${pres} disponibles en ${LBL_ALM[deAlmacen]}.`
-                : <>Se moverán <strong>{nf(n)} {esLitros ? 'L' : pres}</strong> al {LBL_ALM[aAlmacen]}. {esLitros ? 'Los totes viajan con su folio (FEFO): el lote no cambia al cruzar.' : 'Los lotes viajan con las unidades.'}</>
+                ? (tote
+                  ? `El tote ${tote.codigoLote} solo tiene ${nf(dispSel)} L.`
+                  : `Solo hay ${nf(dispSel)} ${pres} disponibles en ${LBL_ALM[deAlmacen]}.`)
+                : <>Se moverán <strong>{nf(n)} {esLitros ? 'L' : pres}</strong> al {LBL_ALM[aAlmacen]}.{' '}
+                  {tote
+                    ? <>Sale del tote <strong>{tote.codigoLote}</strong>, que conserva su folio al cruzar.</>
+                    : esLitros ? 'Los totes viajan con su folio: el lote no cambia al cruzar.' : 'Los lotes viajan con las unidades.'}</>
             ) : 'Indica cuánto se transfiere.'}
           </div>
           {err && <div style={S.err}>{err}</div>}
