@@ -69,6 +69,25 @@ export function envasadorDeLote(lote) {
   return directo || unanime(lote.sublotes, 'envasadoPor');
 }
 
+/* ─── SELLO DE FECHA Y HORA (21-ago-2026, pedido dueño) ──────────────────────
+   La etiqueta oficial lleva "2026-08-15 17:42": cuándo se envasó. Antes este
+   renglón mostraba fecha y LITROS, y el dueño pidió cambiar los litros por la
+   hora ("no pongas cuántos litros restan; ahí puedes poner hora en que se
+   envasó") — con varias tandas del mismo lote en el día, la fecha sola no
+   distingue cuál cubeta es cuál.
+
+   La hora se RECORTA de la misma cadena ISO que la fecha, sin convertir de
+   zona: así fecha y hora describen el mismo instante en el mismo marco y no
+   pueden contradecirse (una conversión podría dejar la hora de un día y la
+   fecha de otro). Sin hora en el dato, sale sólo la fecha. */
+export function selloFechaHora(iso) {
+  const s = String(iso || '');
+  const fecha = s.slice(0, 10);
+  if (!fecha) return '';
+  const m = /T(\d{2}:\d{2})/.exec(s);
+  return m ? `${fecha} ${m[1]}` : fecha;
+}
+
 export const escHtml = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 

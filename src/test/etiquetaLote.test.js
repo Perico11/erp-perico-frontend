@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   abreviaPresentacion, presentacionDeLote, envasadorDeLote,
-  qrEfectivoMm, etiquetaCss, etiquetaHtml, codFontPt, anchoTextoMm, QR_MM_MIN,
+  qrEfectivoMm, etiquetaCss, etiquetaHtml, codFontPt, anchoTextoMm, QR_MM_MIN, selloFechaHora,
 } from '../lib/etiquetaLote';
 
 const F50x25 = { wMm: 50, hMm: 25, qrMm: 21 };
@@ -159,5 +159,37 @@ describe('etiquetaCss', () => {
     const env = +/\.e-env[^}]*font-size: ([\d.]+)pt/.exec(css)[1];
     expect(cod).toBeGreaterThan(env);
     expect(cod).toBeGreaterThanOrEqual(11);
+  });
+});
+
+/* ════════════════════════════════════════════════════════════════════════════
+   SELLO DE FECHA Y HORA (21-ago-2026).
+
+   El renglón de abajo mostraba fecha y LITROS; el dueño pidió cambiar los
+   litros por la HORA: con varias tandas del mismo lote en un día, la fecha
+   sola no distingue cuál cubeta es cuál.
+   ════════════════════════════════════════════════════════════════════════════ */
+describe('selloFechaHora', () => {
+  it('imprime fecha y hora del mismo instante', () => {
+    expect(selloFechaHora('2026-08-15T17:42:09.000Z')).toBe('2026-08-15 17:42');
+  });
+
+  it('recorta la hora de la MISMA cadena que la fecha', () => {
+    /* Convertir de zona podría dejar la hora de un día y la fecha de otro:
+       dos datos que se contradicen en la misma etiqueta. */
+    const iso = '2026-08-15T23:50:00.000Z';
+    const out = selloFechaHora(iso);
+    expect(out.slice(0, 10)).toBe(iso.slice(0, 10));
+    expect(out.slice(11)).toBe('23:50');
+  });
+
+  it('sin hora en el dato, sale sólo la fecha', () => {
+    expect(selloFechaHora('2026-08-15')).toBe('2026-08-15');
+  });
+
+  it('sin dato no inventa nada', () => {
+    expect(selloFechaHora(null)).toBe('');
+    expect(selloFechaHora(undefined)).toBe('');
+    expect(selloFechaHora('')).toBe('');
   });
 });

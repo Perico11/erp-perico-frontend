@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { qrDataUrl } from '../lib/qrGenerator';
 import { qrPublicUrl } from '../lib/qrPublicUrl';
-import { etiquetaCss, etiquetaHtml, presentacionDeLote, envasadorDeLote } from '../lib/etiquetaLote';
+import { etiquetaCss, etiquetaHtml, presentacionDeLote, envasadorDeLote, selloFechaHora } from '../lib/etiquetaLote';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 const S = {
@@ -133,8 +133,14 @@ const S = {
   },
 };
 
-/* Tamaños comunes de etiquetas térmicas */
+/* Tamaños comunes de etiquetas térmicas.
+   El 52×25 va PRIMERO y es el que trae por defecto (21-ago-2026, pedido del
+   dueño con la foto de la etiqueta real en la mano): es el rollo que de verdad
+   se pega en la cubeta. El 50×40 seguía saliendo por defecto de cuando este
+   modal se escribió, y por eso la reimpresión desde Americano no se parecía a
+   la etiqueta oficial. */
 const FORMATOS = [
+  { v: '52x25', label: '52×25 mm (oficial)', wMm: 52, hMm: 25, qrMm: 20 },
   { v: '50x25', label: '50×25 mm (etiqueta chica)', wMm: 50, hMm: 25, qrMm: 21 },
   { v: '50x40', label: '50×40 mm', wMm: 50, hMm: 40, qrMm: 22 },
   { v: '60x40', label: '60×40 mm', wMm: 60, hMm: 40, qrMm: 24 },
@@ -145,6 +151,7 @@ const FORMATOS = [
 ];
 
 /* La impresora/etiqueta del usuario se queda memorizada (formato + rotación). */
+const FORMATO_OFICIAL = '52x25';
 const LS_FORMATO = 'pp_qr_formato';
 const LS_ROT = 'pp_qr_rot';
 const ROTACIONES = [0, 90, 180, 270];
@@ -154,7 +161,7 @@ export default function QRModal({ lote, onClose }) {
      Si lote pasaba de null→objeto, React veía hooks nuevos → crash. */
   const cantidadDefault = Number(lote?.cantidad) || 1;
   const [copias, setCopias] = useState(cantidadDefault);
-  const [formato, setFormato] = useState(() => { try { return localStorage.getItem(LS_FORMATO) || '50x40'; } catch { return '50x40'; } });
+  const [formato, setFormato] = useState(() => { try { return localStorage.getItem(LS_FORMATO) || FORMATO_OFICIAL; } catch { return FORMATO_OFICIAL; } });
   /* `rotacion` gira el contenido 0/90/180/270° dentro de la etiqueta. Cubre TODAS
      las orientaciones: si el driver de la impresora rota solo (imprime "parada"),
      el usuario prueba las 4 y una sale acostada llenando la etiqueta. */
@@ -193,13 +200,12 @@ export default function QRModal({ lote, onClose }) {
     if (!w) { alert('Habilita popups para imprimir'); return; }
 
     const producto = lote.producto || lote.nombre || '';
-    const fecha = (lote.fecha || '').slice(0, 10);
     const n = Math.max(1, Math.min(999, parseInt(copias) || 1));
     /* DISEÑO ÚNICO (5-ago): banda con presentación + folio grande + envasador.
        Vive en lib/etiquetaLote; aquí solo se arma el contexto de cada copia. */
     const pres = presentacionDeLote(lote);
     const envasador = envasadorDeLote(lote);
-    const metaBase = [fecha, lote.litros ? `${lote.litros} L` : ''].filter(Boolean).join(' · ');
+    const metaBase = selloFechaHora(lote.fecha);
     const etiqueta = (i) => etiquetaHtml({
       qrSrc: qrUrlPrint, producto, pres, codigo, envasador, fmt,
       meta: n > 1 ? `${metaBase}${metaBase ? ' · ' : ''}${i + 1}/${n}` : metaBase,
@@ -310,7 +316,7 @@ export default function QRModal({ lote, onClose }) {
                   <div style={S.papelCod}>{codigo}</div>
                   {envasadorPreview && <div style={S.papelEnv}>Envasó: <b>{envasadorPreview}</b></div>}
                   <div style={S.papelMeta}>
-                    {[(lote.fecha || '').slice(0, 10), lote.litros ? `${lote.litros} L` : ''].filter(Boolean).join(' · ')}
+                    {selloFechaHora(lote.fecha)}
                   </div>
                 </div>
               </div>
