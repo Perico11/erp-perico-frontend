@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import TopBar from '../../components/layout/TopBar';
 import PruebasTab from './PruebasTab';
 import MateriasTab from './MateriasTab';
@@ -28,7 +29,9 @@ const S = {
 
 const TABS_VALIDOS = ['pruebas', 'materias'];
 
-export default function LaboratorioPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub "Fórmulas
+   y lab" (/formulas) del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function LaboratorioPage({ embedded = false }) {
   /* Deep-linking por ?tab= (replica patrón InventarioPage): el bot puede abrir
      /laboratorio?tab=materias directo en Materias Primas. ?tab= inválido → default. */
   const [searchParams] = useSearchParams();
@@ -49,13 +52,17 @@ export default function LaboratorioPage() {
   const { data: materiasData, loading: matLoading, reload: reloadMaterias } = useApiData(fetchMaterias, [], 0);
   const { data: pruebasData,  loading: prLoading,  reload: reloadPruebas }  = useApiData(fetchPruebas,  [], 0);
 
+  /* Realtime (T3 jul 2026): canal 'lab' — pruebas/materias creadas en otra
+     sesión aparecen sin F5 (esta página no tiene polling: refreshInterval 0). */
+  useRealtimeSync({ onLab: () => { reloadMaterias(); reloadPruebas(); } });
+
   const maestro = materiasData?.data?.maestro || [];
   const labMPs  = materiasData?.data?.lab || [];
   const pruebas = pruebasData?.data || [];
 
   return (
     <>
-      <TopBar title="Laboratorio" />
+      {!embedded && <TopBar title="Laboratorio" />}
       <div style={S.page}>
       <div style={S.header}>
         <p style={S.subtitle}>Pruebas de reformulación y nuevas materias primas — datos aislados del sistema principal.</p>

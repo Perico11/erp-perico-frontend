@@ -18,6 +18,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
+import { ESTADO_LOTE_TERMINAL, ESTADO_LOTE_VISTA_RECOLECTOR } from '../../lib/estados';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 /* Checkpoint B (handoff Claude Design jun 2026): el timeline horizontal de
    puntos se sustituye por el riel VERTICAL canónico con icono + responsable
@@ -70,31 +71,51 @@ const S = {
 };
 
 function LoteCard({ lote, onClick }) {
+  /* UX 18-jul (pedido dueño): la ruta completa robaba TODA la pantalla con
+     27 lotes abiertos a la vez. Ahora cada lote es DESPLEGABLE: cerrado por
+     default (una línea con código, producto, %, estado) y el riel solo se
+     abre al tocarlo. La navegación a la pantalla del rol vive dentro. */
+  const [abierto, setAbierto] = useState(false);
   const esHold = lote.estado === 'qc_hold';
   const idxActual = idxEtapaLote(lote.estado);
   const etapaActual = ETAPAS_PEDIDO[idxActual];
   const labelEstado = esHold ? 'QC retenido' : etapaActual.label;
   const colorEstado = esHold ? CK_COLOR.danger : CK_COLOR[etapaActual.color];
+  const pct = Math.round((idxActual / Math.max(1, ETAPAS_PEDIDO.length - 1)) * 100);
 
   return (
     <div style={S.loteRow}>
-      {/* Header clickeable → navega a la pantalla del rol (el riel no navega
-          para permitir scroll/lectura sin brincos). */}
-      <div style={{ ...S.loteHeader, cursor: 'pointer' }} onClick={onClick} role="button">
+      {/* Header = botón desplegable (toda la fila abre/cierra el riel) */}
+      <div style={{ ...S.loteHeader, cursor: 'pointer' }} onClick={() => setAbierto(a => !a)}
+        role="button" aria-expanded={abierto} data-id="dashboard.lote.toggle">
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+            strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+            style={{ flexShrink: 0, color: 'var(--lp-text-tertiary)', transform: abierto ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}>
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
           <span style={S.loteCodigo}>{lote.codigoLote || lote.codigo || lote.id}</span>
           {lote.esPrueba && <PruebaBadge size="sm" />}
           <span style={S.loteProducto}>{lote.producto || lote.nombre || lote.formula || '-'}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={S.loteCantidad}>{lote.cantidad || '?'} {lote.litPerUnit === 19 ? 'cub' : 'u'}</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--lp-brand-700)', fontFamily: 'var(--lp-font-mono)' }}>{pct}%</span>
           <span style={S.badge(colorEstado)}>{labelEstado}</span>
         </div>
       </div>
-      {/* Checkpoint B: riel vertical con responsable + hora por etapa */}
-      <div style={{ marginTop: 10 }}>
-        <RutaPedidoRail lote={lote} />
-      </div>
+      {/* Riel vertical SOLO al desplegar */}
+      {abierto && (
+        <div style={{ marginTop: 10 }}>
+          <RutaPedidoRail lote={lote} />
+          <div style={{ marginTop: 8, textAlign: 'right' }}>
+            <span onClick={onClick} role="button"
+              style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-brand-600)', cursor: 'pointer', textDecoration: 'underline' }}>
+              Ir a la pantalla →
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -126,8 +147,8 @@ export default function MisLotesPipeline({ rol }) {
        hecho de que un lote de prueba estaba en el pipeline (operario perdido
        buscando dónde fue). El badge en LoteCard las hace inconfundibles. */
     let activos = lotes.filter(l => l && !l.eliminado);
-    /* Excluir terminales */
-    activos = activos.filter(l => !['entregado', 'cancelado', 'rechazado'].includes(l.estado));
+    /* Excluir terminales (fuente única: lib/estados) */
+    activos = activos.filter(l => !ESTADO_LOTE_TERMINAL.includes(l.estado));
 
     if (rol === 'recolector') {
       /* Luis: solo lo que está listo o en camino.
@@ -136,7 +157,7 @@ export default function MisLotesPipeline({ rol }) {
          siguen en envasado. Sin este estado, en cuanto Luis recoge UN sublote
          de un lote multi-sublote, el lote DESAPARECÍA de su pipeline aunque
          quedaran sublotes por recoger. Bug operativo grave en recolección parcial. */
-      activos = activos.filter(l => ['envasado', 'en_recoleccion', 'en_camino', 'en_proceso'].includes(l.estado));
+      activos = activos.filter(l => ESTADO_LOTE_VISTA_RECOLECTOR.includes(l.estado));
     }
     /* almacen (Josué): ve TODOS los activos */
     /* Ordenar por estado más avanzado primero */
@@ -162,18 +183,14 @@ export default function MisLotesPipeline({ rol }) {
             : 'No hay lotes activos. Cuando Enrique acepte un pedido, aparecerá aquí con su status en tiempo real.'}
         </div>
       ) : (
-        lotesFiltrados.slice(0, 8).map(lote => (
+        /* UX 18-jul: sin tope — cerradas, cada fila es una línea (27 lotes caben). */
+        lotesFiltrados.map(lote => (
           <LoteCard
             key={lote.id || lote.codigoLote}
             lote={lote}
             onClick={() => navigate(navTarget)}
           />
         ))
-      )}
-      {lotesFiltrados.length > 8 && (
-        <div style={{ textAlign: 'center', padding: '8px 0', fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-          +{lotesFiltrados.length - 8} más en <span onClick={() => navigate(navTarget)} style={{ color: 'var(--lp-brand-600)', cursor: 'pointer', textDecoration: 'underline' }}>{navTarget}</span>
-        </div>
       )}
     </div>
   );

@@ -81,7 +81,9 @@ const S = {
     display: 'flex', alignItems: 'center', gap: 11,
     height: 54, padding: '0 16px', borderRadius: 14,
     background: 'color-mix(in srgb, var(--lp-text-primary) 1.5%, transparent)',
-    border: '1.5px solid var(--lp-border-subtle)',
+    /* AUDIT UX 16-jul: longhand (no shorthand `border`) — mezclar `border` +
+       `borderColor` (fieldFocus) disparaba el warning de React en consola. */
+    borderWidth: 1.5, borderStyle: 'solid', borderColor: 'var(--lp-border-subtle)',
     transition: 'border-color .2s',
     boxSizing: 'border-box',
   },
@@ -239,10 +241,40 @@ export default function LoginPage() {
      de autofill arriba del teclado, "reiniciando" la pantalla. Por eso NO se
      usa <form>: solo div + input controlado + button onClick. El Enter se
      maneja con onKeyDown explícito. */
-  const submitName = () => {
+  const submitName = async () => {
     const valDom = (nameRef.current?.value || '').trim();
     const val = valDom || nombre.trim();
     if (!val) return;
+    /* AUDIT UX 16-jul (U1): validar el nombre AQUÍ, no después del PIN. Antes
+       "Continuar" aceptaba cualquier cosa y el operario descubría el error
+       hasta después de teclear su PIN (con el mensaje críptico "credentials").
+       Bonus: auto-corrige el nombre parcial ("Luis" → "Luis Lara"). Si el
+       endpoint no responde (sin red), cae al comportamiento anterior. */
+    try {
+      const r = await fetch('/api/usuarios/public').then(x => x.json());
+      const lista = (r && (r.data || r.usuarios || r)) || [];
+      const nombres = (Array.isArray(lista) ? lista : []).map(u => String((u && u.nombre) || u || '')).filter(Boolean);
+      if (nombres.length) {
+        /* FIX 17-jul: comparar SIN acentos — "Josue" debe encontrar a "Josué"
+           (el operario no siempre teclea la tilde; el bug lo dejaba fuera en el
+           paso 1). El match auto-corrige al nombre canónico con acento. */
+        const norm = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+        const low = norm(val);
+        const exacto = nombres.find(n => norm(n) === low);
+        const parciales = nombres.filter(n => norm(n).includes(low));
+        const match = exacto || (parciales.length === 1 ? parciales[0] : null);
+        if (!match) {
+          setError(parciales.length > 1
+            ? 'Hay varios usuarios parecidos: ' + parciales.join(', ') + '. Escribe el nombre completo.'
+            : 'Ese usuario no existe. Revisa el nombre (por ejemplo "Luis Lara").');
+          return;
+        }
+        setNombre(match);
+        setStep('pin');
+        setError('');
+        return;
+      }
+    } catch { /* sin red → seguir como antes */ }
     setNombre(val);
     setStep('pin');
     setError('');
@@ -268,9 +300,17 @@ export default function LoginPage() {
       setStep('success');
       setTimeout(() => navigate('/', { replace: true }), 850);
     } catch (err) {
-      /* Mensaje del backend tal cual (incluye fuera de horario para no-admin
-         y bloqueo por intentos). Fallback genérico por seguridad. */
-      setError(err.message || 'Usuario o PIN incorrecto.');
+      /* AUDIT UX 16-jul (U1): traducir los CÓDIGOS del backend a idioma de
+         operario — antes se mostraba el código crudo ("credentials"). Los
+         mensajes ya-humanos del backend (horario, bloqueo con texto) pasan
+         tal cual. */
+      const HUMANO = {
+        credentials: 'PIN incorrecto. Revisa e intenta de nuevo.',
+        blocked: 'Cuenta bloqueada por intentos fallidos. Pide al admin que te desbloquee.',
+        hours: 'Fuera de horario laboral (L–V 8:00–18:00). Si es urgente, habla con Emmanuel.',
+        not_found: 'Ese usuario no existe. Revisa el nombre.',
+      };
+      setError(HUMANO[err.message] || err.message || 'Usuario o PIN incorrecto.');
       setPin('');
       setLoading(false);
       setShake(true);

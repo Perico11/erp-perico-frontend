@@ -7,6 +7,7 @@ import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ═══════════════════════════════════════════════════════════════════════
    DevolucionesPage — Devoluciones de PRODUCTO TERMINADO (cliente → fábrica).
@@ -255,14 +256,14 @@ function DevolucionSheet({ isDesktop, onClose, onSaved }) {
       onSaved && onSaved();
       onClose && onClose();
     } catch (e) {
-      setErr(e.message || 'Error al guardar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()} data-id="devoluciones.sheet.registrar" data-rol="admin,tecnico,almacen,compras">
         <div style={S.sheetHeader}>
           <div style={S.sheetTitle}>Registrar devolución</div>
@@ -324,7 +325,7 @@ function DevolucionSheet({ isDesktop, onClose, onSaved }) {
 }
 
 /* ════════════════ Acciones por devolución (compartidas tabla/cards) ════════════════ */
-function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, alignEnd }) {
+function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, cancelar, alignEnd }) {
   return (
     <div style={alignEnd ? S.rowActions : { display: 'flex', gap: 8, flexWrap: 'wrap' }}>
       <button style={S.btnGhost} onClick={() => verNota(d.id)} data-id="devoluciones.btn.ver-nota">Ver nota</button>
@@ -333,6 +334,14 @@ function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, alignEnd 
       {d.estado === 'pendiente' && (can('produccion') || can('admin')) && (
         <button style={S.btnSolidSm} onClick={() => recibir(d)} data-id="devoluciones.btn.recibir" data-rol="admin,tecnico">
           Recibí en fábrica
+        </button>
+      )}
+
+      {/* P1 13-ago: registrada por error → cancelar repone el PT descontado */}
+      {d.estado === 'pendiente' && cancelar && (
+        <button style={{ ...S.btnGhost, ...S.btnGhostDanger }} onClick={() => cancelar(d)}
+          data-id="devoluciones.btn.cancelar" data-rol="admin,tecnico,almacen">
+          Cancelar devolución
         </button>
       )}
 
@@ -356,7 +365,9 @@ function DevAcciones({ d, can, verNota, recibir, disponer, reembolsar, alignEnd 
 }
 
 /* ════════════════ MAIN ════════════════ */
-export default function DevolucionesPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista dentro del hub
+   /devoluciones del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function DevolucionesPage({ embedded = false }) {
   const { can, user } = useAuth();
   const isDesktop = useIsDesktop();
   /* FIX jun 2026 (L3): useConfirm reemplaza window.prompt — éste queda
@@ -375,7 +386,7 @@ export default function DevolucionesPage() {
     setLoading(true);
     api.getDevoluciones()
       .then(r => setDevs(Array.isArray(r) ? r : (r.data || [])))
-      .catch(e => setErr(e.message))
+      .catch(e => setErr(humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoading(false));
   }, []);
 
@@ -400,7 +411,9 @@ export default function DevolucionesPage() {
   });
 
   const verNota = useCallback((id) => {
-    window.open(`/api/devoluciones/${id}/nota`, '_blank');
+    /* P0 13-ago: window.open no manda headers — sin ?token= el backend
+       respondía "Sesion requerida" SIEMPRE. URL con token vía api. */
+    window.open(api.devolucionNotaUrl(id), '_blank');
   }, []);
 
   /* FIX jun 2026 (L2): Enrique recibe físicamente la devolución en fábrica. */
@@ -414,7 +427,7 @@ export default function DevolucionesPage() {
       await api.recibirDevolucion(dev.id, user?.nombre, null, null);
       cargar();
     } catch (e) {
-      setErr(e.message || 'No se pudo registrar la recepción');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   }, [cargar, confirm, user]);
 
@@ -439,7 +452,7 @@ export default function DevolucionesPage() {
       await api.disponerDevolucion(dev.id, disposicion, String(nota || ''));
       cargar();
     } catch (e) {
-      setErr(e.message || 'No se pudo registrar la disposición');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   }, [cargar, confirm]);
 
@@ -458,18 +471,39 @@ export default function DevolucionesPage() {
       await api.emitirReembolso(dev.id, String(folio).trim() || dev.notaCredito || '', dev.montoDevuelto || 0, '');
       cargar();
     } catch (e) {
-      setErr(e.message || 'No se pudo emitir el reembolso');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   }, [cargar, confirm]);
 
   const lista = [...devs].reverse();
-  const accionProps = { can, verNota, recibir: recibirEnFabrica, disponer: disponerDevolucion, reembolsar: emitirReembolso };
+  /* P1 13-ago: una devolución registrada por error no tenía salida (el PT
+     quedaba descontado para siempre). Cancelar repone el stock (backend). */
+  const cancelarDevolucion = useCallback(async (dev) => {
+    const motivo = await confirm(
+      `Cancelar la devolución ${dev.id} (${dev.producto || 'N/D'}). Se repone el PT que se descontó al registrarla.`,
+      {
+        title: 'Cancelar devolución',
+        confirmText: 'Cancelar devolución',
+        danger: true,
+        prompt: { label: 'Motivo (obligatorio)', placeholder: 'Ej. se registró por error, el cliente no la devolvió…', required: true },
+      }
+    );
+    if (motivo === null || motivo === false) return;
+    try {
+      await api.cancelarDevolucion(dev.id, String(motivo || ''));
+      cargar();
+    } catch (e) {
+      setErr(humanizeError(e));
+    }
+  }, [confirm, cargar]);
+
+  const accionProps = { can, verNota, recibir: recibirEnFabrica, disponer: disponerDevolucion, reembolsar: emitirReembolso, cancelar: cancelarDevolucion };
 
   return (
     <div>
-      <TopBar title="Devoluciones" />
+      {!embedded && <TopBar title="Devoluciones" />}
       <div style={S.wrap}>
-        <h1 style={S.h1}>Devoluciones</h1>
+        {!embedded && <h1 style={S.h1}>Devoluciones</h1>}
         <div style={S.psub}>Producto terminado regresado por el cliente — recepción en fábrica, disposición y nota de crédito.</div>
 
         {err && <div style={S.err}>{err}</div>}

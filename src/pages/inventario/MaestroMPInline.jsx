@@ -42,6 +42,13 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
   const [editCat, setEditCat] = useState(null); /* nombre de MP en edición de categoría */
   const [catVal, setCatVal] = useState('');
   const [savingCat, setSavingCat] = useState(false);
+  /* Reasignación de proveedor (admin/compras) */
+  const [editProv, setEditProv] = useState(null);
+  const [provVal, setProvVal] = useState('');
+  const [provLead, setProvLead] = useState('');
+  const [savingProv, setSavingProv] = useState(false);
+  const [proveedores, setProveedores] = useState([]);
+  const [avisoProv, setAvisoProv] = useState('');
 
   useEffect(() => {
     setLoading(true); setErr('');
@@ -50,6 +57,13 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
       .catch(e => setErr(e.message))
       .finally(() => setLoading(false));
   }, [reloadSignal]);
+
+  /* Catálogo de proveedores para el datalist — evita crear duplicados por una
+     letra ("NRW  CHEMIE" vs "NRW CHEMIE"). Opcional: si falla, se puede teclear. */
+  useEffect(() => {
+    if (!canEditCat) return;
+    api.getProveedores().then(r => setProveedores(r.data || r || [])).catch(() => {});
+  }, [canEditCat]);
   if (loading) return <div style={S.loading}>Cargando maestro MP...</div>;
   if (err && !data) return <div style={S.err}>{err}</div>;
   const mps = data?.mps || {};
@@ -74,6 +88,32 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
     finally { setSavingCat(false); }
   };
 
+  const startEditProv = (nombre, m) => {
+    setEditProv(nombre);
+    setProvVal(m?.proveedor?.principal || '');
+    setProvLead(m?.proveedor?.lead_time_dias != null ? String(m.proveedor.lead_time_dias) : '');
+    setErr(''); setAvisoProv('');
+  };
+  const saveProv = async (nombre) => {
+    const v = provVal.trim();
+    if (!v) { setEditProv(null); return; }
+    setSavingProv(true); setAvisoProv('');
+    try {
+      const lead = provLead.trim() === '' ? undefined : Number(provLead);
+      const r = await api.reasignarProveedorMP(nombre, v, lead);
+      setData(d => ({
+        ...d,
+        mps: { ...d.mps, [nombre]: { ...d.mps[nombre], proveedor: { ...(d.mps[nombre].proveedor || {}), principal: v, todos: [v], ...(r?.leadTime != null ? { lead_time_dias: r.leadTime } : {}) } } },
+      }));
+      if (r?.proveedorNuevo) {
+        setAvisoProv(`"${v}" se dio de alta como proveedor nuevo. Confirma su lead time y actualiza el precio en Compras ▸ Catálogo.`);
+        api.getProveedores().then(x => setProveedores(x.data || x || [])).catch(() => {});
+      }
+      setEditProv(null);
+    } catch (e) { setErr('No se pudo reasignar el proveedor: ' + (e?.message || 'error')); }
+    finally { setSavingProv(false); }
+  };
+
   const q = (query || '').trim().toLowerCase();
   const filtradas = (q
     ? list.filter(([nombre, m]) => nombre.toLowerCase().includes(q) || (m.categoria || '').toLowerCase().includes(q))
@@ -90,6 +130,9 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
   return (
     <div style={S.panel}>
       <datalist id="maestro-cats">{categorias.map(c => <option key={c} value={c} />)}</datalist>
+      <datalist id="maestro-provs">
+        {proveedores.map(p => <option key={p.nombre} value={p.nombre}>{p.mps} MP{p.mps === 1 ? '' : 's'}</option>)}
+      </datalist>
       <div style={S.metric}>
         <div style={S.metricCard}>
           <div style={S.metricVal}>{list.length}</div>
@@ -109,6 +152,12 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
         </div>
       </div>
       {err && <div style={{ ...S.err, marginBottom: 10 }}>{err}</div>}
+      {avisoProv && (
+        <div style={{ background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)', padding: 10, borderRadius: 6, fontSize: 12, marginBottom: 10, display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <span style={{ flex: 1 }}>{avisoProv}</span>
+          <button onClick={() => setAvisoProv('')} style={{ ...S.catCancel, flexShrink: 0 }}>✕</button>
+        </div>
+      )}
       <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>
         {q ? `Resultados de "${query}" (${visibles.length})` : 'Top 20 activas por uso en formulas'}
       </div>
@@ -117,6 +166,7 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
         {visibles.map(([nombre, m]) => {
           const eb = estadoInfo(m.estado);
           const editando = editCat === nombre;
+          const editandoProv = editProv === nombre;
           return (
             <div key={nombre} style={S.row}>
               <div style={S.avatar(eb ? eb.color : 'var(--lp-warning-600)')}>{nombre.charAt(0)}</div>
@@ -150,6 +200,34 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
                     </>
                   )}
                 </div>
+                {/* Proveedor — reasignable por admin/compras. Renglón propio para
+                    que el nombre largo del proveedor no empuje a la categoría. */}
+                <div style={S.meta}>
+                  {editandoProv ? (
+                    <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <input
+                        list="maestro-provs" autoFocus value={provVal} disabled={savingProv}
+                        onChange={e => setProvVal(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveProv(nombre); if (e.key === 'Escape') setEditProv(null); }}
+                        placeholder="Proveedor…" style={{ ...S.catInput, maxWidth: 240 }}
+                      />
+                      <input
+                        type="number" min="0" value={provLead} disabled={savingProv}
+                        onChange={e => setProvLead(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveProv(nombre); if (e.key === 'Escape') setEditProv(null); }}
+                        placeholder="días" title="Lead time en días (lo usa el MRP)" style={{ ...S.catInput, maxWidth: 62 }}
+                      />
+                      <button onMouseDown={e => { e.preventDefault(); saveProv(nombre); }} disabled={savingProv} style={S.catSave} title="Guardar">{savingProv ? '…' : '✓'}</button>
+                      <button onMouseDown={e => { e.preventDefault(); setEditProv(null); }} disabled={savingProv} style={S.catCancel} title="Cancelar">✕</button>
+                    </span>
+                  ) : canEditCat ? (
+                    <button onClick={() => startEditProv(nombre, m)} style={m.proveedor?.principal ? S.catBtn : S.catBtnEmpty} title="Reasignar proveedor">
+                      {m.proveedor?.principal || 'sin proveedor'}
+                      {m.proveedor?.lead_time_dias != null && ` · ${m.proveedor.lead_time_dias} d`}
+                      <span style={{ opacity: .55, marginLeft: 3 }}>✎</span>
+                    </button>
+                  ) : (m.proveedor?.principal || 'sin proveedor')}
+                </div>
               </div>
               <div style={S.actions}>
                 {eb && <span style={S.estadoBadge(eb.color)}>{eb.txt}</span>}
@@ -167,7 +245,7 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
           {canDelete
             ? 'Busca arriba para encontrar y sustituir/eliminar cualquier materia prima.'
             : 'Busca arriba para encontrar cualquier materia prima.'}
-          {canEditCat && ' La categoría se edita con el lápiz ✎.'}
+          {canEditCat && ' La categoría y el proveedor se editan con el lápiz ✎. Reasignar el proveedor afecta SOLO a esa materia prima.'}
         </div>
       )}
     </div>

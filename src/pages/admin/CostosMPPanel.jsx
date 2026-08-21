@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../../services/api';
 import SegmentedControl from '../../components/ui/SegmentedControl';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 const S = {
   card: {
@@ -90,6 +91,10 @@ export default function CostosMPPanel() {
   };
   useEffect(cargar, []);
 
+  /* Realtime (T3 jul 2026): el backend emite canal 'costos' (admin+compras)
+     al cambiar precios de MP — antes este panel quedaba stale hasta F5. */
+  useRealtimeSync({ onCostos: () => cargar() });
+
   const items = useMemo(() => {
     if (!maestro?.mps) return [];
     const arr = Object.entries(maestro.mps).map(([nombre, m]) => ({
@@ -164,7 +169,7 @@ export default function CostosMPPanel() {
         });
         cargar();
       }, 600);
-    } catch (ex) {
+    } catch {
       setEdits(p => ({ ...p, [it.nombre]: { ...e, savingState: 'err' } }));
     }
   };

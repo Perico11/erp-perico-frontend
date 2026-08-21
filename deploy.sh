@@ -27,11 +27,26 @@ npm run build
 BUNDLE_LOCAL=$(grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' dist/index.html | head -1)
 echo "==> Bundle local: $BUNDLE_LOCAL"
 
-# 3) Deploy COMPLETO de dist (assets, index, logos, manuales, manifest...).
-#    assets se borra primero para no acumular bundles viejos; el resto se
-#    sobreescribe encima (public/ de Vite: logos, manual/<rol>, manifest).
-ssh -o ConnectTimeout=15 "$VPS" "rm -rf $DIST_REMOTO/assets"
-scp -o ConnectTimeout=15 -r dist/* "$VPS:$DIST_REMOTO/"
+# 3) Deploy ATÓMICO de dist. Incidente 30-jun-2026: el esquema viejo (rm -rf
+#    assets → scp SOBRE el dist VIVO) dejó prod ROTO cuando el scp se cortó a
+#    media subida (index.html referenciando un JS inexistente = pantalla blanca),
+#    agravado por DOS sesiones desplegando a la vez. Ahora:
+#    - LOCK remoto (mkdir es atómico): si otro deploy está en curso, aborta.
+#    - Se sube TODO a dist.new; si el scp muere, el dist vivo NI SE TOCÓ.
+#    - Swap con mv (ventana de milisegundos) y dist.old queda como rollback:
+#      ssh $VPS 'rm -rf dist && mv dist.old dist'  (dentro de frontend/)
+LOCK="$DIST_REMOTO.lock"
+if ! ssh -o ConnectTimeout=15 "$VPS" "mkdir $LOCK 2>/dev/null"; then
+  echo "ERROR: hay OTRO deploy en curso ($LOCK existe en el VPS)." >&2
+  echo "  Si es un deploy muerto (crasheó), libéralo con:" >&2
+  echo "  ssh $VPS 'rmdir $LOCK'" >&2
+  exit 1
+fi
+trap 'ssh -o ConnectTimeout=15 "$VPS" "rmdir $LOCK 2>/dev/null" || true' EXIT
+
+ssh -o ConnectTimeout=15 "$VPS" "rm -rf $DIST_REMOTO.new && mkdir -p $DIST_REMOTO.new"
+scp -o ConnectTimeout=15 -r dist/* "$VPS:$DIST_REMOTO.new/"
+ssh -o ConnectTimeout=15 "$VPS" "rm -rf $DIST_REMOTO.old && mv $DIST_REMOTO $DIST_REMOTO.old && mv $DIST_REMOTO.new $DIST_REMOTO"
 
 # 4) Verificacion: el index.html del VPS debe referenciar el mismo bundle
 BUNDLE_VPS=$(ssh -o ConnectTimeout=15 "$VPS" "grep -oE 'assets/index-[A-Za-z0-9_-]+\.js' $DIST_REMOTO/index.html | head -1")

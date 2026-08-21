@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import useConfirm from '../../hooks/useConfirm';
@@ -7,6 +7,7 @@ import humanizeError from '../../utils/humanizeError';
 import CountBadge from '../ui/CountBadge';
 import ThemeToggle from '../ui/ThemeToggle';
 import { usePedidosNotif } from '../../context/PedidosNotifContext';
+import { useChatNotif } from '../../context/ChatNotifContext';
 
 const icons = {
   dashboard:    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>,
@@ -29,63 +30,90 @@ const icons = {
   pronostico:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
   sat:          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>,
   posAliases:   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
+  stkAmericano: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M6 7v12M10 7v12M14 7v12M18 7v12"/></svg>,
+  entregas:     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
+  chat:         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
 };
 
 /* Sprint F (jun 2026): campo `roles` opcional para restringir adicionalmente
    por rol explícito. Soluciona los casos donde `perm` no es lo suficientemente
    granular y se mostraban items que la ruta App.jsx luego rechazaba (parpadeo
-   a Dashboard sin explicación). El filtro final es: can(perm) AND (roles.length===0 OR roles.includes(rol)). */
-const NAV_ITEMS = [
-  { key: 'dashboard',    label: 'Inicio',       path: '/',              icon: icons.dashboard,    perm: 'dashboard' },
-  /* Candado dueño (jun 2026): Enrique (tecnico) NO tiene la pestaña Fórmulas.
-     Ve la fórmula SOLO al producir (la carga vía API dentro de /produccion). El
-     permiso `formulas` sigue activo para él (producción lo necesita), por eso se
-     oculta la pestaña con `roles` y no quitando el permiso. compras ya queda
-     fuera por perm (formulas:false). */
-  { key: 'formulas',     label: 'Fórmulas',     path: '/formulas',      icon: icons.formulas,     perm: 'formulas',    roles: ['admin','compras'] },
-  { key: 'inventario',   label: 'Inventario',   path: '/inventario',    icon: icons.inventario,   perm: 'inventario' },
-  { key: 'pedidos',      label: 'Pedidos',      path: '/pedidos',       icon: icons.pedidos,      perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
-  /* Órdenes de Transferencia (OT): movimiento formal Fábrica↔Terán con escaneo. */
-  { key: 'transferencias', label: 'Transferencias', path: '/transferencias', icon: icons.transferencias, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
-  /* Ingresos: Enrique da de alta pedidos del proveedor con foto de factura; admin revisa y suma stock. */
-  { key: 'ingresos',     label: 'Ingresos',     path: '/ingresos',      icon: icons.pedidos,      perm: 'ingresos',    roles: ['admin','tecnico','almacen'] },
-  /* "Flujo" retirado del menú (jun 2026, censo duplicados — decisión owner):
-     Pedidos absorbe el ciclo completo (misma card, mismas acciones). La ruta
-     /flujo queda viva como respaldo. */
-  /* Órdenes: solo admin/tecnico — la tab "Almacén Terán" (lo único de Josué
-     aquí) se eliminó por duplicar Pedidos. */
-  { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico'] },
-  { key: 'produccion',   label: 'Producción',   path: '/produccion',    icon: icons.produccion,   perm: 'produccion' },
-  /* Stock Fábrica restringido a admin/almacén (jun 2026, decisión owner): para
-     Enrique (técnico) era redundante — el stock vive en Inventarios ▸ PT ▸
-     Fábrica y el ENVASAR ya está en Producción ▸ En envasado. Josué conserva la
-     pantalla para reenvasar totes y transferir a Terán (lo único que solo vive
-     aquí). Mismo patrón roles[] que "Recepción Terán". */
-  { key: 'stockFabrica', label: 'Stock Fábrica',path: '/stock-fabrica', icon: icons.stockFabrica, perm: 'stockFabrica', roles: ['admin','almacen'] },
-  { key: 'recoleccion',  label: 'Recolección',  path: '/recoleccion',   icon: icons.recoleccion,  perm: 'recoleccion' },
-  /* FIX jun 2026 (censo menú): la pantalla PRINCIPAL de Josué no existía en el
-     sidebar — solo se llegaba por card del Dashboard o el sheet móvil (roto). */
-  { key: 'recepcion',    label: 'Recepción Terán', path: '/almacen',    icon: icons.recepcion,    perm: 'stockFabrica', roles: ['admin','almacen'] },
-  { key: 'compras',      label: 'Compras',      path: '/compras',       icon: icons.compras,      perm: 'compras' },
-  /* Capa Pronóstico (§9): inteligencia de compras separada. */
-  { key: 'pronostico',   label: 'Pronóstico',   path: '/pronostico',    icon: icons.pronostico,   perm: 'compras',     roles: ['admin','compras'] },
-  { key: 'trazabilidad', label: 'Trazabilidad', path: '/trazabilidad',  icon: icons.trazabilidad, perm: 'trazabilidad' },
-  { key: 'cycleCount',   label: 'Conteo',       path: '/conteo',        icon: icons.cycleCount,   perm: 'cycleCount' },
-  /* Reportes: la ruta solo permite admin/inventario/compras. ANTES perm='inventario'
-     incluía a tecnico → parpadeo. Ahora restringido por roles[]. */
-  { key: 'reportes',     label: 'Reportes',     path: '/reportes',      icon: icons.reportes,     perm: 'inventario',  roles: ['admin','inventario','compras'] },
-  { key: 'laboratorio',  label: 'Laboratorio',  path: '/laboratorio',   icon: icons.laboratorio,  perm: 'laboratorio' },
-  /* Devoluciones PT (cliente→fábrica): técnico/almacén/admin. Capa 3 (jun 2026)
-     separó la devolución de MP (compras→proveedor) en su propia entrada, así que
-     este item ya NO se muestra a compras (Arely usa "Devol. a proveedor"). */
-  { key: 'devoluciones', label: 'Devoluciones', path: '/devoluciones',  icon: icons.devoluciones, perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
-  /* Devoluciones de MP a proveedor (Capa 3, Arely / compras). */
-  { key: 'devolucionesMp', label: 'Devol. a proveedor', path: '/devoluciones-mp', icon: icons.devoluciones, perm: 'devoluciones', roles: ['admin','compras'] },
-  /* Capa Pronóstico (§9): SAT/CFDI y POS Aliases salen a pantalla propia (compras+admin). */
-  { key: 'sat',          label: 'SAT / CFDI',   path: '/sat',           icon: icons.sat,          perm: 'compras',     roles: ['admin','compras'] },
-  { key: 'posAliases',   label: 'POS Aliases',  path: '/pos-aliases',   icon: icons.posAliases,   perm: 'compras',     roles: ['admin','compras'] },
-  { key: 'admin',        label: 'Admin',        path: '/admin',         icon: icons.admin,        perm: 'admin' },
+   a Dashboard sin explicación). El filtro final es: can(perm) AND (roles.length===0 OR roles.includes(rol)).
+
+   JUL 2026 (simplificación menús, pedido dueño): el sidebar dejó de ser una
+   lista plana de 20+ items — ahora son GRUPOS colapsables con la MISMA
+   taxonomía del menú móvil (BottomNav): Producción / Inventario / Compras y
+   trazabilidad / Otros. Inicio y Admin quedan sueltos (arriba/abajo). El estado
+   colapsado se persiste por dispositivo en localStorage. */
+const NAV_GROUPS = [
+  { id: 'top', items: [
+    { key: 'dashboard',    label: 'Inicio',       path: '/',              icon: icons.dashboard,    perm: 'dashboard' },
+    /* Chat interno (jul 2026): todos los roles. Badge = mensajes sin leer. */
+    { key: 'chat',         label: 'Chat',         path: '/chat',          icon: icons.chat,         perm: 'dashboard' },
+  ]},
+  { id: 'produccion', titulo: 'Producción', items: [
+    { key: 'pedidos',      label: 'Pedidos',      path: '/pedidos',       icon: icons.pedidos,      perm: 'ordenes',     roles: ['admin','almacen','tecnico'] },
+    /* Órdenes: solo admin/tecnico — la tab "Almacén Terán" (lo único de Josué
+       aquí) se eliminó por duplicar Pedidos. */
+    { key: 'ordenes',      label: 'Órdenes',      path: '/ordenes',       icon: icons.ordenes,      perm: 'ordenes',     roles: ['admin','tecnico'] },
+    { key: 'produccion',   label: 'Producción',   path: '/produccion',    icon: icons.produccion,   perm: 'produccion' },
+    /* P2 (21-jul-2026): "Almacén" FUSIONA Stock Fábrica + Recepción Terán en una
+       sola entrada (2 vistas internas: En fábrica / Recepción). Cero acciones
+       perdidas — los dos componentes viven completos dentro de AlmacenPage. */
+    { key: 'almacen',      label: 'Almacén',      path: '/almacen',       icon: icons.stockFabrica, perm: 'stockFabrica', roles: ['admin','almacen'] },
+  ]},
+  { id: 'inventario', titulo: 'Inventario', items: [
+    /* Para ADMIN /inventario es HUB (Stock · Conteo · Ingresos) — jul 2026,
+       "unificar las de mismo uso". Por eso Conteo e Ingresos ya no se listan
+       al admin (sus rutas directas siguen vivas para Burgos/Enrique/Josué). */
+    { key: 'inventario',   label: 'Inventario',   path: '/inventario',    icon: icons.inventario,   perm: 'inventario' },
+    /* Entregas a tiendas (jul 2026): la BAJA del CEDIS al entregar. Admin la
+       opera dentro del hub Logística. */
+    { key: 'entregas',     label: 'Entregas',     path: '/entregas',      icon: icons.entregas,     perm: 'inventario',  roles: ['almacen'] },
+    { key: 'cycleCount',   label: 'Conteo',       path: '/conteo',        icon: icons.cycleCount,   perm: 'cycleCount',  roles: ['inventario'] },
+    /* Hub "Logística" (admin): Transferencias · Entregas · Recolección en una
+       entrada. Los operadores conservan su entrada directa "Transferencias". */
+    { key: 'logistica',    label: 'Logística',    path: '/transferencias', icon: icons.transferencias, perm: 'transferencias', roles: ['admin'] },
+    { key: 'transferencias', label: 'Transferencias', path: '/transferencias', icon: icons.transferencias, perm: 'transferencias', roles: ['almacen','inventario','tecnico'] },
+    /* Ingresos: Enrique da de alta pedidos del proveedor con foto de factura;
+       admin revisa dentro del hub Inventario. */
+    { key: 'ingresos',     label: 'Ingresos proveedor', path: '/ingresos',  icon: icons.pedidos,      perm: 'ingresos',    roles: ['tecnico','almacen'] },
+    /* Devoluciones: para ADMIN /devoluciones es el HUB con las 2 vistas
+       (cliente PT · proveedor MP) — jul 2026, censo duplicados. Técnico/almacén
+       siguen viendo solo la de PT (misma ruta, sin selector). */
+    { key: 'devoluciones', label: 'Devoluciones', path: '/devoluciones',  icon: icons.devoluciones, perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
+    /* Reportes: la ruta solo permite admin/inventario/compras. ANTES perm='inventario'
+       incluía a tecnico → parpadeo. Ahora restringido por roles[]. */
+    { key: 'reportes',     label: 'Reportes',     path: '/reportes',      icon: icons.reportes,     perm: 'inventario',  roles: ['admin','inventario','compras'] },
+  ]},
+  { id: 'compras', titulo: 'Compras y trazabilidad', items: [
+    /* Para ADMIN /compras es HUB (OCs · Pronóstico · SAT · POS Aliases).
+       Las decisiones LOCKED de §9 siguen intactas PARA ARELY: ella conserva
+       sus 4 entradas y pantallas directas. */
+    { key: 'compras',      label: 'Compras',      path: '/compras',       icon: icons.compras,      perm: 'compras' },
+    { key: 'pronostico',   label: 'Pronóstico',   path: '/pronostico',    icon: icons.pronostico,   perm: 'compras',     roles: ['compras'] },
+    /* Devoluciones de MP a proveedor (Capa 3, Arely). Para admin vive dentro
+       del hub /devoluciones (vista "A proveedor"). Ruta directa sigue viva. */
+    { key: 'devolucionesMp', label: 'Devol. a proveedor', path: '/devoluciones-mp', icon: icons.devoluciones, perm: 'devoluciones', roles: ['compras'] },
+    { key: 'sat',          label: 'SAT / CFDI',   path: '/sat',           icon: icons.sat,          perm: 'compras',     roles: ['compras'] },
+    { key: 'posAliases',   label: 'POS Aliases',  path: '/pos-aliases',   icon: icons.posAliases,   perm: 'compras',     roles: ['compras'] },
+    /* Recolección: Luis y Josué directa; admin dentro del hub Logística. */
+    { key: 'recoleccion',  label: 'Recolección',  path: '/recoleccion',   icon: icons.recoleccion,  perm: 'recoleccion', roles: ['recolector','almacen'] },
+    { key: 'trazabilidad', label: 'Trazabilidad', path: '/trazabilidad',  icon: icons.trazabilidad, perm: 'trazabilidad' },
+  ]},
+  { id: 'otros', titulo: 'Otros', items: [
+    /* Para ADMIN /formulas es HUB (Fórmulas · Laboratorio). Candado dueño
+       (jun 2026): Enrique (tecnico) NO tiene la pestaña Fórmulas — ve la
+       fórmula SOLO al producir; su Laboratorio directo sigue abajo. */
+    { key: 'formulas',     label: 'Fórmulas y lab', path: '/formulas',    icon: icons.formulas,     perm: 'formulas',    roles: ['admin'] },
+    { key: 'laboratorio',  label: 'Laboratorio',  path: '/laboratorio',   icon: icons.laboratorio,  perm: 'laboratorio', roles: ['tecnico'] },
+  ]},
+  { id: 'bottom', items: [
+    { key: 'admin',        label: 'Admin',        path: '/admin',         icon: icons.admin,        perm: 'admin' },
+  ]},
 ];
+/* Export plano para compatibilidad (mismos items, en orden de grupos). */
+const NAV_ITEMS = NAV_GROUPS.flatMap(g => g.items);
 
 const S = {
   aside: { display: 'flex', flexDirection: 'column', width: 240, height: '100vh', background: 'var(--lp-bg-raised)', borderRight: '1.5px solid var(--lp-border-subtle)', position: 'fixed', left: 0, top: 0, zIndex: 40, fontFamily: 'var(--lp-font-sans)' },
@@ -96,6 +124,13 @@ const S = {
   nav: { flex: 1, overflowY: 'auto', padding: '10px 8px' },
   link: { display: 'flex', alignItems: 'center', gap: 12, padding: '11px 14px', borderRadius: 'var(--lp-radius-sm)', fontSize: 14, fontWeight: 500, color: 'var(--lp-text-secondary)', textDecoration: 'none', transition: 'all .15s', marginBottom: 3 },
   linkActive: { background: 'var(--lp-brand-50)', color: 'var(--lp-brand-700)', fontWeight: 600 },
+  groupHeader: {
+    display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%',
+    padding: '10px 14px 5px', background: 'none', border: 'none', cursor: 'pointer',
+    fontFamily: 'inherit', fontSize: 10.5, fontWeight: 700, color: 'var(--lp-text-tertiary)',
+    textTransform: 'uppercase', letterSpacing: '.07em', textAlign: 'left',
+  },
+  groupDot: { width: 6, height: 6, borderRadius: 999, background: 'var(--lp-brand-600)', display: 'inline-block', marginLeft: 6, flexShrink: 0 },
   footer: { padding: '12px 12px', borderTop: '1px solid var(--lp-border-subtle)' },
   footerWrap: { display: 'flex', alignItems: 'center', gap: 8 },
   avatar: { width: 32, height: 32, borderRadius: '50%', background: 'var(--lp-brand-100)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--lp-brand-700)', fontSize: 12, fontWeight: 700, flexShrink: 0 },
@@ -120,17 +155,41 @@ const S = {
   },
 };
 
+const COLLAPSE_LS_KEY = 'pp_sidebar_collapsed_v1';
+
 export default function Sidebar() {
   const { user, can, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirm, ConfirmEl] = useConfirm();
   /* FIX jun 2026 (Sprint P): badge rojo con # pendientes en el ítem "Pedidos".
      count se mantiene en context global PedidosNotifContext que solo se activa
      para rol 'tecnico'; para otros roles devuelve 0 y CountBadge no renderiza. */
   const pedidosNotif = usePedidosNotif();
-  const items = NAV_ITEMS.filter(i =>
-    can(i.perm) && (!Array.isArray(i.roles) || i.roles.length === 0 || i.roles.includes(user?.rol))
+  /* Badge de chat sin leer (todos los roles). */
+  const chatNotif = useChatNotif();
+  /* Grupos colapsables (jul 2026): estado por dispositivo en localStorage. */
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(COLLAPSE_LS_KEY)) || {}; } catch { return {}; }
+  });
+  const toggleGroup = (id) => setCollapsed(prev => {
+    const next = { ...prev, [id]: !prev[id] };
+    try { localStorage.setItem(COLLAPSE_LS_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  });
+
+  const grupos = NAV_GROUPS
+    .map(g => ({
+      ...g,
+      items: g.items.filter(i =>
+        can(i.perm) && (!Array.isArray(i.roles) || i.roles.length === 0 || i.roles.includes(user?.rol))
+      ),
+    }))
+    .filter(g => g.items.length > 0);
+
+  const rutaActivaEn = (g) => g.items.some(i =>
+    i.path === '/' ? location.pathname === '/' : location.pathname.startsWith(i.path)
   );
 
   /* Sprint G-9: handler de cambio de PIN propio.
@@ -183,22 +242,48 @@ export default function Sidebar() {
         </div>
       </div>
       <nav style={S.nav}>
-        {items.map(item => {
-          /* FIX P: badge count solo para item 'pedidos'. S.link ya tiene
-             position: relative para anclar el CountBadge absolute. */
-          const isPedidos = item.key === 'pedidos';
-          const count = isPedidos ? pedidosNotif.count : 0;
+        {grupos.map(g => {
+          /* Grupos de 1 solo item (o sin título, como Inicio/Admin) se pintan
+             planos, sin encabezado — el header solo aporta con ≥2 items. */
+          const conHeader = !!g.titulo && g.items.length >= 2;
+          const estaColapsado = conHeader && !!collapsed[g.id];
+          const renderItem = (item) => {
+            /* FIX P: badges por item — 'pedidos' (backlog del técnico) y
+               'chat' (mensajes sin leer). S.link ya tiene position: relative
+               para anclar el CountBadge absolute. */
+            const count = item.key === 'pedidos' ? pedidosNotif.count
+                        : item.key === 'chat' ? chatNotif.count : 0;
+            return (
+              <NavLink
+                key={item.key}
+                to={item.path}
+                end={item.path === '/'}
+                style={({ isActive }) => ({ ...S.link, ...(isActive ? S.linkActive : {}), position: 'relative' })}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                {count > 0 && <CountBadge count={count} variant="sidebar" />}
+              </NavLink>
+            );
+          };
           return (
-            <NavLink
-              key={item.key}
-              to={item.path}
-              end={item.path === '/'}
-              style={({ isActive }) => ({ ...S.link, ...(isActive ? S.linkActive : {}), position: 'relative' })}
-            >
-              {item.icon}
-              <span>{item.label}</span>
-              {isPedidos && count > 0 && <CountBadge count={count} variant="sidebar" />}
-            </NavLink>
+            <div key={g.id}>
+              {conHeader && (
+                <button type="button" style={S.groupHeader} onClick={() => toggleGroup(g.id)}
+                  aria-expanded={!estaColapsado}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    {g.titulo}
+                    {/* Punto verde: el grupo colapsado contiene la pantalla activa */}
+                    {estaColapsado && rutaActivaEn(g) && <span style={S.groupDot} />}
+                  </span>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                    style={{ transform: estaColapsado ? 'rotate(-90deg)' : 'none', transition: 'transform .15s', flexShrink: 0 }} aria-hidden="true">
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </button>
+              )}
+              {!estaColapsado && g.items.map(renderItem)}
+            </div>
           );
         })}
       </nav>
@@ -221,6 +306,23 @@ export default function Sidebar() {
                 </svg>
                 Cambiar PIN
               </button>
+              {/* AUDIT 15-jul-2026: /seguridad (TOTP personal) era pantalla huérfana —
+                  solo el asistente la conocía. Vive aquí porque es config PERSONAL
+                  (como cambiar PIN), no una pantalla de trabajo. Mismos roles que
+                  su RoleRoute en App.jsx. */}
+              {['admin', 'tecnico', 'inventario', 'almacen'].includes(user?.rol) && (
+                <button
+                  style={S.menuItem}
+                  onClick={() => { setMenuOpen(false); navigate('/seguridad'); }}
+                  onMouseEnter={(e) => e.currentTarget.style.background = 'var(--lp-brand-50)'}
+                  onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  </svg>
+                  Seguridad (Authenticator)
+                </button>
+              )}
               <button
                 style={{ ...S.menuItem, color: 'var(--lp-danger-600)' }}
                 onClick={() => { setMenuOpen(false); logout(); }}

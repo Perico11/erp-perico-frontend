@@ -21,7 +21,7 @@
    Import/Export gateado compras/admin.
    ════════════════════════════════════════════════════════════════════════════ */
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
@@ -182,7 +182,7 @@ function KPI({ label, value, sub, accent = CHART.brand, trend, trendUp }) {
 }
 
 /* ── Tab: Cierre mensual ─────────────────────────────────────────────────── */
-function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
+function CierreMensualTab({ esAdmin, confirm, isDesktop, puedeExport, onExport }) {
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [closing, setClosing] = useState(false);
@@ -392,6 +392,14 @@ function CierreMensualTab({ esAdmin, confirm, isDesktop }) {
           style={{ ...S.btnGhost, textDecoration: 'none', ...(isDesktop ? { marginRight: 'auto' } : { flex: '1 1 100%', justifyContent: 'center' }) }}>
           <Icon d={IC.download} size={16} /> Descargar reporte (PDF)
         </a>
+        {/* Exportar Excel del mes en curso — antes era un botón GLOBAL arriba de
+            todas las pestañas (confundía en Histórico/Análisis); vive aquí donde
+            aplica. Histórico conserva su Excel por renglón. */}
+        {puedeExport && (
+          <button data-id="reportes.btn.exportar" style={S.btnGhost} onClick={onExport}>
+            <Icon d={IC.download} size={16} /> Exportar Excel
+          </button>
+        )}
         {esAdmin && (
           <>
             <button style={S.btnGhost} onClick={cargar}>
@@ -666,8 +674,8 @@ function TrimestralTab({ isDesktop }) {
   );
 }
 
-/* ── Tab: Análisis avanzado (Pareto + rotación + stock muerto) ─────────── */
-function AnalisisAvanzadoTab() {
+/* ── Tab: Análisis avanzado (Pareto + rotación + stock muerto + causas) ── */
+function AnalisisAvanzadoTab({ esAdmin }) {
   const [pareto, setPareto] = useState(null);
   const [rotacion, setRotacion] = useState(null);
   const [stockMuerto, setStockMuerto] = useState(null);
@@ -860,33 +868,295 @@ function AnalisisAvanzadoTab() {
           </>
         )}
       </div>
+
+      {/* ═══════════ Catálogo de causas raíz (admin) ═══════════
+          Jul 2026: dejó de ser pestaña propia — el catálogo alimenta el Pareto
+          de arriba, así que vive junto a él. Componente completo, sin recortes. */}
+      {esAdmin && <CausasManager />}
     </>
   );
 }
 
-/* ── Definición de las 6 sub-secciones (§9) ──────────────────────────────── */
+/* ── Tab: Operación (jul 2026, pedido del dueño) ─────────────────────────────
+   Los 4 datos operativos juntos: qué se PRODUJO, qué se ENVIÓ a Terán, qué
+   queda en FÁBRICA sin enviar, y qué MP está PIDIENDO compras (Arely).
+   Un solo endpoint (/api/reports/operacion, solo admin). KPIs accionables:
+   cada sección tiene link directo a su pantalla de trabajo. */
+function OperacionTab({ isDesktop }) {
+  const navigate = useNavigate();
+  const [dias, setDias] = useState(30);
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [err, setErr] = useState('');
+
+  useEffect(() => {
+    setLoading(true); setErr('');
+    api.getReporteOperacion(dias)
+      .then(r => setData(r.data))
+      .catch(e => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, [dias]);
+
+  /* KPIs accionables (regla del dueño): cada sección enlaza a su pantalla. */
+  const SecHead = ({ children, to, label }) => (
+    <div style={{ ...S.sectionTitle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+      <span>{children}</span>
+      {to && (
+        <button type="button" style={{ ...S.btnGhostSm, textTransform: 'none', letterSpacing: 0 }}
+          onClick={() => navigate(to)}>
+          {label || 'Ver pantalla'} <Icon d={IC.chevron} size={13} />
+        </button>
+      )}
+    </div>
+  );
+
+  if (loading && !data) return <div style={S.loading}>Cargando reporte operativo…</div>;
+  if (err) return <div style={S.err}>{err}</div>;
+  if (!data) return <div style={S.loading}>Sin datos</div>;
+
+  const { produccion, enviosTeran, stockFabrica, comprasMP } = data;
+  const TOP = 12;
+  const OC_BADGE = {
+    por_aprobar: ['var(--lp-warning-100)', 'var(--lp-warning-700)'],
+    pendiente: ['var(--lp-warning-100)', 'var(--lp-warning-700)'],
+    pendiente_aprobacion: ['var(--lp-warning-100)', 'var(--lp-warning-700)'],
+    solicitud: ['var(--lp-warning-100)', 'var(--lp-warning-700)'],
+    aprobada: ['var(--lp-info-100)', 'var(--lp-info-700)'],
+    recibida: ['var(--lp-success-100)', 'var(--lp-success-700)'],
+    cancelada: ['var(--lp-bg-sunken)', 'var(--lp-text-tertiary)'],
+  };
+  const fmtFecha = (f) => f ? new Date(f).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }) : '—';
+
+  return (
+    <>
+      <HelpHint id="reportes-operacion" title="Vista operativa">
+        Resumen del flujo físico completo del periodo: lo <strong>producido</strong> en fábrica, lo <strong>enviado a Terán</strong> (todas las vías: recolección, OT y transfer directo), el <strong>stock que sigue en fábrica</strong> sin enviar, y las <strong>órdenes de compra de MP</strong> que compras tiene en curso.
+      </HelpHint>
+
+      {/* Selector de periodo — controla producción, envíos y OCs del periodo.
+          El stock en fábrica es foto ACTUAL (no depende del periodo). */}
+      <div style={S.perWrap}>
+        {[7, 30, 90].map(d => (
+          <button key={d} type="button" style={S.perBtn(d === dias, !isDesktop)}
+            data-id={`reportes.operacion.dias.${d}`} data-rol="admin"
+            onClick={() => setDias(d)}>Últimos {d} días</button>
+        ))}
+      </div>
+
+      <div style={S.kpiGrid(isDesktop)}>
+        <KPI label="Producido" accent={CHART.brand} value={produccion.totalCubetas.toLocaleString('es-MX')}
+          sub={`cubetas · ${produccion.totalLotes} lotes · ${produccion.totalLitros.toLocaleString('es-MX')} L`} />
+        <KPI label="Enviado a Terán" accent={CHART.info} value={enviosTeran.totalCubetas.toLocaleString('es-MX')}
+          sub={`cubetas · ${enviosTeran.totalEnvios} envíos`} />
+        <KPI label="En fábrica sin enviar" accent={stockFabrica.totalFabrica > 0 ? CHART.amber : 'var(--lp-border-strong)'}
+          value={stockFabrica.totalFabrica.toLocaleString('es-MX')}
+          sub={`cub ahora · ${stockFabrica.totalTransito.toLocaleString('es-MX')} en tránsito`} />
+        <KPI label="OCs de MP abiertas" accent={comprasMP.abiertas.porAprobar > 0 ? CHART.amber : CHART.success}
+          value={comprasMP.abiertas.total}
+          sub={`${comprasMP.abiertas.porAprobar} por aprobar · ${comprasMP.abiertas.kgPorLlegar.toLocaleString('es-MX')} kg por llegar`} />
+      </div>
+
+      {/* ═══ 1. Producción del periodo ═══ */}
+      <div style={S.section}>
+        <SecHead to="/trazabilidad" label="Trazabilidad">Producción · últimos {dias} días</SecHead>
+        {produccion.porProducto.length === 0 ? (
+          <div style={S.empty}>Sin lotes producidos en el periodo.</div>
+        ) : (
+          <div className="table-scroll"><table style={S.table}>
+            <thead><tr>
+              <th style={S.th}>Producto</th>
+              <th style={S.th}>Lotes</th>
+              <th style={S.th}>Cubetas</th>
+              <th style={S.th}>Litros</th>
+            </tr></thead>
+            <tbody>
+              {produccion.porProducto.slice(0, TOP).map(p => (
+                <tr key={p.producto}>
+                  <td style={S.td}><strong>{p.producto}</strong></td>
+                  <td style={S.tdNum}>{p.lotes}</td>
+                  <td style={S.tdNum}>{p.cubetas.toLocaleString('es-MX')}</td>
+                  <td style={S.tdNum}>{p.litros.toLocaleString('es-MX')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        )}
+        {produccion.porProducto.length > TOP && (
+          <div style={{ padding: '10px 0 0', fontSize: 11, color: 'var(--lp-text-tertiary)', textAlign: 'center' }}>
+            Mostrando {TOP} de {produccion.porProducto.length} productos
+          </div>
+        )}
+      </div>
+
+      {/* ═══ 2. Enviado a Terán ═══ */}
+      <div style={S.section}>
+        <SecHead to="/transferencias" label="Transferencias">Enviado a Terán · últimos {dias} días</SecHead>
+        {(enviosTeran.enTransito.ots > 0 || enviosTeran.porSurtir.ots > 0) && (
+          <div style={S.alertBox}>
+            {enviosTeran.enTransito.ots > 0 && (
+              <div><strong>{enviosTeran.enTransito.cubetas.toLocaleString('es-MX')} cub en tránsito</strong> ({enviosTeran.enTransito.ots} OT surtidas sin recibir: {enviosTeran.enTransito.folios.join(', ')})</div>
+            )}
+            {enviosTeran.porSurtir.ots > 0 && (
+              <div>{enviosTeran.porSurtir.cubetas.toLocaleString('es-MX')} cub solicitadas por surtir ({enviosTeran.porSurtir.ots} OT: {enviosTeran.porSurtir.folios.join(', ')})</div>
+            )}
+          </div>
+        )}
+        {enviosTeran.porProducto.length === 0 ? (
+          <div style={S.empty}>Sin envíos a Terán en el periodo.</div>
+        ) : (
+          <div className="table-scroll"><table style={S.table}>
+            <thead><tr>
+              <th style={S.th}>Producto</th>
+              <th style={S.th}>Cubetas enviadas</th>
+              <th style={S.th}>Envíos</th>
+            </tr></thead>
+            <tbody>
+              {enviosTeran.porProducto.slice(0, TOP).map(p => (
+                <tr key={p.producto}>
+                  <td style={S.td}><strong>{p.producto}</strong></td>
+                  <td style={S.tdNum}>{p.cubetas.toLocaleString('es-MX')}</td>
+                  <td style={S.tdNum}>{p.envios}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        )}
+        {enviosTeran.porProducto.length > TOP && (
+          <div style={{ padding: '10px 0 0', fontSize: 11, color: 'var(--lp-text-tertiary)', textAlign: 'center' }}>
+            Mostrando {TOP} de {enviosTeran.porProducto.length} productos
+          </div>
+        )}
+      </div>
+
+      {/* ═══ 3. Stock en fábrica sin enviar (foto actual) ═══ */}
+      <div style={S.section}>
+        <SecHead to="/almacen?vista=fabrica" label="Almacén">Stock en fábrica sin enviar · ahora</SecHead>
+        {stockFabrica.productos.length === 0 ? (
+          <div style={S.empty}>Fábrica sin PT pendiente de enviar. Todo está en Terán.</div>
+        ) : (
+          <div className="table-scroll"><table style={S.table}>
+            <thead><tr>
+              <th style={S.th}>Producto</th>
+              <th style={S.th}>Fábrica</th>
+              <th style={S.th}>Tránsito</th>
+              <th style={S.th}>Terán</th>
+            </tr></thead>
+            <tbody>
+              {stockFabrica.productos.slice(0, TOP).map(p => (
+                <tr key={p.producto}>
+                  <td style={S.td}><strong>{p.producto}</strong></td>
+                  <td style={S.tdNum}>
+                    {p.fabrica > 0
+                      ? <span style={S.badge('var(--lp-warning-100)', 'var(--lp-warning-700)')}>{p.fabrica.toLocaleString('es-MX')}</span>
+                      : p.fabrica.toLocaleString('es-MX')}
+                  </td>
+                  <td style={S.tdNum}>{p.transito.toLocaleString('es-MX')}</td>
+                  <td style={S.tdNum}>{p.teran.toLocaleString('es-MX')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table></div>
+        )}
+        {stockFabrica.productos.length > TOP && (
+          <div style={{ padding: '10px 0 0', fontSize: 11, color: 'var(--lp-text-tertiary)', textAlign: 'center' }}>
+            Mostrando {TOP} de {stockFabrica.productos.length} productos con stock en fábrica
+          </div>
+        )}
+      </div>
+
+      {/* ═══ 4. Compras de MP (Arely) ═══ */}
+      <div style={S.section}>
+        <SecHead to="/compras" label="Compras">Compras de MP · últimos {dias} días</SecHead>
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap', marginBottom: 12, fontSize: 12, color: 'var(--lp-text-secondary)' }}>
+          <span><b style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)' }}>{comprasMP.periodo.creadas}</b> OCs creadas</span>
+          <span><b style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)' }}>{comprasMP.periodo.kgPedidos.toLocaleString('es-MX')}</b> kg pedidos</span>
+          <span><b style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-primary)' }}>{comprasMP.periodo.recibidas}</b> recibidas</span>
+          {comprasMP.periodo.urgentes > 0 && (
+            <span style={S.badge('var(--lp-danger-100)', 'var(--lp-danger-700)')}>{comprasMP.periodo.urgentes} urgentes</span>
+          )}
+        </div>
+        {comprasMP.porMP.length > 0 && (
+          <>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.03em', margin: '4px 0 6px' }}>MPs más pedidas del periodo</div>
+            <div className="table-scroll"><table style={{ ...S.table, marginBottom: 14 }}>
+              <thead><tr>
+                <th style={S.th}>Materia prima</th>
+                <th style={S.th}>kg pedidos</th>
+                <th style={S.th}>OCs</th>
+              </tr></thead>
+              <tbody>
+                {comprasMP.porMP.slice(0, 10).map(m => (
+                  <tr key={m.mp}>
+                    <td style={S.td}><strong>{m.mp}</strong></td>
+                    <td style={S.tdNum}>{m.kg.toLocaleString('es-MX')}</td>
+                    <td style={S.tdNum}>{m.ocs}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table></div>
+          </>
+        )}
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.03em', margin: '4px 0 6px' }}>Últimas órdenes de compra</div>
+        {comprasMP.recientes.length === 0 ? (
+          <div style={S.empty}>Sin órdenes de compra registradas.</div>
+        ) : (
+          <div className="table-scroll"><table style={S.table}>
+            <thead><tr>
+              <th style={S.th}>OC</th>
+              <th style={S.th}>Proveedor</th>
+              <th style={S.th}>MPs</th>
+              <th style={S.th}>kg</th>
+              <th style={S.th}>Estado</th>
+              <th style={S.th}>Creada</th>
+            </tr></thead>
+            <tbody>
+              {comprasMP.recientes.map(o => {
+                const [bg, fg] = OC_BADGE[o.estado] || ['var(--lp-bg-sunken)', 'var(--lp-text-secondary)'];
+                return (
+                  <tr key={o.codigo}>
+                    <td style={S.td}><strong>{o.codigo}</strong>{o.prioridad === 'urgente' && <span style={{ ...S.badge('var(--lp-danger-100)', 'var(--lp-danger-700)'), marginLeft: 6 }}>urgente</span>}</td>
+                    <td style={S.td}>{o.proveedor}</td>
+                    <td style={S.td}>{o.mps.join(', ') || '—'}</td>
+                    <td style={S.tdNum}>{o.kg.toLocaleString('es-MX')}</td>
+                    <td style={S.td}><span style={S.badge(bg, fg)}>{String(o.estado).replace(/_/g, ' ')}</span></td>
+                    <td style={S.tdNum}>{fmtFecha(o.fechaCreacion)}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table></div>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* ── Definición de sub-secciones ─────────────────────────────────────────────
+   Jul 2026 (simplificación dueño): "Operación" NUEVA (default admin) con los 4
+   datos operativos; "Causas" dejó de ser pestaña — el catálogo vive dentro de
+   Análisis (mismo componente, cero funciones perdidas). */
 const SECCIONES = [
+  { id: 'operacion',   label: 'Operación',    full: 'Operación',         sub: 'Producción · Terán · stock · compras MP', adminOnly: true },
   { id: 'cierre',      label: 'Cierre',       full: 'Cierre mensual',    sub: 'Preview del mes + cerrar mes' },
   { id: 'historico',   label: 'Histórico',    full: 'Histórico mensual', sub: 'Serie de cierres anteriores' },
   { id: 'trimestral',  label: 'Trimestral',   full: 'Trimestral',        sub: 'Agregado Q vs Q anterior' },
-  { id: 'analisis',    label: 'Análisis',     full: 'Análisis avanzado', sub: 'Pareto · rotación · stock muerto' },
+  { id: 'analisis',    label: 'Análisis',     full: 'Análisis avanzado', sub: 'Pareto · rotación · stock muerto · causas' },
   { id: 'estrategico', label: 'Estratégico',  full: 'Estratégico',       sub: 'Anual · lead times · ABC' },
-  { id: 'causas',      label: 'Causas',       full: 'Catálogo de causas', sub: 'Causas raíz (editable · admin)' },
 ];
 
 /* ── Bottom-sheet de secciones (móvil) ───────────────────────────────────── */
-function SeccionesSheet({ active, onPick, onClose }) {
+function SeccionesSheet({ active, secciones = SECCIONES, onPick, onClose }) {
   /* MÓVIL: este sheet sólo se monta cuando está abierto (ver render gateado con
      !isDesktop && sheetOpen). Bloquea el scroll del FONDO y publica --pp-vvh para
      que el contenedor tenga overflow interno scrolleable (mismo fix que Modal.jsx). */
   useBodyScrollLock(true);
   return (
-    <div style={S.sheetOverlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay}>
       <div style={S.sheet} onClick={e => e.stopPropagation()}>
         <div style={S.sheetGrab} />
         <div style={S.sheetTitle}>Secciones de reportes</div>
         <div style={S.sheetGrid}>
-          {SECCIONES.map(sec => {
+          {secciones.map(sec => {
             const on = sec.id === active;
             return (
               <button key={sec.id} style={S.sheetItem(on)} onClick={() => onPick(sec.id)}>
@@ -907,53 +1177,52 @@ export default function ReportesPage() {
   const [confirm, ConfirmEl] = useConfirm();
   const isDesktop = useIsDesktop();
   const [searchParams] = useSearchParams();
+  const esAdmin = user?.rol === 'admin';
+  const puedeImportExport = esAdmin || user?.rol === 'compras';
+
+  /* Jul 2026 (simplificación dueño): "Operación" solo admin (el endpoint es
+     solo-admin) y es su pestaña default. El selector "Este mes · Trimestre ·
+     Año" se ELIMINÓ: duplicaba las pestañas (navegaban a lo mismo). */
+  const seccionesVisibles = SECCIONES.filter(s => !s.adminOnly || esAdmin);
+  const defaultTab = esAdmin ? 'operacion' : 'cierre';
+
   /* Deep-link a sub-pestaña vía ?tab= (p.ej. el asistente abre /reportes?tab=trimestral).
-     Validado contra los ids de SECCIONES; valor inválido cae a 'cierre'. */
-  const TABS_VALIDOS = ['cierre', 'historico', 'trimestral', 'analisis', 'estrategico', 'causas'];
-  const [activeTab, setActiveTab] = useState(() => {
-    const t = searchParams.get('tab');
-    return (t && TABS_VALIDOS.includes(t)) ? t : 'cierre';
-  });
+     'causas' (pestaña retirada) mapea a 'analisis', donde vive ahora el catálogo. */
+  const resolveTab = (t) => {
+    if (t === 'causas') return 'analisis';
+    return (t && seccionesVisibles.some(s => s.id === t)) ? t : null;
+  };
+  const [activeTab, setActiveTab] = useState(() => resolveTab(searchParams.get('tab')) || defaultTab);
   /* Sync URL → estado: si navegas a /reportes?tab=... estando YA en Reportes,
      react-router NO remonta y el useState inicial no se relee. Setear al mismo
      valor es no-op (no provoca loop). */
   useEffect(() => {
-    const t = searchParams.get('tab');
-    if (t && TABS_VALIDOS.includes(t)) setActiveTab(t);
+    const t = resolveTab(searchParams.get('tab'));
+    if (t) setActiveTab(t);
   }, [searchParams]);
   const [detallePeriodo, setDetallePeriodo] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const esAdmin = user?.rol === 'admin';
-  const puedeImportExport = esAdmin || user?.rol === 'compras';
 
-  const activeSec = SECCIONES.find(s => s.id === activeTab) || SECCIONES[0];
+  const activeSec = seccionesVisibles.find(s => s.id === activeTab) || seccionesVisibles[0];
 
   const selectTab = (id) => { setActiveTab(id); setDetallePeriodo(null); };
 
-  /* ── Selector de periodo del mockup (Este mes · Trimestre · Año) ──
-     Mapea a las secciones REALES equivalentes (sin backend nuevo):
-     mes → Cierre mensual · trim → Trimestral · año → Estratégico (anual). */
-  const PERIODOS = [
-    { id: 'mes', label: 'Este mes', tab: 'cierre' },
-    { id: 'trim', label: 'Trimestre', tab: 'trimestral' },
-    { id: 'ano', label: 'Año', tab: 'estrategico' },
-  ];
-  const perActivo = activeTab === 'cierre' ? 'mes' : activeTab === 'trimestral' ? 'trim' : activeTab === 'estrategico' ? 'ano' : null;
-
-  /* Subtítulo dinámico del mockup: "Resumen de junio 2026" / "Trimestre abr–jun 2026" / "Acumulado 2026" */
+  /* Subtítulo dinámico por sección */
   const now = new Date();
   const TRIM_TXT = ['ene–mar', 'abr–jun', 'jul–sep', 'oct–dic'];
-  const subPeriodo = activeTab === 'cierre'
-    ? `Resumen de ${now.toLocaleDateString('es-MX', { month: 'long' })} ${now.getFullYear()}`
-    : activeTab === 'trimestral'
-      ? `Trimestre ${TRIM_TXT[Math.floor(now.getMonth() / 3)]} ${now.getFullYear()}`
-      : activeTab === 'estrategico'
-        ? `Acumulado ${now.getFullYear()}`
-        : activeSec.full;
+  const subPeriodo = activeTab === 'operacion'
+    ? 'Producción · envíos a Terán · stock en fábrica · compras MP'
+    : activeTab === 'cierre'
+      ? `Resumen de ${now.toLocaleDateString('es-MX', { month: 'long' })} ${now.getFullYear()}`
+      : activeTab === 'trimestral'
+        ? `Trimestre ${TRIM_TXT[Math.floor(now.getMonth() / 3)]} ${now.getFullYear()}`
+        : activeTab === 'estrategico'
+          ? `Acumulado ${now.getFullYear()}`
+          : activeSec.full;
 
-  /* Export gateado compras/admin (data-id reportes.btn.exportar).
-     Usa el endpoint REAL existente: snapshot xlsx del mes en curso.
-     (No hay endpoint de import de reportes en el backend — ver flag en el reporte.) */
+  /* Export gateado compras/admin (data-id reportes.btn.exportar). Vive DENTRO
+     de la pestaña Cierre (exporta el snapshot del mes en curso — ahí es donde
+     tiene sentido; Histórico ya tiene su Excel por renglón). */
   const handleExport = () => {
     const d = new Date();
     const per = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
@@ -962,28 +1231,17 @@ export default function ReportesPage() {
 
   return (
     <div>
-      <TopBar title="Reportes de inventario" />
+      <TopBar title="Reportes" />
       <div style={{ ...S.wrap, ...(isDesktop ? S.wrapDesk : {}) }}>
         <div style={S.h1}>Reportes</div>
         <div style={S.psub}>
           {detallePeriodo ? 'Detalle de snapshot' : subPeriodo}
         </div>
 
-        {/* Selector de periodo (mockup): Este mes · Trimestre · Año */}
-        {!detallePeriodo && (
-          <div style={S.perWrap}>
-            {PERIODOS.map(p => (
-              <button key={p.id} type="button" style={S.perBtn(p.id === perActivo, !isDesktop)}
-                data-id={`reportes.periodo.${p.id}`} data-rol="admin,inventario,compras"
-                onClick={() => selectTab(p.tab)}>{p.label}</button>
-            ))}
-          </div>
-        )}
-
         {/* Selector de secciones: segmented escritorio / botón→bottom-sheet móvil */}
         {isDesktop ? (
           <div style={S.segWrap}>
-            {SECCIONES.map(sec => (
+            {seccionesVisibles.map(sec => (
               <button key={sec.id} style={S.seg(sec.id === activeTab && !detallePeriodo)} onClick={() => selectTab(sec.id)}
                 data-id={`reportes.sec.${sec.id}`} data-rol="admin,inventario,compras">
                 {sec.label}
@@ -1000,25 +1258,16 @@ export default function ReportesPage() {
           </button>
         )}
 
-        {/* Export — gateado compras/admin. (Import de reportes no tiene endpoint backend — flag.) */}
-        {puedeImportExport && !detallePeriodo && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-            <button data-id="reportes.btn.exportar" style={S.btnGhost} onClick={handleExport}>
-              <Icon d={IC.download} size={16} /> Exportar Excel
-            </button>
-          </div>
-        )}
-
         {detallePeriodo ? (
           <DetalleSnapshot periodo={detallePeriodo} onClose={() => setDetallePeriodo(null)} isDesktop={isDesktop} />
         ) : (
           <>
-            {activeTab === 'cierre' && <CierreMensualTab esAdmin={esAdmin} confirm={confirm} isDesktop={isDesktop} />}
+            {activeTab === 'operacion' && esAdmin && <OperacionTab isDesktop={isDesktop} />}
+            {activeTab === 'cierre' && <CierreMensualTab esAdmin={esAdmin} confirm={confirm} isDesktop={isDesktop} puedeExport={puedeImportExport} onExport={handleExport} />}
             {activeTab === 'historico' && <HistoricoTab onSelectPeriodo={setDetallePeriodo} />}
             {activeTab === 'trimestral' && <TrimestralTab isDesktop={isDesktop} />}
-            {activeTab === 'analisis' && <AnalisisAvanzadoTab />}
+            {activeTab === 'analisis' && <AnalisisAvanzadoTab esAdmin={esAdmin} />}
             {activeTab === 'estrategico' && <EstrategicoTab />}
-            {activeTab === 'causas' && <CausasManager />}
           </>
         )}
       </div>
@@ -1026,6 +1275,7 @@ export default function ReportesPage() {
       {!isDesktop && sheetOpen && (
         <SeccionesSheet
           active={activeTab}
+          secciones={seccionesVisibles}
           onPick={(id) => { selectTab(id); setSheetOpen(false); }}
           onClose={() => setSheetOpen(false)}
         />

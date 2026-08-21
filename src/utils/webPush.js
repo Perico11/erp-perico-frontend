@@ -115,7 +115,7 @@ export async function unsubscribeFromPush() {
         body: JSON.stringify({ endpoint }),
       }).catch(() => {});
     }
-  } catch (e) { /* silencioso */ }
+  } catch { /* silencioso */ }
 }
 
 /* Enviar un push de prueba a este usuario. Devuelve { ok, enviadas }. */

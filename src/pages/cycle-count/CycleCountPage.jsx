@@ -8,6 +8,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ════════════════════════════════════════════════════════════════════════════
    Conteo / Cycle Count — reskin Claude Design (verde).
@@ -20,6 +21,12 @@ import ImportExportPrint from '../../components/ui/ImportExportPrint';
      useConfirm, firma PIN al abrir/cerrar, causa raíz obligatoria, modales.
      Gating: contar/finalizar = inventario; aprobar varianza = admin.
    ════════════════════════════════════════════════════════════════════════════ */
+
+/* AUDIT UX 16-jul (U14): autoFocus solo en dispositivos con puntero fino
+   (mouse/trackpad). En móvil el foco automático abre el teclado encima del
+   sheet y tapa los botones — regla del proyecto. */
+const FINE_POINTER = typeof window !== 'undefined' && window.matchMedia
+  && window.matchMedia('(pointer: fine)').matches;
 
 /* ── Iconos line SVG (sin emojis) ── */
 const Icon = {
@@ -100,6 +107,12 @@ const S = {
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6,
     minHeight: 44, padding: '0 18px', fontSize: 13, fontWeight: 700,
     borderRadius: 12, border: 'none', background: 'var(--lp-warning-600)', color: '#fff',
+    cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+  },
+  btnDanger: {
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7,
+    minHeight: 40, padding: '0 16px', fontSize: 13, fontWeight: 700,
+    borderRadius: 10, border: 'none', background: 'var(--lp-danger-600)', color: '#fff',
     cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
   },
   /* KPI metric cards */
@@ -226,6 +239,9 @@ const CATEGORIAS = [
 const TIPOS = [
   { v: 'completo', label: 'Completo (todos)' },
   { v: 'aleatorio', label: 'Aleatorio (~30%)' },
+  /* `base` (ago-2026): solo MP. Al firmar FIJA la existencia contada como la
+     nueva base de la que producción descuenta — sin pasar por aprobación. */
+  { v: 'base', label: 'Inventario base' },
 ];
 
 /* Umbral de varianza que dispara aprobación admin (espejo del backend). */
@@ -234,11 +250,14 @@ const UMBRAL = 5;
 function StartModal({ onStart, onClose, loading, isDesktop }) {
   const [categoria, setCategoria] = useState('mp');
   const [tipo, setTipo] = useState('completo');
+  /* PT por ubicación (5-ago-2026, reinventario): Terán se cuenta por PIEZAS.
+     Default Terán — ahí vive el grueso del PT y ahí nacen los descuadres. */
+  const [ubicacion, setUbicacion] = useState('teran');
   /* MÓVIL: este componente sólo se monta cuando está abierto → lock siempre activo
      mientras vive. Congela el fondo (anti scroll-chaining) y publica --pp-vvh. */
   useBodyScrollLock(true);
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Iniciar sesión de conteo</div>
         <div style={S.shS}>Elige qué contar y el alcance. Firmarás con tu PIN para abrir.</div>
@@ -247,17 +266,43 @@ function StartModal({ onStart, onClose, loading, isDesktop }) {
           <SegmentedControl value={categoria} onChange={setCategoria}
             options={CATEGORIAS.map(c => ({ value: c.v, label: c.label }))} color="brand" />
         </div>
+        {categoria === 'pt' && (
+          <div style={{ marginBottom: 14 }}>
+            <label style={S.flbl}>Ubicación</label>
+            <SegmentedControl value={ubicacion} onChange={setUbicacion}
+              options={[{ value: 'teran', label: 'Almacén Terán' }, { value: 'fabrica', label: 'Fábrica' }]} color="brand" />
+            {ubicacion === 'teran' && (
+              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
+                Se cuenta por <strong>piezas</strong> (totes llenos, litros del tote a medias,
+                cubetas, galones…) — el sistema hace las conversiones.
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ marginBottom: 8 }}>
           <label style={S.flbl}>Tipo de conteo</label>
           <SegmentedControl value={tipo} onChange={setTipo}
             options={TIPOS.map(t => ({ value: t.v, label: t.label }))} color="brand" />
         </div>
+        {/* El conteo base cambia las reglas del juego: fija en vez de ajustar y
+            no pasa por aprobación. Decirlo ANTES de abrir la sesión, no después. */}
+        {tipo === 'base' && (
+          <div style={{ background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)', padding: 12, borderRadius: 10, fontSize: 12.5, lineHeight: 1.55, marginBottom: 8 }}>
+            <strong>Inventario base — solo materia prima.</strong> Al cerrar y firmar,
+            la cantidad que captures <strong>sustituye</strong> la existencia del sistema
+            (no se suma ni se resta), y de ahí en adelante producción descuenta sobre
+            esa base. Se aplica al instante, sin aprobación.
+            <div style={{ marginTop: 6 }}>
+              Las materias primas que no cuentes <strong>se quedan como están</strong>.
+            </div>
+          </div>
+        )}
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose} disabled={loading}
             data-id="conteo.btn.cancelar-iniciar" data-rol="inventario,admin">Cancelar</button>
-          <button style={S.act2(true)} onClick={() => onStart(categoria, tipo)} disabled={loading}
+          <button style={S.act2(true)} onClick={() => onStart(categoria, tipo === 'base' ? 'base' : tipo, categoria === 'pt' ? ubicacion : undefined)} disabled={loading || (tipo === 'base' && categoria !== 'mp')}
             data-id="conteo.btn.iniciar-sesion" data-rol="inventario,admin">
-            {loading ? 'Iniciando…' : 'Iniciar conteo'}
+            {loading ? 'Iniciando…' : (tipo === 'base' && categoria !== 'mp') ? 'Base solo aplica a MP' : 'Iniciar conteo'}
           </button>
         </div>
       </div>
@@ -273,18 +318,41 @@ function StartModal({ onStart, onClose, loading, isDesktop }) {
    que el mockup y se registra el conteo del item. Si varianza > umbral, el
    item queda flagged y la sesión irá a aprobación de admin al finalizar.
    ════════════════════════════════════════════════════════════════════════════ */
-function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
+function CountSheet({ item, isDesktop, onClose, onRegistrar, esTeranPT }) {
   const [val, setVal] = useState(
     item.stockFisico !== null && item.stockFisico !== undefined ? String(item.stockFisico) : ''
   );
+  /* PT-Terán: se cuenta por PIEZAS (como está el almacén: totes llenos, litros
+     del tote a medias, cubetas, galones…). El cub-equiv lo calcula el server;
+     aquí solo un preview en vivo. Prefill si el item ya se contó. */
+  const pz0 = item.piezas || {};
+  const [piezas, setPiezas] = useState({
+    tote: pz0.tote != null && pz0.tote > 0 ? String(pz0.tote) : '',
+    granelLitros: pz0.granelLitros != null && pz0.granelLitros > 0 ? String(pz0.granelLitros) : '',
+    cubeta: pz0.cubeta != null && pz0.cubeta > 0 ? String(pz0.cubeta) : '',
+    galon: pz0.galon != null && pz0.galon > 0 ? String(pz0.galon) : '',
+    litro: pz0.litro != null && pz0.litro > 0 ? String(pz0.litro) : '',
+    atm: pz0.atm != null && pz0.atm > 0 ? String(pz0.atm) : '',
+  });
+  const setPz = (k, v) => setPiezas(p => ({ ...p, [k]: v }));
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
   /* MÓVIL: sólo se monta cuando está abierto → lock siempre activo mientras vive.
      Congela el fondo y publica --pp-vvh (el sheet la usa en su maxHeight). */
   useBodyScrollLock(true);
 
-  const f = parseFloat(val);
-  const showVar = !isNaN(f);
+  /* cub-equiv de las piezas (espejo de lib/reenvasePT del backend) */
+  const cubEqPiezas = esTeranPT
+    ? +((Number(piezas.tote) || 0) * 52 + (Number(piezas.granelLitros) || 0) / 19
+      + (Number(piezas.cubeta) || 0) + (Number(piezas.galon) || 0) * (3785 / 19000)
+      + (Number(piezas.litro) || 0) * (946 / 19000) + (Number(piezas.atm) || 0) * (750 / 19000)).toFixed(2)
+    : null;
+  const algunaPieza = esTeranPT && Object.values(piezas).some(v => v !== '' && Number(v) > 0);
+  const vacioExplicito = esTeranPT && Object.values(piezas).every(v => v === '' || Number(v) === 0)
+    && Object.values(piezas).some(v => v !== ''); /* capturó ceros a propósito */
+
+  const f = esTeranPT ? Number(cubEqPiezas) : parseFloat(val);
+  const showVar = esTeranPT ? (algunaPieza || vacioExplicito) : !isNaN(f);
   const sis = Number(item.stockSistema) || 0;
   const diff = showVar ? f - sis : 0;
   const vp = showVar ? (sis === 0 ? (f === 0 ? 0 : 100) : ((f - sis) / sis) * 100) : 0;
@@ -292,23 +360,56 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
   const vColor = vp === 0 ? 'var(--lp-success-600)' : alta ? 'var(--lp-danger-600)' : 'var(--lp-warning-600)';
 
   const guardar = async () => {
+    if (esTeranPT) {
+      if (!algunaPieza && !vacioExplicito) { setErr('Captura las piezas contadas (o 0 explícito si no hay nada)'); return; }
+      setErr('');
+      setSaving(true);
+      try {
+        await onRegistrar(item.key, null, {
+          tote: Number(piezas.tote) || 0,
+          granelLitros: Number(piezas.granelLitros) || 0,
+          cubeta: Number(piezas.cubeta) || 0,
+          galon: Number(piezas.galon) || 0,
+          litro: Number(piezas.litro) || 0,
+          atm: Number(piezas.atm) || 0,
+        });
+      } catch (e) {
+        setErr(humanizeError(e));
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (val === '' || isNaN(f) || f < 0) { setErr('Ingresa un físico válido'); return; }
     setErr('');
     setSaving(true);
     try {
+      /* AUDIT UX 16-jul (U11): el padre decide qué sigue (auto-avanza al
+         siguiente pendiente o cierra si ya no hay) — antes onClose() aquí
+         obligaba a Burgos a buscar el siguiente ítem a mano ~66 veces. */
       await onRegistrar(item.key, f);
-      onClose();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al registrar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }
   };
 
+  const pzField = (k, lbl, hint) => (
+    <div key={k}>
+      <label style={{ ...S.flbl, fontSize: 11.5 }}>{lbl}</label>
+      <input style={{ ...S.finQty, height: 42, fontSize: 16, marginBottom: 0 }} type="number" inputMode="decimal" min="0"
+        step={k === 'granelLitros' ? '0.1' : '1'} value={piezas[k]} placeholder="0"
+        onChange={(e) => setPz(k, e.target.value)}
+        data-id={`conteo.input.pz-${k}`} data-rol="inventario,admin" />
+      {hint && <div style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>{hint}</div>}
+    </div>
+  );
+
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
-        <div style={S.shH}>Conteo físico</div>
+        <div style={S.shH}>Conteo físico{esTeranPT ? ' · Terán' : ''}</div>
         <div style={S.shS}>{item.nombre}{item.ubicacion ? ' · ' + item.ubicacion : ''}</div>
 
         <div style={S.bigsis}>
@@ -316,12 +417,33 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
           <div style={S.bigV}>{item.stockSistema} {item.unidad}</div>
         </div>
 
-        <label style={S.flbl}>¿Cuánto contaste físicamente?</label>
-        <input style={S.finQty} type="number" inputMode="decimal" min="0" step="0.01"
-          value={val} autoFocus placeholder="0"
-          onChange={(e) => setVal(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') document.getElementById('cc-sheet-pin')?.focus(); }}
-          data-id="conteo.input.fisico" data-rol="inventario,admin" />
+        {esTeranPT ? (
+          <>
+            <label style={S.flbl}>¿Qué piezas contaste? (el sistema convierte)</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              {pzField('tote', 'Totes LLENOS', '52 cub c/u')}
+              {pzField('granelLitros', 'Litros en tote a medias', 'lee el nivel del tote')}
+              {pzField('cubeta', 'Cubetas (19 L)')}
+              {pzField('galon', 'Galones')}
+              {pzField('litro', 'Litros (botella)')}
+              {pzField('atm', 'Atomizadores 750')}
+            </div>
+            <div style={{ padding: '9px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 10, fontSize: 12.5, color: 'var(--lp-text-secondary)', marginBottom: 4 }}>
+              Total contado: <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{cubEqPiezas} cub-eq</strong>
+            </div>
+          </>
+        ) : (
+          <>
+            <label style={S.flbl}>¿Cuánto contaste físicamente?</label>
+            {/* AUDIT UX 16-jul (U14): autoFocus solo con puntero fino (mouse) —
+                en el teléfono el teclado brincaba y tapaba los botones del sheet. */}
+            <input style={S.finQty} type="number" inputMode="decimal" min="0" step="0.01"
+              value={val} autoFocus={FINE_POINTER} placeholder="0"
+              onChange={(e) => setVal(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }}
+              data-id="conteo.input.fisico" data-rol="inventario,admin" />
+          </>
+        )}
 
         {showVar && (
           <div style={S.varbox(vColor)}>
@@ -336,13 +458,9 @@ function CountSheet({ item, isDesktop, onClose, onRegistrar }) {
           </div>
         )}
 
-        <label style={{ ...S.flbl, marginTop: 14 }}>Firma del contador (PIN)</label>
-        <input id="cc-sheet-pin" style={S.finPin} type="password" inputMode="numeric" maxLength={6}
-          placeholder="••••" data-id="conteo.input.pin-firma" data-rol="inventario,admin"
-          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} />
-        <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 5 }}>
-          Tu PIN se valida al finalizar la sesión — queda registrado que TÚ contaste.
-        </div>
+        {/* AUDIT UX 16-jul (U3): campo "Firma del contador (PIN)" ELIMINADO —
+            era decorativo: guardar() nunca lo enviaba y Burgos lo tecleaba ~66
+            veces por sesión. La firma REAL es el PIN al abrir y al finalizar. */}
 
         {err && <div style={{ ...S.err, marginTop: 12, marginBottom: 0 }}>{err}</div>}
 
@@ -375,7 +493,7 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading, isDesktop }) {
   useEffect(() => {
     api.getCausasVarianza()
       .then(r => setCausas((r.data?.causas || []).filter(c => c.activo)))
-      .catch(e => setErr('Error catálogo: ' + e.message))
+      .catch(e => setErr('Error catálogo: ' + humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoadingCat(false));
   }, []);
 
@@ -389,11 +507,11 @@ function CausasRaizModal({ sesion, onAprobar, onClose, loading, isDesktop }) {
     if (!todasAsignadas) { setErr('Asigna causa a TODOS los items'); return; }
     setErr('');
     try { await onAprobar(asignaciones); }
-    catch (e) { setErr(e?.data?.error || e.message || 'Error al aprobar'); }
+    catch (e) { setErr(humanizeError(e)); } /* AUDIT UX 16-jul (U4) */
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={{ ...S.sheet(isDesktop), maxWidth: 720, maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto' }} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Asignar causa raíz</div>
         <div style={{ ...S.shS, marginBottom: 14 }}>
@@ -574,7 +692,7 @@ function AddMPModal({ onAdd, onClose, loading, isDesktop }) {
     if (stockFisico === '' || isNaN(sf) || sf < 0) { setErr('Stock físico inválido'); return; }
     setErr('');
     try { await onAdd(n, sf, unidad); }
-    catch (e) { setErr(e.message || 'Error al agregar'); }
+    catch (e) { setErr(humanizeError(e)); } /* AUDIT UX 16-jul (U4) */
   };
 
   const inp = {
@@ -584,7 +702,7 @@ function AddMPModal({ onAdd, onClose, loading, isDesktop }) {
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={(e) => e.stopPropagation()}>
         <div style={S.shH}>Agregar MP nueva al conteo</div>
         <div style={S.shS}>La MP se creará en el inventario sólo cuando admin apruebe la sesión.</div>
@@ -642,13 +760,13 @@ function varianzaColor(item) {
 }
 function estadoDeItem(item) {
   const contado = item.stockFisico !== null && item.stockFisico !== undefined;
-  if (!contado) return { key: 'pendiente', label: 'Programado', color: 'var(--lp-warning-600)' };
+  if (!contado) return { key: 'pendiente', label: 'Por contar', color: 'var(--lp-warning-600)' };
   if (item.flagged) return { key: 'flagged', label: 'A aprobación admin', color: 'var(--lp-danger-600)' };
   return { key: 'contado', label: 'Contado', color: 'var(--lp-success-600)' };
 }
 
 /* ── Fila de tabla escritorio (input físico inline + acción Contar) ── */
-function ItemRowDesktop({ item, onRegistrar, onContar }) {
+function ItemRowDesktop({ item, onRegistrar, onContar, esTeranPT }) {
   const [val, setVal] = useState(
     item.stockFisico !== null && item.stockFisico !== undefined ? String(item.stockFisico) : ''
   );
@@ -673,10 +791,19 @@ function ItemRowDesktop({ item, onRegistrar, onContar }) {
       <td style={{ ...S.tdMut, color: 'var(--lp-text-tertiary)' }}>{item.ubicacion || '—'}</td>
       <td style={{ ...S.td, ...S.tdMono, ...S.thR, color: 'var(--lp-text-secondary)' }}>{item.stockSistema}</td>
       <td style={{ ...S.td, ...S.thR }}>
-        <input style={S.inputCount} type="number" inputMode="decimal" min="0" step="0.01"
-          value={val} onChange={(e) => setVal(e.target.value)} onBlur={guardar}
-          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} placeholder="—" disabled={saving}
-          data-id="conteo.input.fisico-inline" data-rol="inventario,admin" />
+        {/* Terán se captura por PIEZAS en el sheet ("Contar") — un solo número
+           inline no puede expresar totes/litros/cubetas. */}
+        {esTeranPT ? (
+          <span style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}
+            title="Conteo por piezas — usa el botón Contar">
+            {item.stockFisico != null ? item.stockFisico + ' cub-eq' : 'por piezas →'}
+          </span>
+        ) : (
+          <input style={S.inputCount} type="number" inputMode="decimal" min="0" step="0.01"
+            value={val} onChange={(e) => setVal(e.target.value)} onBlur={guardar}
+            onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }} placeholder="—" disabled={saving}
+            data-id="conteo.input.fisico-inline" data-rol="inventario,admin" />
+        )}
       </td>
       <td style={{ ...S.td, ...S.thR, ...S.tdMono, fontWeight: 700, color: varianzaColor(item) }}>
         {item.varianza == null ? '—'
@@ -749,9 +876,11 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
   const nCont = (sesion.items || []).length - nProg;
   const nFlag = (sesion.items || []).filter(i => i.flagged).length;
   /* Badge de tipo para las cards móvil (mockup .tipo: MP / PT) */
-  const tipoBadge = sesion.categoria === 'mp' ? 'MP' : sesion.categoria === 'pt' ? 'PT' : 'ENV';
+  const esTeranPT = sesion.categoria === 'pt' && sesion.ubicacion === 'teran';
+  const tipoBadge = sesion.categoria === 'mp' ? 'MP' : sesion.categoria === 'pt' ? (esTeranPT ? 'PT·TERÁN' : 'PT') : 'ENV';
 
-  const tituloAmigable = `Conteo de ${CATEGORIAS.find(c => c.v === sesion.categoria)?.label || sesion.categoria}`;
+  const tituloAmigable = `Conteo de ${CATEGORIAS.find(c => c.v === sesion.categoria)?.label || sesion.categoria}`
+    + (sesion.categoria === 'pt' ? (esTeranPT ? ' — Almacén Terán' : ' — Fábrica') : '');
   const tipoLabel = TIPOS.find(t => t.v === sesion.tipo)?.label || sesion.tipo;
 
   return (
@@ -812,9 +941,9 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
         <SegmentedControl value={filter} onChange={setFilter}
           options={[
             { value: 'todos', label: 'Todos' },
-            { value: 'pendientes', label: `Programados · ${nProg}` },
+            { value: 'pendientes', label: `Por contar · ${nProg}` },
             { value: 'contados', label: `Contados · ${nCont}` },
-            { value: 'flaggeados', label: `Flaggeados · ${nFlag}` },
+            { value: 'flaggeados', label: `Con varianza · ${nFlag}` },
           ]} color="brand" />
         {sesion.categoria === 'mp' && onAgregarMP && (
           <button style={S.btnPrimary} onClick={onAgregarMP} title="Agregar una MP que no está en el inventario"
@@ -846,7 +975,7 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
             </tr></thead>
             <tbody>
               {items.map(item => (
-                <ItemRowDesktop key={item.key} item={item} onRegistrar={onRegistrar} onContar={onContar} />
+                <ItemRowDesktop key={item.key} item={item} onRegistrar={onRegistrar} onContar={onContar} esTeranPT={esTeranPT} />
               ))}
             </tbody>
           </table>
@@ -862,13 +991,16 @@ function SesionActiva({ sesion, isDesktop, onRegistrar, onFinalizar, onAgregarMP
   );
 }
 
-function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
+function HistorialCard({ sesion, onAprobar, onAnular, canAprobar, isDesktop }) {
   const [expanded, setExpanded] = useState(false);
   const fecha = new Date(sesion.fecha).toLocaleString('es-MX');
   const estadoChip = {
     activo: 'var(--lp-brand-600)',
     finalizado: 'var(--lp-warning-600)',
     aprobado: 'var(--lp-success-600)',
+    /* Anulado = rechazado sin aplicar — rojo suave, no el danger pleno: no es
+       una alarma activa, es un cierre. La sesión sigue visible en el historial. */
+    anulado: 'var(--lp-danger-400)',
   }[sesion.estado] || 'var(--lp-text-secondary)';
   const flaggedItems = (sesion.items || []).filter(i => i.flagged);
 
@@ -896,6 +1028,15 @@ function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
             <span style={{ color: 'var(--lp-danger-700)', fontWeight: 600 }}> · {sesion.varianzas} varianzas</span>
           )}
         </div>
+        {/* El motivo del rechazo se queda a la vista: es la explicación que le
+            debe el admin a quien contó. */}
+        {sesion.estado === 'anulado' && (
+          <div style={{ fontSize: 12, color: 'var(--lp-danger-700)', marginTop: 6, lineHeight: 1.5, background: 'var(--lp-danger-50)', borderRadius: 8, padding: '6px 10px' }}>
+            <strong>Rechazado</strong>{sesion.anuladoPor ? ` por ${sesion.anuladoPor}` : ''}
+            {sesion.motivoAnulacion ? `: ${sesion.motivoAnulacion}` : ''}
+            {' '}· los ajustes NO se aplicaron al inventario
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -904,6 +1045,15 @@ function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
           <button style={S.btnSuccess} onClick={() => onAprobar(sesion.id)}
             data-id="conteo.btn.aprobar-ajuste" data-rol="admin">
             {Icon.shield(16)}Aprobar ajuste
+          </button>
+        )}
+        {/* Rechazar conteo — la salida cuando los números son malos y aprobar
+            corrompería el inventario. También destraba sesiones activas
+            abandonadas (el contador no puede abrir otra mientras exista una). */}
+        {(sesion.estado === 'finalizado' || sesion.estado === 'activo') && canAprobar && onAnular && (
+          <button style={S.btnDanger} onClick={() => onAnular(sesion.id)}
+            data-id="conteo.btn.rechazar-conteo" data-rol="admin">
+            {Icon.flag(16)}Rechazar conteo
           </button>
         )}
         <ImportExportPrint
@@ -970,7 +1120,9 @@ function HistorialCard({ sesion, onAprobar, canAprobar, isDesktop }) {
   );
 }
 
-export default function CycleCountPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub /inventario
+   del admin (patrón AlmacenPage). Solo suprime su TopBar propio. */
+export default function CycleCountPage({ embedded = false }) {
   const { can, user } = useAuth();
   const isDesktop = useIsDesktop();
   const [confirm, ConfirmEl] = useConfirm();
@@ -1008,7 +1160,7 @@ export default function CycleCountPage() {
     const p = api.getCalendarioConteos?.();
     if (!p || typeof p.then !== 'function') { setCalLoading(false); return; }
     p.then(r => { setCalData(r.data); setCalErr(''); })
-      .catch(e => setCalErr(e.message))
+      .catch(e => setCalErr(humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setCalLoading(false));
   }, []);
 
@@ -1019,7 +1171,7 @@ export default function CycleCountPage() {
         const arr = Array.isArray(r) ? r : (r.data || []);
         setSesiones(arr);
       })
-      .catch(e => setErr(e.message))
+      .catch(e => setErr(humanizeError(e))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoading(false));
   }, []);
 
@@ -1041,7 +1193,7 @@ export default function CycleCountPage() {
     [sesiones]
   );
 
-  const handleStart = async (categoria, tipo) => {
+  const handleStart = async (categoria, tipo, ubicacion) => {
     /* CANDADO: PIN del contador al ABRIR la sesión (firma de apertura). */
     const pin = await confirm(
       'Vas a iniciar una sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ abriste estos números. Ingresa tu PIN para confirmar.',
@@ -1056,19 +1208,19 @@ export default function CycleCountPage() {
     setStarting(true);
     setErr('');
     try {
-      await api.cycleCountIniciar(categoria, tipo, pin);
+      await api.cycleCountIniciar(categoria, tipo, pin, ubicacion);
       setShowStart(false);
       cargar();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al iniciar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setStarting(false);
     }
   };
 
-  const handleRegistrar = async (sesionId, itemKey, stockFisico) => {
+  const handleRegistrar = async (sesionId, itemKey, stockFisico, piezas) => {
     try {
-      const r = await api.cycleCountRegistrar(sesionId, itemKey, stockFisico);
+      const r = await api.cycleCountRegistrar(sesionId, itemKey, stockFisico, piezas);
       setSesiones(prev => prev.map(s => {
         if (s.id !== sesionId) return s;
         const items = s.items.map(i => i.key === itemKey ? r.item : i);
@@ -1082,29 +1234,47 @@ export default function CycleCountPage() {
         : 'Conteo registrado');
       setTimeout(() => setToast(''), 3000);
     } catch (e) {
-      setToast('Error: ' + e.message);
+      setToast(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
       setTimeout(() => setToast(''), 3000);
       throw e;
     }
   };
 
   const handleFinalizar = async (sesionId) => {
-    /* CANDADO: PIN del contador como firma digital de cierre de sesión. */
+    /* El conteo BASE no va a aprobación: al firmar FIJA el inventario. El aviso
+       tiene que decir exactamente eso, con los números de esta sesión, porque
+       después ya no hay vuelta atrás desde la UI. */
+    const ses = sesiones.find(s => s.id === sesionId) || sesionActiva;
+    const esBase = ses?.tipo === 'base';
+    const contados = (ses?.items || []).filter(i => i.stockFisico !== null && i.stockFisico !== undefined).length;
+    const sinContar = (ses?.items || []).length - contados;
+
     const pin = await confirm(
-      'Vas a finalizar la sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ cerraste estos números. Ingresa tu PIN para confirmar.',
+      esBase
+        ? `Vas a FIJAR el inventario base de materia prima.\n\n`
+          + `· ${contados} materia(s) prima(s) quedarán con la cantidad que capturaste.\n`
+          + `· ${sinContar} sin contar: conservan su existencia actual.\n\n`
+          + `Producción empezará a descontar desde estos números. Se aplica de inmediato, sin aprobación. Ingresa tu PIN para firmar.`
+        : 'Vas a finalizar la sesión de conteo. Esta acción es tu firma como contador — quedará registrado que TÚ cerraste estos números. Ingresa tu PIN para confirmar.',
       {
-        title: 'Firmar y finalizar sesión',
-        confirmText: 'Firmar y finalizar',
-        danger: false,
+        title: esBase ? 'Firmar y fijar inventario base' : 'Firmar y finalizar sesión',
+        confirmText: esBase ? 'Firmar y fijar' : 'Firmar y finalizar',
+        danger: !!esBase,
         prompt: { label: 'Tu PIN', placeholder: '0000', required: true, minLength: 4, maxLength: 6, rows: 1, numeric: true, password: true },
       }
     );
     if (!pin) return;
     try {
-      await api.cycleCountFinalizar(sesionId, pin);
+      if (esBase) {
+        const r = await api.cycleCountFinalizarBase(sesionId, pin);
+        setToast(`Inventario base fijado · ${r.fijadas} MP` + (r.sinContar ? ` · ${r.sinContar} sin contar` : ''));
+        setTimeout(() => setToast(''), 5000);
+      } else {
+        await api.cycleCountFinalizar(sesionId, pin);
+      }
       cargar();
     } catch (e) {
-      setErr(e.message || 'Error al finalizar');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   };
 
@@ -1134,11 +1304,36 @@ export default function CycleCountPage() {
         await api.cycleCountAprobar(sesionId, {});
         cargar();
       } catch (e) {
-        setErr(e?.data?.error || e.message || 'Error al aprobar');
+        setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
       }
     } else {
       /* Hay varianzas >umbral — abrir modal de causas obligatorio (admin). */
       setSesionParaAprobar(sesion);
+    }
+  };
+
+  /* RECHAZAR un conteo (admin): estado→anulado SIN tocar inventario. El motivo
+     es obligatorio (≥5 chars, lo exige también el backend) y queda visible en
+     el historial — es la explicación que se le debe al contador. */
+  const handleAnular = async (sesionId) => {
+    const ses = sesiones.find(s => s.id === sesionId);
+    const motivo = await confirm(
+      `Vas a RECHAZAR el conteo ${ses?.folio || sesionId}. Los ajustes NO se aplicarán al inventario y la sesión quedará como anulada (visible en el historial). Escribe el motivo del rechazo.`,
+      {
+        title: 'Rechazar conteo',
+        confirmText: 'Rechazar conteo',
+        danger: true,
+        prompt: { label: 'Motivo del rechazo', placeholder: 'Ej: números dobles, conteo con la báscula descalibrada…', required: true, minLength: 5, rows: 2 },
+      }
+    );
+    if (!motivo) return;
+    try {
+      await api.anularConteo(sesionId, motivo);
+      setToast('Conteo rechazado · sin cambios al inventario');
+      setTimeout(() => setToast(''), 4000);
+      cargar();
+    } catch (e) {
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     }
   };
 
@@ -1150,7 +1345,7 @@ export default function CycleCountPage() {
       setSesionParaAprobar(null);
       cargar();
     } catch (e) {
-      const msg = e?.data?.error || e.message || 'Error al aprobar';
+      const msg = humanizeError(e); /* AUDIT UX 16-jul (U4) */
       throw new Error(msg, { cause: e });
     } finally {
       setAprobandoConCausas(false);
@@ -1173,7 +1368,7 @@ export default function CycleCountPage() {
   if (sinAcceso) {
     return (
       <div>
-        <TopBar title="Conteo" />
+        {!embedded && <TopBar title="Conteo" />}
         <div style={{ maxWidth: 480, margin: '40px auto', padding: 24, background: 'var(--lp-bg-raised)', borderRadius: 18, border: '1px solid var(--lp-border-subtle)', textAlign: 'center' }}>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Sin acceso</div>
           <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5 }}>
@@ -1187,12 +1382,12 @@ export default function CycleCountPage() {
 
   return (
     <div>
-      <TopBar title="Conteo" />
+      {!embedded && <TopBar title="Conteo" />}
       <div style={S.wrap}>
         <div style={S.h1}>Conteo</div>
         {/* Subtítulo del mockup: "Hola Burgos · 2 vencidos" */}
         <div style={S.psub}>
-          {user?.nombre ? `Hola ${user.nombre}` : 'Cycle count'}
+          {user?.nombre ? `Hola ${user.nombre}` : 'Conteo físico'}
           {nVencidos != null ? ` · ${nVencidos} vencido${nVencidos === 1 ? '' : 's'}` : ''}
         </div>
 
@@ -1235,7 +1430,7 @@ export default function CycleCountPage() {
               <SesionActiva
                 sesion={sesionActiva}
                 isDesktop={isDesktop}
-                onRegistrar={(itemKey, stockFisico) => handleRegistrar(sesionActiva.id, itemKey, stockFisico)}
+                onRegistrar={(itemKey, stockFisico, piezas) => handleRegistrar(sesionActiva.id, itemKey, stockFisico, piezas)}
                 onFinalizar={handleFinalizar}
                 onAgregarMP={() => setShowAddMP(true)}
                 onContar={(item) => setItemParaContar(item)}
@@ -1262,7 +1457,7 @@ export default function CycleCountPage() {
             <div style={S.empty}>Sin historial de conteos</div>
           ) : (
             historial.map(s => (
-              <HistorialCard key={s.id} sesion={s} onAprobar={handleAprobar}
+              <HistorialCard key={s.id} sesion={s} onAprobar={handleAprobar} onAnular={handleAnular}
                 canAprobar={can('admin') || user?.rol === 'admin'} isDesktop={isDesktop} />
             ))
           )
@@ -1272,10 +1467,18 @@ export default function CycleCountPage() {
         {showAddMP && <AddMPModal onAdd={handleAgregarMP} onClose={() => setShowAddMP(false)} loading={addingMP} isDesktop={isDesktop} />}
         {itemParaContar && sesionActiva && (
           <CountSheet
+            key={itemParaContar.key}
             item={itemParaContar}
             isDesktop={isDesktop}
+            esTeranPT={sesionActiva.categoria === 'pt' && sesionActiva.ubicacion === 'teran'}
             onClose={() => setItemParaContar(null)}
-            onRegistrar={(itemKey, stockFisico) => handleRegistrar(sesionActiva.id, itemKey, stockFisico)}
+            onRegistrar={async (itemKey, stockFisico, piezas) => {
+              await handleRegistrar(sesionActiva.id, itemKey, stockFisico, piezas);
+              /* AUDIT UX 16-jul (U11): auto-avanzar al siguiente ítem SIN contar
+                 — antes volvía a la lista y Burgos buscaba el siguiente a mano. */
+              const next = (sesionActiva.items || []).find(i => i && i.stockFisico == null && i.key !== itemKey);
+              setItemParaContar(next || null);
+            }}
           />
         )}
         {sesionParaAprobar && (

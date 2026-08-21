@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
@@ -7,7 +7,7 @@ import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import ProduccionFlow from '../produccion/ProduccionFlow';
-import RecibirOCModal from '../compras/components/RecibirOCModal';
+/* P1 13-ago: RecibirOCModal retirado — "Recibir MP" navega a /ingresos?oc= */
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
@@ -531,6 +531,17 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
      stockCheck: { loading, suficiente, ingredientes, faltantes, error } | null */
   const [stockCheck, setStockCheck] = useState(null);
   const [confirm, ConfirmEl] = useConfirm();
+  /* AUDIT UX 16-jul (U18): si la validación confirma stock suficiente, "Iniciar
+     producción" arranca marcado (default inteligente). Si el usuario ya tocó el
+     checkbox, su elección manda y no se pisa en revalidaciones. Sin validación
+     (prueba/skipped/error) se queda como estaba: manual, default OFF. */
+  const lanzarTouched = useRef(false);
+  useEffect(() => {
+    if (lanzarTouched.current) return;
+    if (stockCheck && !stockCheck.loading && !stockCheck.skipped && !stockCheck.error) {
+      setLanzarAhora(stockCheck.suficiente === true);
+    }
+  }, [stockCheck]);
 
   /* Llamar validar-stock cuando hay (producto, cantidad) y no es prueba */
   useEffect(() => {
@@ -633,7 +644,7 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
   };
 
   return (
-    <div style={sheet.overlay} onClick={onClose}>
+    <div style={sheet.overlay}>
       <div style={sheet.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>
@@ -757,7 +768,8 @@ function NuevaOrdenModal({ formulas, ordenes, userName, onClose, onSuccess, pedi
                   type="checkbox"
                   checked={lanzarAhora}
                   disabled={stockCheck && stockCheck.suficiente === false && !pedidoOrigen?.esPrueba}
-                  onChange={e => setLanzarAhora(e.target.checked)}
+                  /* AUDIT UX 16-jul (U18): marcar que el usuario decidió a mano */
+                  onChange={e => { lanzarTouched.current = true; setLanzarAhora(e.target.checked); }}
                 />
                 <span style={{ fontSize: 13, color: 'var(--lp-text-primary)' }}>
                   Iniciar producción inmediatamente
@@ -2008,7 +2020,10 @@ function OCMPTab({ rol, userName, showToast, isDesktop }) {
 }
 
 function OCCard({ oc, canRecibir = false, onRefresh }) {
-  const [showRecibir, setShowRecibir] = useState(false);
+  /* P1 13-ago (una puerta de MP): "Recibir MP" ya no abre un modal propio —
+     navega a INGRESOS con la OC prellenada. Quien recibe físicamente (Enrique)
+     registra ahí con foto de factura + firma; la OC se marca recibida sola. */
+  const navigate = useNavigate();
   const estado = OC_ESTADO_BADGE[oc.estado] || { cls: 'neutral', label: oc.estado || '-' };
   const solid = OC_CLS_SOLID[estado.cls] || OC_CLS_SOLID.neutral;
 
@@ -2104,8 +2119,8 @@ function OCCard({ oc, canRecibir = false, onRefresh }) {
               type="button"
               data-id="ordenes.btn.recibir-mp"
               data-rol="admin,tecnico"
-              onClick={() => setShowRecibir(true)}
-              title="Recibir la materia prima de esta OC en Fábrica"
+              onClick={() => navigate('/ingresos?oc=' + encodeURIComponent(oc.id))}
+              title="Registrar el ingreso de esta OC (foto de factura + firma) — la OC se marca recibida sola"
               style={{
                 marginLeft: 'auto', minHeight: 40, padding: '9px 16px', borderRadius: 10,
                 border: 'none', background: 'var(--lp-brand-600)', color: '#fff',
@@ -2118,13 +2133,6 @@ function OCCard({ oc, canRecibir = false, onRefresh }) {
         </div>
       )}
 
-      {showRecibir && (
-        <RecibirOCModal
-          oc={oc}
-          onClose={() => setShowRecibir(false)}
-          onSaved={() => { setShowRecibir(false); onRefresh && onRefresh(); }}
-        />
-      )}
     </div>
   );
 }
@@ -2201,7 +2209,7 @@ function SolicitudMPModal({ onClose, onSuccess }) {
   };
 
   return (
-    <div style={sheet.overlay} onClick={onClose}>
+    <div style={sheet.overlay}>
       <div style={{ ...sheet.modal, ...(sheet.isDesktop ? { maxWidth: 560 } : {}) }} onClick={e => e.stopPropagation()}>
         <div style={S.modalHeader}>
           <div>

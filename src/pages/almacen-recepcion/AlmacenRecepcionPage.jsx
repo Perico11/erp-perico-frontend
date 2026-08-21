@@ -1,15 +1,18 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { QRScanner } from '../../components/QRModal';
+import { despacharScanSublote, extraerCodigoScan, otIdDeScan, resumenBulk } from '../../lib/scanSublote';
 import PruebaBadge, { esPrueba } from '../../components/ui/PruebaBadge';
 import useConfirm from '../../hooks/useConfirm';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import { getAccionesSublote } from '../../lib/loteTransiciones';
+import { ESTADO_LOTE_EN_CAMINO, ESTADO_LOTE_EN_RUTA_LEGACY } from '../../lib/estados';
 import { ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -97,18 +100,21 @@ const S = {
   toteGrid: { display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))' },
   toteCard: { background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: 12 },
 
-  toast: { position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', padding: '12px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1001, background: 'var(--lp-text-primary)', color: 'var(--lp-bg-base)', boxShadow: '0 4px 16px rgba(0,0,0,.15)', maxWidth: '88%', textAlign: 'center' },
+  /* z-index ≥1100 para quedar SOBRE el bottom-nav (regla proyecto); el toast
+     va un paso arriba del overlay para conservar el orden relativo previo. */
+  toast: { position: 'fixed', bottom: 96, left: '50%', transform: 'translateX(-50%)', padding: '12px 18px', borderRadius: 12, fontSize: 13, fontWeight: 600, zIndex: 1101, background: 'var(--lp-text-primary)', color: 'var(--lp-bg-base)', boxShadow: '0 4px 16px rgba(0,0,0,.15)', maxWidth: '88%', textAlign: 'center' },
   toastErr: { background: 'var(--lp-danger-600)', color: '#fff' },
 
   /* modal re-envasar (sin cambios funcionales) */
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.55)', zIndex: 1100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
   modal: { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius, 16px)', width: '100%', maxWidth: 480, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 8px 32px rgba(0,0,0,.18)' },
   modalHeader: { padding: '16px 20px', borderBottom: '1px solid var(--lp-border-subtle)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   modalBody: { padding: '16px 20px' },
   modalFooter: { padding: '12px 20px', borderTop: '1px solid var(--lp-border-subtle)', display: 'flex', justifyContent: 'flex-end', gap: 8 },
   fieldLabel: { fontSize: 11, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 4, display: 'block', textTransform: 'uppercase', letterSpacing: '.04em' },
-  fieldInput: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none', boxSizing: 'border-box', marginBottom: 12, color: 'var(--lp-text-primary)' },
-  fieldSelect: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none', boxSizing: 'border-box', marginBottom: 12, appearance: 'auto', color: 'var(--lp-text-primary)' },
+  /* AUDIT UX 16-jul (U15): 16px mínimo en inputs/selects — <16 fuerza zoom en iOS */
+  fieldInput: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)', fontSize: 16, fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none', boxSizing: 'border-box', marginBottom: 12, color: 'var(--lp-text-primary)' },
+  fieldSelect: { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid var(--lp-border-subtle)', fontSize: 16, fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none', boxSizing: 'border-box', marginBottom: 12, appearance: 'auto', color: 'var(--lp-text-primary)' },
 };
 
 const QR_ICON = (
@@ -135,6 +141,30 @@ const _hm = (iso) => {
     return d.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', hour12: false });
   } catch { return ''; }
 };
+/* AUDIT UX 16-jul (U12): fecha REAL de recepción en Terán de un sublote.
+   Prioridad: fechaRecepcionTeran (campo que escribe aplicarMutacionSublote al
+   escanearRecibirTeran) → último evento en_stock_teran del historial (cubre
+   {estado,fecha} del server y {estadoNuevo,ts} de los creados en cliente) →
+   s.fecha (envasado) como último recurso para registros legacy. */
+const _fechaRecepcionTeran = (s) => {
+  if (s?.fechaRecepcionTeran) return s.fechaRecepcionTeran;
+  const hist = Array.isArray(s?.historial) ? s.historial : [];
+  for (let i = hist.length - 1; i >= 0; i--) {
+    const h = hist[i];
+    if (h && (h.estado === 'en_stock_teran' || h.estadoNuevo === 'en_stock_teran')) {
+      return h.fecha || h.ts || '';
+    }
+  }
+  return s?.fecha || '';
+};
+const _esHoy = (iso) => {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const hoy = new Date();
+  return d.getFullYear() === hoy.getFullYear() && d.getMonth() === hoy.getMonth() && d.getDate() === hoy.getDate();
+};
+
 function fromTileInfo(s, esRecibido) {
   const hist = Array.isArray(s?.historial) ? s.historial : [];
   const buscar = (estado) => {
@@ -161,7 +191,10 @@ function fromTileInfo(s, esRecibido) {
 }
 
 /* ─────────────── PAGE PRINCIPAL ─────────────── */
-export default function AlmacenRecepcionPage() {
+/* P2 (21-jul-2026): `embedded` — la pantalla vive también como pestaña
+   "Recepción Terán" de /almacen (AlmacenPage); ahí el TopBar lo pone el
+   contenedor. */
+export default function AlmacenRecepcionPage({ embedded = false }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const userName = user?.nombre || '?';
@@ -194,10 +227,12 @@ export default function AlmacenRecepcionPage() {
     setTimeout(() => setToast(null), 4000);
   }, []);
 
-  const { data: trazaData, loading, reload } = useApiData(() => api.getTrazabilidad(), [], 8000);
+  /* AUDIT UX 16-jul (U19): polling 8s → 30s/45s; respaldo; el WS empuja
+     (onTrazabilidad/onTransferencias/onInventario abajo). */
+  const { data: trazaData, loading, reload } = useApiData(() => api.getTrazabilidad(), [], 30000);
   /* OTs surtidas pendientes de recibir en Terán — para que Josué las vea aquí
      mismo (antes solo en la campanita / pantalla Transferencias). */
-  const { data: otsData, reload: reloadOTs } = useApiData(() => api.getOTs('surtida'), [], 8000);
+  const { data: otsData, reload: reloadOTs } = useApiData(() => api.getOTs('surtida'), [], 45000);
   const otsPorRecibir = useMemo(() => {
     const arr = otsData?.data || otsData || [];
     return (Array.isArray(arr) ? arr : []).filter(o => o && !o.eliminado && o.estado === 'surtida');
@@ -222,7 +257,7 @@ export default function AlmacenRecepcionPage() {
   }, [lotes]);
 
   const sublotesEnCamino = useMemo(() =>
-    allSublotes.filter(s => s.estado === 'en_camino' || (!s.estado && s.ub === 'fabrica' && (s._lote?.estado === 'en_camino' || s._lote?.estado === 'en_recoleccion'))),
+    allSublotes.filter(s => ESTADO_LOTE_EN_CAMINO.includes(s.estado) || (!s.estado && s.ub === 'fabrica' && ESTADO_LOTE_EN_RUTA_LEGACY.includes(s._lote?.estado))),
     [allSublotes]);
   const totesActivos = useMemo(() =>
     allSublotes.filter(s => {
@@ -235,13 +270,22 @@ export default function AlmacenRecepcionPage() {
     }), [allSublotes]);
   const sublotesEnAlmacen = useMemo(() => allSublotes.filter(s => s.estado === 'en_stock_teran'), [allSublotes]);
 
+  /* AUDIT UX 16-jul (U12): "Recibidos hoy" antes listaba TODO el histórico
+     en_stock_teran (crecía sin tope). Ahora filtra por la fecha REAL de
+     recepción: fechaRecepcionTeran (la escribe la state machine al recibir) →
+     evento en_stock_teran del historial → s.fecha (envasado, último recurso).
+     Registros viejos sin fecha de hoy quedan fuera pero accesibles vía el
+     enlace a Inventario ▸ PT ▸ Terán que se muestra bajo la lista. */
+  const recibidosHoy = useMemo(() => sublotesEnAlmacen.filter(s => _esHoy(_fechaRecepcionTeran(s))), [sublotesEnAlmacen]);
+  const recibidosAntes = sublotesEnAlmacen.length - recibidosHoy.length;
+
   const totales = useMemo(() => ({
     enCamino: sublotesEnCamino.length,
     totesActivos: totesActivos.length,
-    enAlmacen: sublotesEnAlmacen.length,
-  }), [sublotesEnCamino, totesActivos, sublotesEnAlmacen]);
+    enAlmacen: recibidosHoy.length,
+  }), [sublotesEnCamino, totesActivos, recibidosHoy]);
 
-  const lista = filter === 'en_camino' ? sublotesEnCamino : sublotesEnAlmacen;
+  const lista = filter === 'en_camino' ? sublotesEnCamino : recibidosHoy;
 
   /* FIX jun 2026 (bug Josué): el atajo "Re-envasar TOTE" de la card del pedido
      llega aquí con ?reenvasar=<cod>. Auto-abrimos el modal de re-envasado para
@@ -264,20 +308,17 @@ export default function AlmacenRecepcionPage() {
      en Terán ahora es SOLO vía escaneo físico del QR de la cubeta — ver
      handleScanResult. No hay camino que se salte el escáner. */
 
-  /* Scanner: dispatch al endpoint /sublotes/scan */
+  /* Scanner: dispatch al endpoint /sublotes/scan.
+     P2 (21-jul-2026): protocolo compartido lib/scanSublote (single→bulk);
+     la detección de QR de OT es propia de ESTA pantalla (Josué recibe OTs
+     aquí mismo — tránsito→Terán, /api/transferencias/scan). */
   const handleScanResult = useCallback(async (result) => {
     setScanning(false);
-    const code = result?.cod || result?.raw || '';
+    const code = extraerCodigoScan(result);
     if (!code) return showToast('QR no reconocido', true);
 
-    /* ¿Es el QR de una ORDEN DE TRANSFERENCIA (OT)? → flujo de transferencias,
-       NO sublote. Josué la recibe aquí mismo (mueve el material tránsito→Terán).
-       Antes caía a escanearSublote y daba "sublote no encontrado / ¿QR viejo?"
-       porque la OT no es un lote de producción. */
-    const otMatch = /transfer-qr\/(OT-[A-Za-z0-9_-]+)/i.exec(code)
-      || /^\s*(OT-[A-Za-z0-9_-]+)\s*$/i.exec(code);
-    if (otMatch) {
-      const otId = otMatch[1];
+    const otId = otIdDeScan(code);
+    if (otId) {
       setBusy(code);
       try {
         const r = await api.escanearOT(otId, 'recibir');
@@ -285,37 +326,28 @@ export default function AlmacenRecepcionPage() {
         if (r && r.idempotente) showToast(`${(r.ot && r.ot.folio) || otId}: ${r.aviso || 'sin cambios'}`);
         else showToast(`Transferencia ${(r && r.ot && r.ot.folio) || otId} recibida en Terán ✓`);
       } catch (err) {
-        showToast('Error: ' + (err?.data?.error || err.message || 'No se pudo recibir la transferencia'), true);
+        showToast(humanizeError(err), true); /* AUDIT UX 16-jul (U4) */
       } finally { setBusy(null); }
       return;
     }
 
     setBusy(code);
-    try {
-      const r = await api.escanearSublote(code, 'escanearRecibirTeran');
-      reload();
-      const s = r?.sublote;
-      const esTote = s?.claseSublote === 'tote' || s?.tipo === 'tote';
-      showToast(`${s?.cod || code} recibido${esTote ? ' (TOTE en buffer)' : ''}`);
-    } catch (err) {
-      const data = err?.data;
-      if (data && data.matchTipo === 'lote_no_sublote' && data.loteId) {
-        const ok = await confirm(`Escaneaste el QR del LOTE ${data.codigoLote}. ¿Recibir TODOS los sublotes en camino del lote?`, { confirmText: 'Recibir todo el lote' });
-        if (ok) {
-          try {
-            const r2 = await api.escanearLoteBulk({ loteId: data.loteId, codigoLote: data.codigoLote, accion: 'escanearRecibirTeran', scanCod: code });
-            reload();
-            const n = r2?.procesados?.length || 0;
-            const omit = r2?.omitidos?.length || 0;
-            showToast(`Lote completo recibido: ${n} sublote(s)${omit ? ` · ${omit} omitido(s)` : ''}`);
-          } catch (e2) { showToast('Error: ' + (e2.message || 'Bulk scan falló'), true); }
-        }
-      } else {
-        showToast('Error: ' + (err.message || 'Scan falló'), true);
-      }
-    } finally {
-      setBusy(null);
-    }
+    await despacharScanSublote({
+      code, accion: 'escanearRecibirTeran', confirm,
+      bulk: {
+        pregunta: (d) => `Escaneaste el QR del LOTE ${d.codigoLote}. ¿Recibir TODOS los sublotes en camino del lote?`,
+        confirmText: 'Recibir todo el lote',
+      },
+      onSublote: (r) => {
+        reload();
+        const s = r?.sublote;
+        const esTote = s?.claseSublote === 'tote' || s?.tipo === 'tote';
+        showToast(`${s?.cod || code} recibido${esTote ? ' (TOTE en buffer)' : ''}`);
+      },
+      onBulk: (r2) => { reload(); showToast(`Lote completo recibido: ${resumenBulk(r2)}`); },
+      onError: (err) => showToast(humanizeError(err), true),
+    });
+    setBusy(null);
   }, [reload, reloadOTs, showToast, confirm]);
 
   /* Vaciar TOTE manualmente — DECISIÓN OWNER 10 jun 2026 (revierte la
@@ -335,7 +367,7 @@ export default function AlmacenRecepcionPage() {
       reload();
       showToast(`TOTE ${tote.cod} vaciado — ${lr.toFixed(2)} L registrados como merma`);
     } catch (e) {
-      showToast('Error: ' + (e.message || 'No se pudo vaciar el TOTE'), true);
+      showToast(humanizeError(e), true); /* AUDIT UX 16-jul (U4) */
     } finally {
       setBusy(null);
     }
@@ -351,7 +383,7 @@ export default function AlmacenRecepcionPage() {
       if (r && r.idempotente) showToast(`${ot.folio}: ${r.aviso || 'sin cambios'}`);
       else showToast(`Transferencia ${ot.folio} recibida en Terán ✓`);
     } catch (err) {
-      showToast('Error: ' + (err?.data?.error || err.message || 'No se pudo recibir la transferencia'), true);
+      showToast(humanizeError(err), true); /* AUDIT UX 16-jul (U4) */
     } finally { setBusy(null); }
   }, [reload, reloadOTs, showToast]);
 
@@ -370,7 +402,7 @@ export default function AlmacenRecepcionPage() {
 
   return (
     <div>
-      <TopBar title="Recepción Terán" />
+      {!embedded && <TopBar title="Recepción Terán" />}
       <div style={isDesktop ? S.wrapDesktop : S.wrap}>
         <div style={S.greet}>Hola {userName} · {totales.enCamino + otsPorRecibir.length} por recibir</div>
 
@@ -428,7 +460,7 @@ export default function AlmacenRecepcionPage() {
                         owner 10 jun 2026). El SM espejo gatea admin/técnico; Josué
                         (almacen) no lo ve. Botón secundario discreto, ancho auto. */}
                     {getAccionesSublote(tote, rol).includes('vaciarTote') && (
-                      <button type="button" data-id="recepcion.btn.vaciarTote" data-rol="admin,tecnico"
+                      <button type="button" data-id="recepcion.btn.vaciarTote" data-rol="admin,tecnico,almacen"
                         disabled={busy === tote.cod}
                         onClick={() => handleVaciarTote(tote)}
                         title={`Registrar los ${(typeof tote.litrosRestante === 'number' ? tote.litrosRestante : Number(tote.lit) || 0).toFixed(2)} L restantes como merma y vaciar el TOTE`}
@@ -548,14 +580,26 @@ export default function AlmacenRecepcionPage() {
                         {QR_ICON} {isBusy ? 'Recibiendo…' : (esTote ? 'Escanear TOTE para recibir' : 'Escanear QR para recibir')}
                       </button>
                     ) : (
-                      <button style={{ ...actBase, ...S.actDone }} disabled>En camino — espera a que llegue</button>
+                      /* P0 13-ago: badges de estado, no botones muertos (eran <button disabled>) */
+                      <div role="status" style={{ ...actBase, ...S.actDone }}>En camino — espera a que llegue</div>
                     )
                   ) : (
-                    <button style={{ ...actBase, ...S.actDone }} disabled>✓ En stock Terán</button>
+                    <div role="status" style={{ ...actBase, ...S.actDone }}>✓ En stock Terán</div>
                   )}
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* AUDIT UX 16-jul (U12): los recibidos de días anteriores ya no
+            inflan la tab — siguen consultables en el inventario de Terán. */}
+        {filter === 'en_almacen' && recibidosAntes > 0 && (
+          <div style={{ textAlign: 'center', fontSize: 12.5, color: 'var(--lp-text-tertiary)', padding: '14px 8px 0' }}>
+            {recibidosAntes} recibido{recibidosAntes === 1 ? '' : 's'} antes de hoy ·{' '}
+            <Link to="/inventario?tab=pt&pt=teran" style={{ color: 'var(--lp-brand-700)', fontWeight: 600 }}>
+              Ver todos en Inventario ▸ PT ▸ Terán
+            </Link>
           </div>
         )}
       </div>
@@ -580,7 +624,8 @@ export default function AlmacenRecepcionPage() {
       )}
       {printQR && <SubloteQRPrintModal payload={printQR} onClose={() => setPrintQR(null)} />}
 
-      {toast && <div style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>{toast.msg}</div>}
+      {/* AUDIT UX 16-jul (U20): anunciar el toast a lectores de pantalla */}
+      {toast && <div role="status" aria-live="polite" style={{ ...S.toast, ...(toast.isErr ? S.toastErr : {}) }}>{toast.msg}</div>}
       {ConfirmEl}
     </div>
   );

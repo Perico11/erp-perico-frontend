@@ -28,7 +28,7 @@ function getCurrentBundleHash() {
       const m = src.match(/\/assets\/index-([A-Za-z0-9_-]+)\.js/);
       if (m) return m[1];
     }
-  } catch (e) {}
+  } catch {}
   return null;
 }
 
@@ -52,7 +52,7 @@ export default function VersionChecker() {
       try {
         if (sessionStorage.getItem(RELOADED_KEY) === hash) return false;
         sessionStorage.setItem(RELOADED_KEY, hash);
-      } catch (e) {}
+      } catch {}
       window.location.reload();
       return true;
     };
@@ -71,7 +71,7 @@ export default function VersionChecker() {
             reloadOnce(data.hash);
           }
         }
-      } catch (e) { /* offline / server down: ignorar */ }
+      } catch { /* offline / server down: ignorar */ }
     };
 
     /* Chequeo inmediato: atrapa a quien ya tenía abierta una versión vieja. */

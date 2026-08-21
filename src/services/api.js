@@ -173,8 +173,19 @@ const api = {
         : { producto, cantidad, nota }),
   /* Reenvasar PT del pool de Terán: convierte `origen` (tote/granel) en `destinos`
      [{tipo,qty,subKey,tapaKey}] consumiendo envases de Terán. No cambia el total. */
-  reenvasarPTTeran: (producto, origen, destinos, nota) =>
-    request('POST', '/api/inventario/pt/reenvasar-teran', { producto, origen, destinos, nota }),
+  reenvasarPTTeran: (producto, origen, destinos, nota, extra) =>
+    request('POST', '/api/inventario/pt/reenvasar-teran', { producto, origen, destinos, nota, ...(extra || {}) }),
+  /* ── Entregas a tiendas (jul 2026): la baja del CEDIS al entregar ── */
+  getEntregas: () => request('GET', '/api/entregas'),
+  crearEntrega: (payload) => request('POST', '/api/entregas/crear', payload),
+  resolverEntregaQR: (cod) => request('GET', '/api/entregas/resolver?cod=' + encodeURIComponent(cod)),
+  /* Alta de sucursal (ago 2026): la tienda destino se elige del catálogo. */
+  crearSucursal: (nombre) => request('POST', '/api/entregas/tiendas', { nombre }),
+  /* Corregir la sucursal de una entrega ya registrada (no mueve inventario). */
+  corregirTiendaEntrega: (id, tienda) => request('POST', `/api/entregas/${encodeURIComponent(id)}/tienda`, { tienda }),
+  /* Editar lo entregado (cantidades, producto, fuente): el backend devuelve lo
+     que salió y vuelve a descontar lo nuevo. Mismo folio. */
+  editarEntrega: (id, payload) => request('POST', `/api/entregas/${encodeURIComponent(id)}/editar`, payload),
   /* Transferencia de envase/tapa Fábrica→Terán (Josué): mueve N piezas de stock
      (Fábrica) a teran. ref = { tipo:'envase', catKey, subKey } | { tipo:'tapa', tapaKey }. */
   transferirEnvaseATeran: (ref, cantidad, nota) =>
@@ -182,7 +193,9 @@ const api = {
   /* ── Órdenes de Transferencia (OT) — flujo formal Fábrica↔Terán con escaneo ── */
   crearOT: (lineas, nota) => request('POST', '/api/transferencias/crear', { lineas, nota }),
   getOTs: (estado) => request('GET', '/api/transferencias' + (estado ? '?estado=' + encodeURIComponent(estado) : '')),
-  escanearOT: (otId, accion) => request('POST', '/api/transferencias/scan', { otId, accion }),
+  /* `parciales` (opcional): [{ idx, cantidad }] en unidades de captura de la línea —
+     surtir: lo que SÍ va (0 = no va) · recibir: lo que SÍ llegó (el resto regresa a Fábrica). */
+  escanearOT: (otId, accion, parciales) => request('POST', '/api/transferencias/scan', { otId, accion, ...(parciales && parciales.length ? { parciales } : {}) }),
   /* Editar/sustituir las líneas de una OT en 'Solicitada' (admin/almacen/tecnico). */
   editarOT: (otId, lineas, nota) => request('POST', '/api/transferencias/editar', { otId, lineas, nota }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.
@@ -268,13 +281,43 @@ const api = {
   solicitudMP: ({ mps, prioridad, notas, proveedorSugerido }) =>
     request('POST', '/api/ordenes-compra/solicitud', { mps, prioridad, notas, proveedorSugerido }),
   getEnvases: () => request('GET', '/api/envases'),
-  recepcionMP: (mp, cantidad, proveedor, nota, factura) =>
-    request('POST', '/api/inventario/recepcion-mp', { mp, cantidad, proveedor, nota, factura }),
+  /* P1 13-ago: wrapper recepcionMP ELIMINADO — sin caller desde el 21-jul; la
+     entrada de MP va por la OC (recibir) o por Ingresos. */
   /* Inventario INICIAL PT (baseline): para producto terminado que YA estaba
      en almacén antes de empezar a usar el ERP. No es producción ni recepción
      de lote — es carga inicial / corrección manual. Admite individual o masivo. */
   ptInicial: ({ producto, cantidad, min, nota, items }) =>
     request('POST', '/api/inventario/pt-inicial', items ? { items, nota } : { producto, cantidad, min, nota }),
+  /* STK AMERICANO (jul 2026): PT importado de EE.UU. en totes de 1000 L.
+     Inventario SEPARADO del PT nacional. Alta manual + lote USA-* + salida por L. */
+  /* STK AMERICANO v2 (jul 2026): inventario POR COLOR con 3 presentaciones
+     (cubetas, galones, totesLitros a granel). Multi-almacén: `almacen` '1' (default)
+     o '2' — mismos endpoints, almacenes de datos separados. */
+  getStkAmericano: (almacen) => request('GET', '/api/stk-americano' + (almacen && almacen !== '1' ? '?almacen=' + almacen : '')),
+  /* Transferencia simple entre almacenes americanos (2 es extensión del 1, 18-jul). */
+  transferirStkAmericano: (payload) => request('POST', '/api/stk-americano/transferir', payload),
+  colorStkAmericano: ({ almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }) =>
+    request('POST', '/api/stk-americano/color', { almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }),
+  /* Sustitución manual de nombre — backend la limita a Emmanuel (11-ago). */
+  renombrarStkAmericano: ({ almacen, key, nuevoNombre }) =>
+    request('POST', '/api/stk-americano/renombrar', { almacen, key, nuevoNombre }),
+  salidaStkAmericano: ({ almacen, key, nombre, presentacion, cantidad, nota }) =>
+    request('POST', '/api/stk-americano/salida', { almacen, key, nombre, presentacion, cantidad, nota }),
+  envasarStkAmericano: ({ almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, deGranel, envasadoPor }) =>
+    request('POST', '/api/stk-americano/envasar', { almacen, key, nombre, medida, unidades, subKey, tapaKey, nota, loteExistente, deGranel, envasadoPor }),
+  eliminarStkAmericano: ({ almacen, key, nombre, motivo }) =>
+    request('POST', '/api/stk-americano/eliminar', { almacen, key, nombre, motivo }),
+  /* Censo de totes abiertos (5-ago): le pone folio al granel que ya está en piso.
+     409 con requiereConfirmacion si lo declarado no cuadra con el sistema. */
+  censarTotesAmericano: ({ almacen, key, nombre, totes, confirmarAjuste, nota }) =>
+    request('POST', '/api/stk-americano/censo-totes', { almacen, key, nombre, totes, confirmarAjuste, nota }),
+  /* Menú del tote (10-ago): transferir UN tote completo (viaja con folio, lote
+     del fabricante y contador de tandas) o darlo de baja (ajuste confirmado). */
+  transferirToteAmericano: ({ de, a, key, nombre, codigoLote }) =>
+    request('POST', '/api/stk-americano/tote/transferir', { de, a, key, nombre, codigoLote }),
+  eliminarToteAmericano: ({ almacen, key, nombre, codigoLote, confirmar, nota }) =>
+    request('POST', '/api/stk-americano/tote/eliminar', { almacen, key, nombre, codigoLote, confirmar, nota }),
+  urlImportStkAmericano: (almacen) => API_BASE + '/api/stk-americano/importar' + (almacen && almacen !== '1' ? '?almacen=' + almacen : ''),
   /* Ajuste inline de UN producto terminado (qty + min) con audit.
      CANDADO REFORZADO: backend exige sesionConteoFolio o codigoTOTP de
      Google Authenticator (override admin). PIN ya no aplica para override. */
@@ -328,6 +371,9 @@ const api = {
   eliminarOrden: (ordenId, nombre, pin, motivo) =>
     request('POST', '/api/ordenes/eliminar', { ordenId, nombre, pin, motivo }),
   getFormulasSummary: () => request('GET', '/api/formulas/summary'),
+  /* PT ocultos (jul 2026): esconder PTs descontinuados de las pantallas sin eliminarlos */
+  getPTOcultos: () => request('GET', '/api/pt-ocultos'),
+  setPTOculto: (producto, oculto) => request('POST', '/api/pt-ocultos', { producto, oculto }),
 
   /* ── Producción / Trazabilidad ── */
   getTrazabilidad: () => request('GET', '/api/trazabilidad'),
@@ -374,8 +420,8 @@ const api = {
     request('POST', '/api/pedidos/rechazar', { pedidoId, motivo }),
   getProduccionHistorial: () => request('GET', '/api/produccion-historial'),
   getQC: () => request('GET', '/api/qc'),
-  /* saveQC = legacy overwrite (admin only). NO USAR — usar transicionLote('aprobarQC') */
-  saveQC: (data) => request('POST', '/api/qc', data),
+  /* (saveQC eliminado 21-jul-2026: legacy overwrite sin callers — usar
+     transicionLote('aprobarQC') / registrarQC) */
   registrarQC: (record) => request('POST', '/api/qc/registrar', record),
   /* Rangos QC por producto — para mostrar al técnico cuáles son los valores
      esperados al lado de cada input y marcar verde/rojo automático. */
@@ -411,8 +457,11 @@ const api = {
      scanCod/qrPayload del QR físico para escanearRecoger/RecibirTeran — sin
      reenviarlo, el bulk respondía 400 SIEMPRE y "tomar todo el lote" nunca
      funcionó. El caller pasa el código que escaneó. */
-  escanearLoteBulk: ({ loteId, codigoLote, accion, scanCod, qrPayload }) =>
-    request('POST', '/api/sublotes/scan-bulk', { loteId, codigoLote, accion, scanCod, qrPayload }),
+  /* P1 (20-jul-2026): acepta campos extra (overrideCaducidad/notaOverride del
+     despacho FEFO) — antes 2 pantallas llamaban api.post crudo para poder
+     mandarlos; ahora TODOS los scan-bulk pasan por este wrapper. */
+  escanearLoteBulk: ({ loteId, codigoLote, accion, scanCod, qrPayload, ...extra }) =>
+    request('POST', '/api/sublotes/scan-bulk', { loteId, codigoLote, accion, scanCod, qrPayload, ...extra }),
   getFormulaOrden: (ordenId) => request('POST', '/api/formulas/orden', { ordenId }),
   registrarProduccion: (body) => request('POST', '/api/inventario/produccion', body),
 
@@ -429,10 +478,9 @@ const api = {
   /* ── Envasado ── */
   registrarEnvasado: (loteId, sublotes) => request('POST', '/api/envasado/registrar', { loteId, sublotes }),
   cerrarLote: (loteId) => request('POST', '/api/envasado/cerrar-lote', { loteId }),
-  transferirSublotes: (loteId, subloteCods) => request('POST', '/api/envasado/transferir', { loteId, subloteCods }),
-  /* DEPRECATED — usar transicionSublote(toteCod, 'reenvasarTote', { nuevosSublotes, litrosConsumidos }).
-     Se mantiene SOLO para compat con código legacy externo; el frontend nuevo usa la state machine. */
-  reenvasar: (loteId, toteCod, sublotes) => request('POST', '/api/envasado/reenvasar', { loteId, toteCod, sublotes }),
+  /* (transferirSublotes y reenvasar eliminados 21-jul-2026: sin callers; sus
+     endpoints legacy quedaron admin-only — el flujo vivo es la state machine
+     via transicionSublote.) */
 
   /* ── Fórmulas ── */
   getFormulas: () => request('GET', '/api/formulas/todas'),
@@ -448,6 +496,8 @@ const api = {
   getMRP: () => request('GET', '/api/compras/mrp'),
   getOCs: () => request('GET', '/api/compras/oc'),
   createOC: (data) => request('POST', '/api/compras/oc', data),
+  /* P1 13-ago: válvula admin — deshace la recepción completa de una OC */
+  revertirRecepcionOC: (id, motivo) => request('POST', '/api/compras/oc/revertir-recepcion', { id, motivo }),
   editOC: (data) => request('POST', '/api/compras/oc/editar', data),
   recibirOC: (id, items, firma, recibidoPor, qcMP) =>
     request('POST', '/api/compras/oc/recibir', { id, items, firma, recibidoPor, qcMP }),
@@ -456,8 +506,33 @@ const api = {
   /* AC1/AC2 (jun 2026): aprobar OC con forma de pago + comprobante, y registrar pago */
   aprobarOC: (data) => request('POST', '/api/compras/oc/aprobar', data),
   registrarPagoOC: (data) => request('POST', '/api/compras/oc/registrar-pago', data),
+  /* 27-jul-2026: corregir precio/kg, flete y total facturado cuando la OC ya no
+     pasa por "Registrar pago" (contado, o crédito ya pagado). */
+  corregirImportesOC: (data) => request('POST', '/api/compras/oc/corregir-importes', data),
+
+  /* Clave de planta de los QR físicos (28-jul-2026): admin define/rota la
+     clave con la que empleados SIN usuario ven la ficha en /qr/<cod>. */
+  getQrAcceso: () => request('GET', '/api/qr-acceso'),
+  setQrAcceso: (clave, dias) => request('POST', '/api/qr-acceso', { clave, ...(dias ? { dias } : {}) }),
+
+  /* ── Vaciadores / envasadores (jul 2026): quién envasó cada lote ── */
+  getVaciadores: () => request('GET', '/api/vaciadores'),
+  crearVaciador: (nombre) => request('POST', '/api/vaciadores', { nombre }),
+  eliminarVaciador: (id) => request('POST', '/api/vaciadores/eliminar', { id }),
+
+  /* ── Chat interno (jul 2026) ── */
+  getChatResumen: () => request('GET', '/api/chat/resumen'),
+  getChatMensajes: (canal, antes) => request('GET', '/api/chat/mensajes?canal=' + encodeURIComponent(canal) + (antes ? '&antes=' + encodeURIComponent(antes) : '')),
+  enviarChat: (data) => request('POST', '/api/chat/enviar', data),
+  marcarChatLeido: (canal) => request('POST', '/api/chat/leer', { canal }),
+  chatImagenUrl: (file) => API_BASE + '/api/chat/imagen/' + encodeURIComponent(file) + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  getChatStickers: () => request('GET', '/api/chat/stickers'),
+  subirChatSticker: (nombre, imagenBase64) => request('POST', '/api/chat/stickers', { nombre, imagenBase64 }),
+  eliminarChatSticker: (id) => request('POST', '/api/chat/stickers/eliminar', { id }),
+  chatStickerUrl: (file) => API_BASE + '/api/chat/sticker/' + encodeURIComponent(file) + (_token ? '?token=' + encodeURIComponent(_token) : ''),
 
   /* ── Reports ── */
+  getReporteOperacion: (dias) => request('GET', '/api/reports/operacion?dias=' + (dias || 30)),
   getReportProduction: (year) => request('GET', `/api/reports/production-monthly?year=${year}`),
   getReportProfitability: () => request('GET', '/api/reports/profitability'),
   getReportValuation: () => request('GET', '/api/reports/inventory-valuation'),
@@ -465,6 +540,13 @@ const api = {
   /* ── Notificaciones ── */
   getNotificaciones: () => request('GET', '/api/notificaciones'),
   marcarNotificacionesLeidas: (items) => request('POST', '/api/notificaciones/leer', { items }),
+
+  /* ── Firmantes de los documentos impresos (hoja de OT, remisión de tiendas) ──
+     Antes estaban escritos a mano en el JSX: cambiar un nombre exigía compilar
+     y desplegar. Lectura: cualquier sesión (quien imprime). Escritura: admin. */
+  getFirmantes: () => request('GET', '/api/firmantes'),
+  setFirmantes: (data) => request('POST', '/api/firmantes', data),
+  resetFirmantes: () => request('POST', '/api/firmantes/reset', {}),
 
   /* ── Usuarios (admin) ── */
   getUsuarios: () => request('GET', '/api/usuarios'),
@@ -505,6 +587,13 @@ const api = {
     request('POST', '/api/maestro-mp/estado', { mp, estado }),
   setMaestroMPCampo: (mp, campo, valor) =>
     request('POST', '/api/maestro-mp', { mp, campo, valor }),
+  /* Catálogo de proveedores (autocompletar del selector de reasignación). */
+  getProveedores: () => request('GET', '/api/proveedores'),
+  /* Reasigna el proveedor de UNA MP escribiendo las DOS caras del índice
+     (maestro + proveedores_catalogo). No renombra al proveedor: las demás MPs
+     que surta se quedan como están. */
+  reasignarProveedorMP: (mp, proveedor, leadTimeDias) =>
+    request('POST', '/api/maestro-mp/proveedor', { mp, proveedor, leadTimeDias }),
   eliminarMP: (mp, forzar) =>
     request('POST', '/api/mp/eliminar', { mp, forzar }),
   sustituirMP: (mpOriginal, mpSustituta) =>
@@ -514,16 +603,27 @@ const api = {
 
   /* ── Cycle Count ── */
   getCycleCounts: () => request('GET', '/api/cycle-count'),
-  cycleCountIniciar: (categoria, tipo, pin) =>
-    request('POST', '/api/cycle-count/iniciar', { categoria, tipo, pin }),
-  cycleCountRegistrar: (sesionId, itemKey, stockFisico) =>
-    request('POST', '/api/cycle-count/registrar', { sesionId, itemKey, stockFisico }),
+  cycleCountIniciar: (categoria, tipo, pin, ubicacion) =>
+    request('POST', '/api/cycle-count/iniciar', { categoria, tipo, pin, ...(ubicacion ? { ubicacion } : {}) }),
+  /* PT-Terán: se manda `piezas` (totes/granelLitros/cubetas/…) y el server
+     calcula el cub-equiv; el resto de conteos mandan stockFisico directo. */
+  cycleCountRegistrar: (sesionId, itemKey, stockFisico, piezas) =>
+    request('POST', '/api/cycle-count/registrar', { sesionId, itemKey, ...(piezas ? { piezas } : { stockFisico }) }),
   cycleCountAgregarItem: (sesionId, nombre, stockFisico, unidad) =>
     request('POST', '/api/cycle-count/agregar-item', { sesionId, nombre, stockFisico, unidad }),
   cycleCountFinalizar: (sesionId, pin) =>
     request('POST', '/api/cycle-count/finalizar', { sesionId, pin }),
+  /* Conteo BASE (inventario canónico desde cero): al firmar FIJA el stock de las
+     MP contadas y deja intactas las no contadas. No pasa por aprobación. */
+  cycleCountFinalizarBase: (sesionId, pin, motivo) =>
+    request('POST', '/api/cycle-count/finalizar-base', { sesionId, pin, motivo }),
   cycleCountAprobar: (sesionId, causasPorItem) =>
     request('POST', '/api/cycle-count/aprobar', { sesionId, causasPorItem }),
+  /* Anular (RECHAZAR) un conteo sin aplicar ajustes — solo admin, motivo ≥5 chars.
+     Es la salida para conteos finalizados con números malos (aprobar los
+     corrompería) y para sesiones activas abandonadas que bloquean al contador. */
+  anularConteo: (id, motivo) =>
+    request('POST', '/api/cycle-count/anular', { id, motivo }),
 
   /* ── Sesiones log ── */
   getSesionesLog: () => request('GET', '/api/sesiones-log'),
@@ -556,23 +656,36 @@ const api = {
   disponerDevolucion: (devolucionId, disposicion, nota) =>
     request('POST', '/api/devoluciones/disposicion', { devolucionId, disposicion, nota }),
 
+  /* P1 13-ago: cancelación de devoluciones (repone el stock descontado al crear) */
+  cancelarDevolucion: (devolucionId, motivo) => request('POST', '/api/devoluciones/cancelar', { devolucionId, motivo }),
+  cancelarDevolucionMP: (id, motivo) => request('POST', '/api/devoluciones/mp/cancelar', { id, motivo }),
+
   /* ── Devoluciones de MP → proveedor (Capa 3, Arely) ── */
   getDevolucionesMP: () => request('GET', '/api/devoluciones/mp'),
   crearDevolucionMP: (data) => request('POST', '/api/devoluciones/mp/crear', data),
   cerrarDevolucionMP: (data) => request('POST', '/api/devoluciones/mp/cerrar', data),
+  /* P0 13-ago: SIN token daban 401 siempre (se abren en <a>/window.open, sin headers) */
   comprobanteDevolucionMPUrl: (id) =>
-    '/api/devoluciones/mp/' + encodeURIComponent(id) + '/comprobante',
+    API_BASE + '/api/devoluciones/mp/' + encodeURIComponent(id) + '/comprobante' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  devolucionNotaUrl: (id) =>
+    API_BASE + '/api/devoluciones/' + encodeURIComponent(id) + '/nota' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
 
   /* ── Ingresos de proveedor (recepción ligera con foto de factura) ── */
   getIngresos: () => request('GET', '/api/ingresos'),
   crearIngreso: (data) => request('POST', '/api/ingresos', data),
   revisarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/revisar', data),
+  /* Eliminar ingreso (admin): borra el registro + foto + movimientos y REVIERTE
+     lo que se sumó al inventario si estaba 'recibido'. */
+  eliminarIngreso: (id) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/eliminar', {}),
+  /* Editar ingreso (admin): corrige proveedor / # factura / monto / nota / partidas
+     y —opcional— reemplaza la foto. Si ya estaba 'recibido', el backend revierte lo
+     anterior y aplica lo nuevo (ajusta el stock automáticamente). */
+  editarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/editar', data),
   ingresoFacturaUrl: (id) => API_BASE + '/api/ingresos/' + encodeURIComponent(id) + '/factura' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
-  /* GD1105/ING-017 (ago 2026): cancelar con reversa + etiqueta de tote por lote.
-     Las URLs llevan ?token= porque se abren con window.open (sin headers). */
-  cancelarIngreso: (id, data) => request('POST', '/api/ingresos/' + encodeURIComponent(id) + '/cancelar', data),
+  /* Etiqueta imprimible de un TOTE (folio USA-* o lote de producción) — página
+     @media print con QR del backend (routes/etiquetas.js). Lleva ?token= porque
+     se abre con window.open (sin headers). */
   etiquetaToteUrl: (cod) => API_BASE + '/api/etiquetas/tote/' + encodeURIComponent(cod) + '/print' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
-  qrLoteUrl: (cod) => API_BASE + '/qr/' + encodeURIComponent(cod),
 
   /* ── SAT / CFDI ── */
   satParse: (xmlText) => request('POST', '/api/sat/parse', { xmlText }),

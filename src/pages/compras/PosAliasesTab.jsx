@@ -81,8 +81,8 @@ const S = {
 
   empty: { textAlign: 'center', padding: '60px 20px', color: 'var(--lp-text-tertiary)' },
 
-  /* Modal */
-  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000,
+  /* Modal — ≥1100: sobre el bottom-nav (regla proyecto, jul 2026) */
+  overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1100,
              display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
   modal: { background: 'var(--lp-bg-raised)', borderRadius: 14, width: '100%', maxWidth: 440,
            maxHeight: 'calc(var(--pp-vvh, 100dvh) - 32px)', overflowY: 'auto', boxShadow: '0 12px 40px rgba(0,0,0,.18)' },
@@ -386,7 +386,7 @@ function EditModal({ item, formulas, onClose, onSave }) {
               || (tipo === 'no_pintura' && razonNoPintura.trim());
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalHead}>
           <div style={S.modalTitle}>Reasignar alias</div>

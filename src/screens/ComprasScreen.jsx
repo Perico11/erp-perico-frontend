@@ -1,9 +1,10 @@
 // ComprasScreen.jsx — Compras / OCs de materia prima (presentacional). 1:1 con el mockup
 // Claude Design (cards en grid) + adiciones críticas (Editar/Eliminar en Activas, Ver
 // comprobante, badge Solicitud, buscador). SOLO contenido + estado de UI; cero fetch/lógica.
-// Props: data{ocs:[{cod,mp,qty,sol?,prov,monto,entrega,estado,vencida?,porVencer?,pago?,comp?,solicitud?}]},
+// Props: data{ocs:[{cod,mp,qty,sol?,prov,monto,producto?,flete?,entrega,estado,vencida?,porVencer?,pago?,comp?,solicitud?}]},
 //   onNuevaOC, onAprobarOC(cod), onEditarOC(cod), onEliminarOC(cod), onRecibirMP(cod),
-//   onRegistrarPago(cod), onImprimirOC(cod), onVerComprobante(cod), can, role, isDesktop.
+//   onRegistrarPago(cod), onCorregirImportes(cod), onImprimirOC(cod), onVerComprobante(cod),
+//   can, role, isDesktop.
 // "Aprobar OC" llama onAprobarOC(cod) → abre el modal REAL (pago + comprobante + vencimiento).
 import { useState, useEffect } from 'react';
 
@@ -38,7 +39,7 @@ function btn(kind) {
 }
 
 export default function ComprasScreen({
-  data = DEMO, onNuevaOC, onAprobarOC, onEditarOC, onEliminarOC, onRecibirMP, onRegistrarPago, onImprimirOC, onVerComprobante,
+  data = DEMO, onNuevaOC, onAprobarOC, onEditarOC, onEliminarOC, onRecibirMP, onRegistrarPago, onCorregirImportes, onImprimirOC, onVerComprobante, onRevertirRecepcion,
   can = () => true, role, isDesktop = false, initialTab,
 }) {
   const ocs = (data && data.ocs) || DEMO.ocs;
@@ -122,13 +123,20 @@ export default function ComprasScreen({
                   {o.pago === 'contado' && <span style={{ fontSize: 11, fontWeight: 600, padding: '3px 10px', borderRadius: 999, background: tint(C.ok), color: C.ok }}>Contado</span>}
                   {/* FALTANTE: la OC se recibió con menos kg de los pedidos. */}
                   {o.faltante && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: tint(C.danger), color: C.danger, letterSpacing: '.03em' }}>FALTANTE</span>}
+                  {/* P2 21-jul-2026: recordatorio de vincular el CFDI — recibida
+                      sin factura registrada en SAT/CFDI. */}
+                  {o.faltaCfdi && <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999, background: tint(C.amber), color: C.amber, letterSpacing: '.03em' }} title="La OC está recibida pero no tiene CFDI vinculado — regístralo en SAT/CFDI">Falta CFDI</span>}
                 </div>
                 <div style={{ fontSize: 16, fontWeight: 600 }}>{o.mp}</div>
                 {o.qty && <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', marginTop: 2 }}>{o.qty}</div>}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 7, margin: '12px 0' }}>
                   {o.estado === 'porAprobar' && o.sol && <Row k="Solicitó" v={o.sol} />}
                   <Row k="Proveedor" v={o.prov} />
-                  {o.monto && <Row k="Monto" v={o.monto} />}
+                  {/* Desglose MP + Flete cuando existen ambos — el flete va en
+                      factura aparte (transportista) y ANTES se perdía del total. */}
+                  {o.producto && o.flete && <Row k="Materias primas" v={o.producto} />}
+                  {o.producto && o.flete && <Row k="Flete" v={o.flete} />}
+                  {o.monto && <Row k={o.producto && o.flete ? 'Monto total' : 'Monto'} v={o.monto} />}
                   {o.entrega && <Row k="Entrega" v={o.vencida ? `${o.entrega} · ${o.vencida} tarde` : o.entrega} color={o.vencida ? C.danger : undefined} />}
                   {o.pago === 'contado' && <Row k="Pago" v={`Contado${o.comp ? ' · ' + o.comp : ''}`} color={C.ok} />}
                   {o.vencida && <div style={{ fontSize: 13, fontWeight: 600, color: C.danger }}>Crédito vencido · {o.vencida} de retraso</div>}
@@ -141,13 +149,31 @@ export default function ComprasScreen({
                     {can('eliminarOC') && <button data-id="compras.btn.eliminar-oc" data-rol="admin" title="Solo admin" onClick={() => onEliminarOC?.(o.cod)} style={btn('danger')}>Eliminar</button>}
                   </>}
                   {o.estado === 'activa' && <>
-                    {can('recibirMP') && <button data-id="compras.btn.recibir-mp" data-rol={role} onClick={() => onRecibirMP?.(o.cod)} style={btn('primary')}><Ico d={I_CHECK} /> Recibir MP</button>}
+                    {/* P1 13-ago (una puerta de MP): Arely ya NO recibe — registra quien
+                        tiene el material en las manos (fábrica, vía Ingresos con la OC
+                        prellenada); aquí solo se LEE el resultado (kg y discrepancias). */}
+                    <span
+                      title="La recepción física la registra fábrica en Ingresos; al aplicarse, esta OC se marca recibida sola"
+                      style={{
+                        flex: '1 1 100%', display: 'inline-flex', alignItems: 'center',
+                        minHeight: 34, padding: '6px 12px', borderRadius: 'var(--lp-radius-md)',
+                        background: 'var(--lp-bg-sunken)', border: '1px dashed var(--lp-border-default)',
+                        color: 'var(--lp-text-tertiary)', fontSize: 12.5, fontWeight: 600,
+                        whiteSpace: 'normal', lineHeight: 1.4,
+                      }}>
+                      Recepción pendiente — la registra fábrica en Ingresos
+                    </span>
                     {o.pago !== 'contado' && o.pago !== 'credito-pagado' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} onClick={() => onRegistrarPago?.(o.cod)} style={btn('ghost')}>Registrar pago</button>}
+                    {/* Contado / ya pagada: el pago se cerró al aprobar, así que la
+                        corrección de importes (precio, flete) necesita puerta propia. */}
+                    {(o.pago === 'contado' || o.pago === 'credito-pagado') && can('compras') && <button data-id="compras.btn.corregir-importes" data-rol={role} title="Corregir precio, flete o total facturado" onClick={() => onCorregirImportes?.(o.cod)} style={btn('ghost')}>Corregir importes</button>}
                     {/* #1 editar OC activa (corregir tras aprobar) */}
                     {can('compras') && <button data-id="compras.btn.editar-oc" data-rol={role} onClick={() => onEditarOC?.(o.cod)} style={btn('ghost')}>Editar</button>}
                     {/* #2 ver comprobante adjunto */}
                     {o.comp && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver comprobante adjunto" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
-                    {can('compras') && <button data-id="compras.btn.imprimir-oc" data-rol={role} title="Imprimir OC" onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}><Ico d={I_PRINT} s={17} /></button>}
+                    {/* AUDIT 15-jul-2026: data-id desambiguado — este botón ABRE el overlay de
+                        impresión; el que imprime de verdad es compras.btn.imprimir-oc (PrintOCOverlay). */}
+                    {can('compras') && <button data-id="compras.btn.abrir-imprimir-oc" data-rol={role} title="Imprimir OC" onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}><Ico d={I_PRINT} s={17} /></button>}
                     {/* #1 cancelar/eliminar OC activa (admin) */}
                     {can('eliminarOC') && <button data-id="compras.btn.eliminar-oc" data-rol="admin" title="Cancelar OC (solo admin)" onClick={() => onEliminarOC?.(o.cod)} style={btn('danger')}>Eliminar</button>}
                   </>}
@@ -159,8 +185,14 @@ export default function ComprasScreen({
                         ya recibió la MP (el pago es posterior a la recepción). Antes este
                         botón solo vivía en 'activa' → al recibir desaparecía. */}
                     {!o.eliminada && o.pago === 'credito' && can('compras') && <button data-id="compras.btn.registrar-pago" data-rol={role} title="Registrar el pago del crédito (sube comprobante)" onClick={() => onRegistrarPago?.(o.cod)} style={btn('primary')}>Registrar pago</button>}
+                    {/* Recibida sin pago pendiente (contado o crédito ya pagado): la
+                        factura real puede traer otro precio/flete y no hay "Registrar
+                        pago" donde corregirlo — Editar tampoco (rechaza recibidas). */}
+                    {!o.eliminada && o.pago !== 'credito' && can('compras') && <button data-id="compras.btn.corregir-importes" data-rol={role} title="Corregir precio, flete o total facturado" onClick={() => onCorregirImportes?.(o.cod)} style={btn('ghost')}>Corregir importes</button>}
                     {!o.eliminada && <button data-id="compras.btn.ver-comprobante" data-rol={role} title="Ver recepción, firma, factura y pago" onClick={() => onVerComprobante?.(o.cod)} style={btn('ghost')}><Ico d={I_DOC} s={16} /> Comprobante</button>}
-                    {!o.eliminada && can('compras') && <button data-id="compras.btn.imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
+                    {/* P1 13-ago: válvula admin — deshace stock, costo, lotes MP y espejo; la OC regresa a Activas */}
+                    {!o.eliminada && can('eliminarOC') && onRevertirRecepcion && <button data-id="compras.btn.revertir-recepcion" data-rol="admin" title="Revertir la recepción completa (solo admin, con motivo)" onClick={() => onRevertirRecepcion?.(o.cod)} style={btn('danger')}>Revertir recepción</button>}
+                    {!o.eliminada && can('compras') && <button data-id="compras.btn.abrir-imprimir-oc" data-rol={role} onClick={() => onImprimirOC?.(o.cod)} style={btn('ghost')}>Imprimir OC</button>}
                   </>}
                 </div>
               </div>

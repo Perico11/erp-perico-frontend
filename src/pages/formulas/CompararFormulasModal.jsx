@@ -138,7 +138,7 @@ export default function CompararFormulasModal({ formulas, onClose }) {
   useBodyScrollLock(true);
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.header}>
           <div style={S.title}>Comparar fórmulas</div>

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import CountBadge from '../ui/CountBadge';
 import { usePedidosNotif } from '../../context/PedidosNotifContext';
+import { useChatNotif } from '../../context/ChatNotifContext';
 
 /* ════════════════════════════════════════════════════════════════════════════
    BottomNav móvil — patrón "sheet con grid completo" (Opción B)
@@ -68,7 +69,10 @@ const ICONS = {
   pronostico:   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>,
   sat:          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>,
   posAliases:   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>,
+  stkAmericano: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M6 7v12M10 7v12M14 7v12M18 7v12"/></svg>,
+  entregas:     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
   notif:        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>,
+  chat:         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
   cerrar:       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>,
 };
 
@@ -90,26 +94,25 @@ const SECCIONES = [
       { path: '/ordenes',                 label: 'Órdenes',       icon: ICONS.ordenes,       perm: 'ordenes',     roles: ['admin','tecnico'] },
       { path: '/produccion',              label: 'Lanzar lote',   icon: ICONS.produccionSub, perm: 'produccion' },
       { path: '/produccion?tab=calidad',  label: 'Calidad QC',    icon: ICONS.lab,           perm: 'produccion' },
-      /* Stock Fábrica: solo admin/almacén (jun 2026). Para Enrique era redundante
-         (stock = Inventarios ▸ PT ▸ Fábrica; envasar = Producción ▸ En envasado).
-         Josué la conserva para reenvasar + transferir a Terán. */
-      { path: '/stock-fabrica',           label: 'Stock fábrica', icon: ICONS.stockFabrica,  perm: 'stockFabrica', roles: ['admin','almacen'] },
-      /* FIX jun 2026 (K8): pantalla principal de Josué (escanear QR para
-         recibir PT en Terán) faltaba en sheet. Solo se llegaba por KPI
-         del Dashboard o URL directa. */
-      /* FIX jun 2026 (censo menú): la ruta real es /almacen — el tile apuntaba a
-         /almacen-recepcion (inexistente) y caía al Dashboard. Y la ruta solo
-         admite admin/almacen (se quita tecnico del tile). */
-      { path: '/almacen',                 label: 'Recepción',     icon: ICONS.recepcion,     perm: 'stockFabrica', roles: ['admin','almacen'] },
+      /* P2 (21-jul-2026): "Almacén" fusiona Stock Fábrica + Recepción Terán
+         (2 vistas internas). Un solo tile en vez de dos. */
+      { path: '/almacen',                 label: 'Almacén',       icon: ICONS.stockFabrica,  perm: 'stockFabrica', roles: ['admin','almacen'] },
     ],
   },
   {
     titulo: 'Inventario',
     items: [
-      { path: '/inventario',   label: 'Stock MP',     icon: ICONS.inv,      perm: 'inventario' },
-      { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount' },
-      { path: '/transferencias', label: 'Transferencias', icon: ICONS.transfer, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
-      { path: '/ingresos',     label: 'Ingresos',     icon: ICONS.recepcion, perm: 'ingresos', roles: ['admin','tecnico','almacen'] },
+      /* JUL 2026 ("unificar mismo uso"): para ADMIN /inventario es HUB
+         (Stock · Conteo · Ingresos) y /transferencias es HUB "Logística"
+         (Transferencias · Entregas · Recolección). Los operadores conservan
+         sus tiles directos; el admin ve un tile por hub. */
+      { path: '/inventario',   label: 'Inventario',   icon: ICONS.inv,      perm: 'inventario' },
+      /* STK Americano vive en Inventarios > Americano Terán / Alm. 2 (dueño 16-jul). */
+      { path: '/entregas',     label: 'Entregas',     icon: ICONS.entregas, perm: 'inventario', roles: ['almacen'] },
+      { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount', roles: ['inventario'] },
+      { path: '/transferencias', label: 'Logística',  icon: ICONS.transfer, perm: 'transferencias', roles: ['admin'] },
+      { path: '/transferencias', label: 'Transferencias', icon: ICONS.transfer, perm: 'transferencias', roles: ['almacen','inventario','tecnico'] },
+      { path: '/ingresos',     label: 'Ingresos proveedor', icon: ICONS.recepcion, perm: 'ingresos', roles: ['tecnico','almacen'] },
       { path: '/devoluciones', label: 'Devoluciones', icon: ICONS.devol,    perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
       { path: '/reportes',     label: 'Reportes',     icon: ICONS.reportes, perm: 'inventario', roles: ['admin','inventario','compras'] },
     ],
@@ -117,23 +120,30 @@ const SECCIONES = [
   {
     titulo: 'Compras y trazabilidad',
     items: [
+      /* Para ADMIN /compras es HUB (OCs · Pronóstico · SAT · POS Aliases).
+         Arely conserva sus tiles directos (decisiones LOCKED §9 intactas). */
       { path: '/compras',      label: 'Compras',      icon: ICONS.compr, perm: 'compras' },
-      { path: '/pronostico',   label: 'Pronóstico',   icon: ICONS.pronostico, perm: 'compras', roles: ['admin','compras'] },
-      { path: '/devoluciones-mp', label: 'Devol. proveedor', icon: ICONS.devol, perm: 'devoluciones', roles: ['admin','compras'] },
-      { path: '/sat',          label: 'SAT / CFDI',   icon: ICONS.sat,        perm: 'compras', roles: ['admin','compras'] },
-      { path: '/pos-aliases',  label: 'POS Aliases',  icon: ICONS.posAliases, perm: 'compras', roles: ['admin','compras'] },
-      { path: '/recoleccion',  label: 'Recolección',  icon: ICONS.recol, perm: 'recoleccion' },
+      { path: '/pronostico',   label: 'Pronóstico',   icon: ICONS.pronostico, perm: 'compras', roles: ['compras'] },
+      /* JUL 2026 (censo duplicados): para ADMIN la devolución a proveedor vive
+         dentro del hub /devoluciones (vista "A proveedor") — solo Arely conserva
+         el tile directo. La ruta /devoluciones-mp sigue viva para deep-links. */
+      { path: '/devoluciones-mp', label: 'Devol. proveedor', icon: ICONS.devol, perm: 'devoluciones', roles: ['compras'] },
+      { path: '/sat',          label: 'SAT / CFDI',   icon: ICONS.sat,        perm: 'compras', roles: ['compras'] },
+      { path: '/pos-aliases',  label: 'POS Aliases',  icon: ICONS.posAliases, perm: 'compras', roles: ['compras'] },
+      /* Luis/Josué directa; admin dentro del hub Logística. */
+      { path: '/recoleccion',  label: 'Recolección',  icon: ICONS.recol, perm: 'recoleccion', roles: ['recolector','almacen'] },
       { path: '/trazabilidad', label: 'Trazabilidad', icon: ICONS.traz,  perm: 'trazabilidad' },
     ],
   },
   {
     titulo: 'Otros',
     items: [
-      /* Enrique (tecnico) NO ve la pestaña Fórmulas — solo la fórmula al producir
-         (carga vía API en /produccion). Se oculta con `roles`, no quitando el
-         permiso (producción lo necesita). compras ya queda fuera por perm. */
-      { path: '/formulas',       label: 'Fórmulas',      icon: ICONS.formulas, perm: 'formulas', roles: ['admin','compras'] },
-      { path: '/laboratorio',    label: 'Laboratorio',   icon: ICONS.lab,      perm: 'laboratorio' },
+      /* Para ADMIN /formulas es HUB (Fórmulas · Laboratorio). Enrique (tecnico)
+         NO ve Fórmulas — solo la fórmula al producir; conserva su Laboratorio. */
+      { path: '/formulas',       label: 'Fórmulas y lab', icon: ICONS.formulas, perm: 'formulas', roles: ['admin'] },
+      { path: '/laboratorio',    label: 'Laboratorio',   icon: ICONS.lab,      perm: 'laboratorio', roles: ['tecnico'] },
+      /* Chat interno (jul 2026): todos los roles. Badge = sin leer. */
+      { path: '/chat',           label: 'Chat',          icon: ICONS.chat,     perm: 'dashboard' },
       { path: '/notificaciones', label: 'Notificaciones',icon: ICONS.notif,    perm: 'dashboard' },
       { path: '/admin',          label: 'Admin',         icon: ICONS.admin,    perm: 'admin' },
     ],
@@ -149,7 +159,7 @@ function tabsParaRol(rol, can) {
     compras:    [inicio, { path: '/compras',    label: 'Compras',    icon: ICONS.compras    }, { path: '/inventario', label: 'Inventario', icon: ICONS.inventario }],
     /* jun 2026 (censo menú): Flujo retirado — Josué opera Recepción (su pantalla
        principal) + Pedidos (despachar); Luis opera Recolección + consulta Trazabilidad. */
-    almacen:    [inicio, { path: '/almacen',    label: 'Recepción',  icon: ICONS.recepcion  }, { path: '/pedidos', label: 'Pedidos', icon: ICONS.pedidos }],
+    almacen:    [inicio, { path: '/almacen',    label: 'Almacén',    icon: ICONS.recepcion  }, { path: '/pedidos', label: 'Pedidos', icon: ICONS.pedidos }],
     recolector: [inicio, { path: '/recoleccion', label: 'Recolección', icon: ICONS.recol    }, { path: '/trazabilidad', label: 'Trazab.', icon: ICONS.traz }],
     inventario: [inicio, { path: '/inventario', label: 'Stock MP',   icon: ICONS.inventario }, { path: '/conteo', label: 'Conteo', icon: ICONS.conteo }],
   };
@@ -164,8 +174,9 @@ export default function BottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const [sheetOpen, setSheetOpen] = useState(false);
-  /* Sprint P: badge en tab/tile "Pedidos" */
+  /* Sprint P: badge en tab/tile "Pedidos" + jul 2026: badge de chat sin leer */
   const pedidosNotif = usePedidosNotif();
+  const chatNotif = useChatNotif();
 
   /* Cerrar sheet al navegar */
   useEffect(() => { setSheetOpen(false); }, [location.pathname]);
@@ -295,11 +306,11 @@ export default function BottomNav() {
                 <div style={S.secTitle}>{sec.titulo}</div>
                 <div style={S.grid}>
                   {sec.items.map(it => {
-                    const esPedidos = it.path === '/pedidos';
-                    const count = esPedidos ? pedidosNotif.count : 0;
+                    const count = it.path === '/pedidos' ? pedidosNotif.count
+                                : it.path === '/chat' ? chatNotif.count : 0;
                     return (
                       <button
-                        key={'tile-' + it.path}
+                        key={'tile-' + it.path + '-' + it.label}
                         type="button"
                         style={{ ...S.tile(isActive(it.path)), position: 'relative' }}
                         onClick={() => handleNav(it.path)}

@@ -18,11 +18,11 @@ const S = {
   wrap: { padding: '8px 20px 0' },
 };
 
-export default function PosAliasesPage() {
+export default function PosAliasesPage({ embedded = false }) {
   const isDesktop = useIsDesktop();
   return (
     <>
-      <TopBar title="POS Aliases" />
+      {!embedded && <TopBar title="POS Aliases" />}
       <div style={{ ...S.wrap, maxWidth: isDesktop ? 1280 : '100%' }}>
         <PosAliasesTab />
       </div>

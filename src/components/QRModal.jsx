@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { qrDataUrl } from '../lib/qrGenerator';
+import { qrPublicUrl } from '../lib/qrPublicUrl';
+import { etiquetaCss, etiquetaHtml, presentacionDeLote, envasadorDeLote } from '../lib/etiquetaLote';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 const S = {
@@ -45,6 +47,29 @@ const S = {
     marginTop: 10, color: 'var(--lp-text-primary)',
     wordBreak: 'break-all', textAlign: 'center',
   },
+  /* Maqueta de la etiqueta física — proporción 2:1 como la 50×25 mm. */
+  papel: {
+    width: '100%', maxWidth: 300, background: '#fff', color: '#000',
+    borderRadius: 3, overflow: 'hidden', boxShadow: '0 2px 10px rgba(0,0,0,.18)',
+    fontFamily: 'system-ui, sans-serif',
+  },
+  /* Sin fondo negro: la térmica no imprime backgrounds (ver lib/etiquetaLote).
+     Recuadro + regla gruesa, que son BORDES y sí salen. */
+  papelBanda: {
+    display: 'flex', alignItems: 'center', gap: 7, padding: '4px 6px',
+    borderBottom: '3px solid #000',
+  },
+  papelPres: {
+    fontSize: 15, fontWeight: 700, lineHeight: 1, flexShrink: 0, letterSpacing: '.02em',
+    border: '1.5px solid #000', borderRadius: 3, padding: '1px 5px',
+  },
+  papelProd: { fontSize: 12.5, fontWeight: 700, lineHeight: 1.1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textTransform: 'uppercase' },
+  papelCuerpo: { display: 'flex', alignItems: 'center', gap: 7, padding: '7px 6px' },
+  papelQr: { width: 76, height: 76, flexShrink: 0, imageRendering: 'pixelated' },
+  papelCod: { fontFamily: 'ui-monospace, monospace', fontSize: 20, fontWeight: 700, letterSpacing: '-.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  papelEnv: { fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  papelMeta: { fontSize: 10, marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
+  previewPie: { fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 10 },
   meta: {
     fontSize: 11, color: 'var(--lp-text-tertiary)',
     marginTop: 4, lineHeight: 1.5, textAlign: 'center',
@@ -110,6 +135,7 @@ const S = {
 
 /* Tamaños comunes de etiquetas térmicas */
 const FORMATOS = [
+  { v: '50x25', label: '50×25 mm (etiqueta chica)', wMm: 50, hMm: 25, qrMm: 21 },
   { v: '50x40', label: '50×40 mm', wMm: 50, hMm: 40, qrMm: 22 },
   { v: '60x40', label: '60×40 mm', wMm: 60, hMm: 40, qrMm: 24 },
   { v: '80x50', label: '80×50 mm', wMm: 80, hMm: 50, qrMm: 30 },
@@ -118,26 +144,45 @@ const FORMATOS = [
   { v: 'A4-24', label: 'Hoja A4 · 24 etiquetas (3×8)', wMm: 70, hMm: 37, qrMm: 20, isSheet: true, cols: 3, rows: 8 },
 ];
 
+/* La impresora/etiqueta del usuario se queda memorizada (formato + rotación). */
+const LS_FORMATO = 'pp_qr_formato';
+const LS_ROT = 'pp_qr_rot';
+const ROTACIONES = [0, 90, 180, 270];
+
 export default function QRModal({ lote, onClose }) {
   /* BUG FIX React #310: los useState DEBEN llamarse antes de cualquier early return.
      Si lote pasaba de null→objeto, React veía hooks nuevos → crash. */
   const cantidadDefault = Number(lote?.cantidad) || 1;
   const [copias, setCopias] = useState(cantidadDefault);
-  const [formato, setFormato] = useState('50x40');
+  const [formato, setFormato] = useState(() => { try { return localStorage.getItem(LS_FORMATO) || '50x40'; } catch { return '50x40'; } });
+  /* `rotacion` gira el contenido 0/90/180/270° dentro de la etiqueta. Cubre TODAS
+     las orientaciones: si el driver de la impresora rota solo (imprime "parada"),
+     el usuario prueba las 4 y una sale acostada llenando la etiqueta. */
+  const [rotacion, setRotacion] = useState(() => { try { const v = parseInt(localStorage.getItem(LS_ROT), 10); return ROTACIONES.includes(v) ? v : 0; } catch { return 0; } });
+  /* Memoriza formato + rotación (la config de la impresora del usuario se queda). */
+  useEffect(() => { try { localStorage.setItem(LS_FORMATO, formato); } catch {} }, [formato]);
+  useEffect(() => { try { localStorage.setItem(LS_ROT, String(rotacion)); } catch {} }, [rotacion]);
   /* MÓVIL: congela el scroll del fondo y publica --pp-vvh mientras el modal está
      abierto (= hay lote). Llamado ANTES del early-return para respetar las reglas
      de hooks. */
   useBodyScrollLock(!!lote);
   if (!lote) return null;
   const codigo = lote.codigo || lote.codigoLote || lote.id;
+  /* Banda de la etiqueta (diseño único 5-ago): presentación abreviada + quién
+     envasó. Ambos degradan a vacío si el lote no los trae. */
+  const presPreview = presentacionDeLote(lote);
+  const envasadorPreview = envasadorDeLote(lote);
 
   const fmt = FORMATOS.find(f => f.v === formato) || FORMATOS[0];
 
-  const payload = JSON.stringify({
-    t: 'perico-lote', cod: codigo,
-    p: lote.producto || lote.nombre,
-    cant: lote.cantidad, f: lote.fecha,
-  });
+  /* 28-jul-2026 (pedido dueño): el QR llevaba los DATOS adentro (JSON con
+     producto/cantidad/fecha) — cualquier lector genérico los mostraba a quien
+     tuviera la cubeta, cliente final incluido. Ahora codifica solo la URL del
+     DOMINIO PRINCIPAL (pinturaselperico.com/QR/…, 29-jul): la página exige la
+     clave de planta antes de enseñar nada. El escáner interno sigue leyendo
+     los JSON de etiquetas viejas (rama JSON.parse en handleResult) y el
+     backend extrae el código de la URL en /api/sublotes/scan(-bulk). */
+  const payload = qrPublicUrl(codigo);
   /* QR generado LOCAL (sin quickchart.io). Funciona offline, sin latencia,
      sin riesgo de CSP/bloqueo. */
   const qrUrlPreview = qrDataUrl(payload, { scale: 8, margin: 2, ecLevel: 'M' });
@@ -147,26 +192,27 @@ export default function QRModal({ lote, onClose }) {
     const w = window.open('', '_blank', 'width=800,height=900');
     if (!w) { alert('Habilita popups para imprimir'); return; }
 
-    const producto = (lote.producto || lote.nombre || '').replace(/</g, '&lt;');
+    const producto = lote.producto || lote.nombre || '';
     const fecha = (lote.fecha || '').slice(0, 10);
     const n = Math.max(1, Math.min(999, parseInt(copias) || 1));
+    /* DISEÑO ÚNICO (5-ago): banda con presentación + folio grande + envasador.
+       Vive en lib/etiquetaLote; aquí solo se arma el contexto de cada copia. */
+    const pres = presentacionDeLote(lote);
+    const envasador = envasadorDeLote(lote);
+    const metaBase = [fecha, lote.litros ? `${lote.litros} L` : ''].filter(Boolean).join(' · ');
+    const etiqueta = (i) => etiquetaHtml({
+      qrSrc: qrUrlPrint, producto, pres, codigo, envasador, fmt,
+      meta: n > 1 ? `${metaBase}${metaBase ? ' · ' : ''}${i + 1}/${n}` : metaBase,
+    });
 
     /* Generar HTML según formato */
-    let html = '';
+    let html;
     if (fmt.isSheet) {
       /* Hoja A4 con grid */
       const total = fmt.cols * fmt.rows;
-      const totalPages = Math.ceil(n / total);
       let labels = '';
       for (let i = 0; i < n; i++) {
-        labels += `<div class="cell">
-          <img src="${qrUrlPrint}" />
-          <div class="info">
-            <div class="prod">${producto}</div>
-            <div class="cod">${codigo}</div>
-            <div class="meta">${fecha} · ${i + 1}/${n}</div>
-          </div>
-        </div>`;
+        labels += `<div class="cell">${etiqueta(i)}</div>`;
         /* Filler para que el grid termine la página */
         if ((i + 1) % total === 0 && i + 1 < n) {
           labels += '<div class="page-break"></div>';
@@ -184,16 +230,10 @@ export default function QRModal({ lote, onClose }) {
           .cell {
             width: ${fmt.wMm}mm; height: ${fmt.hMm}mm;
             border: 0.3mm dashed #ccc;
-            box-sizing: border-box; padding: 2mm;
-            display: flex; align-items: center; gap: 2mm;
+            box-sizing: border-box;
             page-break-inside: avoid;
           }
-          .cell img { width: ${fmt.qrMm}mm; height: ${fmt.qrMm}mm; }
-          .info { flex: 1; min-width: 0; font-size: 7pt; line-height: 1.2; }
-          .prod { font-weight: bold; font-size: 8pt; margin-bottom: 1mm;
-                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-          .cod { font-family: monospace; font-weight: bold; font-size: 7pt; }
-          .meta { color: #666; font-size: 6pt; margin-top: 1mm; }
+          ${etiquetaCss(fmt, '.cell')}
           .page-break { break-after: page; flex-basis: 100%; }
           @media print { .cell { border: none; } }
         </style></head><body>
@@ -201,38 +241,40 @@ export default function QRModal({ lote, onClose }) {
         <script>setTimeout(() => window.print(), 400);</script>
         </body></html>`;
     } else {
-      /* Etiqueta individual (rollo térmico) */
+      /* Etiqueta individual (rollo térmico). `rotacion` (0/90/180/270°) gira el
+         contenido dentro de la etiqueta. En 90/270 la PÁGINA usa las medidas
+         intercambiadas (hMm×wMm) para que el driver NO reescale; el contenido
+         —caja fija wMm×hMm— se rota con transform y cae EXACTO en la hoja
+         (transform-origin 0,0 + translate por ángulo). Cubrir las 4 rotaciones deja
+         que el usuario elija la que sale acostada aunque su driver rote por su cuenta. */
+      const ang = ROTACIONES.includes(rotacion) ? rotacion : 0;
+      const portrait = ang === 90 || ang === 270;
+      const pageW = portrait ? fmt.hMm : fmt.wMm;
+      const pageH = portrait ? fmt.wMm : fmt.hMm;
+      const tf = ang === 90  ? `translateX(${fmt.hMm}mm) rotate(90deg)`
+               : ang === 180 ? `translate(${fmt.wMm}mm, ${fmt.hMm}mm) rotate(180deg)`
+               : ang === 270 ? `translateY(${fmt.wMm}mm) rotate(270deg)`
+               : 'none';
       let labels = '';
       for (let i = 0; i < n; i++) {
-        labels += `<div class="ticket">
-          <img src="${qrUrlPrint}" />
-          <div class="info">
-            <div class="prod">${producto}</div>
-            <div class="cod">${codigo}</div>
-            <div class="meta">${fecha}${n > 1 ? ' · ' + (i + 1) + '/' + n : ''}</div>
-          </div>
-        </div>`;
+        labels += `<div class="page"><div class="label">${etiqueta(i)}</div></div>`;
       }
+      /* La página tiene el tamaño de la hoja; la etiqueta (caja wMm×hMm) va absoluta
+         y se rota para llenarla exacto. ang=0 → transform:none → la caja == la página. */
+      const cajaCss = `.page { width: ${pageW}mm; height: ${pageH}mm; position: relative; overflow: hidden; page-break-after: always; }
+          .page:last-child { page-break-after: auto; }
+          .label {
+            position: absolute; top: 0; left: 0;
+            width: ${fmt.wMm}mm; height: ${fmt.hMm}mm;
+            box-sizing: border-box;
+            transform-origin: 0 0; transform: ${tf};
+          }`;
       html = `<!DOCTYPE html><html><head><title>QR ${codigo} (${n} ticket${n > 1 ? 's' : ''})</title>
         <style>
-          @page { size: ${fmt.wMm}mm ${fmt.hMm}mm; margin: 0; }
+          @page { size: ${pageW}mm ${pageH}mm; margin: 0; }
           body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-          .ticket {
-            width: ${fmt.wMm}mm; height: ${fmt.hMm}mm;
-            box-sizing: border-box; padding: 2mm;
-            display: flex; align-items: center; gap: 2mm;
-            page-break-after: always;
-          }
-          .ticket:last-child { page-break-after: auto; }
-          .ticket img { width: ${fmt.qrMm}mm; height: ${fmt.qrMm}mm; }
-          .info { flex: 1; min-width: 0; line-height: 1.3; }
-          .prod {
-            font-weight: bold; font-size: 9pt;
-            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            margin-bottom: 1mm;
-          }
-          .cod { font-family: monospace; font-weight: bold; font-size: 8pt; }
-          .meta { color: #666; font-size: 6pt; margin-top: 1mm; }
+          ${cajaCss}
+          ${etiquetaCss(fmt, '.label')}
         </style></head><body>
         ${labels}
         <script>setTimeout(() => window.print(), 400);</script>
@@ -245,20 +287,35 @@ export default function QRModal({ lote, onClose }) {
   const setPreset = (n) => setCopias(n);
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.header}>
           <div style={S.title}>QR de lote · imprimir tickets</div>
           <button style={S.close} onClick={onClose} aria-label="Cerrar">×</button>
         </div>
         <div style={S.body}>
+          {/* Vista previa FIEL a lo que sale de la impresora (5-ago): antes el
+              modal mostraba QR+código sueltos y la etiqueta impresa era otra
+              cosa. Papel blanco y tinta negra fijos a propósito — representa el
+              objeto físico, no la UI, y debe verse igual en tema claro y oscuro. */}
           <div style={S.qrPreview}>
-            <img src={qrUrlPreview} alt={`QR ${codigo}`} style={S.qrImg} />
-            <div style={S.codigo}>{codigo}</div>
-            <div style={S.meta}>
-              {lote.producto || lote.nombre}<br/>
-              {lote.cantidad ? lote.cantidad + ' cubetas · ' : ''}{(lote.fecha || '').slice(0, 10)}
+            <div style={S.papel}>
+              <div style={S.papelBanda}>
+                {presPreview && <span style={S.papelPres}>{presPreview}</span>}
+                <span style={S.papelProd}>{lote.producto || lote.nombre}</span>
+              </div>
+              <div style={S.papelCuerpo}>
+                <img src={qrUrlPreview} alt={`QR ${codigo}`} style={S.papelQr} />
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={S.papelCod}>{codigo}</div>
+                  {envasadorPreview && <div style={S.papelEnv}>Envasó: <b>{envasadorPreview}</b></div>}
+                  <div style={S.papelMeta}>
+                    {[(lote.fecha || '').slice(0, 10), lote.litros ? `${lote.litros} L` : ''].filter(Boolean).join(' · ')}
+                  </div>
+                </div>
+              </div>
             </div>
+            <div style={S.previewPie}>Así sale impresa · {fmt.label}</div>
           </div>
 
           <div style={S.field}>
@@ -295,6 +352,20 @@ export default function QRModal({ lote, onClose }) {
               </optgroup>
             </select>
           </div>
+
+          {!fmt.isSheet && (
+            <div style={S.field}>
+              <label style={S.label}>Rotación de la impresión</label>
+              <div style={S.presetBar}>
+                {ROTACIONES.map(a => (
+                  <button key={a} type="button" style={S.preset(rotacion === a)} onClick={() => setRotacion(a)}>{a}°</button>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 6, lineHeight: 1.5 }}>
+                Si la etiqueta sale <strong>parada</strong> o de lado, prueba otra rotación hasta que salga <strong>acostada y llenando</strong> la etiqueta. Queda memorizada.
+              </div>
+            </div>
+          )}
 
           <div style={S.hint}>
             Es <strong>un solo QR</strong> que identifica este lote. Imprimes {copias} tickets idénticos para etiquetar las {copias} unidades del lote. Al escanear cualquier ticket, se identifica el lote completo.
@@ -515,7 +586,7 @@ export function QRScanner({ onResult, onClose }) {
       try {
         const mod = await import('jsqr');
         jsqrModuleRef.current = mod.default || mod;
-      } catch (e) {
+      } catch {
         setErr('No se pudo cargar el lector de QR. Ingresa el código manualmente abajo.');
         return;
       }
@@ -536,7 +607,7 @@ export function QRScanner({ onResult, onClose }) {
   };
 
   return (
-    <div style={SS.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={SS.overlay}>
       <div style={SS.modal}>
         <div style={SS.header}>
           <div style={SS.title}>Escanear QR de lote</div>

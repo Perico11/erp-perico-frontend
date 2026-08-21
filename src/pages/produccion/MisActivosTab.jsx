@@ -11,6 +11,7 @@
 import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PruebaBadge from '../../components/ui/PruebaBadge';
+import { ESTADO_PEDIDO_TERMINAL, ESTADO_LOTE_INTERNO_OCULTO } from '../../lib/estados';
 
 /* Icono SVG line (sin glyphs) */
 const IcoPlay = () => (
@@ -147,7 +148,9 @@ const S = {
   },
   btn: (primary, disabled) => ({
     padding: '10px 18px', minHeight: 44,
-    borderRadius: 8, border: 'none',
+    /* el `border` real se define abajo según primary/disabled — aquí había un
+       duplicado que quedaba pisado (en un objeto literal gana la última clave) */
+    borderRadius: 8,
     fontSize: 13, fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
     background: disabled ? 'var(--lp-bg-base)'
               : primary ? 'var(--lp-success-600)' : 'var(--lp-bg-raised)',
@@ -180,7 +183,7 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
     /* 1. Pedidos activos (no terminales, no eliminados) */
     (pedidos || []).forEach(p => {
       if (!p || p.eliminado) return;
-      if (['entregado', 'cancelado', 'rechazado'].includes(p.estado)) return;
+      if (ESTADO_PEDIDO_TERMINAL.includes(p.estado)) return;
       const lote = loteByPedido[p.id];
       const orden = ordenByPedido[p.id];
       /* El estado "real" más actualizado es el del lote si existe */
@@ -204,7 +207,7 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
     (lotes || []).forEach(l => {
       if (!l || l.eliminado) return;
       if (l.pedidoId) return; /* ya está arriba via pedido */
-      if (['entregado', 'cancelado'].includes(l.estado)) return;
+      if (ESTADO_LOTE_INTERNO_OCULTO.includes(l.estado)) return;
       result.push({
         id: l.id,
         codigo: l.codigo || l.id,

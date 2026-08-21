@@ -9,7 +9,6 @@ import UsuariosPanel from './UsuariosPanel';
 import MargenesDashboard from './MargenesDashboard';
 import CanonicoPanel from './CanonicoPanel';
 import TOTPSetupPanel from './TOTPSetupPanel';
-import DevolucionesPanel from './DevolucionesPanel';
 import SATPanel from './SATPanel';
 import CostosMPPanel from './CostosMPPanel';
 import CostosAuxiliaresPanel from './CostosAuxiliaresPanel';
@@ -424,7 +423,7 @@ function ConfiguracionPanel() {
       setEdits({});
       setSaveState('saved');
       setTimeout(() => setSaveState(null), 2000);
-    } catch (e) {
+    } catch {
       setSaveState('err');
     }
   };
@@ -981,6 +980,38 @@ function ReportesPanel() {
               </div>
             </div>
 
+            {/* Un total que se ve razonable pero deja fuera cientos de miles de
+                pesos es peor que uno que avisa. La valuación cruza el nombre del
+                PT contra la key de la fórmula EXACTA; si no empata, ese producto
+                se cuenta solo con envase y mano de obra. Antes no se notaba. */}
+            {(() => {
+              const adv = v.advertenciasPT;
+              if (!adv || !adv.sinFormula || adv.sinFormula.length === 0) return null;
+              return (
+                <div style={{
+                  marginBottom: 16, padding: '10px 12px', borderRadius: 10, fontSize: 12, lineHeight: 1.6,
+                  background: 'var(--lp-warning-bg, #FEF3C7)', color: 'var(--lp-warning-text, #92400E)',
+                  border: '1px solid var(--lp-warning-border, #FCD34D)',
+                }}>
+                  <strong>El valor de producto terminado está incompleto.</strong>{' '}
+                  {adv.sinFormula.length === 1 ? 'Un producto no tiene' : `${adv.sinFormula.length} productos no tienen`}
+                  {' '}fórmula con ese nombre exacto, así que se {adv.sinFormula.length === 1 ? 'cuenta' : 'cuentan'} solo
+                  con envase y mano de obra — sin el costo de materia prima:
+                  <div style={{ marginTop: 6 }}>
+                    {adv.sinFormula.map(p => (
+                      <div key={p.nombre} style={{ fontWeight: 600 }}>
+                        · {p.nombre} — {p.qty.toLocaleString('es-MX')} cub
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 6, opacity: .9 }}>
+                    Para corregirlo: crea la fórmula con ese nombre exacto, o renombra el
+                    producto para que empate con la fórmula que le corresponde.
+                  </div>
+                </div>
+              );
+            })()}
+
             {topMP.length > 0 && (
               <>
                 <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-text-secondary)', textTransform: 'uppercase', letterSpacing: '.04em', margin: '6px 0 10px' }}>
@@ -1240,7 +1271,6 @@ const SECTION_PANELS = {
   'canonico':      CanonicoPanel,
   'usuarios':      UsuariosPanel,
   'margenes':      MargenesDashboard,
-  'devoluciones':  DevolucionesPanel,
   'sat':           SATPanel,
   'maestro-mp':    MaestroMPPanel,
   'costos-mp':     CostosMPPanel,
@@ -1269,6 +1299,16 @@ export default function AdminPage() {
     const s = searchParams.get('section');
     if (s && SECTION_PANELS[s]) setActiveSection(s);
   }, [searchParams]);
+
+  /* Unificación Devoluciones (jul 2026): el panel embebido DevolucionesPanel
+     duplicaba a la pantalla canónica /devoluciones (sheets nuevas + data-id) y
+     se eliminó. Deep-links viejos ?section=devoluciones redirigen allá — antes
+     ni siquiera renderizaban (la sección no estaba en ADMIN_SECTIONS → blanco). */
+  useEffect(() => {
+    if (searchParams.get('section') === 'devoluciones') {
+      navigate('/devoluciones', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   const currentSection = activeSection
     ? ADMIN_SECTIONS.find(s => s.id === activeSection)

@@ -9,14 +9,20 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import { EliminarMPModal, SustituirMPModal, MPActionsMenu } from './MPActions';
 import AgregarPTModal from './AgregarPTModal';
+import StkAmericanoView from '../stk-americano/StkAmericanoView';
+import { SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import CostosMPPanel from '../admin/CostosMPPanel';
 import MaestroMPInline from './MaestroMPInline';
-import HelpHint from '../../components/HelpHint';
-import PageTabs from '../../components/ui/PageTabs';
 import ImportExportPrint from '../../components/ui/ImportExportPrint';
 import CanonicoCard from './CanonicoCard';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import useVaciadores from '../../hooks/useVaciadores';
+/* DISEÑO ÚNICO de envasado (jul 2026): bloques compartidos por las 4 pantallas. */
+import { Sec, PresPills, EnvaseSelect, TapaSelect, QuienEnvaso, Contador, TopeHint } from '../../components/envasado/EnvasarUI';
+import { ESTADO_LOTE_OCULTO_INVENTARIO, ESTADO_LOTE_UBICACION_TERAN } from '../../lib/estados';
+/* Patrón único de ajuste (ago 2026): Fijar/Sumar/Restar + preview antes → después. */
+import { ModoAjusteSelector, AjustePreview, calcularTotalAjuste, etiquetaCampoAjuste, notaModoAjuste } from '../../components/AjusteModoControl';
 
 /* ── Category config — matches maestro_mp.json categories exactly.
    Iconos abreviados estilo "tag" de 2 letras (sin emojis para consistencia
@@ -345,128 +351,11 @@ const S = {
   }),
 };
 
-/* ── Modal Recepción MP ── */
-function RecepcionModal({ mpList, onClose, onSuccess }) {
-  const [mp, setMp] = useState('');
-  const [cantidad, setCantidad] = useState('');
-  const [proveedor, setProveedor] = useState('');
-  const [nota, setNota] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
-  const [search, setSearch] = useState('');
-  const inputRef = useRef(null);
-
-  useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
-
-  const filteredMPs = useMemo(() => {
-    if (!search) return mpList;
-    const q = search.toLowerCase();
-    return mpList.filter(m => m.toLowerCase().includes(q));
-  }, [mpList, search]);
-
-  const handleSubmit = async () => {
-    if (!mp) return setError('Selecciona una materia prima');
-    const qty = parseFloat(cantidad);
-    if (!qty || qty <= 0) return setError('Cantidad debe ser mayor a 0');
-    setSaving(true);
-    setError('');
-    try {
-      await api.recepcionMP(mp, qty, proveedor || undefined, nota || undefined);
-      onSuccess(mp, qty);
-    } catch (e) {
-      setError(e.message || 'Error al registrar');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={S.modal}>
-        <div style={S.modalHeader}>
-          <span style={S.modalTitle}>Recepción de Materia Prima</span>
-          <button style={S.modalClose} onClick={onClose} aria-label="Cerrar">✕</button>
-        </div>
-        <div style={S.modalBody}>
-          {/* MP selector with search */}
-          <div>
-            <label style={S.fieldLabel}>Materia Prima *</label>
-            <input
-              ref={inputRef}
-              type="text" style={S.fieldInput}
-              placeholder="Buscar MP..." value={mp || search}
-              onChange={e => { setSearch(e.target.value); setMp(''); }}
-            />
-            {search && !mp && filteredMPs.length > 0 && (
-              <div style={{
-                maxHeight: 150, overflowY: 'auto', border: '1.5px solid var(--lp-border-subtle)',
-                borderRadius: 8, marginTop: 4, background: 'var(--lp-bg-raised)',
-              }}>
-                {filteredMPs.slice(0, 15).map(m => (
-                  <div key={m} onClick={() => { setMp(m); setSearch(''); }}
-                    style={{
-                      padding: '8px 14px', fontSize: 12, cursor: 'pointer',
-                      borderBottom: '1px solid var(--lp-border-subtle)',
-                      color: 'var(--lp-text-primary)', fontWeight: 500,
-                    }}
-                    onMouseEnter={e => e.currentTarget.style.background = 'var(--lp-bg-sunken)'}
-                    onMouseLeave={e => e.currentTarget.style.background = '#fff'}
-                  >{m}</div>
-                ))}
-              </div>
-            )}
-            {mp && (
-              <div style={{
-                marginTop: 4, padding: '6px 12px', borderRadius: 6, fontSize: 12,
-                fontWeight: 600, background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)',
-                display: 'inline-flex', gap: 6, alignItems: 'center',
-              }}>
-                {mp}
-                <span style={{ cursor: 'pointer', fontSize: 14 }} onClick={() => { setMp(''); setSearch(''); }}>✕</span>
-              </div>
-            )}
-          </div>
-
-          {/* Cantidad */}
-          <div>
-            <label style={S.fieldLabel}>Cantidad (kg) *</label>
-            <input type="number" inputMode="decimal" step="0.1" min="0" style={S.fieldInput}
-              placeholder="Ej: 25.0" value={cantidad}
-              onChange={e => setCantidad(e.target.value)} />
-          </div>
-
-          {/* Proveedor (opcional) */}
-          <div>
-            <label style={S.fieldLabel}>Proveedor (opcional)</label>
-            <input type="text" style={S.fieldInput}
-              placeholder="Nombre del proveedor" value={proveedor}
-              onChange={e => setProveedor(e.target.value)} />
-          </div>
-
-          {/* Nota (opcional) */}
-          <div>
-            <label style={S.fieldLabel}>Nota (opcional)</label>
-            <input type="text" style={S.fieldInput}
-              placeholder="Factura, OC, comentario..." value={nota}
-              onChange={e => setNota(e.target.value)} />
-          </div>
-
-          {error && (
-            <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>
-              {error}
-            </div>
-          )}
-        </div>
-        <div style={S.modalFooter}>
-          <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
-          <button style={S.btnPrimary} onClick={handleSubmit} disabled={saving}>
-            {saving ? 'Guardando...' : 'Registrar Recepción'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* ── Modal Recepción MP: ELIMINADO (P1 auditoría 20-jul-2026) ──
+   La MP entra por UNA puerta: Recibir OC (Compras, cuando hay OC) o Ingresos
+   de proveedor (/ingresos, con foto de factura). El endpoint suelto
+   /api/inventario/recepcion-mp quedó admin-only en el backend. El botón
+   "Recepción MP" de esta página ahora navega a /ingresos. */
 
 /* ── MP Row component (with optional editing) ── */
 /* AD1 (jun 2026): resalta coincidencias del buscador en un texto */
@@ -569,7 +458,9 @@ function TransitoBadge({ transito, unidad }) {
   );
 }
 
-function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir }) {
+function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir, onOcultar }) {
+  /* Regla proyecto: botones NUNCA 100% width en PC (bp 880, igual que la página). */
+  const isDesktop = useIsDesktop();
   const { nombre, inv, pct } = item;
   /* PT vista "Total": item.displayQty = Fábrica + Terán. Env/MP no lo traen → qty real. */
   const qty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
@@ -581,8 +472,24 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
       role={clickable ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
       <div style={S.mTop}>
         <span style={S.mName}>{resaltar(nombre, query)}</span>
+        {item.oculto && (
+          <span style={{
+            fontSize: 10, fontWeight: 800, letterSpacing: 0.5, padding: '2px 7px',
+            borderRadius: 10, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)',
+          }}>OCULTO</span>
+        )}
         <EstadoBadge qty={qty} pct={pct} />
         {canEdit && <PencilIcon />}
+        {/* PT ocultos (jul 2026): menú ⋮ con Ocultar/Mostrar (solo admin) */}
+        {onOcultar && (
+          <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+            <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
+              label: item.oculto ? 'Mostrar' : 'Ocultar',
+              color: item.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
+              onClick: () => onOcultar(item),
+            }]} />
+          </span>
+        )}
       </div>
       <div style={S.sevBar}><div style={S.sevFill(barPctOf(qty, inv.min || 0), sev.color)} /></div>
       <div style={S.mNums}>
@@ -603,7 +510,7 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
       {onTransferir && (
         <button type="button" data-id="inventario.btn.transferir-env" data-rol="admin,almacen,inventario"
           onClick={(e) => { e.stopPropagation(); onTransferir(); }}
-          style={{ ...S.btnGhost, marginTop: 10, width: '100%', color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>
+          style={{ ...S.btnGhost, marginTop: 10, width: isDesktop ? 'auto' : '100%', color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>
           → Terán
         </button>
       )}
@@ -801,6 +708,10 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
+  /* Patrón único de ajuste (ago 2026): 'fijar' sustituye el total (default, es
+     lo que el endpoint espera); 'sumar'/'restar' operan sobre lo que hay y el
+     sheet calcula el total final antes de guardar. */
+  const [modo, setModo] = useState('fijar');
   /* Catálogo editable: nombre (PT y MP) + SKU (solo PT). Estos campos NO tocan
      stock: se guardan directo con auditoría.
        · PT  → /api/inventario/pt-meta (nombre + SKU; admin/inventario).
@@ -824,13 +735,31 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const cantMedidaNum = parseFloat(cantMedida);    /* PT: cantidad en la medida */
   const minNum = parseFloat(min);
   const esEnv = item.tipo === 'env';
-  /* PT: la existencia base (cubetas) se DERIVA de medida × cantidad. */
+  /* PT: el "actual" comparable para Sumar/Restar es la cantidad en la MEDIDA
+     guardada. Si el usuario captura en otra medida, no hay actual comparable
+     → se fuerza 'fijar' (captura el total en la medida nueva). */
+  const medidaActualKey = item.medida || 'cubeta';
+  const actualEnMedida = item.medidaQty != null ? item.medidaQty : (item.qty ?? 0);
+  const medidaCambiada = esPT && medidaEdit !== medidaActualKey;
+  const modoEfectivo = medidaCambiada ? 'fijar' : modo;
+  /* Total final en la unidad de captura (medida para PT, unidad directa MP/Env). */
+  const cantMedidaFinal = calcularTotalAjuste(modoEfectivo, actualEnMedida, cantMedida);
+  const qtyFinalDirecta = calcularTotalAjuste(modoEfectivo, item.qty ?? 0, qty);
+  /* PT: la existencia base (cubetas) se DERIVA de medida × cantidad (total final). */
   const qtyEfectiva = esPT
-    ? medidaACubetas(medidaEdit, isNaN(cantMedidaNum) ? 0 : cantMedidaNum)
-    : qtyNum;
+    ? medidaACubetas(medidaEdit, cantMedidaFinal == null ? 0 : cantMedidaFinal)
+    : (qtyFinalDirecta == null ? NaN : qtyFinalDirecta);
   const qtyValida = esPT
     ? (cantMedida !== '' && !isNaN(cantMedidaNum) && cantMedidaNum >= 0 && !!medidaEdit)
     : (qty !== '' && !isNaN(qtyNum) && qtyNum >= 0);
+  /* Cambiar de modo limpia el campo (sumar/restar) o precarga el total actual
+     (fijar), y regresa el foco al input. */
+  const cambiarModo = (m) => {
+    setModo(m);
+    if (esPT) setCantMedida(m === 'fijar' ? String(actualEnMedida) : '');
+    else setQty(m === 'fijar' ? String(item.qty ?? 0) : '');
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 0);
+  };
   const stockChanged = (qtyValida && qtyEfectiva !== (item.qty ?? 0))
     || (canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
   const nombreChanged = mostrarNombre && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
@@ -852,12 +781,26 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   const handleSave = async () => {
     if (!puedeGuardar) return;
     setSaving(true);
+    /* Rastro del modo en el motivo: "Sumó 20 kg (300 → 320) — <motivo>". Así la
+       auditoría distingue un conteo (fijar) de una entrada/salida manual. */
+    const notaModo = stockChanged
+      ? notaModoAjuste(
+        modoEfectivo,
+        esPT ? actualEnMedida : (item.qty ?? 0),
+        esPT ? cantMedidaNum : qtyNum,
+        esPT ? cantMedidaFinal : qtyFinalDirecta,
+        esPT ? (ptMedidaDef(medidaEdit)?.plur || '') : item.unidad
+      )
+      : null;
+    const motivoFinal = notaModo
+      ? (motivo.trim() ? `${notaModo} — ${motivo.trim()}` : notaModo)
+      : motivo.trim();
     try {
       /* 3er arg = nuevo mínimo (solo si el rol puede editarlo; si no, se conserva el actual).
          4to arg = metadatos de catálogo (solo PT) + flags de qué cambió. */
       await onSave(
         qtyValida ? qtyEfectiva : (item.qty ?? 0),
-        motivo.trim(),
+        motivoFinal,
         canEditMin ? minNum : (item.min ?? 0),
         {
           stockChanged,
@@ -874,10 +817,13 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Ajustar existencia</div>
-        <div style={S.shS}>{item.nombre}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
+        {/* `ubicLabel` (envases/tapas): dice a QUÉ ubicación se va a escribir.
+            Sin él, desde la vista "Total" no había forma de saber que el ajuste
+            aterriza en Fábrica y no en el total que se ve arriba. */}
+        <div style={S.shS}>{item.nombre}{item.ubicLabel ? ` · ${item.ubicLabel}` : ''}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
         <div style={S.bigsis}>
           <div style={S.bigK}>Existencia actual</div>
           <div style={S.bigV}>
@@ -926,7 +872,8 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
               {PT_MEDIDAS.map(m => {
                 const on = medidaEdit === m.key;
                 return (
-                  <button key={m.key} type="button" onClick={() => setMedidaEdit(m.key)}
+                  <button key={m.key} type="button"
+                    onClick={() => { setMedidaEdit(m.key); if (m.key !== medidaActualKey && modo !== 'fijar') setModo('fijar'); }}
                     style={{ height: 36, padding: '0 12px', borderRadius: 999, cursor: 'pointer',
                       fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: on ? 600 : 500,
                       border: on ? '1px solid transparent' : '1px solid var(--lp-border-subtle)',
@@ -937,20 +884,36 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
                 );
               })}
             </div>
-            <label style={{ ...S.flbl, marginTop: 12 }}>Cantidad ({ptMedidaDef(medidaEdit)?.label || 'unidades'})</label>
-            <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
-              value={cantMedida} onChange={e => setCantMedida(e.target.value)} />
-            {medidaEdit !== 'cubeta' && qtyValida && (
-              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
-                = <strong>{qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })}</strong> cubetas-equivalente
+            <label style={{ ...S.flbl, marginTop: 12 }}>Tipo de ajuste</label>
+            <ModoAjusteSelector modo={modoEfectivo} onModo={cambiarModo} soloFijar={medidaCambiada} dataIdBase="inventario.ajuste.modo" />
+            {medidaCambiada && (
+              <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+                Cambiaste la medida: captura el <strong>total</strong> en {ptMedidaDef(medidaEdit)?.plur || 'la medida nueva'} (Sumar/Restar solo aplican en la medida guardada).
               </div>
             )}
+            <label style={{ ...S.flbl, marginTop: 12 }}>{etiquetaCampoAjuste(modoEfectivo, ptMedidaDef(medidaEdit)?.plur || 'unidades')}</label>
+            <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
+              value={cantMedida} onChange={e => setCantMedida(e.target.value)} />
+            {medidaCambiada
+              ? <AjustePreview actual={item.qty ?? 0} nuevo={qtyValida ? qtyEfectiva : null} unidad="cub" />
+              : (
+                <AjustePreview actual={actualEnMedida} nuevo={cantMedidaFinal} unidad={ptMedidaDef(medidaEdit)?.plur || ''}
+                  extra={medidaEdit !== 'cubeta' && qtyValida ? (
+                    <div style={{ marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-sans)' }}>
+                      = <strong>{qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })}</strong> cubetas-equivalente
+                    </div>
+                  ) : null}
+                />
+              )}
           </>
         ) : (
           <>
-            <label style={{ ...S.flbl, marginTop: mostrarNombre ? 12 : 0 }}>Nueva cantidad</label>
+            <label style={{ ...S.flbl, marginTop: mostrarNombre ? 12 : 0 }}>Tipo de ajuste</label>
+            <ModoAjusteSelector modo={modo} onModo={cambiarModo} dataIdBase="inventario.ajuste.modo" />
+            <label style={{ ...S.flbl, marginTop: 12 }}>{etiquetaCampoAjuste(modo, item.unidad)}</label>
             <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="0.1" min="0"
               value={qty} onChange={e => setQty(e.target.value)} />
+            <AjustePreview actual={item.qty ?? 0} nuevo={qtyFinalDirecta} unidad={item.unidad} />
           </>
         )}
         {canEditMin && (
@@ -977,7 +940,11 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
             disabled={!puedeGuardar || saving} onClick={handleSave}>
             {saving
               ? (modoPropuesta && stockChanged ? 'Enviando…' : 'Guardando…')
-              : (modoPropuesta && stockChanged ? 'Enviar a aprobación' : 'Guardar')}
+              : (modoPropuesta && stockChanged
+                ? 'Enviar a aprobación'
+                : (stockChanged && qtyValida
+                  ? `${modoEfectivo === 'fijar' ? 'Fijar' : 'Guardar'} total: ${qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })} ${esPT ? 'cub' : item.unidad}`
+                  : 'Guardar'))}
           </button>
         </div>
 
@@ -1010,13 +977,14 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
 }
 
 /* ── Tabla de inventario (escritorio) ── */
-function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir }) {
+function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir, onOcultar }) {
   /* La columna "Acción" solo se muestra si el rol tiene ALGUNA acción posible en
      esta tabla. Antes el header "Acción" se pintaba siempre y dejaba celdas vacías
      para roles sin acciones (p.ej. inventario/Burgos: sin editarInventario) → columna
      fantasma. Ahora: si no hay acción, no se pinta la columna.
-     onTransferir (envases en sub-vista Fábrica): añade el botón "→ Terán" por fila. */
-  const showActionCol = canEdit || canContar || !!onTransferir || (tipo === 'mp' ? canDelete : canPedir);
+     onTransferir (envases en sub-vista Fábrica): añade el botón "→ Terán" por fila.
+     onOcultar (PT ocultos, jul 2026): menú ⋯ por fila PT con Ocultar/Mostrar (admin). */
+  const showActionCol = canEdit || canContar || !!onTransferir || !!onOcultar || (tipo === 'mp' ? canDelete : canPedir);
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -1045,6 +1013,13 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
               <tr key={nombre} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
                 <td style={S.td}>
                   <span style={{ fontWeight: 600 }}>{resaltar(nombre, query)}</span>
+                  {it.oculto && (
+                    <span style={{
+                      marginLeft: 8, fontSize: 10, fontWeight: 800, letterSpacing: 0.5,
+                      padding: '2px 7px', borderRadius: 10, verticalAlign: 'middle',
+                      background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)',
+                    }}>OCULTO</span>
+                  )}
                   {prov && <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· {prov}</span>}
                   {tipo === 'pt' && it.inv.sku && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline', fontFamily: 'var(--lp-font-mono)' }}>· {it.inv.sku}</span>
@@ -1107,6 +1082,16 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {tipo === 'mp' && canDelete && (
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
                       <MPActionsMenu mp={nombre} mpsDisponibles={mpsDisponibles} canEdit={canDelete} onAction={onAction} />
+                    </span>
+                  )}
+                  {/* PT ocultos (jul 2026): menú ⋯ con Ocultar/Mostrar (solo admin) */}
+                  {tipo === 'pt' && onOcultar && (
+                    <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
+                      <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
+                        label: it.oculto ? 'Mostrar' : 'Ocultar',
+                        color: it.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
+                        onClick: () => onOcultar(it),
+                      }]} />
                     </span>
                   )}
                 </td>
@@ -1204,7 +1189,7 @@ function VistaFiltrosSheet({ activeTab, activeFilter, onFilter, mpSubtab, onMpSu
   const row = { display: 'flex', gap: 8, flexWrap: 'wrap' };
   const FILTS = [['todos', 'Todos', null], ['sin', 'Crítico', 'var(--lp-danger-600)'], ['bajo', 'Bajo', 'var(--lp-warning-600)']];
   return (
-    <div style={S.sheetOverlay(false)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(false)}>
       <div style={S.sheet(false)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Vista y filtros</div>
         <div style={S.shS}>Ajusta qué ves del inventario.</div>
@@ -1252,7 +1237,7 @@ function VistaFiltrosSheet({ activeTab, activeFilter, onFilter, mpSubtab, onMpSu
 /* Hoja "Acciones" móvil (mockup .asheet, la abre el FAB) — acciones REALES */
 function AccionesSheet({ rows, importExportNode, onClose }) {
   return (
-    <div style={S.sheetOverlay(false)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(false)}>
       <div style={S.sheet(false)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Acciones</div>
         <div style={S.shS}>Operaciones sobre el inventario.</div>
@@ -1427,7 +1412,7 @@ function ImportPreviewModal({ data, onClose, onConfirmed, modoPropuesta = false 
   const td = { padding: '6px 8px', fontSize: 12, borderTop: '1px solid var(--lp-border-subtle)' };
 
   return (
-    <div style={ov} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={ov}>
       <div style={box} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 18px 10px' }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>Revisar importación · {esPT ? 'Producto terminado' : 'Materia prima'}</div>
@@ -1512,7 +1497,7 @@ function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
   const box = { background: 'var(--lp-bg-raised)', borderRadius: 'var(--lp-radius-lg)', border: '1px solid var(--lp-border-subtle)', width: '100%', maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' };
   const lbl = { fontSize: 10, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)', fontWeight: 600 };
   return (
-    <div style={ov} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={ov}>
       <div style={box} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '16px 18px 8px' }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>Ajustes por aprobar</div>
@@ -1572,7 +1557,9 @@ function AprobarAjustesModal({ pendientes, onClose, onResolved }) {
 }
 
 /* ================================================================ */
-export default function InventarioPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub /inventario
+   del admin (patrón AlmacenPage). Solo suprime su TopBar propio. */
+export default function InventarioPage({ embedded = false }) {
   const { user, can } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1597,9 +1584,9 @@ export default function InventarioPage() {
        envase → { tipo:'envase', catKey, subKey, nombre, unidad:'pz' }
        tapa   → { tipo:'tapa',   tapaKey, nombre, unidad:'pz' }
      La pantalla de OT (TransferenciasPage) lee este query y pre-abre el sheet
-     "Nueva OT" con esa línea. Mantenemos los modales instantáneos
-     (TransferirPTTeranModal / TransferirEnvaseTeranModal) montados pero el
-     flujo NORMAL del botón es la OT. */
+     "Nueva OT" con esa línea. (Limpieza 21-jul-2026: los modales instantáneos
+     TransferirPTTeranModal/TransferirEnvaseTeranModal se ELIMINARON — llevaban
+     semanas inalcanzables; el transfer directo del pool vive en el bot.) */
   const irASolicitudOT = useCallback((linea) => {
     navigate('/transferencias?nueva=' + encodeURIComponent(JSON.stringify(linea)));
   }, [navigate]);
@@ -1617,12 +1604,10 @@ export default function InventarioPage() {
   const [agregarMpUbic, setAgregarMpUbic] = useState(null);
   /* Sprint X: modal "Agregar PT a almacén" (fábrica = qty / Terán = pool manual). { ubicacion } */
   const [agregarPtUbic, setAgregarPtUbic] = useState(null);
-  /* Parte B (jun 2026): transferencia manual PT Fábrica→Terán. { producto } */
-  const [transferirPt, setTransferirPt] = useState(null);
   const [reenvasarTeran, setReenvasarTeran] = useState(null); /* { producto, scalar } */
-  /* Sprint Y2 (jun 2026): transferencia manual de ENVASE/TAPA Fábrica→Terán.
-     Guarda el item completo de envItems (trae item._env para el contrato del backend). */
-  const [transferirEnv, setTransferirEnv] = useState(null);
+  /* Cola de QRs de la tanda recién envasada en Terán (jul 2026): tras envasar,
+     se abre el print modal por cada sublote hijo creado — igual que Americano. */
+  const [printTeranQR, setPrintTeranQR] = useState([]);
   /* Entrada de envases (suma a stock): { ubic:'fabrica'|'teran' } o null. Fábrica =
      llegada de proveedor (Enrique); Terán = envases que llegan directo a Terán. */
   const [agregarEnv, setAgregarEnv] = useState(null);
@@ -1647,7 +1632,6 @@ export default function InventarioPage() {
   const [vSheetOpen, setVSheetOpen] = useState(false);
   const [aSheetOpen, setASheetOpen] = useState(false);
   const { query, debouncedQuery, setQuery } = useSearch(200);
-  const [showRecepcion, setShowRecepcion] = useState(false);
   const [showAltaMP, setShowAltaMP] = useState(false);
   const [showAgregarPT, setShowAgregarPT] = useState(false);
   const [showAgregarEnv, setShowAgregarEnv] = useState(false);
@@ -1684,6 +1668,9 @@ export default function InventarioPage() {
   const valuation = (valuationData && (valuationData.data || valuationData)) || null;
   /* W3: stock PT desglosado por ubicación física (desde trazabilidad) */
   const { data: ptUbiData, reload: reloadPtUbi } = useApiData(() => api.getPTPorUbicacion(), [], 15000);
+  /* Lotes por producto (jul 2026, pedido dueño: "mostrar el lote de cada color").
+     Se listan los lotes ACTIVOS (con stock) de cada PT bajo su nombre en la tarjeta. */
+  const { data: trazaData, reload: reloadTraza } = useApiData(() => api.getTrazabilidad(), null, 30000);
   /* Sprint X: stock MP desglosado por almacén (fábrica/Terán) — inv.mp[X].ubic */
   const { data: mpUbiData, reload: reloadMpUbi } = useApiData(() => api.getMPPorUbicacion(), [], 15000);
   /* Cola de aprobación de ajustes (propuestas pendientes). */
@@ -1693,11 +1680,58 @@ export default function InventarioPage() {
      "no aparece ni con stock ni sin stock"). Antes solo se mostraban los que ya
      tenían fila en inv.pt (producidos / dados de alta). */
   const { data: formSummaryData } = useApiData(() => api.getFormulasSummary(), null, 60000);
+  /* STK AMERICANO (jul 2026): inventario SEPARADO del PT nacional — totes de 1000 L
+     importados de EE.UU. Sub-pestaña para quienes gestionan almacén (admin/almacén/
+     inventario). Dato GLOBAL vía WS 'stk-americano'. Fetch condicional por rol. */
+  const canSeeStkAmericano = ['admin', 'almacen', 'inventario'].includes(user?.rol);
+  const { data: stkResp, reload: reloadStk } = useApiData(
+    () => (canSeeStkAmericano ? api.getStkAmericano('1') : Promise.resolve(null)),
+    [user?.rol], 12000
+  );
+  /* Almacén 2 (segundo patio): mismo modelo, datos separados. */
+  const { data: stkResp2, reload: reloadStk2 } = useApiData(
+    () => (canSeeStkAmericano ? api.getStkAmericano('2') : Promise.resolve(null)),
+    [user?.rol], 12000
+  );
   const ptCatalogo = useMemo(() => {
     const arr = formSummaryData?.data?.summary || formSummaryData?.summary || [];
     return Array.isArray(arr) ? arr.map(x => x && x.nombre).filter(Boolean) : [];
   }, [formSummaryData]);
   const pendientes = pendData?.pendientes || [];
+  /* Lotes ACTIVOS por producto (MAYÚSCULAS) Y POR UBICACIÓN (fabrica/teran).
+     El lote se muestra SOLO en las vistas Fábrica/Terán (donde el producto tiene
+     stock vivo), no en Total (pedido dueño jul 2026). Un lote cae en fabrica/teran
+     según la ubicación de sus sublotes; los header-only (sin sublote) usan su
+     estado (en_almacen/en_stock_teran… → Terán; envasado/producido → Fábrica). */
+  const lotesPorProductoUbic = useMemo(() => {
+    const arr = trazaData?.data || trazaData?.lotes || (Array.isArray(trazaData) ? trazaData : []);
+    /* AUDIT 15-jul-2026: buckets desde lib/estados (fuente única, anti-drift). */
+    const OCULTOS = new Set(ESTADO_LOTE_OCULTO_INVENTARIO);
+    const TERAN_EST = new Set(ESTADO_LOTE_UBICACION_TERAN);
+    const map = {};
+    const add = (prod, ubic, cod, estado) => {
+      map[prod] = map[prod] || { fabrica: [], teran: [] };
+      if (!map[prod][ubic].some(x => x.codigoLote === cod)) map[prod][ubic].push({ codigoLote: cod, estado });
+    };
+    (Array.isArray(arr) ? arr : []).forEach(l => {
+      if (!l || l.eliminado || l.esPrueba || l.cancelado) return;
+      if (OCULTOS.has(String(l.estado || '').toLowerCase())) return;
+      const prod = String(l.producto || '').trim().toUpperCase();
+      if (!prod) return;
+      const cod = l.codigoLote || l.id;
+      const subs = Array.isArray(l.sublotes) ? l.sublotes : [];
+      if (subs.length) {
+        subs.forEach(s => {
+          if (!s || s.esMerma || s.consumido || ['cancelado', 'tote_vaciado'].includes(s.estado)) return;
+          const ubic = (s.ub === 'teran' || TERAN_EST.has(String(s.estado || '').toLowerCase())) ? 'teran' : 'fabrica';
+          add(prod, ubic, cod, l.estado);
+        });
+      } else {
+        add(prod, TERAN_EST.has(String(l.estado || '').toLowerCase()) ? 'teran' : 'fabrica', cod, l.estado);
+      }
+    });
+    return map;
+  }, [trazaData]);
 
   /* FIX jun 2026 (K1): InventarioPage solo polleaba cada 8s. Cualquier
      movimiento (recepción MP, ajuste por conteo, descuento por producción)
@@ -1706,7 +1740,8 @@ export default function InventarioPage() {
     onInventario:   () => { reloadInv(); reloadPtUbi(); reloadMpUbi(); reloadPendientes(); },
     onEnvases:      () => reloadEnv(),
     onPrecios:      () => reloadInv(),
-    onTrazabilidad: () => reloadPtUbi(), /* W3: sublotes mueven ubicación → refrescar tabla */
+    onTrazabilidad: () => { reloadPtUbi(); reloadTraza(); }, /* W3: sublotes mueven ubicación + lotes por producto */
+    onStkAmericano: () => { reloadStk(); reloadStk2(); }, /* jul 2026: stock americano (2 almacenes) */
   });
 
   const inventory = invData?.data || {};
@@ -1768,8 +1803,13 @@ export default function InventarioPage() {
     if (!hideMP) t.push({ id: 'mp', label: 'Materia Prima' });
     if (!hidePT) t.push({ id: 'pt', label: 'Producto Terminado' });
     t.push({ id: 'env', label: 'Envases' });
+    /* STK AMERICANO: sub-pestañas (totes de EE.UU.), separado del PT nacional.
+       Decisión dueño 16-jul: el americano vive AQUÍ (no en pestañas del menú);
+       nombres reales de las bodegas: 1 = Terán, 2 = Almacén 2. */
+    if (canSeeStkAmericano) t.push({ id: 'stkAmericano', label: 'Americano Terán' });
+    if (canSeeStkAmericano) t.push({ id: 'stkAmericano2', label: 'Americano Alm. 2' });
     return t;
-  }, [hideMP, hidePT]);
+  }, [hideMP, hidePT, canSeeStkAmericano]);
 
   /* Sync tab from URL params */
   useEffect(() => {
@@ -1812,6 +1852,25 @@ export default function InventarioPage() {
     return items;
   }, [activeTab, inventory.mp, maestro]);
 
+  /* PT ocultos (jul 2026): descontinuados fuera de la lista (su stock sigue
+     contando en valuación/reportes). Admin: menú ⋯ por fila → Ocultar/Mostrar,
+     y botón "Mostrar ocultos" para verlos con badge. */
+  const [ptOcultos, setPtOcultos] = useState({});
+  const [verOcultosPT, setVerOcultosPT] = useState(false);
+  useEffect(() => {
+    if (activeTab !== 'pt') return;
+    api.getPTOcultos?.().then(r => setPtOcultos(r?.data?.ocultos || r?.ocultos || {})).catch(() => {});
+  }, [activeTab]);
+  const handleOcultarPT = useCallback(async (item) => {
+    const nombre = item.nombre;
+    const nuevo = !ptOcultos[nombre];
+    try {
+      const r = await api.setPTOculto(nombre, nuevo);
+      setPtOcultos(r?.ocultos || (() => { const cp = { ...ptOcultos }; if (nuevo) cp[nombre] = true; else delete cp[nombre]; return cp; })());
+    } catch (e) { alert('Error: ' + (e.message || 'no se pudo cambiar')); }
+  }, [ptOcultos]);
+  const numOcultosPT = Object.keys(ptOcultos).length;
+
   /* ── Build PT items ── */
   const ptItems = useMemo(() => {
     if (activeTab !== 'pt') return [];
@@ -1819,7 +1878,8 @@ export default function InventarioPage() {
     /* UNIÓN: los productos con fila en inv.pt + TODOS los del catálogo de
        fórmulas. Los que no tienen fila se muestran a 0 (qty 0, sin mínimo). Así
        cada producto aparece aunque nunca se haya producido/dado de alta. */
-    const nombres = Array.from(new Set([...Object.keys(ptInv), ...ptCatalogo]));
+    const nombres = Array.from(new Set([...Object.keys(ptInv), ...ptCatalogo]))
+      .filter(n => verOcultosPT || !ptOcultos[n]);
     return nombres
       .map((nombre) => {
         const inv = ptInv[nombre] || { qty: 0, min: 0 };
@@ -1832,10 +1892,10 @@ export default function InventarioPage() {
         /* OT (jun 2026): expone `transito` al nivel del item (igual que envItems)
            para que PTRow/InvTable pinten el badge "en tránsito: N". El inv.pt del
            backend OT lleva { qty, transito, teran, min }. */
-        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty };
+        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty, oculto: !!ptOcultos[nombre] };
       })
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [activeTab, inventory.pt, ptCatalogo]);
+  }, [activeTab, inventory.pt, ptCatalogo, ptOcultos, verOcultosPT]);
 
   /* ── Filter by KPI click ── */
   const filterFn = useCallback((items, getQty, getPct) => {
@@ -2089,9 +2149,23 @@ export default function InventarioPage() {
   const handleAdjustEnv = useCallback((item) => {
     /* La sub-vista activa decide a qué ubicación escribe el ajuste: en "Terán"
        fija `teran`; en Fábrica/Total fija `stock` (Fábrica). Antes SIEMPRE escribía
-       Fábrica aunque estuvieras viendo Terán (confuso). */
+       Fábrica aunque estuvieras viendo Terán (confuso).
+
+       FIX ago-2026: en la sub-vista "Total" el renglón muestra la SUMA
+       (Fábrica + Terán + tránsito) pero el ajuste escribe SOLO Fábrica. El sheet
+       recibía esa suma como "existencia actual", así que se veía p.ej. 2,840
+       (todos en Terán) mientras el guardado iba a Fábrica, que tenía 0 — y
+       teclear "1000" no dejaba el total en 1000 sino que INFLABA el inventario.
+       Ahora el sheet recibe la cantidad de la ubicación DESTINO y la nombra en
+       el subtítulo: lo que ves es lo que editas. */
     const ubic = envSubtab === 'teran' ? 'teran' : 'fabrica';
-    setAjusteItem({ tipo: 'env', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: item.unidad || 'pz', _env: { ...item._env, ubic } });
+    const qtyDestino = ubic === 'teran' ? (item._env?.teran || 0) : (item._env?.fabrica || 0);
+    setAjusteItem({
+      tipo: 'env', nombre: item.nombre, qty: qtyDestino, min: item.inv.min || 0,
+      unidad: item.unidad || 'pz',
+      ubicLabel: ubic === 'teran' ? 'Terán' : 'Fábrica',
+      _env: { ...item._env, ubic },
+    });
   }, [envSubtab]);
   const handleSaveEnv = useCallback(async (ref, qty, min) => {
     try {
@@ -2196,7 +2270,7 @@ export default function InventarioPage() {
   if (invLoading) {
     return (
       <>
-        <TopBar title="Inventarios" />
+        {!embedded && <TopBar title="Inventarios" />}
         <div style={S.spinner}><div className="lp-spinner" /></div>
       </>
     );
@@ -2204,7 +2278,7 @@ export default function InventarioPage() {
 
   return (
     <>
-      <TopBar title="Inventarios" />
+      {!embedded && <TopBar title="Inventarios" />}
       <div style={S.wrap}>
         <div style={S.h1}>Inventario</div>
         <div style={S.psub}>Materia prima y producto terminado</div>
@@ -2231,7 +2305,7 @@ export default function InventarioPage() {
         {/* Toolbar (mockup): fila buscador prominente + fila segmented MP/PT con
             chips de severidad a la derecha. En móvil se apilan igual que el mockup. */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
-          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }) }}>
+          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }), ...(activeTab === 'stkAmericano' || activeTab === 'stkAmericano2' ? { display: 'none' } : {}) }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query}
               onChange={e => setQuery(e.target.value)}
@@ -2246,7 +2320,7 @@ export default function InventarioPage() {
             <div style={S.segWrap}>
               {tabs.map(t => (
                 <button key={t.id} type="button" data-id={`inventario.tab.${t.id}`} style={S.segBtn(activeTab === t.id)} onClick={() => handleTabChange(t.id)}>
-                  {t.id === 'mp' ? 'MP' : t.id === 'pt' ? 'PT' : 'Envases'}
+                  {t.id === 'mp' ? 'MP' : t.id === 'pt' ? 'PT' : t.id === 'env' ? 'Envases' : t.label}
                 </button>
               ))}
             </div>
@@ -2257,7 +2331,7 @@ export default function InventarioPage() {
                 <FilterChips activeFilter={activeFilter} onPick={handleKpiClick} />
               </div>
             )}
-            {!isDesktop && (
+            {!isDesktop && activeTab !== 'stkAmericano' && activeTab !== 'stkAmericano2' && (
               <div style={{ marginLeft: 'auto' }}>
                 <MFiltBtn
                   active={activeFilter !== 'todos' || (activeTab === 'mp' && mpSubtab !== 'stock') || (activeTab === 'pt' && ptSubtab !== 'total')}
@@ -2361,8 +2435,11 @@ export default function InventarioPage() {
               {mpSubtab === 'stock' && (
                 <div style={S.actionsCluster(isDesktop)}>
                   {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
-                  {canRecibirMP && isDesktop && (
-                    <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,compras,admin,tecnico" onClick={() => setShowRecepcion(true)}>+ Recepción MP</button>
+                  {/* P1 (20-jul-2026): la entrada de MP vive en /ingresos (foto de
+                      factura) o en Compras > Recibir OC. compras no tiene /ingresos:
+                      su puerta es la OC, así que no ve este botón. */}
+                  {canRecibirMP && user?.rol !== 'compras' && isDesktop && (
+                    <button style={S.btnAdd} data-id="inventario.btn.recepcion-mp" data-rol="almacen,admin,tecnico" onClick={() => navigate('/ingresos')}>+ Ingreso de proveedor</button>
                   )}
                   {canAltaMP && isDesktop && (
                     <button style={S.btnAdd} data-id="inventario.btn.alta-mp" data-rol="tecnico,admin,compras,inventario" onClick={() => setShowAltaMP(true)}>+ Dar de alta MP</button>
@@ -2399,7 +2476,7 @@ export default function InventarioPage() {
                 onQuery={setQuery}
                 canEdit={canEditMP}
                 onAgregar={() => setAgregarMpUbic({ ubicacion: mpSubtab })}
-                onFijar={(mp, nuevoQty) => handleSaveMPUbic(mp, mpSubtab, nuevoQty, 'fijar', `Conteo físico ${mpSubtab}`)}
+                onFijar={(mp, nuevoQty, nota) => handleSaveMPUbic(mp, mpSubtab, nuevoQty, 'fijar', nota ? `${nota} · ${mpSubtab}` : `Conteo físico ${mpSubtab}`)}
               />
             )}
             {mpSubtab === 'stock' && (
@@ -2488,15 +2565,32 @@ export default function InventarioPage() {
                 </div>
               ) : (
                 <>
-                  <div style={S.countLbl}>{filteredPT.length} de {ptItems.length} productos terminados</div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <div style={S.countLbl}>{filteredPT.length} de {ptItems.length} productos terminados</div>
+                    {/* PT ocultos (jul 2026): alternar visibilidad de descontinuados (solo admin) */}
+                    {user?.rol === 'admin' && numOcultosPT > 0 && (
+                      <button type="button" data-id="inventario.btn.ver-ocultos-pt" data-rol="admin"
+                        onClick={() => setVerOcultosPT(v => !v)}
+                        style={{
+                          ...S.btnGhost, marginBottom: 8,
+                          color: verOcultosPT ? 'var(--lp-warning-700)' : 'var(--lp-text-secondary)',
+                          borderColor: verOcultosPT ? 'var(--lp-warning-700)' : 'var(--lp-border-subtle)',
+                          background: verOcultosPT ? 'var(--lp-warning-100)' : 'transparent',
+                        }}>
+                        {verOcultosPT ? 'Ocultar de nuevo' : `Mostrar ocultos (${numOcultosPT})`}
+                      </button>
+                    )}
+                  </div>
                   {isDesktop ? (
                     <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
                       canContar={canContar} onContar={handleContar}
+                      onOcultar={user?.rol === 'admin' ? handleOcultarPT : null}
                       onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
                   ) : (
                     <div>
                       {filteredPT.map(item => (
-                        <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery} />
+                        <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery}
+                          onOcultar={user?.rol === 'admin' ? handleOcultarPT : null} />
                       ))}
                     </div>
                   )}
@@ -2509,6 +2603,9 @@ export default function InventarioPage() {
               <PTUbicacionView
                 ubicacion={ptSubtab}
                 data={ptUbiData?.data || ptUbiData}
+                lotes={lotesPorProductoUbic}
+                invPT={inventory?.pt || {}}
+                esAdmin={esAdmin}
                 query={query}
                 onQuery={setQuery}
                 canPedir={canPedirPT}
@@ -2517,7 +2614,7 @@ export default function InventarioPage() {
                 onAgregar={(ubic) => setAgregarPtUbic({ ubicacion: ubic })}
                 onEliminarTeran={handleEliminarPTTeran}
                 onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : undefined}
-                onReenvasar={canReenvasar ? (producto, scalar) => setReenvasarTeran({ producto, scalar }) : undefined}
+                onReenvasar={canReenvasar ? (producto, scalar, totes) => setReenvasarTeran({ producto, scalar, totes }) : undefined}
               />
             )}
           </>
@@ -2599,6 +2696,30 @@ export default function InventarioPage() {
             ))}
           </>
         )}
+
+        {/* ════════ TAB: STK AMERICANO (PT importado de EE.UU., totes de 1000 L) ════════ */}
+        {activeTab === 'stkAmericano' && (
+          <StkAmericanoView
+            data={stkResp?.data || null}
+            loading={!stkResp}
+            reload={reloadStk}
+            canEdit={rol === 'admin' || rol === 'almacen'}
+            canDelete={rol === 'admin'}
+            almacen="1"
+            embedded
+          />
+        )}
+        {activeTab === 'stkAmericano2' && (
+          <StkAmericanoView
+            data={stkResp2?.data || null}
+            loading={!stkResp2}
+            reload={reloadStk2}
+            canEdit={rol === 'admin' || rol === 'almacen'}
+            canDelete={rol === 'admin'}
+            almacen="2"
+            embedded
+          />
+        )}
       </div>
 
       {/* Modal de confirmación con PIN (override candado de ajuste) */}
@@ -2630,19 +2751,8 @@ export default function InventarioPage() {
         />
       )}
 
-      {/* ── Recepción MP Modal ── */}
-      {showRecepcion && (
-        <RecepcionModal
-          mpList={mpItems.map(it => it.mp)}
-          onClose={() => setShowRecepcion(false)}
-          onSuccess={(msg) => {
-            setShowRecepcion(false);
-            setToastMsg(msg);
-            reloadInv();
-            setTimeout(() => setToastMsg(''), 4000);
-          }}
-        />
-      )}
+      {/* ── Recepción MP Modal: ELIMINADO (P1 20-jul-2026) — la entrada de MP
+          es Compras > Recibir OC o /ingresos (foto de factura). ── */}
 
       {/* ── Dar de alta MP Modal ── */}
       {showAltaMP && (
@@ -2689,53 +2799,48 @@ export default function InventarioPage() {
         />
       )}
 
-      {/* ── Parte B: Transferir PT Fábrica → Terán (Josué) ── */}
-      {transferirPt && (
-        <TransferirPTTeranModal
-          producto={transferirPt.producto}
-          isDesktop={isDesktop}
-          onClose={() => setTransferirPt(null)}
-          onDone={(r) => {
-            setTransferirPt(null);
-            setToastMsg(`${r.producto}: ${r.transferido} cub → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
-            reloadInv();
-            reloadPtUbi();
-            setTimeout(() => setToastMsg(''), 4500);
-          }}
-        />
-      )}
+      {/* ── Transferir PT/Envase a Terán: los modales instantáneos se ELIMINARON
+          (limpieza 21-jul-2026, llevaban semanas inalcanzables) — los botones
+          "→ Terán" navegan al flujo OT (irASolicitudOT); el transfer directo
+          del pool vive solo en el AsistenteFlotante (decisión del dueño). ── */}
 
       {/* ── Reenvasar PT en Terán (tote/granel → cubetas/galones) ── */}
       {reenvasarTeran && (
         <ReenvasarTeranModal
           producto={reenvasarTeran.producto}
           scalar={reenvasarTeran.scalar}
+          totes={reenvasarTeran.totes}
           envData={envData?.data || envData}
           isDesktop={isDesktop}
           onClose={() => setReenvasarTeran(null)}
           onDone={(r) => {
             setReenvasarTeran(null);
-            setToastMsg(`${r.producto} reenvasado en Terán`);
+            setToastMsg(`${r.producto} envasado en Terán`);
             reloadInv();
             reloadPtUbi();
             reloadEnv();
             setTimeout(() => setToastMsg(''), 4500);
+            /* Imprimir QR de la tanda (igual que Americano): un print modal por
+               cada sublote hijo que el backend creó en trazabilidad (FEFO). */
+            const hijos = (r && r.espejo && Array.isArray(r.espejo.hijos)) ? r.espejo.hijos : [];
+            if (hijos.length) {
+              setPrintTeranQR(hijos.map(h => ({
+                /* env: null → el modal usa `tipo` como presentación (label bonita) */
+                sublotes: [{ cod: h.cod, qrPayload: h.qrPayload, qty: h.qty, env: null, marca: null }],
+                lote: { producto: h.producto || r.producto, codigoLote: h.codigoLote },
+                isTote: false, q: h.qty, tipo: (REENV_TIPO_LBL[h.tipo] || h.tipo), desdeTote: h.fromTote,
+              })));
+            }
           }}
         />
       )}
 
-      {/* ── Sprint Y2: Transferir Envase/Tapa Fábrica → Terán (Josué) ── */}
-      {transferirEnv && (
-        <TransferirEnvaseTeranModal
-          item={transferirEnv}
-          isDesktop={isDesktop}
-          onClose={() => setTransferirEnv(null)}
-          onDone={(r) => {
-            setTransferirEnv(null);
-            setToastMsg(`${r.item}: ${r.transferido} ${r.unidad || 'pz'} → Terán (Fábrica ${r.fabrica} · Terán ${r.teran})`);
-            reloadEnv();
-            setTimeout(() => setToastMsg(''), 4500);
-          }}
+      {/* QR del sublote recién envasado en Terán — imprimir y pegar al envase.
+          Cola: si el FEFO cruzó varios lotes, se imprime uno por uno. */}
+      {printTeranQR.length > 0 && (
+        <SubloteQRPrintModal
+          payload={printTeranQR[0]}
+          onClose={() => setPrintTeranQR(q => q.slice(1))}
         />
       )}
 
@@ -2770,10 +2875,10 @@ export default function InventarioPage() {
         <AccionesSheet
           onClose={() => setASheetOpen(false)}
           rows={[
-            ...(activeTab === 'mp' && canRecibirMP ? [{
-              key: 'recepcion', label: 'Recepción MP', desc: 'Captura entrada de materia prima',
-              dataId: 'inventario.btn.recepcion-mp', dataRol: 'almacen,compras,admin,tecnico',
-              onClick: () => setShowRecepcion(true),
+            ...(activeTab === 'mp' && canRecibirMP && user?.rol !== 'compras' ? [{
+              key: 'recepcion', label: 'Ingreso de proveedor', desc: 'Registra la llegada con foto de factura',
+              dataId: 'inventario.btn.recepcion-mp', dataRol: 'almacen,admin,tecnico',
+              onClick: () => navigate('/ingresos'),
               icon: <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><path d="M3.27 6.96 12 12.01l8.73-5.05" /></svg>,
             }] : []),
             ...(activeTab === 'mp' && canAltaMP ? [{
@@ -2892,89 +2997,9 @@ export default function InventarioPage() {
    Datos vienen de /api/inventario/pt-por-ubicacion calculado server-side
    desde trazabilidad.json (fuente de verdad para ubicación física).
    ═══════════════════════════════════════════════════════════════════ */
-/* Parte B (jun 2026, pedido dueño): modal de transferencia PT Fábrica→Terán.
-   Mueve cubetas de inv.pt[X].qty a inv.pt[X].teran (no cambia el total). */
-function TransferirPTTeranModal({ producto, isDesktop, onClose, onDone }) {
-  const [cant, setCant] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-  const inputRef = useRef(null);
-  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 120); return () => clearTimeout(t); }, []);
-  const n = parseInt(cant, 10);
-  const valido = !isNaN(n) && n > 0;
-  const submit = async () => {
-    if (!valido || saving) return;
-    setSaving(true); setErr('');
-    try { const r = await api.transferirPTaTeran(producto, n); onDone(r); }
-    catch (e) { setErr(e?.data?.error || e.message || 'No se pudo transferir'); setSaving(false); }
-  };
-  return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
-        <div style={S.shH}>Transferir a Terán</div>
-        <div style={S.shS}>{producto}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Mueve cubetas del stock de <strong>Fábrica</strong> al de <strong>Terán</strong>. No cambia el total — solo dónde está el producto.
-        </div>
-        <label style={S.flbl}>Cubetas a transferir</label>
-        <input ref={inputRef} style={S.finQty} type="number" inputMode="numeric" step="1" min="1"
-          value={cant} onChange={e => setCant(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
-        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
-        <div style={S.shActs}>
-          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
-            {saving ? 'Transfiriendo…' : 'Transferir a Terán'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* Sprint Y2 (jun 2026, pedido dueño): modal de transferencia de ENVASE/TAPA
-   Fábrica→Terán. ESPEJO de TransferirPTTeranModal: mueve N piezas de `stock`
-   (Fábrica) a `teran` (Terán) en envases.json — no cambia el total.
-   item._env = { tipo:'envase', catKey, subKey, fabrica, teran } | { tipo:'tapa', tapaKey, fabrica, teran }. */
-function TransferirEnvaseTeranModal({ item, isDesktop, onClose, onDone }) {
-  const [cant, setCant] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState('');
-  const inputRef = useRef(null);
-  useEffect(() => { const t = setTimeout(() => inputRef.current?.focus(), 120); return () => clearTimeout(t); }, []);
-  const disponible = Number(item?._env?.fabrica) || 0; /* lo que hay en Fábrica para mover */
-  const unidad = item?.unidad || 'pz';
-  const n = parseInt(cant, 10);
-  const valido = !isNaN(n) && n > 0 && n <= disponible;
-  const submit = async () => {
-    if (!valido || saving) return;
-    setSaving(true); setErr('');
-    try { const r = await api.transferirEnvaseATeran(item._env, n); onDone(r); }
-    catch (e) { setErr(e?.data?.error || e.message || 'No se pudo transferir'); setSaving(false); }
-  };
-  return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
-        <div style={S.shH}>Transferir a Terán</div>
-        <div style={S.shS}>{item?.nombre}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Mueve piezas del stock de <strong>Fábrica</strong> al de <strong>Terán</strong>. No cambia el total — solo dónde están los envases. Disponible en Fábrica: <strong>{disponible.toLocaleString('es-MX')} {unidad}</strong>.
-        </div>
-        <label style={S.flbl}>Piezas a transferir</label>
-        <input ref={inputRef} style={S.finQty} type="number" inputMode="numeric" step="1" min="1" max={disponible}
-          value={cant} onChange={e => setCant(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
-        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
-        <div style={S.shActs}>
-          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
-            {saving ? 'Transfiriendo…' : 'Transferir a Terán'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+/* (Limpieza 21-jul-2026: TransferirPTTeranModal y TransferirEnvaseTeranModal
+   ELIMINADOS — inalcanzables desde jun-2026; el botón "→ Terán" navega a la OT
+   y el transfer directo del pool vive solo en el AsistenteFlotante.) */
 
 /* Entrada de envases/tapas (SUMA al stock de Fábrica o Terán). Fábrica = llegada
    de proveedor (Enrique/técnico); Terán = envases que llegan directo a Terán.
@@ -3015,7 +3040,7 @@ function EntradaEnvaseModal({ ubic, envData, isDesktop, onClose, onDone }) {
   };
   const selStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)' };
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
         <div style={S.shH}>Agregar a {lugar}</div>
         <div style={S.shS}>{esTeran ? 'Envases/tapas que llegaron directo a Terán' : 'Entrada de envases/tapas (llegada de proveedor)'}</div>
@@ -3052,9 +3077,24 @@ const reenvCubEq = (p, n) => p === 'granel' ? (Number(n) || 0) : (REENV_ML[p] ? 
 const REENV_TIPO_LBL = { tote: 'Tote', cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador', granel: 'Granel' };
 const REENV_TIPO_CAT = { cubeta: 'cubeta', galon: 'galon', litro: 'litro', atomizador750: 'otros' };
 
-function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, onDone }) {
-  const origenes = Object.entries(scalar || {}).filter(([p, n]) => reenvCubEq(p, n) > 0.001).map(([p]) => p);
-  const [origen, setOrigen] = useState(origenes[0] || 'tote');
+function ReenvasarTeranModal({ producto, scalar, totes, envData, isDesktop, onClose, onDone }) {
+  /* TOTES FÍSICOS (ago 2026, reporte dueño): el origen "tote" sale de los totes
+     reales del espejo (tote_activo + litrosRestante) — un tote a medias SIGUE
+     siendo tote elegible hasta vaciarse (paridad Americano). El contador del
+     pool (teranPres.tote) ya no decide las opciones; el pool solo pone el tope
+     contable. Sin totes físicos → comportamiento previo (granel/presentaciones). */
+  const totesFisicos = ((totes && totes.detalle) || []).filter(t => (Number(t.litrosRestante) || 0) > 0.01);
+  const hayTotes = totesFisicos.length > 0;
+  const fmtL = (x) => (Math.round((Number(x) || 0) * 10) / 10).toLocaleString('es-MX');
+  const origenes = Object.entries(scalar || {})
+    .filter(([p, n]) => reenvCubEq(p, n) > 0.001 && (!hayTotes || (p !== 'tote' && p !== 'granel')))
+    .map(([p]) => p);
+  /* Valor del select: 'tote::<cod>' = tote físico; si no, presentación del pool. */
+  const [origenSel, setOrigenSel] = useState(hayTotes ? 'tote::' + totesFisicos[0].cod : (origenes[0] || 'tote'));
+  const toteSel = origenSel.startsWith('tote::')
+    ? (totesFisicos.find(t => 'tote::' + t.cod === origenSel) || null)
+    : null;
+  const origen = toteSel ? 'tote' : origenSel;
   const destinoOpts = ['cubeta', 'galon', 'litro', 'atomizador750'].filter(t => t !== origen);
   const [destinoTipo, setDestinoTipo] = useState(destinoOpts[0] || 'cubeta');
   const [qty, setQty] = useState('');
@@ -3062,6 +3102,9 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   const [tapaKey, setTapaKey] = useState('');
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
+  /* Vaciador responsable (jul 2026) — mismo desplegable que en los sheets de
+     Stock Fábrica; el nombre se espeja a los sublotes hijos. */
+  const { vaciadores, envasadorId, elegir: elegirVaciador, camposSublote } = useVaciadores();
 
   const cats = envData?.categorias || {};
   const tapas = envData?.tapas || {};
@@ -3071,17 +3114,53 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   const tapaList = Object.entries(tapas);
 
   const n = parseInt(qty, 10);
+  /* Tope contable = POOL (lo que el backend valida). El tote elegido es la pieza
+     física: si la tanda lo excede, el resto sale FEFO del siguiente (así se
+     rellena la última cubeta en la vida real) — se avisa, no se bloquea. */
   const dispCub = reenvCubEq(origen, scalar?.[origen] || 0) + (origen !== 'granel' ? (Number(scalar?.granel) || 0) : 0);
   const producedCub = !isNaN(n) && n > 0 ? reenvCubEq(destinoTipo, n) : 0;
   const valido = !isNaN(n) && n > 0 && producedCub <= dispCub + 0.01;
   const restante = Math.max(0, dispCub - producedCub);
+  const toteLitros = toteSel ? (Number(toteSel.litrosRestante) || 0) : 0;
+  const excedeTote = !!toteSel && valido && producedCub * 19 > toteLitros + 0.5;
+
+  /* Tope + cuello de botella (diseño único jul 2026): cuántas caben por
+     material disponible, por envases y por tapas — el menor manda y se dice
+     cuál es. Antes solo fallaba al guardar. */
+  const subSelTeran = subs.find(([sk]) => sk === subKey);
+  const tapaSelTeran = tapaList.find(([tk]) => tk === tapaKey);
+  /* DISEÑO ÚNICO (ago 2026): la tapa se SUGIERE por la marca del envase elegido
+     —igual que en "Envasar lote" y en el re-envase de Stock Fábrica— pero queda
+     visible y editable. Antes arrancaba vacía y "— sin tapa —" era el default,
+     así que la tapa física salía del almacén sin descontarse. */
+  const marcaEnvSel = subSelTeran ? (subSelTeran[1].marca || null) : null;
+  useEffect(() => {
+    if (!usaTapa || tapaKey || !marcaEnvSel) return;
+    const sug = envData?.tapa_default?.[marcaEnvSel];
+    if (sug && tapas[sug]) setTapaKey(sug);
+  }, [usaTapa, tapaKey, marcaEnvSel, envData, tapas]);
+  const cubEqUnidad = reenvCubEq(destinoTipo, 1) || 1;
+  const limitesTeran = [
+    { n: Math.floor(dispCub / cubEqUnidad), motivo: 'la pintura disponible' },
+    ...(subSelTeran ? [{ n: Math.round(Number(subSelTeran[1].teran) || 0), motivo: 'los envases en Terán' }] : []),
+    ...(usaTapa && tapaSelTeran ? [{ n: Math.round(Number(tapaSelTeran[1].teran) || 0), motivo: 'las tapas en Terán' }] : []),
+  ];
+  const maxUnidTeran = Math.max(0, Math.min(...limitesTeran.map(l => l.n)));
 
   const submit = async () => {
     if (!valido || saving) return;
+    /* El envase es OBLIGATORIO: sin `subKey` el backend no descuenta el envase
+       físico (mismo guard que el re-envase de Stock Fábrica). El servidor
+       también lo rechaza — esto solo evita el viaje. */
+    if (!subKey) return setErr('Elige el envase que estás usando — su stock se descuenta de Terán');
+    if (n > Math.round(Number(subSelTeran?.[1]?.teran) || 0)) {
+      return setErr(`Stock insuficiente de "${subSelTeran?.[1]?.nombre || subKey}" en Terán: hay ${Math.round(Number(subSelTeran?.[1]?.teran) || 0)}, necesitas ${n}`);
+    }
     setSaving(true); setErr('');
     try {
-      const destinos = [{ tipo: destinoTipo, qty: n, subKey: subKey || null, tapaKey: usaTapa ? (tapaKey || null) : null }];
-      const r = await api.reenvasarPTTeran(producto, origen, destinos);
+      const destinos = [{ tipo: destinoTipo, qty: n, subKey, tapaKey: usaTapa ? (tapaKey || null) : null }];
+      const r = await api.reenvasarPTTeran(producto, origen, destinos, null,
+        { ...(camposSublote || {}), ...(toteSel ? { toteCod: toteSel.cod } : {}) });
       onDone(r);
     } catch (e) { setErr(e?.data?.error || e.message || 'No se pudo reenvasar'); setSaving(false); }
   };
@@ -3089,60 +3168,95 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   const selStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)' };
 
   return (
-    <div style={S.sheetOverlay(isDesktop)} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.sheetOverlay(isDesktop)}>
       <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
-        <div style={S.shH}>Reenvasar en Terán</div>
+        <div style={S.shH}>Envasar en Terán</div>
         <div style={S.shS}>{producto}</div>
         <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
-          Convierte un <strong>tote</strong> (o granel) en cubetas/galones. No cambia el total de pintura — solo su forma. Consume envases vacíos del stock de <strong>Terán</strong>; lo que sobra de un tote abierto queda <strong>a granel</strong>.
+          Convierte un <strong>tote</strong> (o granel) en cubetas/galones. No cambia el total de pintura — solo su forma. Consume envases vacíos del stock de <strong>Terán</strong>. El tote elegido queda <strong>a medias con sus litros restantes</strong> y sigue apareciendo aquí hasta vaciarse. Al terminar se abre la <strong>etiqueta QR</strong> de la tanda para imprimir.
         </div>
 
-        <label style={S.flbl}>Origen</label>
-        <select style={selStyle} value={origen} onChange={e => setOrigen(e.target.value)}>
+        <label style={S.flbl}>{hayTotes ? 'De qué tote' : 'Origen'}</label>
+        <select style={selStyle} value={origenSel} onChange={e => setOrigenSel(e.target.value)} data-id="inventario.sel.origen">
+          {totesFisicos.map(t => (
+            <option key={t.cod} value={'tote::' + t.cod}>
+              Tote {t.cod} · {fmtL(t.litrosRestante)} L disp.{(Number(t.litrosRestante) || 0) < 982 ? ' (a medias)' : ''}
+            </option>
+          ))}
           {origenes.map(p => (
             <option key={p} value={p}>{REENV_TIPO_LBL[p] || p} — {p === 'granel' ? `${Math.round(scalar[p])} cub` : `${scalar[p]} (${Math.round(reenvCubEq(p, scalar[p]))} cub)`} disp.</option>
           ))}
         </select>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 92px', gap: 10, marginTop: 12 }}>
-          <div>
-            <label style={S.flbl}>Convertir a</label>
-            <select style={selStyle} value={destinoTipo} onChange={e => { setDestinoTipo(e.target.value); setSubKey(''); setTapaKey(''); }}>
-              {destinoOpts.map(t => <option key={t} value={t}>{REENV_TIPO_LBL[t]}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={S.flbl}>Cantidad</label>
-            <input style={S.finQty} type="number" inputMode="numeric" min="1" step="1" value={qty} onChange={e => setQty(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') submit(); }} />
-          </div>
-        </div>
+        {/* DISEÑO ÚNICO (jul 2026): mismo orden y mismos controles que las otras
+            3 pantallas de envasado — components/envasado/EnvasarUI. */}
+        <Sec>En qué se envasa</Sec>
+        <PresPills
+          opciones={destinoOpts.map(t => ({
+            id: t, nombre: REENV_TIPO_LBL[t],
+            sub: REENV_ML[t] ? (REENV_ML[t] / 1000) + ' L' : null,
+          }))}
+          valor={destinoTipo}
+          onChange={(v) => { setDestinoTipo(v); setSubKey(''); setTapaKey(''); }}
+          dataId="inventario.pres"
+        />
 
-        <label style={{ ...S.flbl, marginTop: 12 }}>Envase a usar (de Terán)</label>
-        <select style={selStyle} value={subKey} onChange={e => setSubKey(e.target.value)}>
-          <option value="">— sin descontar envase —</option>
-          {subs.map(([sk, sub]) => <option key={sk} value={sk}>{sub.nombre} (Terán: {Math.round(Number(sub.teran) || 0)})</option>)}
-        </select>
-        {usaTapa && (
-          <>
-            <label style={{ ...S.flbl, marginTop: 12 }}>Tapa (de Terán)</label>
-            <select style={selStyle} value={tapaKey} onChange={e => setTapaKey(e.target.value)}>
-              <option value="">— sin tapa —</option>
-              {tapaList.map(([tk, t]) => <option key={tk} value={tk}>{t.nombre} (Terán: {Math.round(Number(t.teran) || 0)})</option>)}
-            </select>
-          </>
+        <EnvaseSelect
+          etiqueta="Envase (stock de Terán)"
+          opciones={subs.map(([sk, sub]) => ({
+            value: sk,
+            disabled: (Number(sub.teran) || 0) <= 0,
+            label: `${sub.nombre} · ${Math.round(Number(sub.teran) || 0) <= 0 ? 'sin stock' : `${Math.round(Number(sub.teran) || 0)} en Terán`}`,
+          }))}
+          valor={subKey}
+          onChange={setSubKey}
+          vacio="— elige el envase —"
+          dataId="inventario.sel.envase"
+        />
+        {!subKey && (
+          <div style={{ marginTop: -4, marginBottom: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+            Obligatorio: su stock se descuenta del pool de Terán.
+          </div>
         )}
 
+        {usaTapa && (
+          <TapaSelect
+            opciones={tapaList.map(([tk, t]) => ({
+              value: tk, color: t.color || undefined,
+              disabled: (Number(t.teran) || 0) <= 0,
+              label: `${t.color_nombre || t.nombre} · ${Math.round(Number(t.teran) || 0) <= 0 ? 'sin stock' : `${Math.round(Number(t.teran) || 0)} en Terán`}`,
+            }))}
+            valor={tapaKey}
+            onChange={setTapaKey}
+            vacio="— sin tapa —"
+            dataId="inventario.sel.tapa"
+          />
+        )}
+
+        <QuienEnvaso vaciadores={vaciadores} valor={envasadorId} onChange={elegirVaciador}
+          dataId="inventario.sel.vaciador" />
+
+        <Sec>Cuántas {(REENV_TIPO_LBL[destinoTipo] || '').toLowerCase()}s</Sec>
+        <Contador valor={qty} onChange={(v) => setQty(String(v))} max={maxUnidTeran} min={0} dataId="inventario.qty" />
+        <TopeHint limites={limitesTeran} />
+
         <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6 }}>
-          Disponible en <strong>{REENV_TIPO_LBL[origen] || origen}</strong>: <strong>{Math.round(dispCub)} cub-equiv</strong><br />
+          {toteSel
+            ? <>Tote <strong>{toteSel.cod}</strong>: <strong>{fmtL(toteLitros)} L</strong> disponibles<br /></>
+            : <>Disponible en <strong>{REENV_TIPO_LBL[origen] || origen}</strong>: <strong>{Math.round(dispCub)} cub-equiv</strong><br /></>}
           Producirás: <strong>{n > 0 ? n : 0} {(REENV_TIPO_LBL[destinoTipo] || '').toLowerCase()}</strong> = {producedCub ? (producedCub < 10 ? producedCub.toFixed(2) : Math.round(producedCub)) : 0} cub-equiv<br />
-          {valido && <>Quedará a granel: <strong>~{Math.round(restante)} cub</strong></>}
+          {valido && (toteSel
+            ? (excedeTote
+              ? <>El tote elegido no alcanza: los <strong>{fmtL(producedCub * 19 - toteLitros)} L</strong> extra salen del siguiente tote (FEFO).</>
+              : <>Le quedarán al tote: <strong>~{fmtL(Math.max(0, toteLitros - producedCub * 19))} L</strong> (sigue como tote a medias)</>)
+            : <>Quedará a granel: <strong>~{Math.round(restante)} cub</strong></>)}
         </div>
 
         {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
         <div style={S.shActs}>
           <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button style={{ ...S.act2(true), opacity: valido && !saving ? 1 : 0.5 }} disabled={!valido || saving} onClick={submit}>
-            {saving ? 'Reenvasando…' : 'Reenvasar'}
+          <button style={{ ...S.act2(true), opacity: valido && subKey && !saving ? 1 : 0.5 }} disabled={!valido || !subKey || saving} onClick={submit}>
+            {saving ? 'Envasando…' : 'Envasar'}
           </button>
         </div>
       </div>
@@ -3150,7 +3264,149 @@ function ReenvasarTeranModal({ producto, scalar, envData, isDesktop, onClose, on
   );
 }
 
-function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar }) {
+/* ── Fase 3 (ago 2026, "se cuenta lo que se puede tocar") ────────────────────
+   Tarjeta de PIEZAS por producto para las vistas Fábrica/Terán de PT: cubetas/
+   galones como chips grandes, cada tote como renglón físico con su folio y una
+   barra de litros, y la contabilidad (lotes, granel cub-equiv, residual/manual)
+   plegada en "Ver detalle". El descuadre contable-vs-piezas solo lo ve admin. */
+function PTPiezasCard({ nombre, d, ubicacion, esFabrica, acentColor, lotes, invPT, esAdmin, canPedir, onPedir, onTransferir, puedeReenvasar, onReenvasar, canEdit, onEliminarTeran }) {
+  const [detalle, setDetalle] = useState(false);
+  const fmtN = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
+  const tf = d.totesFisicos;
+  const chips = [
+    { n: d.cubeta, sing: 'cubeta', plur: 'cubetas' },
+    { n: d.galon, sing: 'galón', plur: 'galones' },
+    { n: d.litro, sing: 'litro', plur: 'litros' },
+    { n: d.atm, sing: 'atomizador', plur: 'atomizadores' },
+    { n: d.otros, sing: 'otra pieza', plur: 'otras piezas' },
+    /* tote como chip SOLO si no hay detalle físico (p.ej. residual capturado en
+       medida tote, sin sublote) — con detalle, cada tote es su propio renglón. */
+    ...(!(tf && tf.total > 0) && (Number(d.tote) || 0) > 0 ? [{ n: d.tote, sing: 'tote', plur: 'totes' }] : []),
+  ].filter(c => (Number(c.n) || 0) > 0);
+  const eq = Number(esFabrica ? invPT?.[nombre]?.qty : invPT?.[nombre]?.teran);
+  const granelSinTote = !(tf && tf.parciales > 0) && (Number(d.granel) || 0) > 0.5;
+  const lotesUbic = lotes?.[nombre.toUpperCase()]?.[ubicacion] || [];
+  const manual = Number(d.manual) || 0;
+  const residual = Number(d.residual) || 0;
+  const sinPiezas = chips.length === 0 && !(tf && tf.total > 0) && !granelSinTote;
+
+  return (
+    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--lp-border-subtle)' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ flex: 1, minWidth: 170 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--lp-text-primary)' }}>{nombre}</div>
+          {Number.isFinite(eq) && (
+            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>≈ {fmtN(eq)} cubetas en total</div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {canPedir && (
+            <button onClick={() => onPedir(nombre)}
+              title={esFabrica ? 'Pedir producción para reponer en fábrica' : 'Pedir reposición a fábrica'}
+              style={{ ...S.btnGhost, minWidth: 92, color: acentColor, borderColor: `color-mix(in srgb, ${acentColor} 45%, transparent)` }}>Pedir</button>
+          )}
+          {/* Parte B (jun 2026): Josué transfiere PT de Fábrica → Terán (mueve inv.pt qty→teran). */}
+          {esFabrica && onTransferir && (
+            <button onClick={() => onTransferir(nombre)}
+              title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
+              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>→ Terán</button>
+          )}
+          {/* Envasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán)
+              + imprime el QR de la tanda (paridad Americano 1/2, jul 2026). */}
+          {puedeReenvasar && (
+            <button type="button" data-id="inventario.btn.reenvasar-teran" data-rol="admin,tecnico,almacen"
+              onClick={() => onReenvasar(nombre, d.teranPresScalar, d.totesFisicos)}
+              title="Envasar: convertir tote/granel en cubetas o galones (consume envases de Terán) e imprimir etiqueta QR"
+              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>Envasar</button>
+          )}
+        </div>
+      </div>
+
+      {chips.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+          {chips.map(c => (
+            <span key={c.plur} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, background: 'var(--lp-bg-sunken)', borderRadius: 10, padding: '7px 12px' }}>
+              <span style={{ fontFamily: 'var(--lp-font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: 17, fontWeight: 700, color: 'var(--lp-text-primary)' }}>{fmtN(c.n)}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{Number(c.n) === 1 ? c.sing : c.plur}</span>
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Cada tote físico: folio + barra de litros. Lo que Josué/Enrique pueden tocar. */}
+      {(tf?.detalle || []).map(t => {
+        const rest = Number(t.litrosRestante) || 0;
+        const lleno = rest >= 982;
+        const pct = Math.min(100, Math.round((rest / 988) * 100));
+        return (
+          <div key={t.cod} style={{ marginTop: 8, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-brand-600) 7%, transparent)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-text-primary)', whiteSpace: 'nowrap' }}>
+              Tote <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, fontSize: 10.5, color: 'var(--lp-text-tertiary)' }}>{t.toteCod || t.codigoLote || t.cod}</span>
+            </span>
+            <span style={{ flex: 1, minWidth: 90, height: 8, borderRadius: 999, background: 'color-mix(in srgb, var(--lp-text-tertiary) 22%, transparent)', overflow: 'hidden' }}>
+              <span style={{ display: 'block', height: '100%', width: `${pct}%`, borderRadius: 999, background: 'var(--lp-brand-600)' }} />
+            </span>
+            <span style={{ fontFamily: 'var(--lp-font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-700)', whiteSpace: 'nowrap' }}>
+              {fmtN(rest)} L · {lleno ? 'lleno' : `al ${pct}%`}
+            </span>
+          </div>
+        );
+      })}
+
+      {granelSinTote && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--lp-warning-700)' }}>
+          Granel sin tote censado: ~{fmtN(d.granel)} cub-equivalente.
+        </div>
+      )}
+      {sinPiezas && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>Sin piezas registradas.</div>
+      )}
+
+      {/* Descuadre contable vs piezas (solo admin — el personal nunca ve dos números peleados) */}
+      {esAdmin && (Number(d.deficit) || 0) > 0.5 && (
+        <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 12, color: 'var(--lp-warning-700)' }}>
+          Descuadre: las piezas rastreadas suman <strong>{fmtN(d.cubEqTrack)}</strong> cub pero el contable dice <strong>{fmtN(d.cubEqContable)}</strong>. Hay que censar este producto.
+        </div>
+      )}
+
+      <button type="button" onClick={() => setDetalle(v => !v)}
+        style={{ marginTop: 10, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>
+        {detalle ? 'Ocultar detalle ▴' : 'Ver detalle ▾'}
+      </button>
+      {detalle && (
+        <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: 'var(--lp-bg-sunken)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {lotesUbic.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Lotes</span>
+              {lotesUbic.map((l, i) => (
+                <span key={(l.codigoLote || '') + i} title={'Lote ' + (l.codigoLote || '') + (l.estado ? ' · ' + l.estado : '')}
+                  style={{ fontSize: 10, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-700)', background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)', borderRadius: 5, padding: '1px 5px' }}>
+                  {l.codigoLote}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: 'var(--lp-text-secondary)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {(Number(d.granel) || 0) > 0 && <span title="Contenido restante dentro de totes a medias, en cubetas-equivalente">Granel: {fmtN(d.granel)} cub-eq</span>}
+            {residual > 0 && <span title="Stock cargado manual o de producciones previas a la trazabilidad — no se puede mover a Terán por el flujo de sublotes/QR">Sin lote: {fmtN(residual)} cub</span>}
+            {manual > 0 && <span title="Registrado a mano en Terán">Manual: {fmtN(manual)} cub</span>}
+            <span>Sublotes: {d.sublotes || 0}</span>
+          </div>
+          {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
+          {!esFabrica && canEdit && onEliminarTeran && manual > 0 && (
+            <button onClick={() => onEliminarTeran(nombre)}
+              title={`Quitar de Terán (${Math.round(manual)} cub manual). No afecta lotes rastreados ni el stock total.`}
+              style={{ ...S.btnGhost, alignSelf: 'flex-start', minWidth: 92, color: 'var(--lp-danger-600)', borderColor: 'color-mix(in srgb, var(--lp-danger-600) 45%, transparent)' }}>
+              Eliminar registro manual
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar, invPT, esAdmin }) {
   const bucket = data?.[ubicacion] || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => {
@@ -3159,9 +3415,10 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
     })
     .sort((a, b) => a[0].localeCompare(b[0]));
 
-  /* Totales agregados */
+  /* Totales agregados — TOTEs cuenta PIEZAS físicas (llenos + a medias) cuando
+     el backend trae el detalle (Fase 3: ya viene para ambas ubicaciones). */
   const totales = productos.reduce((acc, [, d]) => {
-    acc.tote   += d.tote   || 0;
+    acc.tote   += (d.totesFisicos?.total > 0) ? d.totesFisicos.total : (d.tote || 0);
     acc.cubeta += d.cubeta || 0;
     acc.galon  += d.galon  || 0;
     acc.litro  += d.litro  || 0;
@@ -3171,8 +3428,6 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
   }, { tote: 0, cubeta: 0, galon: 0, litro: 0, atm: 0, granel: 0 });
 
   const esFabrica = ubicacion === 'fabrica';
-  /* Grid: Producto · TOTE · Cub · Gal · Lt · ATM · Granel · Acción */
-  const gridCols = 'minmax(170px, 2fr) 60px 60px 60px 56px 56px 72px 132px';
   /* ¿Hay algo reenvasable en el pool ESCALAR de este renglón? (tote/granel/…) */
   const reenvasable = (d) => !esFabrica && !!onReenvasar && d.teranPresScalar
     && Object.entries(d.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
@@ -3259,111 +3514,27 @@ function PTUbicacionView({ ubicacion, data, query, onQuery, canPedir, onPedir, c
           border: '1.5px solid var(--lp-border-subtle)',
           borderRadius: 'var(--lp-radius-md)', overflow: 'hidden',
         }}>
-          {/* Header de tabla */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: gridCols,
-            padding: '10px 14px',
-            background: 'var(--lp-bg-sunken)',
-            fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
-            color: 'var(--lp-text-tertiary)', letterSpacing: '.05em',
-            borderBottom: '1px solid var(--lp-border-subtle)',
-          }}>
-            <span>Producto</span>
-            <span style={{ textAlign: 'right' }}>TOTE</span>
-            <span style={{ textAlign: 'right' }}>Cub</span>
-            <span style={{ textAlign: 'right' }}>Gal</span>
-            <span style={{ textAlign: 'right' }}>Lt</span>
-            <span style={{ textAlign: 'right' }}>ATM</span>
-            <span style={{ textAlign: 'right' }} title="Volumen suelto en cub-equiv (tote abierto al reenvasar)">Granel</span>
-            <span style={{ textAlign: 'right' }}>Acción</span>
-          </div>
-          {/* Filas */}
-          {productos.map(([nombre, d]) => {
-            const tieneResidual = (d.residual || 0) > 0;
-            const todoResidual = tieneResidual && (d.sublotes || 0) === 0;
-            return (
-              <div key={nombre} style={{
-                display: 'grid',
-                gridTemplateColumns: gridCols,
-                padding: '12px 14px',
-                borderBottom: '1px solid var(--lp-border-subtle)',
-                fontSize: 13, alignItems: 'center',
-              }}>
-                <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  {nombre}
-                  {tieneResidual && (
-                    <span
-                      title={todoResidual
-                        ? 'Stock cargado manualmente o de producciones previas a la trazabilidad — no se puede mover a Terán por el flujo de sublotes/QR.'
-                        : `${Math.round(d.residual)} cub sin lote (cargado manual / pre-trazabilidad). El resto sí está trackeado.`}
-                      style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                        background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)',
-                        border: '1px solid var(--lp-border-subtle)',
-                        textTransform: 'uppercase', letterSpacing: '.04em',
-                      }}
-                    >
-                      {todoResidual ? 'sin lote' : `+${Math.round(d.residual)} sin lote`}
-                    </span>
-                  )}
-                  {/* Sprint X: porción agregada a mano en Terán (eliminable) */}
-                  {!esFabrica && (Number(d.manual) || 0) > 0 && (
-                    <span
-                      title={`${Math.round(d.manual)} cub registradas a mano en Terán`}
-                      style={{
-                        fontSize: 10, fontWeight: 700, padding: '2px 6px', borderRadius: 4,
-                        background: 'var(--lp-brand-100)', color: 'var(--lp-brand-700)',
-                        border: '1px solid var(--lp-brand-600)',
-                        textTransform: 'uppercase', letterSpacing: '.04em',
-                      }}
-                    >+{Math.round(d.manual)} manual</span>
-                  )}
-                </span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.tote || 0)   > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.tote   || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.cubeta || 0) > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.cubeta || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.galon || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.galon  || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.litro || 0)  > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.litro  || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 19, fontWeight: 600, color: (d.atm || 0)    > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{d.atm    || 0}</span>
-                <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontSize: 16, fontWeight: 600, color: (d.granel || 0) > 0 ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)' }} title={(d.granel || 0) > 0 ? `${Math.round(d.granel)} cub-equiv a granel (tote abierto)` : ''}>{(d.granel || 0) > 0 ? Math.round(d.granel) : 0}</span>
-                <span style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
-                  {canPedir && (
-                    <button
-                      onClick={() => onPedir(nombre)}
-                      title={esFabrica
-                        ? 'Pedir producción para reponer en fábrica'
-                        : 'Pedir reposición a fábrica'}
-                      style={{ ...S.btnGhost, minWidth: 96, color: acentColor, borderColor: `color-mix(in srgb, ${acentColor} 45%, transparent)` }}
-                    >Pedir</button>
-                  )}
-                  {/* Parte B (jun 2026): Josué transfiere PT de Fábrica → Terán (mueve inv.pt qty→teran). */}
-                  {esFabrica && onTransferir && (
-                    <button
-                      onClick={() => onTransferir(nombre)}
-                      title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
-                      style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
-                    >→ Terán</button>
-                  )}
-                  {/* Reenvasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán). */}
-                  {reenvasable(d) && (
-                    <button
-                      onClick={() => onReenvasar(nombre, d.teranPresScalar)}
-                      title="Reenvasar: convertir tote/granel en cubetas o galones (consume envases de Terán)"
-                      style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}
-                    >Reenvasar</button>
-                  )}
-                  {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
-                  {!esFabrica && canEdit && onEliminarTeran && (Number(d.manual) || 0) > 0 && (
-                    <button
-                      onClick={() => onEliminarTeran(nombre)}
-                      title={`Quitar de Terán (${Math.round(d.manual)} cub manual). No afecta lotes rastreados ni el stock total.`}
-                      style={{ ...S.btnGhost, minWidth: 96, color: 'var(--lp-danger-600)', borderColor: 'color-mix(in srgb, var(--lp-danger-600) 45%, transparent)' }}
-                    >Eliminar</button>
-                  )}
-                </span>
-              </div>
-            );
-          })}
+          {/* Tarjetas de piezas (Fase 3) — una por producto */}
+          {productos.map(([nombre, d]) => (
+            <PTPiezasCard
+              key={nombre}
+              nombre={nombre}
+              d={d}
+              ubicacion={ubicacion}
+              esFabrica={esFabrica}
+              acentColor={acentColor}
+              lotes={lotes}
+              invPT={invPT}
+              esAdmin={esAdmin}
+              canPedir={canPedir}
+              onPedir={onPedir}
+              onTransferir={onTransferir}
+              puedeReenvasar={reenvasable(d)}
+              onReenvasar={onReenvasar}
+              canEdit={canEdit}
+              onEliminarTeran={onEliminarTeran}
+            />
+          ))}
         </div>
       )}
 
@@ -3484,46 +3655,64 @@ function MPUbicacionView({ ubicacion, data, query, onQuery, canEdit, onAgregar, 
   );
 }
 
-/* Fila editable de MP por almacén: "Ajustar" abre un input inline; al guardar
-   pasa por onFijar → handleSaveMPUbic → candado. */
+/* Fila editable de MP por almacén: "Ajustar" abre un editor inline con el patrón
+   único Fijar/Sumar/Restar + preview (ago 2026); al guardar pasa por
+   onFijar(total final) → handleSaveMPUbic → candado. */
 function MPUbicRow({ mp, qty, min, esTeran, canEdit, onFijar, acentColor }) {
   const [editing, setEditing] = useState(false);
+  const [modo, setModo] = useState('fijar');
   const [val, setVal] = useState(String(qty));
   const [saving, setSaving] = useState(false);
   useEffect(() => { setVal(String(qty)); }, [qty]);
   const low = min > 0 && qty <= min;
+  const totalFinal = calcularTotalAjuste(modo, qty, val);
+
+  const cambiarModo = (m) => { setModo(m); setVal(m === 'fijar' ? String(qty) : ''); };
+  const cerrar = () => { setVal(String(qty)); setModo('fijar'); setEditing(false); };
 
   const guardar = async () => {
     const n = parseFloat(val);
-    if (isNaN(n) || n < 0) return;
+    if (totalFinal == null || isNaN(n) || n < 0) return;
     setSaving(true);
-    try { await onFijar(mp, n); setEditing(false); }
+    try {
+      await onFijar(mp, totalFinal, notaModoAjuste(modo, qty, n, totalFinal, 'kg'));
+      setModo('fijar'); setEditing(false);
+    }
     catch { /* el wrapper ya alertó / canceló */ }
     finally { setSaving(false); }
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 2fr) 110px 90px 120px', padding: '12px 14px', borderBottom: '1px solid var(--lp-border-subtle)', fontSize: 13, alignItems: 'center' }}>
-      <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{mp}</span>
-      {editing ? (
-        <input type="number" inputMode="decimal" step="0.1" min="0" value={val} autoFocus
-          onChange={e => setVal(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') { setVal(String(qty)); setEditing(false); } }}
-          style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', padding: '6px 8px', borderRadius: 6, border: `1.5px solid ${acentColor}`, fontSize: 13, width: '100%', outline: 'none' }} />
-      ) : (
-        <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: low ? 'var(--lp-danger-600)' : qty > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{qty.toLocaleString('es-MX')}</span>
-      )}
-      <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{min > 0 ? min.toLocaleString('es-MX') : '—'}</span>
-      <span style={{ textAlign: 'right' }}>
-        {canEdit && (editing ? (
-          <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
-            <button onClick={guardar} disabled={saving} title="Guardar (candado)" style={{ padding: '5px 9px', borderRadius: 6, border: `1px solid ${acentColor}`, background: acentColor, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{saving ? '…' : '✓'}</button>
-            <button onClick={() => { setVal(String(qty)); setEditing(false); }} title="Cancelar" style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕</button>
-          </span>
+    <div style={{ borderBottom: '1px solid var(--lp-border-subtle)' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 2fr) 110px 90px 120px', padding: '12px 14px', fontSize: 13, alignItems: 'center' }}>
+        <span style={{ fontWeight: 600, color: 'var(--lp-text-primary)' }}>{mp}</span>
+        {editing ? (
+          <input type="number" inputMode="decimal" step="0.1" min="0" value={val} autoFocus
+            placeholder={modo === 'sumar' ? '+ kg' : modo === 'restar' ? '− kg' : ''}
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') guardar(); if (e.key === 'Escape') cerrar(); }}
+            style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', padding: '6px 8px', borderRadius: 6, border: `1.5px solid ${acentColor}`, fontSize: 13, width: '100%', outline: 'none' }} />
         ) : (
-          <button onClick={() => setEditing(true)} title={esTeran ? 'Fijar el stock de Terán (conteo físico) — no afecta producción' : 'Fijar el stock de producción en fábrica (conteo físico)'} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${acentColor}`, background: 'transparent', color: acentColor, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>Ajustar</button>
-        ))}
-      </span>
+          <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: low ? 'var(--lp-danger-600)' : qty > 0 ? 'var(--lp-text-primary)' : 'var(--lp-text-tertiary)' }}>{qty.toLocaleString('es-MX')}</span>
+        )}
+        <span style={{ textAlign: 'right', fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{min > 0 ? min.toLocaleString('es-MX') : '—'}</span>
+        <span style={{ textAlign: 'right' }}>
+          {canEdit && (editing ? (
+            <span style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+              <button onClick={guardar} disabled={saving || totalFinal == null} title="Guardar (candado)" style={{ padding: '5px 9px', borderRadius: 6, border: `1px solid ${acentColor}`, background: acentColor, color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer', opacity: totalFinal == null ? 0.5 : 1 }}>{saving ? '…' : '✓'}</button>
+              <button onClick={cerrar} title="Cancelar" style={{ padding: '5px 9px', borderRadius: 6, border: '1px solid var(--lp-border-subtle)', background: 'transparent', color: 'var(--lp-text-secondary)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>✕</button>
+            </span>
+          ) : (
+            <button onClick={() => setEditing(true)} title={esTeran ? 'Ajustar el stock de Terán (fijar, sumar o restar) — no afecta producción' : 'Ajustar el stock de producción en fábrica (fijar, sumar o restar)'} style={{ padding: '6px 10px', borderRadius: 6, border: `1px solid ${acentColor}`, background: 'transparent', color: acentColor, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)' }}>Ajustar</button>
+          ))}
+        </span>
+      </div>
+      {editing && (
+        <div style={{ padding: '0 14px 12px', maxWidth: 420, marginLeft: 'auto' }}>
+          <ModoAjusteSelector compact modo={modo} onModo={cambiarModo} dataIdBase="inventario.mpUbic.modo" />
+          <AjustePreview compact actual={qty} nuevo={totalFinal} unidad="kg" />
+        </div>
+      )}
     </div>
   );
 }
@@ -3655,7 +3844,7 @@ function AgregarMPUbicacionModal({ ubicacion, mpList, onClose, onSubmit }) {
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Agregar MP a {esFabrica ? 'Fábrica' : 'Terán'}</span>
@@ -3768,14 +3957,14 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
     try {
       await onSubmit(elegido, qty);
       /* Guarda la medida real (ej. "2 totes") como metadato — no rompe si falla. */
-      try { await api.ptMeta(elegido, { medida, medidaQty: cantNum }); } catch (_) {}
+      try { await api.ptMeta(elegido, { medida, medidaQty: cantNum }); } catch {}
     }
     catch (e) { setError(e?.data?.error || e?.message || 'No se pudo guardar'); }
     finally { setSaving(false); }
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Agregar PT a {esFabrica ? 'Fábrica' : 'Terán'}</span>
@@ -3897,14 +4086,15 @@ function AltaMPModal({ onClose, onSaved }) {
       });
       onSaved(`Materia prima "${nom}" dada de alta`);
     } catch (e) {
-      /* 409 = ya existe → orientar al flujo correcto: sumar stock es "+ Recepción MP" */
+      /* 409 = ya existe → orientar al flujo correcto: sumar stock es un Ingreso
+         de proveedor (/ingresos) o Recibir OC en Compras (P1 20-jul-2026). */
       const msg = e?.data?.error || e?.message || 'No se pudo dar de alta';
-      setError(e?.status === 409 ? msg + ' — para sumarle stock usa "+ Recepción MP".' : msg);
+      setError(e?.status === 409 ? msg + ' — para sumarle stock usa "Ingreso de proveedor" (o Recibir OC en Compras).' : msg);
     } finally { setSaving(false); }
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Dar de alta materia prima</span>
@@ -3996,7 +4186,7 @@ function AgregarEnvaseModal({ categorias, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <span style={S.modalTitle}>Agregar envase</span>

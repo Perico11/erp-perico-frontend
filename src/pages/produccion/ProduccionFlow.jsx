@@ -9,6 +9,7 @@
    ═══════════════════════════════════════════════════════════════════ */
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import api from '../../services/api';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 import SecureView from '../../components/SecureView';
 import PruebaBadge from '../../components/ui/PruebaBadge';
@@ -298,7 +299,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           }
         } catch { /* fórmula/catálogo opcional */ }
       } catch (e) {
-        if (!cancel) setError(e.message || 'Error al cargar pasos');
+        if (!cancel) setError(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
       } finally {
         if (!cancel) setLoading(false);
       }
@@ -546,14 +547,30 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         })
         .filter(a => a.mp && (a.esExtra || a.sustituyeA || Math.abs(a.delta) > 0.0001));
 
-      await api.registrarProduccion({
-        descuentos, producto: productoNombre, lotes,
-        ajustesMP: ajustesLimpios, /* enviar para que server lo persista en el historial */
-        esPrueba: item.esPrueba || false,
-        ordenId: tipo === 'orden' ? item.id : '',
-        pedidoId: tipo === 'pedido' ? item.id : (item.pedidoId || ''),
-        usuario: userName,
-      });
+      /* C1 (auditoría UX 10-ago, fix P1 13-ago) — CIERRE REANUDABLE: si la red
+         o el server fallaron a media finalización, la MP ya se descontó y el
+         PT ya se sumó, pero el lote/estado quedaron a medias. Al reintentar,
+         el server responde 409 con código (ORDEN_YA_PRODUCIDA / LOTE_YA_EXISTE
+         / PEDIDO_YA_PRODUCIDO / YA_PRODUCIDO) = "el paso 1 YA está hecho".
+         Antes eso abortaba todo y Enrique quedaba sin salida (MP descontada,
+         sin lote, sin QR); ahora se SALTA el paso 1 y se continúa con los
+         upserts y la creación de lotes, que son idempotentes (el server
+         de-duplica bachas por ordenId+bachaIndex). */
+      const CODIGOS_YA_HECHO = ['ORDEN_YA_PRODUCIDA', 'LOTE_YA_EXISTE', 'PEDIDO_YA_PRODUCIDO', 'YA_PRODUCIDO'];
+      try {
+        await api.registrarProduccion({
+          descuentos, producto: productoNombre, lotes,
+          ajustesMP: ajustesLimpios, /* enviar para que server lo persista en el historial */
+          esPrueba: item.esPrueba || false,
+          ordenId: tipo === 'orden' ? item.id : '',
+          pedidoId: tipo === 'pedido' ? item.id : (item.pedidoId || ''),
+          usuario: userName,
+        });
+      } catch (ePro) {
+        const codigo = ePro?.data?.codigo || ePro?.codigo || '';
+        if (!CODIGOS_YA_HECHO.includes(codigo)) throw ePro;
+        console.warn('[PRODUCCION] Reanudando cierre: el inventario ya estaba registrado (' + codigo + ') — se continúa con lotes/estado.');
+      }
 
       const ahora = new Date().toISOString();
 
@@ -670,7 +687,13 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           eventos: eventsFinal,
           fechaInicio: new Date(tInicio).toISOString(),
           fechaFin: ahora,
-          ...(N > 1 ? { bachaIndex: b, bachaDe: N } : {}),
+          /* C1 13-ago: bachaIndex SIEMPRE (también con 1 bacha) — es la llave
+             de la de-duplicación del server (ordenId+bachaIndex): un reintento
+             del cierre devuelve el lote existente en vez de duplicarlo. Los
+             badges "Bacha i/N" se gatean por bachaDe>1, así que no cambia nada
+             visual en el flujo clásico. */
+          bachaIndex: b,
+          ...(N > 1 ? { bachaDe: N } : {}),
           historial: [{ estado:'producido', fecha:ahora, usuario:userName,
             nota: N > 1
               ? `Bacha ${b}/${N} · ${cantBacha} ${litPerUnit === 19 ? 'cubetas' : 'unidades'} · tiempo ≈ sesión ÷ ${N} (activo ${Math.round(divAct/60000)}min)`
@@ -756,7 +779,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           : `Lote ${folios[0]} producido: ${productoNombre} x${lotes}${sufijoMsg}`,
       });
     } catch (e) {
-      setError(e.message || 'Error al finalizar producción');
+      setError(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally {
       setSaving(false);
     }

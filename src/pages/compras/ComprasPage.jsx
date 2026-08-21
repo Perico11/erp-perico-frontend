@@ -21,8 +21,9 @@ import PageTabs from '../../components/ui/PageTabs';
 import NewOCModal from './components/NewOCModal';
 import AprobarOCModal from './components/AprobarOCModal';
 import RegistrarPagoModal from './components/RegistrarPagoModal';
+import CorregirImportesModal from './components/CorregirImportesModal';
 import EditOCModal from './components/EditOCModal';
-import RecibirOCModal from './components/RecibirOCModal';
+/* P1 13-ago (una puerta de MP): RecibirOCModal retirado — la recepción la registra fábrica en /ingresos (la OC se marca recibida sola) */
 import EliminarOCModal from './components/EliminarOCModal';
 import ComprobantesOCModal from './components/ComprobantesOCModal';
 /* Mockup integracion/Compras.html: documento de OC imprimible con partidas */
@@ -160,31 +161,30 @@ function fmtMoney(n) {
   return '$' + num.toLocaleString('es-MX', { maximumFractionDigits: 0 });
 }
 
-/* Monto a mostrar en la columna/línea: factura real > estimado por items > flete. */
-function _ocMonto(oc) {
-  if (Number(oc.totalFacturaConIva) > 0) return fmtMoney(oc.totalFacturaConIva);
-  const est = (oc.items || []).reduce((s, it) => {
-    const kg = Number(it.kg) || 0;
-    const p = Number(it.precioUnitario) || 0;
-    return s + kg * p;
-  }, 0);
-  const flete = Number(oc.fleteEstimadoMxn) || 0;
-  const total = est + flete;
-  if (total > 0) return fmtMoney(total);
-  return null;
+/* Base de MERCANCÍA de la OC: factura real > estimado por items (`precioUnitario`
+   lo enriquece el server desde el costoBase del maestro). */
+function _ocBaseProducto(oc) {
+  if (Number(oc.totalFacturaConIva) > 0) return Number(oc.totalFacturaConIva);
+  return (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
 }
 
-/* Desglose para la card: PRODUCTO (precio base × kg — `precioUnitario` lo
-   enriquece el server desde el costoBase del maestro) y FLETE por separado.
-   Arely veía SOLO el flete; ahora se muestran ambos + total. Con factura real
-   registrada, manda el total (no desglosamos). */
+/* Monto TOTAL de la OC = mercancía + flete, SIEMPRE. El flete viaja en factura
+   APARTE (transportista, `numFacturaFlete`), así que la factura del proveedor NO
+   lo trae: con factura real registrada también se suma. (OC-1785880633051:
+   $43,949.50 factura + $4,119.44 flete Potosinos = $48,068.94 — antes la card
+   mostraba solo la factura y el flete desaparecía del total.) */
+function _ocMonto(oc) {
+  const total = _ocBaseProducto(oc) + (Number(oc.fleteEstimadoMxn) || 0);
+  return total > 0 ? fmtMoney(total) : null;
+}
+
+/* Desglose para la card: MATERIAS PRIMAS (factura real o estimado) y FLETE por
+   separado, para que se vea de dónde sale el total. */
 function _ocProducto(oc) {
-  if (Number(oc.totalFacturaConIva) > 0) return null;
-  const prod = (oc.items || []).reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
+  const prod = _ocBaseProducto(oc);
   return prod > 0 ? fmtMoney(prod) : null;
 }
 function _ocFleteFmt(oc) {
-  if (Number(oc.totalFacturaConIva) > 0) return null;
   const f = Number(oc.fleteEstimadoMxn) || 0;
   return f > 0 ? fmtMoney(f) : null;
 }
@@ -244,6 +244,10 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       sol: oc.solicitadoPor || oc.solicitante || undefined,
       prov: oc.proveedor || '—',
       monto: _ocMonto(oc) || '',
+      /* Desglose (solo si hay flete Y mercancía): la card muestra MP + Flete y
+         el Monto total; sin desglose, el Monto solo. */
+      producto: _ocProducto(oc) || '',
+      flete: _ocFleteFmt(oc) || '',
       entrega: _fmtEntrega(oc.fechaEntrega),
       estado: bucket,
       vencida, porVencer,
@@ -256,6 +260,9 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
       eliminada: oc.eliminada || oc.estado === 'eliminada',
       /* FALTANTE: recibida con menos kg de los pedidos → badge en ComprasScreen. */
       faltante: !!oc.faltante,
+      /* P2 21-jul-2026: recibida (real, no eliminada) sin CFDI vinculado en
+         facturas_sat → badge "Falta CFDI" (recordatorio de ir a SAT/CFDI). */
+      faltaCfdi: oc.estado === 'recibida' && !oc.eliminada && !oc.tieneCfdi,
     };
   }), [ocs]);
 
@@ -306,8 +313,21 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
         onAprobarOC={(cod) => openModal(cod, 'aprobar')}
         onEditarOC={(cod) => openModal(cod, 'editar')}
         onEliminarOC={(cod) => openModal(cod, 'eliminar')}
-        onRecibirMP={(cod) => openModal(cod, 'recibir')}
+        onRevertirRecepcion={async (cod) => {
+          /* P1 13-ago: válvula admin — deshace stock, costo, lotes MP y espejo */
+          const motivo = window.prompt('Revertir la recepción de esta OC.\nSe descuenta la MP recibida, se des-mezcla el costo y la OC regresa a Activas.\n\nMotivo (mínimo 10 caracteres):');
+          if (motivo === null) return;
+          try {
+            const r = await api.revertirRecepcionOC(cod, motivo);
+            const avisos = (r?.detalle || []).filter(d => d.aviso).map(d => `${d.mp}: ${d.aviso}`);
+            window.alert('Recepción revertida.' + (avisos.length ? '\n\nAVISOS:\n' + avisos.join('\n') : ''));
+            if (onRefresh) onRefresh();
+          } catch (e) {
+            window.alert(e?.message || 'No se pudo revertir');
+          }
+        }}
         onRegistrarPago={(cod) => openModal(cod, 'pago')}
+        onCorregirImportes={(cod) => openModal(cod, 'importes')}
         onImprimirOC={(cod) => { const oc = findOC(cod); if (oc) setPrintOC(oc); }}
         onVerComprobante={(cod) => openModal(cod, 'comprobante')}
       />
@@ -316,8 +336,8 @@ function OCsTabResponsive({ ocsData, onRefresh, prefillNewOC, onPrefillConsumed,
 
       {active?.type === 'aprobar'  && <AprobarOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'pago'     && <RegistrarPagoModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
+      {active?.type === 'importes' && <CorregirImportesModal oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'editar'   && <EditOCModal       oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
-      {active?.type === 'recibir'  && <RecibirOCModal    oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'eliminar' && <EliminarOCModal   oc={active.oc} onClose={closeModal} onSaved={afterSave} />}
       {active?.type === 'comprobante' && <ComprobantesOCModal oc={active.oc} onClose={closeModal} />}
 
@@ -1323,7 +1343,9 @@ function ErrBox({ msg, onRetry }) {
  *   handleCrearOCFromMRP guarda el prefill y, si está en modo pronóstico, navega a /compras
  *   con el prefill en el state de la ruta para que OCsTabResponsive abra "Levantar OC".
  */
-export default function ComprasPage({ mode = 'compras' }) {
+/* JUL 2026: `embedded` — la pantalla también vive como vista del hub /compras
+   del admin (patrón AlmacenPage). Solo suprime su TopBar propio. */
+export default function ComprasPage({ mode = 'compras', embedded = false }) {
   const isDesktop = useIsDesktop();
   const navigate = useNavigate();
   const location = useLocation();
@@ -1440,7 +1462,7 @@ export default function ComprasPage({ mode = 'compras' }) {
 
   return (
     <>
-      <TopBar title={esPronostico ? 'Pronóstico' : 'Compras'} />
+      {!embedded && <TopBar title={esPronostico ? 'Pronóstico' : 'Compras'} />}
       <div style={S.wrap}>
         {/* Encabezado del mockup: h1+sub en escritorio (Pronóstico) / tsub con conteos (Compras) */}
         {esPronostico ? (
@@ -1485,11 +1507,10 @@ export default function ComprasPage({ mode = 'compras' }) {
               />
         )}
 
+        {/* P1 (20-jul-2026): el Catálogo quedó de CONSULTA — el carrito que
+            generaba OCs duplicaba a Pronóstico ▸ Sugerencias. */}
         {activeTab === 'catalogo' && (
-          <CatalogoCompraTab
-            isDesktop={isDesktop}
-            onCreated={() => { reloadOCs(); setActiveTab('ocs'); }}
-          />
+          <CatalogoCompraTab isDesktop={isDesktop} />
         )}
 
         {activeTab === 'pedidos' && (

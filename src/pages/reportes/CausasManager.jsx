@@ -51,7 +51,7 @@ function EditModal({ causa, onSave, onClose, loading }) {
   };
 
   return (
-    <div style={S.modal} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.modal}>
       <div style={S.modalBox}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>
           {editar ? 'Editar causa' : 'Nueva causa raíz'}

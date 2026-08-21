@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 
 vi.mock('../services/api', () => ({
@@ -41,9 +42,11 @@ describe('AuthContext', () => {
 
   it('inicialmente sin user retorna no-user', async () => {
     render(
-      <AuthProvider>
-        <TestComponent />
-      </AuthProvider>
+      <MemoryRouter>
+        <AuthProvider>
+          <TestComponent />
+        </AuthProvider>
+      </MemoryRouter>
     );
     await waitFor(() => {
       expect(screen.getByText('no-user')).toBeInTheDocument();
@@ -58,9 +61,11 @@ describe('AuthContext', () => {
       return null;
     }
     render(
-      <AuthProvider>
-        <Capture />
-      </AuthProvider>
+      <MemoryRouter>
+        <AuthProvider>
+          <Capture />
+        </AuthProvider>
+      </MemoryRouter>
     );
     expect(capturedCan('admin')).toBe(false);
     expect(capturedCan('produccion')).toBe(false);

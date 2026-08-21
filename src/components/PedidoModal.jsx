@@ -165,7 +165,8 @@ export default function PedidoModal({ pedido, onResolve }) {
     <div
       role="dialog" aria-modal="true" aria-labelledby="pedido-modal-title"
       style={{
-        position: 'fixed', inset: 0, zIndex: 1000,
+        /* ≥1100: sobre el bottom-nav (regla proyecto, jul 2026) */
+        position: 'fixed', inset: 0, zIndex: 1100,
         display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
       }}
     >

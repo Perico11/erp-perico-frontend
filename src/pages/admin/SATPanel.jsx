@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import api from '../../services/api';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 
 /* SATPanel — presentación 1:1 con el mockup `integracion/SAT CFDI.html`
    (dropzone, KPIs "Resumen", cards de factura con folio mono + badges + cruce
@@ -108,6 +109,10 @@ export default function SATPanel() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  /* Realtime (T3 jul 2026): canal 'sat' (solo admin) — otra sesión registra
+     una factura y esta bandeja refresca sin F5. */
+  useRealtimeSync({ onSat: () => cargar() });
 
   const handleFile = async (file) => {
     if (!file) return;

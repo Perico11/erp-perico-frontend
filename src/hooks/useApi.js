@@ -37,9 +37,10 @@ export function useApiData(fetchFn, deps = [], refreshInterval = 60000) {
       if (myRequestId !== requestIdRef.current) return; /* obsoleto */
       setError(err.message || 'Error');
     } finally {
-      if (!mountedRef.current) return;
-      /* Solo apagar loading si esta era la última request */
-      if (myRequestId === requestIdRef.current) setLoading(false);
+      /* Sin `return` dentro del finally: un return ahí descarta cualquier
+         excepción que estuviera propagándose (p.ej. si el propio catch fallara),
+         y el error desaparecería sin rastro. Basta con la condición. */
+      if (mountedRef.current && myRequestId === requestIdRef.current) setLoading(false);
     }
   }, safeDeps); // eslint-disable-line react-hooks/exhaustive-deps
 

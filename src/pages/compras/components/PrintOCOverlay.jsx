@@ -58,11 +58,16 @@ export default function PrintOCOverlay({ oc, onClose }) {
   const items = Array.isArray(oc.items) ? oc.items : [];
   const flete = Number(oc.fleteEstimadoMxn) || 0;
   const estimado = items.reduce((s, it) => s + (Number(it.kg) || 0) * (Number(it.precioUnitario) || 0), 0);
-  const total = Number(oc.totalFacturaConIva) > 0 ? Number(oc.totalFacturaConIva) : (estimado + flete);
+  /* Mercancía: factura real > estimado por partidas. El flete se suma SIEMPRE —
+     viaja en factura aparte del transportista, la del proveedor no lo incluye.
+     (Antes, con factura registrada, el renglón de flete se pintaba pero el
+     Total lo ignoraba: documento que no cuadraba consigo mismo.) */
+  const facturaReal = Number(oc.totalFacturaConIva) > 0 ? Number(oc.totalFacturaConIva) : 0;
+  const total = (facturaReal || estimado) + flete;
   const autorizo = oc.aprobadaPor || oc.aprobadoPor || 'Compras';
 
   return (
-    <div className="lp-printov" onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div className="lp-printov">
       {/* CSS del documento + aislamiento @media print (scoped a esta clase) */}
       <style>{`
         .lp-printov{ position:fixed; inset:0; background:rgba(10,16,14,.55); display:flex; flex-direction:column;
@@ -135,6 +140,15 @@ export default function PrintOCOverlay({ oc, onClose }) {
                 </tr>
               );
             })}
+            {/* Con factura real y partidas sin precio (Arely captura el total,
+                no el $/kg), este renglón hace que la tabla cuadre con el Total. */}
+            {facturaReal > 0 && estimado === 0 && (
+              <tr>
+                <td style={{ color: MUT }}>Materias primas (factura)</td>
+                <td className="r">—</td>
+                <td className="r">{fmt$(facturaReal)}</td>
+              </tr>
+            )}
             {flete > 0 && (
               <tr>
                 <td style={{ color: MUT }}>Flete estimado</td>
@@ -163,11 +177,9 @@ export default function PrintOCOverlay({ oc, onClose }) {
           {IPrint}Imprimir
         </button>
       </div>
-      {/* Acción existente conservada: documento formal generado por el backend */}
-      <button type="button" className="lp-psrv" data-id="compras.btn.imprimir-oc-servidor" data-rol="compras,admin"
-        onClick={() => window.open(`/api/compras/oc/${oc.id}/print`, '_blank')}>
-        Abrir versión del servidor
-      </button>
+      {/* P0 13-ago: "Abrir versión del servidor" RETIRADO — abría sin ?token=
+          (401 garantizado) y duplicaba este mismo documento con otra maqueta.
+          El overlay + Imprimir es la única vía. */}
     </div>
   );
 }

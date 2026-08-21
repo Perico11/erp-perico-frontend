@@ -28,17 +28,27 @@ export const TRANSICIONES_LOTE = {
 
 export const TRANSICIONES_SUBLOTE = {
   marcarRecoleccion:      { desde: ['envasado'], a: 'en_recoleccion', roles: ['almacen','admin'] },
+  /* Camino "Luis ausente" (21-jul-2026): deshace marcarRecoleccion — el
+     sublote regresa a 'envasado' (nunca salió de fábrica). Josué lo puede
+     re-despachar después o llevarlo por OT. */
+  cancelarRecoleccion:    { desde: ['en_recoleccion'], a: 'envasado', roles: ['almacen','admin'] },
   escanearRecoger:        { desde: ['envasado','en_recoleccion','tote_activo'], a: 'en_camino', roles: ['recolector','admin'] },
   /* FIX jun 2026 (Sprint R): sync con backend — quitamos 'envasado' del
      origen. Josué solo puede recibir cuando Luis ya recogió (en_camino) o
      en caso de TOTE directo. Antes el banner "Recibir aquí" aparecía
      prematuramente y saltaba el paso de Luis. */
   escanearRecibirTeran:   { desde: ['en_camino','tote_activo'], a: '__auto__', roles: ['almacen','admin'] },
+  /* P1 13-ago-2026: marcha atrás de un escaneo de Luis hecho por error —
+     'en_camino' no tenía salida y el material quedaba "viajando" hasta que
+     un admin forzara transición. No toca inventario. Motivo obligatorio. */
+  cancelarEnCamino:       { desde: ['en_camino'], a: 'en_recoleccion', roles: ['recolector','almacen','admin'] },
   reenvasarTote:          { desde: ['tote_activo'], a: '__same__', roles: ['almacen','tecnico','admin'] },
   /* Cierre MANUAL del TOTE — DECISIÓN OWNER 10 jun 2026 (revierte la auto-merma):
      el remanente se registra como merma SOLO cuando admin/técnico lo decide.
-     Nota obligatoria (el guard vive en el backend; aquí solo gateo rol/estado). */
-  vaciarTote:             { desde: ['tote_activo'], a: 'tote_vaciado', roles: ['admin','tecnico'] },
+     Nota obligatoria (el guard vive en el backend; aquí solo gateo rol/estado).
+     P1 13-ago: +almacen (Josué opera los totes de Terán; sin él, un remanente
+     de 0.2 L bloqueaba el cierre del pedido para siempre). */
+  vaciarTote:             { desde: ['tote_activo'], a: 'tote_vaciado', roles: ['admin','tecnico','almacen'] },
   cancelarSublote:        { desde: ['envasado','en_recoleccion'], a: 'cancelado', roles: ['admin','almacen'] },
 };
 
@@ -62,7 +72,9 @@ export const LABELS_ACCION_SUBLOTE = {
      'Recibir' = botón único de Josué para PT en camino a Terán (decisión
      owner jun 2026) — siempre vía QR físico. */
   marcarRecoleccion:    'Marcar listo para recolectar',
+  cancelarRecoleccion:  'Luis no disponible — regresar a envasado',
   escanearRecoger:      'Voy por él',
+  cancelarEnCamino:     'Escaneado por error — regresar a recolección',
   escanearRecibirTeran: 'Recibir',
   reenvasarTote:        'Re-envasar TOTE',
   vaciarTote:           'Vaciar TOTE (merma)',
@@ -93,6 +105,7 @@ export const ESTADO_SUBLOTE_LABEL = {
   en_stock_teran:  'En stock Terán',
   tote_activo:     'TOTE activo',
   tote_vaciado:    'TOTE vaciado',
+  entregado_tienda: 'Entregado a tienda',
   cancelado:       'Cancelado',
 };
 
@@ -119,6 +132,7 @@ export const ESTADO_SUBLOTE_COLOR = {
   en_stock_teran:  'var(--lp-success-600)',
   tote_activo:     'var(--lp-qc-600)',
   tote_vaciado:    'var(--lp-text-tertiary)',
+  entregado_tienda: 'var(--lp-brand-700)',
   cancelado:       'var(--lp-text-tertiary)',
 };
 
@@ -142,6 +156,7 @@ export const NOTIF_TARGETS_POR_EVENTO = {
   'lote.registrarEnvasado':   ['almacen', 'recolector', 'admin'],
   'lote.marcarEnvasado':      ['recolector', 'almacen', 'admin'],
   'sublote.marcarRecoleccion':    ['recolector', 'almacen', 'admin'],
+  'sublote.cancelarRecoleccion':  ['recolector', 'almacen', 'admin'],
   'sublote.escanearRecoger':      ['recolector', 'almacen', 'admin'],
   'sublote.escanearRecibirTeran': ['almacen', 'tecnico', 'recolector', 'admin'],
   'sublote.reenvasarTote':        ['tecnico', 'admin'],
@@ -180,7 +195,7 @@ export function calcularEstadoLote(lote) {
   const subs = (Array.isArray(lote.sublotes) ? lote.sublotes : []).filter(s => s && !s.esMerma);
   if (subs.length === 0) return lote.estado || 'envasado';
 
-  const terminales = ['en_stock_teran','tote_vaciado','cancelado'];
+  const terminales = ['en_stock_teran','tote_vaciado','cancelado','entregado_tienda'];
   if (subs.every(s => terminales.includes(s.estado))) return 'entregado';
 
   /* REGLA jun 2026 (decisión owner, reemplaza L4; sync con backend): un TOTE
@@ -205,7 +220,7 @@ export function calcularEstadoLote(lote) {
   );
   if (hayToteActivoFabrica) return 'en_proceso';
 
-  const enRuta = subs.every(s => ['en_camino','en_stock_teran','tote_vaciado'].includes(s.estado));
+  const enRuta = subs.every(s => ['en_camino','en_stock_teran','tote_vaciado','entregado_tienda'].includes(s.estado));
   if (enRuta) return 'en_proceso';
 
   if (subs.every(s => s.estado === 'en_recoleccion')) return 'en_recoleccion';
@@ -213,7 +228,7 @@ export function calcularEstadoLote(lote) {
      suelto NO degrada un lote cuyos otros sublotes ya avanzaron (en camino, en
      Terán, vaciados, TOTE activo en Terán) — evitaba reaparecer en "Voy por él". */
   const haySublotesAvanzados = subs.some(s =>
-    ['en_recoleccion','en_camino','en_stock_teran','tote_vaciado'].includes(s.estado) ||
+    ['en_recoleccion','en_camino','en_stock_teran','tote_vaciado','entregado_tienda'].includes(s.estado) ||
     (s.estado === 'tote_activo' && (s.ub || 'fabrica') === 'teran')
   );
   const algunEnvasado = subs.some(s => s.estado === 'envasado');

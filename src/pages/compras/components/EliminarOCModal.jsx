@@ -47,7 +47,7 @@ export default function EliminarOCModal({ oc, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.title}>Eliminar OC — {oc.codigo}</div>
 

@@ -9,6 +9,7 @@ import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import { useAuth } from '../../context/AuthContext';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* DevolucionesMPPage — Capa 3 (Arely / rol compras).
    Devoluciones de MATERIA PRIMA al proveedor. Flujo SEPARADO del de PT.
@@ -99,7 +100,9 @@ const ESTADO_BADGE = {
 
 const fmtMoney = (n) => (n == null || n === '') ? '—' : '$' + Number(n).toLocaleString('es-MX');
 
-export default function DevolucionesMPPage() {
+/* JUL 2026: `embedded` — la pantalla también vive como vista dentro del hub
+   /devoluciones del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+export default function DevolucionesMPPage({ embedded = false }) {
   const { user } = useAuth();
   const isDesktop = useIsDesktop();
   const [searchParams] = useSearchParams();
@@ -120,6 +123,18 @@ export default function DevolucionesMPPage() {
   const [crear, setCrear] = useState(false);
   /* { dev, tipo } — tipo viene del botón elegido (mockup: Nota de crédito | Reembolso) */
   const [cerrar, setCerrar] = useState(null);
+
+  /* P1 13-ago: registrada por error → cancelar repone la MP descontada (backend). */
+  const cancelarDev = async (d) => {
+    const motivo = window.prompt(`Cancelar la devolución ${d.id} (${d.mp}).\nSe repone la MP que se descontó al crearla.\n\nMotivo (obligatorio):`);
+    if (motivo === null) return;
+    try {
+      await api.cancelarDevolucionMP(d.id, String(motivo || ''));
+      reload();
+    } catch (e) {
+      window.alert(e?.message || 'No se pudo cancelar');
+    }
+  };
 
   const { data, loading, reload } = useApiData(() => api.getDevolucionesMP(), null, 60000);
   const { data: invData } = useApiData(() => api.getInventario(), null, 0);
@@ -153,14 +168,14 @@ export default function DevolucionesMPPage() {
   if (isDesktop) {
     return (
       <>
-        <TopBar title="Devoluciones a proveedor" />
+        {!embedded && <TopBar title="Devoluciones a proveedor" />}
         <div style={S.wrapDesk}>
-          <div style={S.h1}>Devoluciones</div>
+          {!embedded && <div style={S.h1}>Devoluciones</div>}
           <div style={S.psub}>Materia prima → proveedor</div>
 
           <div style={S.toolbarRow}>
             <PageTabs tabs={tabs} activeTab={tab} onChange={setTab} />
-            <button style={{ ...S.newBtn, margin: 0, marginLeft: 'auto' }} data-id="devoluciones.btn.nueva" data-rol="compras,admin" onClick={() => setCrear(true)}>
+            <button style={{ ...S.newBtn, margin: 0, marginLeft: 'auto' }} data-id="devoluciones-mp.btn.nueva" data-rol="compras,admin" onClick={() => setCrear(true)}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
               Nueva devolución
             </button>
@@ -171,7 +186,7 @@ export default function DevolucionesMPPage() {
           ) : !visibles.length ? (
             <div style={S.empty}>Sin devoluciones aquí.</div>
           ) : (
-            <DevTable devs={visibles} onCerrar={(d, tipo) => setCerrar({ dev: d, tipo })} />
+            <DevTable devs={visibles} onCerrar={(d, tipo) => setCerrar({ dev: d, tipo })} onCancelar={cancelarDev} />
           )}
         </div>
 
@@ -196,7 +211,7 @@ export default function DevolucionesMPPage() {
   /* ── Móvil (1:1 actual): botón + tabs + cards + bottom-sheets ── */
   return (
     <>
-      <TopBar title="Devoluciones a proveedor" />
+      {!embedded && <TopBar title="Devoluciones a proveedor" />}
       <div style={S.wrap}>
         {/* tsub del mockup: "MP a proveedor · N por gestionar" con conteo en vivo */}
         <div style={S.tsub}>MP a proveedor · {counts.por_gestionar} por gestionar</div>
@@ -205,7 +220,7 @@ export default function DevolucionesMPPage() {
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', flexWrap: 'wrap', marginBottom: 16 }}>
           <button
-            data-id="devoluciones.btn.nueva"
+            data-id="devoluciones-mp.btn.nueva"
             data-rol="compras,admin"
             style={{ height: 44, padding: '0 16px', borderRadius: 999, border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: 6, background: 'var(--lp-brand-600)', color: '#fff' }}
             onClick={() => setCrear(true)}
@@ -219,7 +234,7 @@ export default function DevolucionesMPPage() {
         ) : !visibles.length ? (
           <div style={S.empty}>Sin devoluciones aquí.</div>
         ) : (
-          visibles.map(d => <DevCard key={d.id} d={d} onCerrar={(tipo) => setCerrar({ dev: d, tipo })} />)
+          visibles.map(d => <DevCard key={d.id} d={d} onCerrar={(tipo) => setCerrar({ dev: d, tipo })} onCancelar={() => cancelarDev(d)} />)
         )}
       </div>
 
@@ -242,7 +257,7 @@ export default function DevolucionesMPPage() {
 }
 
 /* ── Tabla de devoluciones (escritorio) — 1:1 SCREENS.devol ── */
-function DevTable({ devs, onCerrar }) {
+function DevTable({ devs, onCerrar, onCancelar }) {
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -287,14 +302,20 @@ function DevTable({ devs, onCerrar }) {
                   {d.estado === 'por_gestionar' && (
                     /* Mockup: NC primario + Reembolso secundario, mismos dos caminos */
                     <span style={{ display: 'inline-flex', gap: 6 }}>
-                      <button type="button" data-id="devoluciones.btn.registrar-nc" data-rol="admin,compras"
+                      <button type="button" data-id="devoluciones-mp.btn.registrar-nc" data-rol="admin,compras"
                         style={S.actBtn} onClick={() => onCerrar(d, 'nota_credito')}>
                         Nota de crédito
                       </button>
-                      <button type="button" data-id="devoluciones.btn.reembolso" data-rol="admin,compras"
+                      <button type="button" data-id="devoluciones-mp.btn.reembolso" data-rol="admin,compras"
                         style={{ ...S.actBtn, background: 'transparent', border: '1px solid var(--lp-border-default)', color: 'var(--lp-text-secondary)' }}
                         onClick={() => onCerrar(d, 'reembolso')}>
                         Reembolso
+                      </button>
+                      {/* P1 13-ago: registrada por error → repone la MP */}
+                      <button type="button" data-id="devoluciones-mp.btn.cancelar" data-rol="admin,compras"
+                        style={{ ...S.actBtn, background: 'transparent', border: '1px solid var(--lp-danger-300, #f3b6b2)', color: 'var(--lp-danger-700, #B42318)' }}
+                        onClick={() => onCancelar && onCancelar(d)}>
+                        Cancelar
                       </button>
                     </span>
                   )}
@@ -321,7 +342,7 @@ function DevTable({ devs, onCerrar }) {
   );
 }
 
-function DevCard({ d, onCerrar }) {
+function DevCard({ d, onCerrar, onCancelar }) {
   const est = ESTADO_BADGE[d.estado] || ESTADO_BADGE.merma;
   const cantTxt = (d.cantidad != null ? d.cantidad + ' ' + (d.unidad || '') : '').trim();
   return (
@@ -347,16 +368,22 @@ function DevCard({ d, onCerrar }) {
           {/* Mockup: dos caminos de cierre auditables, lado a lado */}
           <div style={S.actRow}>
             <button style={{ ...S.act, ...S.actPrimary, flex: 1, width: 'auto' }}
-              data-id="devoluciones.btn.registrar-nc" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.registrar-nc" data-rol="compras,admin"
               onClick={() => onCerrar('nota_credito')}>
               Nota de crédito
             </button>
             <button style={{ ...S.act, ...S.actGhost, flex: 1, width: 'auto' }}
-              data-id="devoluciones.btn.reembolso" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.reembolso" data-rol="compras,admin"
               onClick={() => onCerrar('reembolso')}>
               Reembolso
             </button>
           </div>
+          {/* P1 13-ago: registrada por error → repone la MP */}
+          <button style={{ ...S.act, ...S.actGhost, color: 'var(--lp-danger-700, #B42318)', borderColor: 'var(--lp-danger-300, #f3b6b2)' }}
+            data-id="devoluciones-mp.btn.cancelar" data-rol="compras,admin"
+            onClick={() => onCancelar && onCancelar()}>
+            Cancelar devolución
+          </button>
         </>
       )}
       {d.estado === 'registrada' && (
@@ -368,18 +395,19 @@ function DevCard({ d, onCerrar }) {
             </span>
             <span style={S.v}>{fmtMoney(d.montoEstimado)}</span>
           </div>
-          <button style={{ ...S.act, ...S.actDone }} disabled>
+          {/* P0 13-ago: badge de estado, no botón muerto */}
+          <div role="status" style={{ ...S.act, ...S.actDone }}>
             ✓ {d.cierreTipo === 'reembolso' ? 'Reembolso registrado' : 'Crédito registrado'}
-          </button>
+          </div>
           {d.cierreTipo === 'reembolso' && d.comprobanteArchivo && (
             <a style={S.link} href={api.comprobanteDevolucionMPUrl(d.id)} target="_blank" rel="noreferrer">Ver comprobante de pago →</a>
           )}
         </>
       )}
       {d.estado === 'merma' && (
-        <button style={{ ...S.act, ...S.actDone }} disabled>
+        <div role="status" style={{ ...S.act, ...S.actDone }}>
           Descartado como merma — sin nota de crédito
-        </button>
+        </div>
       )}
     </div>
   );
@@ -469,12 +497,12 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
       });
       onSaved && onSaved();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al crear la devolución');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally { setSaving(false); }
   };
 
   return (
-    <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={SH.overlay(isDesktop)}>
       <div style={SH.sheet(isDesktop)}>
         <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
           <div style={SH.h}>Nueva devolución de MP</div>
@@ -484,7 +512,7 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
         <div style={SH.body}>
           <label style={SH.lbl}>Materia prima</label>
           <input style={SH.input} list="mp-list" value={mp} onChange={(e) => onMp(e.target.value)}
-            data-id="devoluciones.input.mp" data-rol="compras,admin" placeholder="Escribe o elige una MP" />
+            data-id="devoluciones-mp.input.mp" data-rol="compras,admin" placeholder="Escribe o elige una MP" />
           <datalist id="mp-list">{mpList.map(m => <option key={m} value={m} />)}</datalist>
           {mp && stock != null && <div style={SH.hint}>Stock actual: {stock.toLocaleString('es-MX')} {unidad}</div>}
 
@@ -509,7 +537,7 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
           <textarea style={SH.area} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ej. Humedad fuera de especificación, no pasó QC de entrada…" />
 
           <label style={SH.lbl}>Disposición</label>
-          <div data-id="devoluciones.select.disposicion" data-rol="compras,admin">
+          <div data-id="devoluciones-mp.select.disposicion" data-rol="compras,admin">
             <SegmentedControl
               options={[{ value: 'devolver', label: 'Devolver a proveedor' }, { value: 'descartar', label: 'Descartar (merma)' }]}
               value={disposicion} onChange={setDisposicion}
@@ -533,7 +561,7 @@ function CrearSheet({ isDesktop, inv, maestro, usuario, onClose, onSaved }) {
           <div style={SH.acts}>
             <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
             <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
-              data-id="devoluciones.btn.crear" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.crear" data-rol="compras,admin"
               onClick={guardar} disabled={!puede || saving}>
               {saving ? 'Creando…' : 'Crear devolución'}
             </button>
@@ -591,12 +619,12 @@ function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
       });
       onSaved && onSaved();
     } catch (e) {
-      setErr(e?.data?.error || e.message || 'Error al cerrar la devolución');
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4) */
     } finally { setSaving(false); }
   };
 
   return (
-    <div style={SH.overlay(isDesktop)} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={SH.overlay(isDesktop)}>
       <div style={SH.sheet(isDesktop)}>
         <div style={{ flexShrink: 0, padding: '18px 20px 0' }}>
           <div style={SH.h}>Cerrar {dev.codigo || 'devolución'}</div>
@@ -617,7 +645,7 @@ function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
           ) : (
             <>
               <label style={SH.lbl}>Comprobante del reembolso · obligatorio</label>
-              <label style={SH.drop(!!fileB64)} data-id="devoluciones.btn.adjuntar-comprobante" data-rol="compras,admin">
+              <label style={SH.drop(!!fileB64)} data-id="devoluciones-mp.btn.adjuntar-comprobante" data-rol="compras,admin">
                 {fileB64 ? IFile : ICloud}
                 {fileB64
                   ? <div style={SH.fn}>{fileName}</div>
@@ -642,7 +670,7 @@ function CerrarSheet({ isDesktop, dev, initialTipo, onClose, onSaved }) {
           <div style={SH.acts}>
             <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
             <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: puede && !saving ? 1 : 0.5 }}
-              data-id="devoluciones.btn.confirmar-cierre" data-rol="compras,admin"
+              data-id="devoluciones-mp.btn.confirmar-cierre" data-rol="compras,admin"
               onClick={guardar} disabled={!puede || saving}>
               {saving ? 'Guardando…' : 'Confirmar cierre'}
             </button>

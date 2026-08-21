@@ -109,9 +109,11 @@ export default function TopBar({ title, action }) {
      funcionando si el admin sube uno propio. */
   const logoIcon = branding?.logoIcon || '/logos/logo-perico-green.svg';
 
-  /* Saludo del Design System: "Hola {nombre} · N pendientes" (1:1 mockup). */
-  const firstName = (user?.nombre || '').split(' ')[0] || (user?.nombre || '');
-  const pendText = count > 0 ? `${count} ${count === 1 ? 'pendiente' : 'pendientes'}` : 'Todo al día';
+  /* El saludo "Hola {nombre} · N pendientes" vivía aquí. Se quitó al rediseñar
+     (el cuerpo del Dashboard ya saluda — ver DashboardPage), pero las variables
+     que lo componían quedaron calculándose en cada render sin que nadie las
+     pintara. De ahí venía el pendiente "TopBar no muestra Hola X · N": no era
+     una función a medias, era código muerto de un diseño superado. */
 
   return (
     <header style={{ ...S.bar, ...(isDesktop ? {} : { borderBottom: '1px solid var(--lp-border-subtle)' }) }}>

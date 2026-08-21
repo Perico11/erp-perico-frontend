@@ -12,6 +12,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 
 const S = {
@@ -95,7 +96,7 @@ export default function CanonicoPanel() {
       try {
         const d = await api.getCanonicoDelta();
         setDelta(d);
-      } catch (e) { /* sin delta ok */ }
+      } catch { /* sin delta ok */ }
     } catch (e) {
       if (e?.status === 404) {
         setCanonico(null); /* aún no existe */
@@ -106,6 +107,10 @@ export default function CanonicoPanel() {
   };
 
   useEffect(() => { cargar(); }, []);
+
+  /* Realtime (T3 jul 2026): canal 'inventario-canonico' (kebab→camel del hook:
+     onInventarioCanonico) — nueva versión del canónico refresca versión/delta. */
+  useRealtimeSync({ onInventarioCanonico: () => cargar() });
 
   if (user?.rol !== 'admin') {
     return (
@@ -279,7 +284,7 @@ function CrearCanonicoModal({ onClose, onSaved }) {
   };
 
   return (
-    <div style={S.modal} onClick={onClose}>
+    <div style={S.modal}>
       <div style={S.modalCard} onClick={e => e.stopPropagation()}>
         <div style={S.modalTitle}>Crear inventario canónico v1</div>
         <p style={{ fontSize: 12, color: '#5A5550', lineHeight: 1.5 }}>
@@ -364,7 +369,7 @@ function ModificarCanonicoModal({ canonico, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.modal} onClick={onClose}>
+    <div style={S.modal}>
       <div style={{ ...S.modalCard, maxWidth: 600 }} onClick={e => e.stopPropagation()}>
         <div style={S.modalTitle}>Modificar canónico (nueva versión v{canonico._meta.version + 1})</div>
         <p style={{ fontSize: 12, color: '#5A5550', lineHeight: 1.5 }}>

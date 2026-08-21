@@ -86,7 +86,7 @@ export default function AprobarOCModal({ oc, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose && onClose()}>
+    <div style={S.overlay}>
       <div style={S.sheet}>
         <div style={S.h}>Aprobar orden de compra</div>
         <div style={S.s}>{oc.codigo} · {(oc.items && oc.items[0] && oc.items[0].mp) || 'materia prima'}</div>

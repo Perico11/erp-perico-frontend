@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import api from '../../services/api';
+import { qrDataUrl } from '../../lib/qrGenerator';
 
 const S = {
   page: { padding: '0 20px 100px', maxWidth: 900, margin: '0 auto' },
@@ -60,7 +60,9 @@ const S = {
   },
   btn: (kind) => ({
     padding: '10px 20px', fontSize: 13, fontWeight: 700, borderRadius: 8,
-    border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+    /* el `border` real se define abajo según `kind` — este duplicado quedaba
+       pisado por el de más abajo (en un objeto literal gana la última clave) */
+    cursor: 'pointer', fontFamily: 'inherit',
     background: kind === 'primary' ? 'var(--lp-brand-600)' : kind === 'danger' ? '#DC2626' : 'var(--lp-bg-base)',
     color: kind === 'primary' || kind === 'danger' ? '#fff' : 'var(--lp-text-primary)',
     marginRight: 8,
@@ -177,7 +179,13 @@ export default function TOTPSetupPanel() {
                 Abre Google Authenticator → "+" abajo → "Escanear código QR" → apunta la cámara aquí.
               </div>
               <div style={S.qrBox}>
-                <img src={setupData.qrUrl} alt="QR Google Authenticator" style={S.qrImg} />
+                {/* AUDIT 15-jul-2026: QR generado LOCALMENTE desde otpauth — el
+                    qrUrl del backend mandaba el secreto a api.qrserver.com. */}
+                <img
+                  src={setupData.otpauth ? qrDataUrl(setupData.otpauth, { scale: 8, margin: 2, ecLevel: 'M' }) : (setupData.qrUrl || '')}
+                  alt="QR Google Authenticator"
+                  style={S.qrImg}
+                />
                 <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 8 }}>
                   ¿No puedes escanear? Ingresa este código manualmente:
                 </div>

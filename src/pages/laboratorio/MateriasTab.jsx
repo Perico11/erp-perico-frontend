@@ -2,6 +2,7 @@ import { useState } from 'react';
 import api from '../../services/api';
 import useConfirm from '../../hooks/useConfirm';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 const S = {
   toolbar: { display: 'flex', gap: 10, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' },
@@ -33,7 +34,8 @@ const S = {
   empty: { textAlign: 'center', padding: 40, color: 'var(--lp-text-tertiary)', fontSize: 14 },
   /* Modal */
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1000,
+    /* ≥1100: sobre el bottom-nav (regla proyecto, jul 2026) */
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1100,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
   },
   modal: {
@@ -51,6 +53,8 @@ const S = {
   },
   row2: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 },
   actions: { display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 },
+  /* AUDIT UX 16-jul (U7): error inline en vez de alert() nativo (precedente IngresosPage) */
+  err: { fontSize: 13.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 11px', marginTop: 10, lineHeight: 1.4 },
 };
 
 function MPCard({ mp, isLab, onEdit, onDelete }) {
@@ -93,6 +97,7 @@ const EMPTY_MP = { nombre: '', proveedor: '', tipo: 'otro', densidad: '', solido
 function MPModal({ mp, onClose, onSave }) {
   const [form, setForm] = useState(mp ? { ...mp, densidad: mp.densidad ?? '', solidos: mp.solidos ?? '', viscosidad: mp.viscosidad ?? '', ph: mp.ph ?? '', costoKg: mp.costoKg ?? '' } : { ...EMPTY_MP });
   const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(''); /* AUDIT UX 16-jul (U7): error inline en vez de alert() */
 
   /* MÓVIL: bloquea el scroll del FONDO mientras el modal está montado y publica
      --pp-vvh (alto visible real, sigue al teclado) que S.modal usa en su maxHeight
@@ -103,7 +108,8 @@ function MPModal({ mp, onClose, onSave }) {
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const handleSave = async () => {
-    if (!form.nombre.trim()) return alert('Nombre requerido');
+    if (!form.nombre.trim()) return setErr('Nombre requerido'); /* AUDIT UX 16-jul (U7) */
+    setErr('');
     setSaving(true);
     try {
       await onSave({
@@ -117,14 +123,14 @@ function MPModal({ mp, onClose, onSave }) {
       });
       onClose();
     } catch (e) {
-      alert(e.message);
+      setErr(humanizeError(e)); /* AUDIT UX 16-jul (U4+U7) */
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <div style={S.overlay} onClick={onClose}>
+    <div style={S.overlay}>
       <div style={S.modal} onClick={e => e.stopPropagation()}>
         <div style={S.modalTitle}>{mp ? 'Editar MP de Lab' : 'Nueva MP de Laboratorio'}</div>
 
@@ -182,6 +188,9 @@ function MPModal({ mp, onClose, onSave }) {
           <label style={S.label}>Notas</label>
           <textarea style={{ ...S.input, minHeight: 60, resize: 'vertical' }} value={form.notas} onChange={e => set('notas', e.target.value)} />
         </div>
+
+        {/* AUDIT UX 16-jul (U7): error inline en vez de alert() bloqueante */}
+        {err && <div style={S.err} role="alert">{err}</div>}
 
         <div style={S.actions}>
           <button style={{ ...S.btn, background: 'var(--lp-bg-base)', border: '1.5px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)' }} onClick={onClose}>Cancelar</button>

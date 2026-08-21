@@ -28,6 +28,7 @@ import {
   LABELS_ACCION_SUBLOTE, ESTADO_SUBLOTE_LABEL, ESTADO_SUBLOTE_COLOR,
   ESTADO_LOTE_LABEL, ESTADO_LOTE_COLOR,
 } from '../../lib/loteTransiciones';
+import { ESTADO_FUENTE_SIN_LOTE, ESTADO_LOTE_TERMINAL } from '../../lib/estados';
 
 /* ── Pipeline completo pedido → entregado ─────────────────────────────── */
 const PASOS = [
@@ -296,7 +297,7 @@ export default function FlujoPage() {
        FIX jun 2026 (auditoría M5): dedupe — los pedidos van primero (fuente
        canónica); una orden se omite si su pedido fuente (orden.pedidoId) ya
        está mostrado, para no pintar dos cards del mismo trabajo. */
-    const PRE = ['pendiente', 'aceptado', 'en_produccion'];
+    const PRE = ESTADO_FUENTE_SIN_LOTE; /* fuente única: lib/estados */
     const preIds = new Set();
     pedidos.forEach(src => {
       if (usedSrc.has(src.id) || !PRE.includes(src.estado) || preIds.has(src.id)) return;
@@ -317,7 +318,7 @@ export default function FlujoPage() {
   /* FIX jun 2026 (feedback owner — duplicados): SIN pestañas. Flujo es UNA
      sola lista de lo ACTIVO; "Para mí"/"Todos" duplicaban lo que Pedidos ya
      resuelve (el historial vive en Pedidos > Historial). */
-  const TERMINALES = ['entregado', 'cancelado', 'rechazado'];
+  const TERMINALES = ESTADO_LOTE_TERMINAL; /* fuente única: lib/estados */
   const visibles = useMemo(() => flowItems.filter(it => {
     const est = it.lote ? (calcularEstadoLote(it.lote) || it.lote.estado) : (it.source?.estado);
     return !TERMINALES.includes(est);

@@ -120,7 +120,7 @@ export function EliminarMPModal({ mp, onClose, onSaved }) {
   const tieneFormulas = formulasVinculadas.length > 0;
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.header}>
           <div style={S.title}>Eliminar MP — {mp}</div>
@@ -201,7 +201,7 @@ export function SustituirMPModal({ mp, mpsDisponibles, onClose, onSaved }) {
   const opciones = (mpsDisponibles || []).filter(m => m !== mp);
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.header}>
           <div style={S.title}>Sustituir MP — {mp}</div>
@@ -243,7 +243,10 @@ export function SustituirMPModal({ mp, mpsDisponibles, onClose, onSaved }) {
 }
 
 /* ────────── MP ACTIONS DROPDOWN ────────── */
-export function MPActionsMenu({ mp, mpsDisponibles, canEdit, onAction }) {
+/* extraItems (jul 2026): items adicionales [{label, color, onClick}] — usado por
+   la tabla PT para "Ocultar/Mostrar" (PT ocultos). Si no hay onAction, solo se
+   pintan los extraItems (el menú deja de ser exclusivo de MP). */
+export function MPActionsMenu({ mp, mpsDisponibles, canEdit, onAction, extraItems }) {
   const [open, setOpen] = useState(false);
   /* FIX jun 2026: el desplegable era position:absolute y lo recortaba el
      overflow:hidden de la tabla (más visible ahora con las secciones por
@@ -290,29 +293,48 @@ export function MPActionsMenu({ mp, mpsDisponibles, canEdit, onAction }) {
             boxShadow: '0 8px 24px rgba(26,24,21,.16)',
             zIndex: 9999, minWidth: 160,
           }}>
-            <button
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '10px 14px', fontSize: 12, border: 'none',
-                background: 'transparent', cursor: 'pointer',
-                fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-primary)',
-              }}
-              onClick={() => { setOpen(false); onAction('sustituir', mp, mpsDisponibles); }}
-            >
-              Sustituir...
-            </button>
-            <button
-              style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                padding: '10px 14px', fontSize: 12, border: 'none',
-                background: 'transparent', cursor: 'pointer',
-                fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-danger-600)',
-                borderTop: '0.5px solid var(--lp-border-subtle)', fontWeight: 600,
-              }}
-              onClick={() => { setOpen(false); onAction('eliminar', mp); }}
-            >
-              Eliminar...
-            </button>
+            {onAction && (
+              <button
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '10px 14px', fontSize: 12, border: 'none',
+                  background: 'transparent', cursor: 'pointer',
+                  fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-text-primary)',
+                }}
+                onClick={() => { setOpen(false); onAction('sustituir', mp, mpsDisponibles); }}
+              >
+                Sustituir...
+              </button>
+            )}
+            {onAction && (
+              <button
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '10px 14px', fontSize: 12, border: 'none',
+                  background: 'transparent', cursor: 'pointer',
+                  fontFamily: 'var(--lp-font-sans)', color: 'var(--lp-danger-600)',
+                  borderTop: '0.5px solid var(--lp-border-subtle)', fontWeight: 600,
+                }}
+                onClick={() => { setOpen(false); onAction('eliminar', mp); }}
+              >
+                Eliminar...
+              </button>
+            )}
+            {(extraItems || []).map((item, i) => (
+              <button
+                key={item.label + i}
+                style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  padding: '10px 14px', fontSize: 12, border: 'none',
+                  background: 'transparent', cursor: 'pointer', fontWeight: 600,
+                  fontFamily: 'var(--lp-font-sans)', color: item.color || 'var(--lp-text-primary)',
+                  borderTop: (onAction || i > 0) ? '0.5px solid var(--lp-border-subtle)' : 'none',
+                }}
+                onClick={() => { setOpen(false); item.onClick && item.onClick(); }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </>
       )}

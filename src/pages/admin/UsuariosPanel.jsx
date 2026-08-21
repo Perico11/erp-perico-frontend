@@ -1,7 +1,18 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import PageTabs from '../../components/ui/PageTabs';
+
+/* Estilo de las sub-pestañas (usuarios · vaciadores) — subrayado del DS verde. */
+const tabStyle = (activo) => ({
+  padding: '9px 16px', minHeight: 42, border: 'none', background: 'none',
+  cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 13.5,
+  fontWeight: activo ? 700 : 500,
+  color: activo ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+  borderBottom: '2px solid ' + (activo ? 'var(--lp-brand-600)' : 'transparent'),
+});
 
 const S = {
   toolbar: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, flexWrap: 'wrap' },
@@ -176,7 +187,7 @@ function UserFormModal({ user, roles, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={S.modal}>
         <div style={S.modalHeader}>
           <div style={S.modalTitle}>{isEdit ? 'Editar usuario' : 'Crear usuario'}</div>
@@ -258,7 +269,7 @@ function PinModal({ user, onClose, onSaved }) {
   };
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={{ ...S.modal, maxWidth: 400 }}>
         <div style={S.modalHeader}>
           <div style={S.modalTitle}>Cambiar PIN · {user.nombre}</div>
@@ -330,7 +341,7 @@ function PermisosRolModal({ rol, permisosActuales, disponibles, onClose, onSaved
   const totalDisponibles = (disponibles || []).length;
 
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={{ ...S.modal, maxWidth: 640 }}>
         <div style={S.modalHeader}>
           <div>
@@ -408,7 +419,7 @@ function ConfirmDelete({ user, onClose, onSaved }) {
     }
   };
   return (
-    <div style={S.overlay} onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div style={S.overlay}>
       <div style={{ ...S.modal, maxWidth: 400 }}>
         <div style={S.modalHeader}>
           <div style={S.modalTitle}>Eliminar usuario</div>
@@ -437,8 +448,326 @@ function ConfirmDelete({ user, onClose, onSaved }) {
 }
 
 /* ────────── PANEL PRINCIPAL ────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   FirmasPanel — quién firma cada documento impreso (27-jul-2026).
+
+   Antes estos nombres estaban escritos a mano dentro del JSX de la hoja de
+   Orden de Transferencia y de la remisión de entregas. Cuando Rodolfo dejó de
+   recibir en Almacén Terán hubo que editar código, compilar y desplegar para
+   cambiar un nombre en un papel — y hasta entonces los documentos salieron
+   con el nombre de alguien que ya no estaba ahí.
+   ═══════════════════════════════════════════════════════════════════════ */
+const RANURAS_FIRMA = [
+  { grupo: 'Hoja de Orden de Transferencia (Fábrica → Terán)', items: [
+    { id: 'otSalida', ayuda: 'Quien entrega el material en la fábrica' },
+    { id: 'otTraslado', ayuda: 'Quien lo transporta y lo entrega en Terán' },
+    { id: 'otRecepcionAlmacen', ayuda: 'Quien lo recibe en el almacén' },
+    { id: 'otRecepcionOficina', ayuda: 'Quien lo recibe en recepción' },
+  ] },
+  { grupo: 'Remisión de entregas a tienda', items: [
+    { id: 'remisionSalida', ayuda: 'Deja el nombre VACÍO para que salga quien despachó la entrega' },
+    { id: 'remisionEntrega', ayuda: 'Quien lleva el material a la tienda. Vacío = el usuario con rol de recolector' },
+  ] },
+];
+
+function FirmasPanel() {
+  const [firm, setFirm] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [ok, setOk] = useState('');
+
+  const cargar = useCallback(() => {
+    setLoading(true);
+    api.getFirmantes()
+      .then(r => setFirm(r?.data || r || {}))
+      .catch(e => setErr(e.message || 'No se pudieron cargar'))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const set = (ranura, campo, valor) =>
+    setFirm(f => ({ ...f, [ranura]: { ...(f?.[ranura] || {}), [campo]: valor } }));
+
+  const guardar = async () => {
+    setErr(''); setOk(''); setSaving(true);
+    try {
+      const r = await api.setFirmantes(firm);
+      setFirm(r?.data || firm);
+      setOk('Guardado. Los documentos que se impriman de ahora en adelante llevan estos nombres.');
+      setTimeout(() => setOk(''), 6000);
+    } catch (e) { setErr(e.message || 'No se pudo guardar'); }
+    finally { setSaving(false); }
+  };
+
+  if (loading) return <div style={S.loading}>Cargando firmas...</div>;
+
+  return (
+    <div>
+      {err && <div style={S.err}>{err}</div>}
+      {ok && <div style={{ ...S.err, background: 'var(--lp-success-100)', color: 'var(--lp-success-700)', borderColor: 'var(--lp-success-300)' }}>{ok}</div>}
+
+      <div style={{ fontSize: 12, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 16 }}>
+        Estos nombres se imprimen en las líneas de firma de los documentos. Cámbialos
+        cuando cambie el personal — no hace falta tocar el sistema.
+      </div>
+
+      {RANURAS_FIRMA.map(g => (
+        <div key={g.grupo} style={{ marginBottom: 22 }}>
+          <div style={{ ...S.label, marginBottom: 10 }}>{g.grupo}</div>
+          {g.items.map(({ id, ayuda }) => {
+            const v = firm?.[id] || {};
+            return (
+              <div key={id} style={{
+                border: '1.5px solid var(--lp-border-subtle)', borderRadius: 10,
+                padding: 12, marginBottom: 10, background: 'var(--lp-bg-raised)',
+              }}>
+                <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 8 }}>{ayuda}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+                  <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                    Nombre y firma
+                    <input style={{ ...S.input, marginTop: 4 }} value={v.nombre || ''}
+                      placeholder="(usa el usuario del registro)"
+                      onChange={e => set(id, 'nombre', e.target.value)}
+                      data-id={`firmas.${id}.nombre`} />
+                  </label>
+                  <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                    Concepto
+                    <input style={{ ...S.input, marginTop: 4 }} value={v.puesto || ''}
+                      onChange={e => set(id, 'puesto', e.target.value)}
+                      data-id={`firmas.${id}.puesto`} />
+                  </label>
+                  <label style={{ fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+                    Lugar
+                    <input style={{ ...S.input, marginTop: 4 }} value={v.lugar || ''}
+                      onChange={e => set(id, 'lugar', e.target.value)}
+                      data-id={`firmas.${id}.lugar`} />
+                  </label>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+
+      <button type="button" style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }}
+        onClick={guardar} disabled={saving} data-id="firmas.btn.guardar">
+        {saving ? 'Guardando...' : 'Guardar firmas'}
+      </button>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   VaciadoresPanel — catálogo del personal que ENVASA (jul 2026, pedido dueño).
+
+   No son usuarios del sistema (no tienen PIN ni entran a la app): es una
+   lista simple de nombres que alimenta el desplegable "Quién envasó" de los
+   sheets de Envasar y Re-envasar. Al envasar, el nombre se COPIA al sublote,
+   así que dar de baja a alguien nunca altera la historia de lotes viejos.
+   ═══════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   QrAccesoPanel — clave de planta de los QR físicos (28-jul-2026, dueño).
+
+   Las cubetas viajan con el cliente: la página /qr/<cod> ya NO muestra nada
+   sin la clave. El empleado de piso (sin usuario del ERP) la teclea UNA vez
+   en su teléfono y le queda guardada `dias` días. Cambiarla aquí la ROTA:
+   todos los teléfonos vuelven a pedirla (las cookies viejas se invalidan).
+   ═══════════════════════════════════════════════════════════════════════ */
+function QrAccesoPanel() {
+  const [info, setInfo] = useState(null);
+  const [clave, setClave] = useState('');
+  const [dias, setDias] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const cargar = useCallback(() => {
+    api.getQrAcceso()
+      .then(r => setInfo(r || {}))
+      .catch(e => setErr(e?.data?.error || e.message));
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+
+  const guardar = async () => {
+    const c = clave.trim();
+    if (c.length < 4 || c.length > 12) { setErr('La clave debe tener entre 4 y 12 caracteres'); return; }
+    setSaving(true); setErr(''); setMsg('');
+    try {
+      await api.setQrAcceso(c, dias ? parseInt(dias) : undefined);
+      setClave('');
+      setMsg(info?.configurada
+        ? 'Clave rotada. Todos los teléfonos volverán a pedirla en el próximo escaneo.'
+        : 'Clave activada. Compártela con el personal de piso.');
+      cargar();
+    } catch (e) {
+      setErr(e?.data?.error || e.message);
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div>
+      {err && <div style={S.err}>{err}</div>}
+      {msg && <div style={{ background: 'color-mix(in srgb, var(--lp-brand-600) 12%, transparent)', color: 'var(--lp-brand-700)', padding: '10px 12px', borderRadius: 10, fontSize: 12.5, marginBottom: 12, fontWeight: 600 }}>{msg}</div>}
+
+      <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 14, maxWidth: 620 }}>
+        Los QR pegados a cubetas y totes abren <strong>pinturaselperico.com/QR/…</strong> (la página web,
+        no el sistema). Sin esta clave, quien escanee (un cliente, por ejemplo) solo ve el código de la
+        etiqueta. El personal de piso <strong>sin usuario del ERP</strong> la escribe una vez en su teléfono
+        y le queda guardada. Cambiarla aquí obliga a todos los teléfonos a pedirla de nuevo.
+      </div>
+
+      <div style={{ ...S.metricCard, maxWidth: 620, marginBottom: 14, padding: '14px 16px' }}>
+        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>
+          Estado: <strong style={{ color: info?.configurada ? 'var(--lp-brand-700)' : 'var(--lp-danger-600)' }}>
+            {info == null ? 'cargando…' : info.configurada ? 'ACTIVA' : 'SIN CONFIGURAR — los QR no muestran información'}
+          </strong>
+          {info?.configurada && info.actualizadaEn && (
+            <span> · definida el {String(info.actualizadaEn).slice(0, 10)} por {info.por || '—'} · vigencia {info.dias} días por teléfono</span>
+          )}
+        </div>
+      </div>
+
+      <div style={{ ...S.toolbar, maxWidth: 620 }}>
+        <input
+          style={S.search}
+          type="text"
+          inputMode="numeric"
+          placeholder={info?.configurada ? 'Nueva clave (rota la actual)…' : 'Clave de planta (4–12 caracteres)…'}
+          value={clave}
+          maxLength={12}
+          onChange={(e) => setClave(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') guardar(); }}
+          data-id="admin.input.qr-clave"
+        />
+        <input
+          style={{ ...S.search, maxWidth: 130 }}
+          type="number"
+          min="1"
+          max="365"
+          placeholder={'Días (' + (info?.dias || 90) + ')'}
+          value={dias}
+          onChange={(e) => setDias(e.target.value)}
+          title="Días que la clave queda guardada en cada teléfono"
+        />
+        <button style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }} onClick={guardar} disabled={saving}
+          data-id="admin.btn.guardar-qr-clave">
+          {saving ? 'Guardando…' : info?.configurada ? 'Rotar clave' : 'Activar clave'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function VaciadoresPanel() {
+  const [lista, setLista] = useState([]);
+  const [nombre, setNombre] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const [porBorrar, setPorBorrar] = useState(null);
+
+  const cargar = useCallback(() => {
+    setLoading(true);
+    api.getVaciadores()
+      .then(r => setLista(Array.isArray(r?.data) ? r.data : []))
+      .catch(e => setErr(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+  useEffect(() => { cargar(); }, [cargar]);
+  useRealtimeSync({ onVaciadores: () => cargar() });
+
+  const agregar = async () => {
+    const n = nombre.trim();
+    if (n.length < 2) { setErr('Escribe el nombre completo'); return; }
+    setSaving(true); setErr('');
+    try {
+      await api.crearVaciador(n);
+      setNombre('');
+      cargar();
+    } catch (e) {
+      setErr(e?.data?.error || e.message);
+    } finally { setSaving(false); }
+  };
+
+  const borrar = async (v) => {
+    setErr('');
+    try { await api.eliminarVaciador(v.id); setPorBorrar(null); cargar(); }
+    catch (e) { setErr(e?.data?.error || e.message); }
+  };
+
+  return (
+    <div>
+      {err && <div style={S.err}>{err}</div>}
+
+      <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 14, maxWidth: 620 }}>
+        El personal que envasa. Aparecen en el desplegable <strong>"Quién envasó"</strong> de Envasar y
+        Re-envasar, y su nombre queda grabado en cada sublote — así sabes quién es el responsable de cada tanda.
+        No entran a la app ni necesitan PIN.
+      </div>
+
+      <div style={S.toolbar}>
+        <input
+          style={S.search}
+          type="text"
+          placeholder="Nombre del vaciador…"
+          value={nombre}
+          maxLength={80}
+          onChange={(e) => setNombre(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') agregar(); }}
+          data-id="admin.input.vaciador"
+        />
+        <button style={{ ...S.btnPrimary, opacity: saving ? 0.6 : 1 }} onClick={agregar} disabled={saving}
+          data-id="admin.btn.agregar-vaciador">
+          {saving ? 'Agregando…' : '+ Agregar vaciador'}
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={S.loading}>Cargando…</div>
+      ) : lista.length === 0 ? (
+        <div style={S.loading}>Todavía no hay vaciadores. Agrega el primero arriba.</div>
+      ) : (
+        <div style={S.list}>
+          {lista.map(v => (
+            <div key={v.id} style={S.row}>
+              <div style={S.avatar('var(--lp-brand-100)')}>
+                {(v.nombre || '?').charAt(0).toUpperCase()}
+              </div>
+              <div style={S.info}>
+                <div style={S.name}>{v.nombre}</div>
+                <div style={S.meta}>
+                  Alta {(v.creadoEn || '').slice(0, 10)}{v.creadoPor ? ` · por ${v.creadoPor}` : ''}
+                </div>
+              </div>
+              <div style={S.actions}>
+                {porBorrar === v.id ? (
+                  <>
+                    <button style={S.btnGhost} onClick={() => setPorBorrar(null)}>Cancelar</button>
+                    <button style={S.btnDanger} onClick={() => borrar(v)}>Confirmar baja</button>
+                  </>
+                ) : (
+                  <button style={S.btnDanger} onClick={() => setPorBorrar(v.id)}>Eliminar</button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {lista.length > 0 && (
+        <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 12, lineHeight: 1.6 }}>
+          Dar de baja a alguien solo lo quita del desplegable. Los lotes que ya envasó conservan su nombre.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function UsuariosPanel() {
   const { can, recargarPermisos, permisosRoles } = useAuth();
+  /* Sub-pestañas (jul 2026): usuarios del sistema · vaciadores (personal que envasa) */
+  const [seccion, setSeccion] = useState('usuarios');
   const [list, setList] = useState([]);
   const [roles, setRoles] = useState(['admin', 'tecnico', 'compras', 'almacen', 'recolector', 'inventario']);
   const [permisosDisponibles, setPermisosDisponibles] = useState([]);
@@ -471,6 +800,10 @@ export default function UsuariosPanel() {
 
   useEffect(() => { cargar(); }, [cargar]);
 
+  /* Realtime (T3 jul 2026): canal 'usuarios' — altas/ediciones de usuarios
+     hechas por otro admin refrescan la lista sin F5. */
+  useRealtimeSync({ onUsuarios: () => cargar() });
+
   const handleSaved = () => {
     cargar();
     recargarPermisos();
@@ -492,7 +825,18 @@ export default function UsuariosPanel() {
 
   if (loading) return <div style={S.loading}>Cargando usuarios...</div>;
 
+  const tabsSeccion = [
+    { id: 'usuarios', label: 'Usuarios del sistema', style: (a) => tabStyle(a) },
+    { id: 'vaciadores', label: 'Vaciadores', style: (a) => tabStyle(a) },
+    { id: 'firmas', label: 'Firmas de documentos', style: (a) => tabStyle(a) },
+    { id: 'qr', label: 'QR cubetas', style: (a) => tabStyle(a) },
+  ];
+
   return (
+    <div>
+      <PageTabs tabs={tabsSeccion} activeTab={seccion} onChange={setSeccion} style={{ marginBottom: 16 }} />
+
+      {seccion === 'firmas' ? <FirmasPanel /> : seccion === 'vaciadores' ? <VaciadoresPanel /> : seccion === 'qr' ? <QrAccesoPanel /> : (
     <div>
       {err && <div style={S.err}>{err}</div>}
 
@@ -570,6 +914,22 @@ export default function UsuariosPanel() {
           <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 10, lineHeight: 1.6 }}>
             Edita qué pantallas y acciones tiene cada rol. Si das más permisos, los usuarios de ese rol verán más botones al refrescar.
           </div>
+          {/* Honestidad sobre el alcance (auditoría 26-jul-2026): estos permisos
+              deciden lo que se MUESTRA; el servidor sigue autorizando por ROL.
+              Sin este aviso, quitar un permiso parece un candado y no lo es —
+              y creer que algo está restringido cuando no lo está es peor que
+              saber que no lo está. Cablear el enforce granular está pendiente
+              (requirePermission existe en el backend, sin usar todavía). */}
+          <div style={{
+            fontSize: 11, lineHeight: 1.6, marginBottom: 12, padding: '8px 10px',
+            borderRadius: 8, background: 'var(--lp-warning-bg, #FEF3C7)',
+            color: 'var(--lp-warning-text, #92400E)', border: '1px solid var(--lp-warning-border, #FCD34D)',
+          }}>
+            <strong>Qué controla esto:</strong> lo que cada rol VE en la aplicación.
+            El servidor autoriza por rol, no por estas casillas, así que quitar un
+            permiso oculta el botón pero no bloquea la acción a alguien que conozca
+            la ruta. Para restringir de verdad, cambia el rol del usuario.
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 8 }}>
             {roles.map(r => {
               const rs = rolStyle(r);
@@ -619,6 +979,8 @@ export default function UsuariosPanel() {
           onClose={() => setEditPermsRol(null)}
           onSaved={handleSaved}
         />
+      )}
+    </div>
       )}
     </div>
   );

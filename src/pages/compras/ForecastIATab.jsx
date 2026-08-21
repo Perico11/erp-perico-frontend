@@ -86,7 +86,7 @@ function DetalleModal({ mp, onClose }) {
   }, [mp]);
 
   if (loading) return (
-    <div style={S.modal} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.modal}>
       <div style={S.modalBox}>Cargando…</div>
     </div>
   );
@@ -94,7 +94,7 @@ function DetalleModal({ mp, onClose }) {
 
   const col = PRIORIDAD_COLORS[data.prioridad] || PRIORIDAD_COLORS.low;
   return (
-    <div style={S.modal} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.modal}>
       <div style={S.modalBox}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
           <h2 style={{ margin: 0, fontSize: 18 }}>{data.mp}</h2>
@@ -242,7 +242,7 @@ function BulkOCModal({ items, onConfirm, onClose, loading }) {
   const nProv = Object.keys(porProveedor).length;
 
   return (
-    <div style={S.modal} onClick={e => e.target === e.currentTarget && onClose()}>
+    <div style={S.modal}>
       <div style={S.modalBox}>
         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>Confirmar generación de OCs</div>
         <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginBottom: 14 }}>

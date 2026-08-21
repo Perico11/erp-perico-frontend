@@ -19,7 +19,7 @@ export function ndaYaAceptado(user, context) {
     if (!ts || isNaN(ts)) return false;
     const diasTranscurridos = (Date.now() - ts) / (24 * 60 * 60 * 1000);
     return diasTranscurridos < NDA_VALIDEZ_DIAS;
-  } catch (_) { return false; }
+  } catch { return false; }
 }
 
 const S = {
@@ -83,7 +83,7 @@ export default function NDAModal({ user, onAccept, onReject, context, productoNo
         contexto: context || 'session', producto: productoNombre || null,
         userAgent: navigator.userAgent, ts: new Date().toISOString(),
       }).catch(() => {});
-    } catch (_) {}
+    } catch {}
   };
 
   const handleAccept = () => {
@@ -91,7 +91,7 @@ export default function NDAModal({ user, onAccept, onReject, context, productoNo
       /* Persistimos timestamp en ms; ndaYaAceptado() valida que no haya
          pasado de NDA_VALIDEZ_DIAS. */
       localStorage.setItem(NDA_KEY(user, context), String(Date.now()));
-    } catch (_) {}
+    } catch {}
     sendAudit('NDA_ACEPTADO', isProduccion ? 'Produccion: ' + (productoNombre || '?') : 'Sesion');
     if (onAccept) onAccept();
   };

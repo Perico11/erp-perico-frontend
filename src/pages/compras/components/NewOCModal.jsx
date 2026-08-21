@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import api from '../../../services/api';
 import useIsDesktop from '../../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../../hooks/useBodyScrollLock';
+import humanizeError from '../../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { presEnvases } from '../presentaciones';
 
 const PRESENTACIONES = [
@@ -225,9 +226,14 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   });
   const [prioridad, setPrioridad] = useState('media');
   const [notas, setNotas] = useState('');
+  /* Flete: captura MANUAL de Arely (decisión del dueño 5-ago-2026). El $/kg de
+     la config es SOLO para aproximar el costo de fórmulas — no se sugiere aquí:
+     el flete real varía según la MP y lo cotiza el transportista. */
   const [fleteEstimado, setFleteEstimado] = useState('');
-  const [fleteOverride, setFleteOverride] = useState(false);
   const [creating, setCreating] = useState(false);
+  /* AUDIT UX 16-jul (U7): error de validación inline (en el footer pegajoso,
+     siempre visible) en vez de alert() nativo bloqueante. */
+  const [formErr, setFormErr] = useState('');
 
   /* Load catalog y enriquecer items con proveedor + último precio + lead time */
   useEffect(() => {
@@ -264,7 +270,7 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           }
         }
       })
-      .catch(err => setError(err.message))
+      .catch(err => setError(humanizeError(err))) /* AUDIT UX 16-jul (U4) */
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -280,38 +286,25 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
     return Array.isArray(provObj) ? provObj : (provObj?.mps || []);
   }, [proveedor, catalog]);
 
-  const totalKg = useMemo(() => {
-    return items.reduce((s, it) => s + (Number(it.kg) || 0), 0);
-  }, [items]);
-
-  const sugeridoFlete = useMemo(() => {
-    return Math.round(totalKg * 5 * 100) / 100;
-  }, [totalKg]);
-
-  /* Auto-update flete if not overridden */
-  useEffect(() => {
-    if (!fleteOverride) {
-      setFleteEstimado(sugeridoFlete.toFixed(2));
-    }
-  }, [sugeridoFlete, fleteOverride]);
-
   const handleAddItem = () => {
+    /* AUDIT UX 16-jul (U7): validación inline en vez de alert() */
     if (!mp) {
-      alert('Selecciona materia prima');
+      setFormErr('Selecciona materia prima');
       return;
     }
     if (!kg || Number(kg) <= 0) {
-      alert('Ingresa kilos válidos');
+      setFormErr('Ingresa kilos válidos');
       return;
     }
     if (!presentacion) {
-      alert('Selecciona presentación');
+      setFormErr('Selecciona presentación');
       return;
     }
     if (presentacion === 'otro' && !presentacionOtro) {
-      alert('Especifica la presentación');
+      setFormErr('Especifica la presentación');
       return;
     }
+    setFormErr('');
 
     setItems([...items, {
       mp,
@@ -331,8 +324,9 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
   };
 
   const handleCreate = async () => {
+    /* AUDIT UX 16-jul (U7): validación inline en vez de alert() */
     if (!proveedor) {
-      alert('Selecciona proveedor');
+      setFormErr('Selecciona proveedor');
       return;
     }
     /* Si no se pulsó "+ Agregar al pedido", incluir la MP que está cargada en el
@@ -351,11 +345,12 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           kg_recibidos: null,
         }];
       } else {
-        alert('Agrega al menos un item');
+        setFormErr('Agrega al menos un item'); /* AUDIT UX 16-jul (U7) */
         return;
       }
     }
 
+    setFormErr('');
     setCreating(true);
     try {
       const res = await api.post('/api/compras/oc', {
@@ -370,10 +365,10 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
         onCreated();
         if (onClose) onClose(); /* garantizar cierre del modal en éxito */
       } else {
-        alert(`Error: ${res.error || 'desconocido'}`);
+        setFormErr(humanizeError({ data: res })); /* AUDIT UX 16-jul (U4+U7) */
       }
     } catch (err) {
-      alert(`Error: ${err.message}`);
+      setFormErr(humanizeError(err)); /* AUDIT UX 16-jul (U4+U7) */
     } finally {
       setCreating(false);
     }
@@ -621,9 +616,9 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
           </select>
         </div>
 
-        {/* Flete */}
+        {/* Flete — captura manual (varía según la MP; lo cotiza el transportista) */}
         <div style={S.fleteBox}>
-          <label style={S.label}>Flete estimado total (MXN)</label>
+          <label style={S.label}>Flete total (MXN)</label>
           <div style={S.fleteInputGroup}>
             <span style={{ fontSize: 14, fontWeight: 600 }}>$</span>
             <input
@@ -634,28 +629,15 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
                 /* Mantener el texto crudo mientras se escribe (NO toFixed por
                    tecla — eso reescribía a "0.00" y hacía imposible teclear).
                    Se parsea a número solo al levantar la OC. */
-                const raw = e.target.value;
-                setFleteEstimado(raw);
-                setFleteOverride(Number(raw) !== sugeridoFlete);
+                setFleteEstimado(e.target.value);
               }}
               min="0"
               step="any"
               placeholder="0.00"
             />
-            <button
-              style={{ ...S.btn, ...S.btnSmall, ...S.btnSecondary }}
-              onClick={() => {
-                setFleteOverride(false);
-                setFleteEstimado(sugeridoFlete.toFixed(2));
-              }}
-              title="Restaurar al cálculo automático"
-            >
-              Auto
-            </button>
           </div>
           <div style={S.fleteHint}>
-            Sugerido: ${(sugeridoFlete).toFixed(2)} ({totalKg} kg × $5 MXN/kg)
-            {fleteOverride && ' · ajuste manual activo'}
+            Costo real del envío según transportista · se puede corregir al pagar
           </div>
         </div>
 
@@ -675,6 +657,13 @@ export default function NewOCModal({ onClose, onCreated, prefillMP }) {
         {/* Footer PEGAJOSO — botones fijos abajo. Orden del mockup: Cancelar
             discreto, primario dominante. */}
         <div style={S.footer}>
+          {/* AUDIT UX 16-jul (U7): error inline en el footer pegajoso (siempre
+              visible aunque el body esté scrolleado) en vez de alert() */}
+          {formErr && (
+            <div role="alert" style={{ fontSize: 13.5, color: '#B91C1C', background: '#FEF2F2', border: '1px solid #FCA5A5', borderRadius: 8, padding: '9px 11px', marginBottom: 10, lineHeight: 1.4 }}>
+              {formErr}
+            </div>
+          )}
           <div style={S.buttons}>
             <button
               style={{ ...S.btn, ...S.btnSecondary, flex: '0 0 auto', padding: '12px 18px' }}
