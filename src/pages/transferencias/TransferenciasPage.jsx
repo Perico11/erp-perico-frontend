@@ -546,8 +546,10 @@ function OTCard({ ot, rol, busy, onAccion, onPrint, onEditar }) {
   const puedeCancelar =
     (ot.estado === 'solicitada' && (rol === 'admin' || rol === 'almacen' || rol === 'tecnico')) ||
     (ot.estado === 'surtida' && rol === 'admin');
-  /* Editar líneas: solo antes de surtir ('Solicitada'), por admin/almacen/tecnico. */
-  const puedeEditar = ot.estado === 'solicitada' && (rol === 'admin' || rol === 'almacen' || rol === 'tecnico');
+  /* Editar líneas: solo antes de surtir ('Solicitada'). AUDITORÍA 24-ago:
+     inventario (Burgos) puede CREAR OTs — quien crea puede corregir la suya
+     antes de que se surta; faltaba aquí y el backend ya lo acepta. */
+  const puedeEditar = ot.estado === 'solicitada' && (rol === 'admin' || rol === 'almacen' || rol === 'tecnico' || rol === 'inventario');
 
   const tipoLabel = (l) => l.tipo === 'pt' ? 'PT' : l.tipo === 'tapa' ? 'Tapa' : 'Envase';
   const em = ESTADO_DS[ot.estado] || ESTADO_DS.solicitada;
@@ -633,7 +635,7 @@ function OTCard({ ot, rol, busy, onAccion, onPrint, onEditar }) {
           )}
           {puedeEditar && (
             <button style={{ ...C.btnNeutral, ...neutralFull }} disabled={busy} onClick={onEditar}
-              data-id="transferencias.btn.editar" data-rol="admin,almacen,tecnico">
+              data-id="transferencias.btn.editar" data-rol="admin,almacen,tecnico,inventario">
               {iconNeutral(<IconEdit size={16} />)} Editar
             </button>
           )}

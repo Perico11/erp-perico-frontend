@@ -391,7 +391,7 @@ export default function NotificacionesPage() {
             {marcables.length > 0 && (
               <button
                 data-id="notif-leer-todas"
-                data-rol="marcar-leidas"
+                data-rol="admin,tecnico,almacen,compras,inventario,recolector"
                 onClick={leerTodas}
                 style={{ height: 40, padding: '0 18px', borderRadius: 999, border: 'none', background: 'var(--lp-brand-600)', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
               >
