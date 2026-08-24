@@ -2432,6 +2432,15 @@ export default function InventarioPage({ embedded = false }) {
                     style={S.chip(t.id === mpSubtab)} onClick={() => setMpSubtab(t.id)}>{t.label}</button>
                 ))}
               </div>
+              {/* MAESTRO (22-ago-2026): "+ Dar de alta MP" vivía SOLO en la
+                  subpestaña Stock, pero quien va a registrar una materia prima
+                  nueva entra por Maestro — es la pantalla que enseña la ficha de
+                  cada MP. Ahí lo buscó el dueño y no estaba. */}
+              {mpSubtab === 'maestro' && canAltaMP && isDesktop && (
+                <div style={S.actionsCluster(isDesktop)}>
+                  <button style={S.btnAdd} data-id="inventario.btn.alta-mp" data-rol="tecnico,admin,compras,inventario" onClick={() => setShowAltaMP(true)}>+ Dar de alta MP</button>
+                </div>
+              )}
               {mpSubtab === 'stock' && (
                 <div style={S.actionsCluster(isDesktop)}>
                   {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
@@ -2757,6 +2766,10 @@ export default function InventarioPage({ embedded = false }) {
       {/* ── Dar de alta MP Modal ── */}
       {showAltaMP && (
         <AltaMPModal
+          /* Ligar una MP a una fórmula ES editar la receta: solo se ofrece a
+             quien puede hacerlo. El backend lo vuelve a comprobar — Arely
+             (compras) tiene formulas:false a propósito. */
+          puedeLigarFormulas={can('editarFormulas') && can('formulas')}
           onClose={() => setShowAltaMP(false)}
           onSaved={(msg) => {
             setShowAltaMP(false);
@@ -4058,7 +4071,7 @@ function AgregarPTUbicacionModal({ ubicacion, ptList, onClose, onSubmit }) {
    lo fija con /api/envases/stock. Ventana emergente igual que MP/PT. ── */
 /* ── Modal "Dar de alta MP" — crea una materia prima NUEVA en maestro + inventario
    y la dispersa a todas las vistas (broadcast). Gate frontend: canAltaMP. ── */
-function AltaMPModal({ onClose, onSaved }) {
+function AltaMPModal({ onClose, onSaved, puedeLigarFormulas }) {
   useBodyScrollLock();
   const cats = Object.keys(MP_CATEGORIES);
   const [nombre, setNombre] = useState('');
@@ -4073,18 +4086,52 @@ function AltaMPModal({ onClose, onSaved }) {
   const inputRef = useRef(null);
   useEffect(() => { if (inputRef.current) inputRef.current.focus(); }, []);
 
+  /* FÓRMULAS LIGADAS (22-ago-2026, pedido dueño): al registrar una MP nueva se
+     puede decir en qué fórmulas va a entrar, con sus kg por 19 L si ya se saben.
+     Se listan por SUMMARY (solo nombres, sin recetas), que es lo que el backend
+     deja leer a cualquiera con sesión.
+
+     Solo aparece para quien puede editar fórmulas: ligar una MP es editar una
+     receta. Arely y Burgos dan de alta la MP igual, sin esta parte. */
+  const [formulasCat, setFormulasCat] = useState([]);
+  const [ligadas, setLigadas] = useState({});   /* { nombreFormula: kg19String } */
+  const [buscaF, setBuscaF] = useState('');
+  useEffect(() => {
+    if (!puedeLigarFormulas) return;
+    api.getFormulasSummary()
+      .then(r => {
+        const arr = (r?.data?.summary || r?.summary || []).map(x => (typeof x === 'string' ? x : x?.nombre)).filter(Boolean);
+        setFormulasCat([...new Set(arr)].sort((a, b) => a.localeCompare(b, 'es')));
+      })
+      .catch(() => { /* sin catálogo se puede dar de alta igual, solo sin ligar */ });
+  }, [puedeLigarFormulas]);
+
+  const toggleFormula = (f) => setLigadas(prev => {
+    const next = { ...prev };
+    if (f in next) delete next[f]; else next[f] = '';
+    return next;
+  });
+  const formulasVisibles = buscaF.trim()
+    ? formulasCat.filter(f => f.toLowerCase().includes(buscaF.trim().toLowerCase()))
+    : formulasCat;
+
   const handleSubmit = async () => {
     const nom = nombre.trim();
     if (!nom) return setError('Escribe el nombre de la materia prima');
     if (!categoria) return setError('Selecciona una categoría');
     setSaving(true); setError('');
     try {
-      await api.crearMP({
+      const formulas = Object.entries(ligadas).map(([nombreF, kg]) => ({
+        nombre: nombreF, kg19: kg === '' ? 0 : Number(kg),
+      }));
+      const r = await api.crearMP({
         nombre: nom, categoria, unidad: unidad.trim() || 'kg',
         stockInicial: Number(stock) || 0, min: Number(min) || 0,
         costoKg: Number(costo) || 0, proveedor: proveedor.trim() || undefined,
+        ...(formulas.length ? { formulas } : {}),
       });
-      onSaved(`Materia prima "${nom}" dada de alta`);
+      const n = (r?.formulasLigadas || []).length;
+      onSaved(`Materia prima "${nom}" dada de alta` + (n ? ` · ligada a ${n} fórmula${n === 1 ? '' : 's'}` : ''));
     } catch (e) {
       /* 409 = ya existe → orientar al flujo correcto: sumar stock es un Ingreso
          de proveedor (/ingresos) o Recibir OC en Compras (P1 20-jul-2026). */
@@ -4142,6 +4189,50 @@ function AltaMPModal({ onClose, onSaved }) {
                 onKeyDown={e => { if (e.key === 'Enter') handleSubmit(); }} />
             </div>
           </div>
+          {puedeLigarFormulas && (
+            <div>
+              <label style={S.fieldLabel}>Fórmulas que la llevan (opcional)</label>
+              <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5, marginBottom: 6 }}>
+                Marca las fórmulas donde va a entrar esta materia prima. Los kg por 19 L
+                se pueden dejar en blanco y capturarlos después en Fórmulas.
+                {' '}<strong>Si la fórmula todavía no está cargada</strong>, da de alta la
+                materia prima sin marcar nada y lígala luego desde Fórmulas.
+              </div>
+              {formulasCat.length === 0 ? (
+                <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>No hay fórmulas cargadas todavía.</div>
+              ) : (
+                <>
+                  <input type="text" style={{ ...S.fieldInput, marginBottom: 6 }} placeholder="Buscar fórmula…"
+                    value={buscaF} onChange={e => setBuscaF(e.target.value)} />
+                  <div style={{ maxHeight: 190, overflowY: 'auto', border: '1px solid var(--lp-border-subtle)', borderRadius: 8, padding: 6 }}>
+                    {formulasVisibles.map(f => {
+                      const on = f in ligadas;
+                      return (
+                        <div key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 4px' }}>
+                          <input type="checkbox" checked={on} onChange={() => toggleFormula(f)}
+                            data-id="inventario.alta-mp.formula" id={`alta-mp-f-${f}`} />
+                          <label htmlFor={`alta-mp-f-${f}`} style={{ flex: 1, fontSize: 12.5, cursor: 'pointer' }}>{f}</label>
+                          {on && (
+                            <input type="number" inputMode="decimal" min="0" step="0.001" placeholder="kg/19L"
+                              style={{ ...S.fieldInput, width: 96, height: 32, fontSize: 12 }}
+                              value={ligadas[f]} onChange={e => setLigadas(prev => ({ ...prev, [f]: e.target.value }))} />
+                          )}
+                        </div>
+                      );
+                    })}
+                    {formulasVisibles.length === 0 && (
+                      <div style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', padding: 4 }}>Ninguna coincide con “{buscaF}”.</div>
+                    )}
+                  </div>
+                  {Object.keys(ligadas).length > 0 && (
+                    <div style={{ fontSize: 11.5, color: 'var(--lp-text-secondary)', marginTop: 6 }}>
+                      {Object.keys(ligadas).length} fórmula(s) marcada(s).
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
           {error && <div style={{ fontSize: 12, color: 'var(--lp-danger-600)', fontWeight: 600 }}>{error}</div>}
         </div>
         <div style={S.modalFooter}>
