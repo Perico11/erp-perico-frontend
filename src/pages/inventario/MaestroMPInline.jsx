@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
+import { presLabel } from '../compras/presentaciones';
 import { MPActionsMenu } from './MPActions';
 
 const S = {
@@ -47,6 +48,7 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
   const [provVal, setProvVal] = useState('');
   const [provLead, setProvLead] = useState('');
   const [savingProv, setSavingProv] = useState(false);
+  const [verTodas, setVerTodas] = useState(false);
   const [proveedores, setProveedores] = useState([]);
   const [avisoProv, setAvisoProv] = useState('');
 
@@ -119,7 +121,13 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
     ? list.filter(([nombre, m]) => nombre.toLowerCase().includes(q) || (m.categoria || '').toLowerCase().includes(q))
     : list.filter(([, m]) => m.estado === 'activo')
   ).sort((a, b) => (b[1].en_formulas?.length || 0) - (a[1].en_formulas?.length || 0));
-  const visibles = q ? filtradas : filtradas.slice(0, 20);
+  /* TOP 20 (24-ago-2026). Sin buscar, la lista mostraba 20 de N sin decir
+     cuántas quedaban fuera. El menú ⋯ de cada renglón es de donde cuelgan
+     Sustituir y Eliminar, así que una MP fuera del top 20 no tenía renglón, no
+     tenía ⋯ y parecía que la acción se había quitado del sistema — el dueño lo
+     reportó justo así. Ahora se dice cuántas hay y se pueden ver todas. */
+  const visibles = (q || verTodas) ? filtradas : filtradas.slice(0, 20);
+  const ocultas = (q || verTodas) ? 0 : Math.max(0, filtradas.length - visibles.length);
 
   const estadoInfo = (estado) => {
     if (estado === 'eliminado') return { txt: 'eliminada', color: 'var(--lp-danger-600)' };
@@ -158,9 +166,29 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
           <button onClick={() => setAvisoProv('')} style={{ ...S.catCancel, flexShrink: 0 }}>✕</button>
         </div>
       )}
-      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.04em' }}>
-        {q ? `Resultados de "${query}" (${visibles.length})` : 'Top 20 activas por uso en formulas'}
+      <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-text-secondary)', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '.04em', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span>
+          {q
+            ? `Resultados de "${query}" (${visibles.length})`
+            : (verTodas
+              ? `Todas las activas (${filtradas.length})`
+              : `Top 20 de ${filtradas.length} activas por uso en fórmulas`)}
+        </span>
+        {!q && filtradas.length > 20 && (
+          <button type="button" onClick={() => setVerTodas(v => !v)}
+            data-id="maestro-mp.btn.ver-todas"
+            style={{ border: 'none', background: 'transparent', color: 'var(--lp-brand-700)', fontFamily: 'inherit', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', textTransform: 'none', letterSpacing: 0, padding: 0 }}>
+            {verTodas ? 'Ver solo el top 20' : `Ver las ${ocultas} restantes`}
+          </button>
+        )}
       </div>
+      {!q && !verTodas && ocultas > 0 && (
+        <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginBottom: 10, lineHeight: 1.5 }}>
+          Hay {ocultas} materias primas activas más. Búscalas por nombre o pulsa
+          “Ver las {ocultas} restantes”: las acciones de cada MP —incluida
+          <strong> Sustituir</strong>— están en el menú <strong>⋯</strong> de su renglón.
+        </div>
+      )}
       <div style={S.list}>
         {visibles.length === 0 && <div style={S.empty}>Sin coincidencias para "{query}".</div>}
         {visibles.map(([nombre, m]) => {
@@ -197,6 +225,9 @@ export default function MaestroMPInline({ query = '', canDelete = false, canEdit
                         </button>
                       ) : (m.categoria || 'sin categoria')}
                       {m.stock?.qty != null && ' · stock ' + m.stock.qty}
+                      {/* La presentación se captura al dar de alta; si no se
+                          viera aquí seria un dato guardado y escondido. */}
+                      {m.presentacion && ' · ' + (presLabel(m.presentacion) || m.presentacion)}
                     </>
                   )}
                 </div>

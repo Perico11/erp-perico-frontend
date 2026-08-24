@@ -4,6 +4,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
 import api from '../../services/api';
+import { PRESENTACIONES } from '../compras/presentaciones';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useIsDesktop from '../../hooks/useIsDesktop';
@@ -4077,6 +4078,12 @@ function AltaMPModal({ onClose, onSaved, puedeLigarFormulas }) {
   const [nombre, setNombre] = useState('');
   const [categoria, setCategoria] = useState(cats[0] || '');
   const [unidad, setUnidad] = useState('kg');
+  /* PRESENTACIÓN (24-ago-2026, pedido dueño). Cómo VIENE empaquetada, que no es
+     lo mismo que cómo se cuenta: la unidad es kg, la presentación es saco de 25
+     o tambor de 200. Sin ella, pedirla es adivinar cuántos envases son.
+     Se usa la lista COMPARTIDA de Compras — la misma que ven Ingresos y
+     Forecast— para no crear una cuarta copia del vocabulario. */
+  const [presentacion, setPresentacion] = useState('');
   const [stock, setStock] = useState('');
   const [min, setMin] = useState('');
   const [costo, setCosto] = useState('');
@@ -4126,6 +4133,7 @@ function AltaMPModal({ onClose, onSaved, puedeLigarFormulas }) {
       }));
       const r = await api.crearMP({
         nombre: nom, categoria, unidad: unidad.trim() || 'kg',
+        ...(presentacion ? { presentacion } : {}),
         stockInicial: Number(stock) || 0, min: Number(min) || 0,
         costoKg: Number(costo) || 0, proveedor: proveedor.trim() || undefined,
         ...(formulas.length ? { formulas } : {}),
@@ -4158,6 +4166,18 @@ function AltaMPModal({ onClose, onSaved, puedeLigarFormulas }) {
             <select style={S.fieldInput} value={categoria} onChange={e => setCategoria(e.target.value)}>
               {cats.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
+          </div>
+          <div>
+            <label style={S.fieldLabel}>Presentación</label>
+            <select style={S.fieldInput} value={presentacion} onChange={e => setPresentacion(e.target.value)}
+              data-id="inventario.alta-mp.presentacion">
+              {PRESENTACIONES.map(p => <option key={p.v} value={p.v}>{p.lbl}</option>)}
+            </select>
+            <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5, marginTop: 4 }}>
+              Cómo <strong>viene</strong> del proveedor. No es lo mismo que la unidad: se
+              cuenta en kg, pero llega en sacos, tambores o a granel — y de eso depende
+              cuántos envases se piden. Si aún no se sabe, se deja en blanco.
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 10 }}>
             <div style={{ flex: 1 }}>
