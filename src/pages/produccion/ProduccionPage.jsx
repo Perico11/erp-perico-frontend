@@ -647,6 +647,37 @@ export default function ProduccionPage() {
 
   /* Emmanuel (id='admin') es el propietario de las fórmulas — bypass del NDA.
      Para cualquier otro usuario se muestra el modal NDA antes de arrancar. */
+  /* Arrancar un pedido ACEPTADO. Vive aparte porque lo llaman los dos caminos
+     (con NDA y sin él) y porque le faltaba algo que Pedidos sí hacía: VALIDAR
+     QUE HAYA MATERIA PRIMA. Mientras los aceptados no se veían en esta
+     pantalla daba igual; al mostrarlos, esta ruta se vuelve alcanzable y sin
+     el candado se podría soltar a planta una tirada sin MP — el descuento hace
+     clamp a 0 en silencio. Mismo criterio que handleIniciarProduccion de
+     PedidosPage, incluido excluirPedido para que el pedido no compita consigo
+     mismo por su propia reserva. */
+  const arrancarAceptado = useCallback(async (it) => {
+    try {
+      const v = await api.validarStock(it.formula || it.producto, it.cantidad, undefined, it.id);
+      if (v && v.suficiente === false) {
+        const falt = (v.faltantes || []).slice(0, 4)
+          .map(f => `${f.mp} (faltan ${Number(f.faltanteKg || 0).toFixed(1)} kg)`).join(' · ');
+        showToast(`Stock MP insuficiente para ${it.formula || it.producto}: ${falt}` +
+          `${(v.faltantes || []).length > 4 ? ' …' : ''}. Recibe MP o ajusta inventario antes de iniciar.`);
+        return;
+      }
+    } catch { /* si la validación falla (red/endpoint), NO bloquear el flujo */ }
+    try {
+      await api.upsertPedido({
+        ...it._raw,
+        estado: 'en_produccion',
+        fechaInicioProduccion: new Date().toISOString(),
+        produccionIniciadaPor: userName,
+      });
+      reloadPed();
+    } catch (e) { showToast('No se pudo iniciar: ' + humanizeError(e)); /* AUDIT UX 16-jul (U4) */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userName]);
+
   const handleStartProduccion = useCallback((it) => {
     /* NDA: admin (propietario) o vigencia de 7 días ya aceptada → sin modal.
        Antes solo admin se exceptuaba, forzando re-consentir aquí aunque el
@@ -654,19 +685,8 @@ export default function ProduccionPage() {
     if ((user && user.id === 'admin') || ndaYaAceptado(user, 'produccion')) {
       /* Bypass NDA: ejecutar la lógica de arranque directamente */
       (async () => {
-        if (it._tipo === 'pedido' && it.estado === 'aceptado') {
-          try {
-            await api.upsertPedido({
-              ...it._raw,
-              estado: 'en_produccion',
-              fechaInicioProduccion: new Date().toISOString(),
-              produccionIniciadaPor: userName,
-            });
-            reloadPed();
-          } catch (e) { showToast('No se pudo iniciar: ' + humanizeError(e)); /* AUDIT UX 16-jul (U4) */ }
-        } else {
-          setProdModal(it);
-        }
+        if (it._tipo === 'pedido' && it.estado === 'aceptado') await arrancarAceptado(it);
+        else setProdModal(it);
       })();
       return;
     }
@@ -733,12 +753,28 @@ export default function ProduccionPage() {
     [ordenes]
   );
 
-  /* Pedidos en producción activa (reales y prueba) */
-  const pedidosListos = useMemo(() =>
-    pedidos.filter(p => p && p.estado === 'en_produccion' && p.fechaInicioProduccion)
-      .sort((a, b) => (a.fechaInicioProduccion || a.fecha || '').localeCompare(b.fechaInicioProduccion || b.fecha || '')),
-    [pedidos]
-  );
+  /* Pedidos en producción activa Y los ACEPTADOS que esperan turno.
+     ─────────────────────────────────────────────────────────────────────
+     Hasta el 25-ago-2026 esto solo admitía 'en_produccion', y sin embargo
+     renderProdAction YA traía una rama isAceptado que pinta "Iniciar
+     producción", y handleStartProduccion YA sabía arrancar un pedido
+     aceptado. Las dos eran CÓDIGO MUERTO: el filtro nunca dejaba llegar un
+     aceptado hasta aquí. La intención original era que se vieran; solo
+     faltaba el filtro.
+
+     Se notó por dos caminos: el dueño fue a buscar a Producción un pedido
+     que acababa de aceptar y no estaba, y después no encontró dónde
+     corregirle la cantidad antes de arrancar.
+
+     Orden: primero lo que está corriendo (con cronómetro), después la fila
+     de espera — que es como se lee una cola. */
+  const pedidosListos = useMemo(() => {
+    const enCurso = pedidos.filter(p => p && p.estado === 'en_produccion' && p.fechaInicioProduccion)
+      .sort((a, b) => (a.fechaInicioProduccion || a.fecha || '').localeCompare(b.fechaInicioProduccion || b.fecha || ''));
+    const esperando = pedidos.filter(p => p && p.estado === 'aceptado')
+      .sort((a, b) => (a.fecha || '').localeCompare(b.fecha || ''));
+    return [...enCurso, ...esperando];
+  }, [pedidos]);
 
   /* DECISIÓN OWNER jun 2026 ("al terminar un lote de producción, ahí mismo debe
      quedar la card hasta terminar envasado"): lotes post-producción que aún NO
@@ -1317,20 +1353,9 @@ export default function ProduccionPage() {
             const it = pendingNDA;
             setPendingNDA(null);
             /* Si es un pedido aceptado y aún no tiene fechaInicioProduccion → arrancar cronómetro */
-            if (it._tipo === 'pedido' && it.estado === 'aceptado') {
-              try {
-                await api.upsertPedido({
-                  ...it._raw,
-                  estado: 'en_produccion',
-                  fechaInicioProduccion: new Date().toISOString(),
-                  produccionIniciadaPor: userName,
-                });
-                reloadPed();
-              } catch (e) { showToast('No se pudo iniciar: ' + humanizeError(e)); /* AUDIT UX 16-jul (U4) */ }
-            } else {
-              /* Para órdenes y pedidos ya en producción, abrir directo el flujo paso-a-paso */
-              setProdModal(it);
-            }
+            if (it._tipo === 'pedido' && it.estado === 'aceptado') await arrancarAceptado(it);
+            /* Para órdenes y pedidos ya en producción, abrir directo el flujo paso-a-paso */
+            else setProdModal(it);
           }}
           onReject={() => {
             setPendingNDA(null);
