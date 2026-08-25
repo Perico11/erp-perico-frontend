@@ -644,7 +644,7 @@ export function QRScanner({ onResult, onClose }) {
           <div style={SS.manualLabel}>O ingresa el código manualmente:</div>
           <input
             style={SS.manual}
-            placeholder="Ej: LP-2026-001-A"
+            placeholder="Ej: LP-0001-001-A"
             value={manual}
             onChange={(e) => setManual(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') submitManual(); }}

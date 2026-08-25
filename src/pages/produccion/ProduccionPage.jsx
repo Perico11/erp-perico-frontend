@@ -577,6 +577,28 @@ export function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess 
    tanque), pero la cola tiene que DECIRLO antes de entrar — así se ve de un
    vistazo qué otros colores vienen con más de una bacha. Silencioso cuando
    la orden cabe en una: no ensucia el caso normal. */
+/* ── EL # DE LOTE, DESDE QUE SE ASIGNA (25-ago-2026) ──────────────────────
+   El dueño: "que se herede desde que se asigna hasta que se saca en Terán a
+   envasar con el botón, todo debe coincidir". El número se acuña al hacer el
+   pedido, así que la cola puede nombrarlo ANTES de producir — y el operario
+   compara contra la etiqueta que va a imprimir. Vacío en lo anterior al
+   cambio: mejor no enseñar nada que enseñar un número inventado. */
+function LoteBadge({ codigo }) {
+  if (!codigo) return null;
+  return (
+    <span
+      title="Número de lote de este encargo — el mismo que llevará la etiqueta"
+      style={{
+        fontFamily: 'var(--lp-font-mono)', fontSize: 11, fontWeight: 700,
+        color: 'var(--lp-text-secondary)', background: 'var(--lp-bg-subtle, #f1f5f9)',
+        border: '1px solid var(--lp-border, #e2e8f0)', borderRadius: 5, padding: '1px 6px',
+      }}
+    >
+      {codigo}
+    </span>
+  );
+}
+
 function BachasHint({ item }) {
   const litPerUnit = Number(item.litPerUnit) || Number(item._raw?.litPerUnit) || 19;
   const n = bachasParaLitros((Number(item.cantidad) || 0) * litPerUnit);
@@ -812,6 +834,7 @@ export default function ProduccionPage() {
       fechaCreacion: o.fechaCreacion,
       notas: o.notas,
       pedidoId: o.pedidoId || '',
+      codigoLote: o.codigoLote || '',
     }));
     const fromPedido = pedidosListos.map(p => ({
       _tipo: 'pedido',
@@ -829,6 +852,7 @@ export default function ProduccionPage() {
       fechaCreacion: p.fecha,
       notas: p.solicitante ? `Solicitante: ${p.solicitante}` : '',
       pedidoId: p.id,
+      codigoLote: p.codigoLote || '',
     }));
     /* Pedidos primero (cronómetro corriendo arriba), luego órdenes.
        FIX jun 2026 (censo Pre#2): DEDUPE — un pedido lanzado con
@@ -1093,6 +1117,7 @@ export default function ProduccionPage() {
                             <td style={S.td}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                 <span style={S.folio}>{it.codigo}</span>
+                                <LoteBadge codigo={it.codigoLote} />
                                 {it._tipo === 'pedido' && <span style={B('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Pedido</span>}
                                 {it.prioridad === 'urgente' && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>URGENTE</span>}
                                 {it.prioridad === 'alta' && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>ALTA</span>}
@@ -1135,6 +1160,7 @@ export default function ProduccionPage() {
                     <div key={it._tipo + ':' + it.id} style={S.card(enCurso)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, flexWrap: 'wrap' }}>
                         <span style={S.folio}>{it.codigo}</span>
+                        <LoteBadge codigo={it.codigoLote} />
                         <EstadoBadge color={est.color} label={est.label} />
                         {it.prioridad === 'urgente' && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>URGENTE</span>}
                         {it.prioridad === 'alta' && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>ALTA</span>}

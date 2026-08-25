@@ -642,8 +642,10 @@ export default function TrazabilidadPage() {
   }, [lotes, setQuery, showToast]);
 
   /* §7: + Lote manual (solo admin) → crea un lote en trazabilidad vía
-     api.crearLote (server asigna código canónico LP-YYYYMMDD-NNN dentro del
-     mutex). Pide producto y cantidad; NO inventa datos extra. */
+     api.crearLote (el server asigna el código dentro del mutex). Un lote
+     manual no cuelga de ningún pedido, así que ESTRENA serie mayor —
+     LP-0008-001— sin pisar la que un encargo vivo tiene apartada.
+     Pide producto y cantidad; NO inventa datos extra. */
   const handleLoteManual = useCallback(async () => {
     if (!esAdmin) return;
     const producto = await confirm('Registra un lote manualmente (sin pasar por producción). Quedará auditado.', {

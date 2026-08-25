@@ -379,8 +379,10 @@ const api = {
   getTrazabilidad: () => request('GET', '/api/trazabilidad'),
   /* X2 (jun 2026): upsertTrazabilidad eliminado — backend retorna 410 sin header
      x-trazabilidad-overwrite-confirm:SI. Usar crearLote o api.transicionLote/Sublote. */
-  /* Crear UN lote nuevo — server asigna código canónico LP-YYYYMMDD-NNN
-     dentro del mutex, evitando colisiones del antiguo Math.random*999. */
+  /* Crear UN lote nuevo — el server asigna el código canónico dentro del
+     mutex, evitando colisiones del antiguo Math.random*999. Desde 25-ago-2026
+     es LP-SERIEMAYOR-SERIEMENOR (LP-0007-001): el mayor viene del pedido, así
+     que el lote sale con el número que el encargo ya traía. */
   crearLote: (lote) => request('POST', '/api/trazabilidad/lote', { lote }),
 
   /* Sprint G-9: cambiar el PIN propio (self-service, sin admin).
