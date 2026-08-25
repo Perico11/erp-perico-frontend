@@ -1036,8 +1036,15 @@ export default function PedidosPage() {
                         data-rol="tecnico,admin"
                         disabled={busyId === p.id}
                         onClick={() => handleAceptar(p)}
+                        title="Acepta el pedido y le crea su orden. Para arrancar, después usa «Iniciar producción»."
                       >
-                        {busyId === p.id ? '…' : <>{Icon.check} Aceptar y producir</>}
+                        {/* Decía "Aceptar y producir" y NO produce: handleAceptar
+                            manda lanzarProduccion:false a propósito, porque arrancar
+                            exige validar stock de MP y aceptar el NDA — y eso vive en
+                            "Iniciar producción". El dueño aceptó BLANCO SG V3 el
+                            25-ago y no entendía por qué no llegaba a la cola: la
+                            etiqueta prometía un paso que el handler no da. */}
+                        {busyId === p.id ? '…' : <>{Icon.check} Aceptar</>}
                       </button>
                     )}
                     {mostrarIniciar && (
