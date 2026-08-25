@@ -288,9 +288,26 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             if (st.qcReadings && typeof st.qcReadings === 'object') setQcReadings(st.qcReadings);
             if (Array.isArray(st.consumoReal) && st.consumoReal.length) { setConsumoReal(st.consumoReal); restoredCR = true; }
             if (st.stepDone && typeof st.stepDone === 'object') setStepDone(st.stepDone);
-            /* Multi-bacha: restaurar nº de bachas, reparto y QC extra. */
-            if (typeof st.numBachas === 'number' && st.numBachas >= 1) setNumBachas(st.numBachas);
-            if (Array.isArray(st.cantBachas) && st.cantBachas.length) setCantBachas(st.cantBachas);
+            /* Multi-bacha: restaurar nº de bachas, reparto y QC extra.
+               PERO el checkpoint puede haber quedado VIEJO: si un admin corrigió
+               la cantidad del pedido a media producción (2 totes → 1), el reparto
+               guardado suma el total anterior y el cierre revienta con "el reparto
+               no cuadra". En ese caso se descarta el reparto guardado y se vuelve
+               a partir por capacidad de tanque. El QC capturado NO se toca. */
+            const totalActual = Number(item.cantidad) || 0;
+            const guardado = Array.isArray(st.cantBachas) ? st.cantBachas : null;
+            const sumaGuardada = guardado ? guardado.reduce((a, c) => a + (Number(c) || 0), 0) : null;
+            const repartoVigente = guardado && guardado.length && sumaGuardada === totalActual;
+
+            if (repartoVigente) {
+              if (typeof st.numBachas === 'number' && st.numBachas >= 1) setNumBachas(st.numBachas);
+              setCantBachas(guardado);
+            } else if (guardado) {
+              console.warn('[PRODUCCION] el reparto guardado suma ' + sumaGuardada +
+                ' y la orden ahora es de ' + totalActual + ' — se reparte de nuevo');
+              setNumBachas(bachasSugeridas);
+              setCantBachas(repartir(totalActual || 1, bachasSugeridas));
+            }
             if (st.qcExtraBachas && typeof st.qcExtraBachas === 'object') setQcExtraBachas(st.qcExtraBachas);
           }
         } catch { /* sin checkpoint */ }
@@ -327,7 +344,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
       }
     })();
     return () => { cancel = true; };
-  }, [item.id, productoNombre, item.cantidad]);
+  }, [item.id, productoNombre, item.cantidad, bachasSugeridas]);
 
   /* Auto-guardar checkpoint cada 15 segundos */
   useEffect(() => {
