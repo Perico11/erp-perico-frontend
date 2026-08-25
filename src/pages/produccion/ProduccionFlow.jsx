@@ -232,6 +232,9 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
      lote. Reemplaza el "ajustes (solo sumar)" anterior — ahora cubre bajar/sustituir.
      Fila: { mp, teorico, real, sustituyeA, esExtra, motivo }. */
   const [consumoReal, setConsumoReal] = useState([]);
+  /* true cuando el consumo del checkpoint era de otra cantidad y se reconstruyó:
+     el operario tiene que saber que lo que hubiera ajustado a mano ya no está. */
+  const [consumoRecalculado, setConsumoRecalculado] = useState(false);
   const [mpCatalogo, setMpCatalogo] = useState([]); /* nombres de MP del catálogo (autocompletar) */
   const [stepDone, setStepDone] = useState({});
   const [loading, setLoading] = useState(true);
@@ -278,6 +281,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
 
         /* Intentar restaurar checkpoint */
         let restoredCR = false;
+        let consumoRestaurado = [];
         try {
           const ck = await api.getProduccionCheckpoint(item.id);
           if (ck?.checkpoint?.state && !cancel) {
@@ -286,7 +290,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             if (typeof st.timerSec === 'number') setTimerSec(st.timerSec);
             if (st.dualPhase) setDualPhase(st.dualPhase);
             if (st.qcReadings && typeof st.qcReadings === 'object') setQcReadings(st.qcReadings);
-            if (Array.isArray(st.consumoReal) && st.consumoReal.length) { setConsumoReal(st.consumoReal); restoredCR = true; }
+            if (Array.isArray(st.consumoReal) && st.consumoReal.length) { setConsumoReal(st.consumoReal); consumoRestaurado = st.consumoReal; restoredCR = true; }
             if (st.stepDone && typeof st.stepDone === 'object') setStepDone(st.stepDone);
             /* Multi-bacha: restaurar nº de bachas, reparto y QC extra.
                PERO el checkpoint puede haber quedado VIEJO: si un admin corrigió
@@ -324,13 +328,46 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           if (!cancel) {
             const fmap = fr?.formulas || fr?.data?.formulas || fr || {};
             const f = fmap[productoNombre];
+            /* EL CHECKPOINT PUEDE TRAER EL CONSUMO DE OTRA CANTIDAD (25-ago-2026).
+               Reporte del dueño: corrigió la orden a 1 tote y el cierre descontó
+               materia prima como si fueran 2. La causa: `consumoReal` se restauraba
+               VERBATIM del checkpoint —con los kg calculados para 104 cubetas— y
+               `descuentos` sale de ahí, NO de item.cantidad. Corregir la cantidad
+               arreglaba el lote y el PT, pero no lo que se descontaba de almacén.
+
+               El `teorico` de cada MP es siempre kg19 × cantidad, así que comparar
+               contra la fórmula fresca detecta el desfase sin depender de campos
+               nuevos ni de cantBachas. Si no cuadra, el consumo guardado es de otra
+               tirada y se reconstruye: lo que el operario hubiera editado a mano era
+               para un lote de otro tamaño, así que conservarlo sería peor. */
+            const teoricoDe = (ing) => +((Number(ing.kg19) || 0) * lotes).toFixed(3);
+            const consumoDeLaFormula = () => f.ingredientes
+              .filter(ing => ing && ing.nombre)
+              .map(ing => {
+                const teo = teoricoDe(ing);
+                return { mp: ing.nombre, teorico: teo, real: teo, sustituyeA: null, esExtra: false, motivo: '' };
+              });
+
+            let obsoleto = false;
+            if (restoredCR && f && Array.isArray(f.ingredientes)) {
+              const esperado = {};
+              f.ingredientes.forEach(ing => { if (ing && ing.nombre) esperado[ing.nombre] = teoricoDe(ing); });
+              /* Solo se miran las MP de la fórmula: las extras y las sustituciones
+                 que agregó el operario no tienen teórico contra qué comparar. */
+              obsoleto = consumoRestaurado.some(r => {
+                if (r.esExtra || r.sustituyeA) return false;
+                const esp = esperado[String(r.mp || '').trim()];
+                if (esp === undefined) return false;
+                return Math.abs((Number(r.teorico) || 0) - esp) > 0.01;
+              });
+              if (obsoleto) {
+                console.warn('[PRODUCCION] el consumo guardado es de otra cantidad — se recalcula para ' + lotes + ' cubetas');
+                setConsumoReal(consumoDeLaFormula());
+                setConsumoRecalculado(true);
+              }
+            }
             if (!restoredCR && f && Array.isArray(f.ingredientes)) {
-              setConsumoReal(f.ingredientes
-                .filter(ing => ing && ing.nombre)
-                .map(ing => {
-                  const teo = +((Number(ing.kg19) || 0) * lotes).toFixed(3);
-                  return { mp: ing.nombre, teorico: teo, real: teo, sustituyeA: null, esExtra: false, motivo: '' };
-                }));
+              setConsumoReal(consumoDeLaFormula());
             }
             const mps = mr?.data?.mps || mr?.mps || {};
             const names = Object.keys(mps).filter(Boolean).sort();
@@ -1098,6 +1135,17 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
             <div style={{ ...S.saction, marginBottom: 12 }}>
               {step.desc || 'Consumo real vs fórmula. Ajusta lo que REALMENTE usaste: sube/baja el kg, sustituye una MP por otra del catálogo, o agrega una extra. Si todo fue igual a la fórmula, no toques nada y avanza.'}
             </div>
+
+            {consumoRecalculado && (
+              <div style={{ padding: '10px 12px', marginBottom: 12, borderRadius: 10,
+                background: 'var(--lp-warning-50)', border: '1px solid var(--lp-warning-200)',
+                color: 'var(--lp-warning-700)', fontSize: 12, lineHeight: 1.5 }}>
+                <strong>Se recalculó el consumo.</strong> La sesión guardada era de otra
+                cantidad —la orden se corrigió después— así que estos kg se volvieron a
+                sacar de la fórmula para {item.cantidad} cubetas. Si ya habías ajustado
+                algún renglón a mano, vuelve a capturarlo.
+              </div>
+            )}
 
             {/* La tabla es el TOTAL de la orden. Con el reparto por debajo de lo
                 que el tanque aguanta, esos kg leídos como una sola mezcla son el
