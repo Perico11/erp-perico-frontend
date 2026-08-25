@@ -13,7 +13,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import CorregirCantidadModal from '../pages/produccion/CorregirCantidadModal';
+import CorregirCantidadModal from '../components/CorregirCantidadModal';
 
 vi.mock('../services/api', () => ({
   default: { corregirCantidadPedido: vi.fn() },

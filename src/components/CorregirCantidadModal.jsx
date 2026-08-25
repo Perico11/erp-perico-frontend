@@ -8,15 +8,18 @@
    No usa window.prompt a propósito — la PWA de iOS lo traga en silencio (mismo
    motivo por el que el rechazo de pedidos dejó de usarlo).
 
+   Vive en components/ porque lo usan DOS pantallas: Pedidos (antes de arrancar,
+   que es cuando de verdad conviene corregir) y la cola de Producción.
+
    El candado real vive en el servidor (solo admin, solo antes de 'producido',
    motivo obligatorio, y el cubeta-equivalente lo recalcula él). Aquí solo se
    captura y se muestra la equivalencia para que nadie confunda totes con
    cubetas, que es de donde salió el enredo.
    ════════════════════════════════════════════════════════════════════════════ */
 import { useState, useMemo } from 'react';
-import api from '../../services/api';
-import humanizeError from '../../utils/humanizeError';
-import { ptMedidaDef, medidaACubetas, etiquetaMedida, bachasParaLitros } from '../../utils/ptMedidas';
+import api from '../services/api';
+import humanizeError from '../utils/humanizeError';
+import { ptMedidaDef, medidaACubetas, etiquetaMedida, bachasParaLitros } from '../utils/ptMedidas';
 
 const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(10,16,14,.45)', zIndex: 1200,
