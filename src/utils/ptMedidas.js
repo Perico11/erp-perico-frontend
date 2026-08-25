@@ -39,3 +39,25 @@ export const etiquetaMedidaReal = (key, medidaQty, cubetas) => {
   const cub = Number(cubetas) || 0;
   return `${etiquetaMedida(key, medidaQty)} · ${cub.toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub`;
 };
+
+/* ── CAPACIDAD DE UNA BACHA (25-ago-2026) ─────────────────────────────────
+   Una BACHA es una mezcla física: lo que cabe en el tanque de una tirada.
+   Ese tanque es de un TOTE — por eso la fórmula de un producto está cuadrada
+   a ~400 kg de agua por bacha y no al doble.
+
+   El ERP guarda `cantidad` en CUBETA-EQUIVALENTE, así que un pedido de 2 totes
+   llega como 104. Sin este tope, producción escalaba la receta a las 104
+   cubetas de un jalón y le pedía al operario 800 kg de agua para un tanque que
+   solo admite 400: la orden entera se trataba como UNA sola mezcla.
+
+   Se razona en LITROS, no en cubetas, porque `litPerUnit` no siempre es 19
+   (hay presentaciones en galón/litro y ahí "cantidad" no son cubetas). */
+export const LITROS_POR_BACHA = ptMedidaDef('tote').ml / 1000; /* 988 L */
+
+/* Cuántas bachas hace falta para producir `litros` sin pasarse del tanque.
+   El epsilon evita que 988.0000001 L (redondeo de coma flotante) pida 2. */
+export const bachasParaLitros = (litros) => {
+  const L = Number(litros) || 0;
+  if (!(L > 0)) return 1;
+  return Math.max(1, Math.ceil(L / LITROS_POR_BACHA - 1e-9));
+};

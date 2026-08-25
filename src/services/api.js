@@ -418,6 +418,12 @@ const api = {
      huérfana producible). */
   rechazarPedido: (pedidoId, motivo) =>
     request('POST', '/api/pedidos/rechazar', { pedidoId, motivo }),
+  /* Corregir CUÁNTO se va a producir (admin). No es upsert: ese número decide
+     la MP que se descuenta y el PT que entra a stock al cerrar producción, así
+     que el server lo blinda (solo admin, solo antes de 'producido', motivo
+     obligatorio) y recalcula el cubeta-equivalente él mismo. */
+  corregirCantidadPedido: (pedidoId, medidaQty, motivo) =>
+    request('POST', '/api/pedidos/corregir-cantidad', { pedidoId, medidaQty, motivo }),
   getProduccionHistorial: () => request('GET', '/api/produccion-historial'),
   getQC: () => request('GET', '/api/qc'),
   /* (saveQC eliminado 21-jul-2026: legacy overwrite sin callers — usar
