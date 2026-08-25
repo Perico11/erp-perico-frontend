@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
+import api from '../../services/api';
 
 const S = {
   overlay: {
@@ -44,14 +45,44 @@ const S = {
     border: '1.5px solid ' + (highlight ? 'var(--lp-success-500)' : 'var(--lp-border-subtle)'),
     borderRadius: 'var(--lp-radius-sm)', padding: 14,
   }),
-  cardName: { fontSize: 15, fontWeight: 700, marginBottom: 8, color: 'var(--lp-text-primary)' },
+  cardName: { fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--lp-text-primary)', textTransform: 'uppercase', letterSpacing: '.06em' },
+  /* Grid de 3 columnas (etiqueta · valor A · valor B) para que los encabezados
+     de columna queden EXACTAMENTE encima de sus números. Con el flex anterior
+     no había forma de rotularlos y las dos cifras de cada renglón no decían a
+     qué fórmula pertenecían. */
   metricRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+    display: 'grid', gridTemplateColumns: '1fr 76px 76px', gap: 8, alignItems: 'baseline',
     padding: '4px 0', fontSize: 12,
     borderBottom: '0.5px solid var(--lp-border-subtle)',
   },
+  colHead: {
+    display: 'grid', gridTemplateColumns: '1fr 76px 76px', gap: 8,
+    fontSize: 10, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase',
+    color: 'var(--lp-text-tertiary)', paddingBottom: 4, marginBottom: 4,
+    borderBottom: '1px solid var(--lp-border-subtle)',
+  },
+  colHeadVal: { textAlign: 'right' },
+  leyenda: {
+    display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center',
+    fontSize: 11.5, color: 'var(--lp-text-secondary)', marginBottom: 10,
+  },
+  leyendaPill: (esA) => ({
+    display: 'inline-flex', alignItems: 'center', gap: 6,
+    fontWeight: 600, color: esA ? 'var(--lp-text-primary)' : 'var(--lp-text-secondary)',
+  }),
+  leyendaTag: (esA) => ({
+    display: 'inline-flex', width: 18, height: 18, borderRadius: 4,
+    alignItems: 'center', justifyContent: 'center',
+    fontSize: 10, fontWeight: 700,
+    background: esA ? 'var(--lp-brand-50)' : 'var(--lp-bg-sunken)',
+    color: esA ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)',
+    border: '1px solid ' + (esA ? 'var(--lp-brand-100)' : 'var(--lp-border-subtle)'),
+  }),
+  aviso: {
+    fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 10, lineHeight: 1.5,
+  },
   metricLabel: { color: 'var(--lp-text-tertiary)', fontWeight: 500 },
-  metricVal: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-text-primary)' },
+  metricVal: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-text-primary)', textAlign: 'right' },
   diffMejor: { color: 'var(--lp-success-700)' },
   diffPeor: { color: 'var(--lp-danger-700)' },
   section: { marginTop: 16 },
@@ -94,25 +125,90 @@ function MetricRow({ label, valA, valB, fmtFn = fmt, mejorMenor = true }) {
   return (
     <div style={S.metricRow}>
       <span style={S.metricLabel}>{label}</span>
-      <span style={{ display: 'flex', gap: 16 }}>
-        <span style={{ ...S.metricVal, ...(winner === 'a' ? S.diffMejor : winner === 'b' ? S.diffPeor : {}) }}>
-          {fmtFn(valA)}
-        </span>
-        <span style={{ ...S.metricVal, ...(winner === 'b' ? S.diffMejor : winner === 'a' ? S.diffPeor : {}), opacity: .6 }}>
-          {fmtFn(valB)}
-        </span>
+      <span style={{ ...S.metricVal, ...(winner === 'a' ? S.diffMejor : winner === 'b' ? S.diffPeor : {}) }}>
+        {fmtFn(valA)}
+      </span>
+      <span style={{ ...S.metricVal, ...(winner === 'b' ? S.diffMejor : winner === 'a' ? S.diffPeor : {}) }}>
+        {fmtFn(valB)}
       </span>
     </div>
   );
 }
 
-export default function CompararFormulasModal({ formulas, onClose }) {
-  /* formulas: array de objetos formula con { nombre, ingredientes, costoCalculado?, pvc?, ... } */
+/* ── De dónde sale cada dato (25-ago-2026) ────────────────────────────────────
+   Antes TODAS las métricas salían "–" y parecía que el comparador estaba roto.
+   No lo estaba: pedía los datos donde no viven.
+
+   · ECONÓMICOS (costo MP, costo total, precio, margen, producción/mes): NO
+     viajan en /api/formulas/todas — ese endpoint dice en su propio comentario
+     "NO incluye datos de costo". Se piden a /api/reports/margenes, que ya los
+     calcula por fórmula con los costos auxiliares CONFIGURABLES (envase, tapa,
+     mano de obra, merma de costos_pt_config). Se consume esa fuente en vez de
+     recalcular aquí para que el comparador no invente un margen distinto al
+     del resto del sistema.
+   · TÉCNICOS (PVC, densidad, viscosidad, sólidos, finish): en formulas_custom
+     viven ANIDADOS bajo `tecnico`, y el modal los leía al nivel superior — por
+     eso salían vacíos incluso cuando estaban capturados. Se leen de los dos
+     sitios (`tecnico.x` y, por compatibilidad con formulas_v2, `x`).
+   ──────────────────────────────────────────────────────────────────────────── */
+const CAMPOS_TEC = ['pvc', 'densidad', 'solidosPeso', 'solidosVolumen', 'finish'];
+/* Nombre del campo en summary[] — lo escribe
+   scripts/propagar_propiedades_correctas.js con el motor de cálculo validado. */
+const EN_SUMMARY = {
+  pvc: 'pvc',
+  densidad: 'densidad',
+  solidosPeso: 'nv_peso',        /* no-volátiles en peso */
+  solidosVolumen: 'nv_vol',      /* no-volátiles en volumen */
+  finish: 'acabado_texto',
+};
+/* Orden de búsqueda: summary (fuente real del ERP) → tecnico.x → x plano
+   (compat con formulas_v2, que sí los guarda al nivel superior). */
+function tec(f, campo, sum) {
+  const enSum = sum ? sum[EN_SUMMARY[campo]] : null;
+  const anidado = f && f.tecnico ? f.tecnico[campo] : null;
+  const plano = f ? f[campo] : null;
+  const primero = [enSum, anidado, plano].find(v => v != null && v !== '');
+  if (primero == null) return null;
+  if (campo === 'finish') return String(primero);
+  const n = Number(primero);
+  return Number.isFinite(n) ? +n.toFixed(2) : null;
+}
+
+export default function CompararFormulasModal({ formulas, summary, onClose }) {
+  /* formulas: array de objetos formula con { nombre, ingredientes, tecnico?, ... } */
   const lista = formulas || [];
   const [selAName, setSelAName] = useState(lista[0]?.nombre || '');
   const [selBName, setSelBName] = useState(lista[1]?.nombre || '');
   const fmA = lista.find(f => f.nombre === selAName) || lista[0];
   const fmB = lista.find(f => f.nombre === selBName) || lista[1];
+
+  /* Económicos por fórmula — una sola carga al abrir el comparador. */
+  const [eco, setEco] = useState(null);      /* { [nombre]: producto } */
+  const [ecoErr, setEcoErr] = useState('');
+  useEffect(() => {
+    let vivo = true;
+    api.getMargenes()
+      .then(r => {
+        if (!vivo) return;
+        const idx = {};
+        (r?.productos || []).forEach(p => { if (p && p.nombre) idx[p.nombre] = p; });
+        setEco(idx);
+      })
+      .catch(e => { if (vivo) { setEco({}); setEcoErr(e?.message || 'no se pudieron cargar'); } });
+    return () => { vivo = false; };
+  }, []);
+  const ecoDe = (f) => (f && eco ? eco[f.nombre] : null) || null;
+  const ecoA = ecoDe(fmA);
+  const ecoB = ecoDe(fmB);
+
+  /* Propiedades físico-químicas: summary[] indexado por nombre de fórmula. */
+  const sumIdx = useMemo(() => {
+    const idx = {};
+    (summary || []).forEach(x => { if (x && x.nombre) idx[x.nombre] = x; });
+    return idx;
+  }, [summary]);
+  const sumA = fmA ? sumIdx[fmA.nombre] : null;
+  const sumB = fmB ? sumIdx[fmB.nombre] : null;
 
   /* Comparación de ingredientes */
   const ingDiff = useMemo(() => {
@@ -157,26 +253,75 @@ export default function CompararFormulasModal({ formulas, onClose }) {
 
           {fmA && fmB && (
             <>
+              {/* Leyenda: las tarjetas agrupan MÉTRICAS, no fórmulas — cada
+                  renglón trae los dos valores. Antes las tarjetas se titulaban
+                  con el nombre de cada fórmula y parecía que a la izquierda le
+                  faltaban los datos técnicos, cuando estaban del otro lado. */}
+              <div style={S.leyenda}>
+                <span style={S.leyendaPill(true)}>
+                  <span style={S.leyendaTag(true)}>A</span>{fmA.nombre}
+                </span>
+                <span style={S.leyendaPill(false)}>
+                  <span style={S.leyendaTag(false)}>B</span>{fmB.nombre}
+                </span>
+              </div>
+
               <div style={S.comparisonGrid}>
                 <div style={S.card(false)}>
-                  <div style={S.cardName}>{fmA.nombre}</div>
-                  <MetricRow label="Costo MP" valA={fmA.costoMP} valB={fmB.costoMP} fmtFn={fmt$} mejorMenor />
-                  <MetricRow label="Costo total" valA={fmA.costoTotal || fmA.costoCalculado} valB={fmB.costoTotal || fmB.costoCalculado} fmtFn={fmt$} mejorMenor />
-                  <MetricRow label="Precio venta" valA={fmA.precioVenta} valB={fmB.precioVenta} fmtFn={fmt$} mejorMenor={false} />
-                  <MetricRow label="Margen %" valA={fmA.margenPct} valB={fmB.margenPct} fmtFn={(n) => n != null ? n + '%' : '—'} mejorMenor={false} />
-                  <MetricRow label="Producción/mes" valA={fmA.prodMensual} valB={fmB.prodMensual} mejorMenor={false} />
+                  <div style={S.cardName}>Económicos <span style={{ fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--lp-text-tertiary)' }}>· por cubeta</span></div>
+                  <div style={S.colHead}>
+                    <span />
+                    <span style={S.colHeadVal}>A</span>
+                    <span style={S.colHeadVal}>B</span>
+                  </div>
+                  <MetricRow label="Costo MP" valA={ecoA?.costoMP} valB={ecoB?.costoMP} fmtFn={fmt$} mejorMenor />
+                  <MetricRow label="Costo total" valA={ecoA?.costoTotal} valB={ecoB?.costoTotal} fmtFn={fmt$} mejorMenor />
+                  <MetricRow label="Precio venta" valA={ecoA?.precioVenta || null} valB={ecoB?.precioVenta || null} fmtFn={fmt$} mejorMenor={false} />
+                  <MetricRow label="Margen %" valA={ecoA?.margenPct} valB={ecoB?.margenPct} fmtFn={(n) => n != null ? n + '%' : '—'} mejorMenor={false} />
+                  <MetricRow label="Producción/mes" valA={ecoA?.prodMensual} valB={ecoB?.prodMensual} mejorMenor={false} />
                   <MetricRow label="# Ingredientes" valA={(fmA.ingredientes || []).length} valB={(fmB.ingredientes || []).length} />
                 </div>
                 <div style={S.card(false)}>
-                  <div style={S.cardName}>{fmB.nombre}</div>
-                  <MetricRow label="PVC %" valA={fmA.pvc} valB={fmB.pvc} mejorMenor />
-                  <MetricRow label="Densidad" valA={fmA.densidad} valB={fmB.densidad} />
-                  <MetricRow label="Viscosidad KU" valA={fmA.viscosidad} valB={fmB.viscosidad} />
-                  <MetricRow label="Sólidos w/w" valA={fmA.solidosPeso} valB={fmB.solidosPeso} mejorMenor={false} />
-                  <MetricRow label="Sólidos v/v" valA={fmA.solidosVolumen} valB={fmB.solidosVolumen} mejorMenor={false} />
-                  <MetricRow label="Finish" valA={fmA.finish} valB={fmB.finish} fmtFn={(s) => s || '—'} />
+                  <div style={S.cardName}>Técnicos</div>
+                  <div style={S.colHead}>
+                    <span />
+                    <span style={S.colHeadVal}>A</span>
+                    <span style={S.colHeadVal}>B</span>
+                  </div>
+                  {/* "Viscosidad KU" se retiró: no existe en summary ni en el
+                      recetario ni en el Sheet — era un renglón condenado a "–".
+                      Cuando se capture, vuelve con una línea. */}
+                  <MetricRow label="PVC %" valA={tec(fmA, 'pvc', sumA)} valB={tec(fmB, 'pvc', sumB)} mejorMenor />
+                  <MetricRow label="Densidad" valA={tec(fmA, 'densidad', sumA)} valB={tec(fmB, 'densidad', sumB)} />
+                  <MetricRow label="Sólidos w/w" valA={tec(fmA, 'solidosPeso', sumA)} valB={tec(fmB, 'solidosPeso', sumB)} mejorMenor={false} />
+                  <MetricRow label="Sólidos v/v" valA={tec(fmA, 'solidosVolumen', sumA)} valB={tec(fmB, 'solidosVolumen', sumB)} mejorMenor={false} />
+                  <MetricRow label="Acabado" valA={tec(fmA, 'finish', sumA)} valB={tec(fmB, 'finish', sumB)} fmtFn={(x) => x || '—'} />
+                  <MetricRow label="Rendimiento m²/L" valA={sumA?.rendimiento_m2_L != null ? +Number(sumA.rendimiento_m2_L).toFixed(2) : null} valB={sumB?.rendimiento_m2_L != null ? +Number(sumB.rendimiento_m2_L).toFixed(2) : null} mejorMenor={false} />
                 </div>
               </div>
+
+              {/* Un guion no dice si el dato falta o si falló la carga. */}
+              {eco === null && !ecoErr && (
+                <div style={S.aviso}>Cargando costos y precios…</div>
+              )}
+              {ecoErr && (
+                <div style={S.aviso}>
+                  No se pudieron cargar los costos y precios ({ecoErr}). Los datos técnicos y
+                  los ingredientes sí son correctos.
+                </div>
+              )}
+              {eco && !ecoErr && (!ecoA?.precioVenta || !ecoB?.precioVenta) && (
+                <div style={S.aviso}>
+                  Sin precio de venta capturado en {!ecoA?.precioVenta && !ecoB?.precioVenta ? 'ninguna de las dos fórmulas' : (!ecoA?.precioVenta ? fmA.nombre : fmB.nombre)} —
+                  por eso el margen sale vacío. Se captura en Precios de venta.
+                </div>
+              )}
+              {eco && !ecoErr && CAMPOS_TEC.every(c => tec(fmA, c, sumA) == null && tec(fmB, c, sumB) == null) && (
+                <div style={S.aviso}>
+                  Ninguna de las dos fórmulas tiene propiedades calculadas (PVC, densidad,
+                  sólidos, acabado). Se generan al recalcular las fórmulas en el ERP.
+                </div>
+              )}
 
               <div style={S.section}>
                 <div style={S.sectionTitle}>

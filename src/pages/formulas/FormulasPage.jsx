@@ -1121,6 +1121,10 @@ export default function FormulasPage({ embedded = false }) {
       {comparar && (
         <CompararFormulasModal
           formulas={Object.entries(formulas).map(([id, f]) => ({ ...f, nombre: f.nombre || id }))}
+          /* summary[] trae las propiedades por fórmula (pvc, densidad,
+             nv_peso, nv_vol, acabado_texto). Vive junto a formulas{} en
+             formulas_custom.json, no dentro de cada fórmula. */
+          summary={fData?.data?.summary || fData?.summary || []}
           onClose={() => setComparar(false)}
         />
       )}
