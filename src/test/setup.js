@@ -41,3 +41,10 @@ if (!window.matchMedia) {
     }),
   });
 }
+
+/* Mock de scrollTo — jsdom tampoco lo implementa (ni en Element ni en window).
+   Lo usa el riel de checkpoints (components/pipeline/Checkpoint) para
+   auto-centrar el paso activo. Sin esto, montar cualquier pantalla con el riel
+   revienta con "scrollTo is not a function" por un detalle de scroll. */
+if (!Element.prototype.scrollTo) Element.prototype.scrollTo = () => {};
+if (!window.scrollTo) window.scrollTo = () => {};

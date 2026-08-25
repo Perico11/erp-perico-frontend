@@ -10,7 +10,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import api from '../../services/api';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
-import { etiquetaMedidaReal } from '../../utils/ptMedidas';
+import { etiquetaMedidaReal, LITROS_POR_BACHA, bachasParaLitros } from '../../utils/ptMedidas';
 import SecureView from '../../components/SecureView';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 /* Checkpoint A (handoff Claude Design jun 2026): riel horizontal con icono
@@ -186,6 +186,17 @@ const S = {
   }),
 };
 
+/* Reparte `total` en `n` partes enteras lo más parejas posible; el sobrante
+   cae en la última (mismo criterio que usaba cambiarNumBachas). */
+function repartir(total, n) {
+  const T = Number(total) || 0;
+  const N = Math.max(1, n);
+  const base = Math.floor(T / N);
+  const arr = Array.from({ length: N }, () => base);
+  arr[N - 1] += T - base * N;
+  return arr;
+}
+
 export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   /* item: { _tipo:'orden'|'pedido', _raw, id, codigo, formula, cantidad, esPrueba, fechaInicioProduccion } */
   const tipo = item._tipo || 'orden';
@@ -198,11 +209,22 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   const [dualPhase, setDualPhase] = useState('add'); /* 'add' | 'disp' */
   const [qcReadings, setQcReadings] = useState({}); /* bacha 1: { pasoIdx: { fieldId: value } } */
   /* Multi-bacha (jun 2026): N bachas = N lotes INDEPENDIENTES (cada uno con su #
-     de lote, su QR y su QC). numBachas default 1 = flujo clásico byte-idéntico.
-     Bacha 1 usa qcReadings (path actual intacto, cero regresión); las bachas 2..N
-     usan qcExtraBachas[b]. cantBachas reparte la cantidad total entre bachas. */
-  const [numBachas, setNumBachas] = useState(1);
-  const [cantBachas, setCantBachas] = useState(() => [item.cantidad || 1]); /* [cant1, …] long. numBachas */
+     de lote, su QR y su QC). Bacha 1 usa qcReadings (path clásico); las bachas
+     2..N usan qcExtraBachas[b]. cantBachas reparte la cantidad total entre
+     bachas. (El default ya NO es 1 — ver el bloque de abajo.) */
+  /* UNA BACHA = UN TANQUE = UN TOTE (25-ago-2026, reporte del dueño).
+     Una orden de 2 totes llegaba como `cantidad: 104` (cubeta-equivalente) y el
+     default de 1 bacha escalaba la receta a las 104 de un jalón: 800 kg de agua
+     para un tanque que admite 400. La orden entera se trataba como UNA mezcla.
+     Ahora el default parte la orden en bachas que quepan en el tanque — para un
+     pedido en totes eso da exactamente una bacha por tote. El operario sigue
+     pudiendo ajustar el número y el reparto a mano. */
+  const litPerUnit = Number(item.litPerUnit) || Number(item._raw?.litPerUnit) || 19;
+  const bachasSugeridas = bachasParaLitros((Number(item.cantidad) || 0) * litPerUnit);
+  const [numBachas, setNumBachas] = useState(bachasSugeridas);
+  const [cantBachas, setCantBachas] = useState(() => repartir(item.cantidad || 1, bachasSugeridas));
+  /* Tope del stepper: nunca por debajo de lo que el tanque exige. */
+  const maxBachas = Math.max(6, bachasSugeridas);
   const [qcExtraBachas, setQcExtraBachas] = useState({}); /* { 2:{pasoIdx:{fieldId}}, 3:{…} } */
   /* CONSUMO REAL vs fórmula (jun 2026): la fórmula da el TEÓRICO; aquí el operador
      edita lo REALMENTE usado por MP (sube/baja/0), sustituye una MP por otra del
@@ -321,18 +343,16 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
   }, [item.id, productoNombre, curStep, timerSec, dualPhase, qcReadings, consumoReal, stepDone, loading, error, userName, numBachas, cantBachas, qcExtraBachas]);
 
   /* Multi-bacha: cambiar el nº de bachas reparte la cantidad total parejo (el
-     operario ajusta después) y descarta el QC de bachas que ya no existen. Tope:
-     no más bachas que cubetas, máx 6. */
+     operario ajusta después) y descarta el QC de bachas que ya no existen.
+     Tope: no más bachas que unidades, y nunca menos que las que exige el
+     tanque (antes era un 6 fijo — una orden de 8 totes no podía repartirse). */
   const cambiarNumBachas = useCallback((n) => {
     const totalCant = item.cantidad || 1;
-    const nn = Math.max(1, Math.min(6, totalCant, n));
+    const nn = Math.max(1, Math.min(maxBachas, totalCant, n));
     setNumBachas(nn);
-    const base = Math.floor(totalCant / nn);
-    const arr = Array.from({ length: nn }, () => base);
-    arr[nn - 1] += totalCant - base * nn;
-    setCantBachas(arr);
+    setCantBachas(repartir(totalCant, nn));
     setQcExtraBachas(x => { const y = {}; Object.keys(x).forEach(k => { if (Number(k) >= 2 && Number(k) <= nn) y[k] = x[k]; }); return y; });
-  }, [item.cantidad]);
+  }, [item.cantidad, maxBachas]);
 
   /* QC de la bacha b (b = 1..numBachas): bacha 1 = qcReadings (path clásico);
      resto = qcExtraBachas[b]. Devuelve { pasoIdx: { fieldId } }. */
@@ -898,9 +918,23 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           <div style={S.bachaStepper}>
             <button type="button" style={S.bachaStepBtn} disabled={numBachas <= 1} onClick={() => cambiarNumBachas(numBachas - 1)} aria-label="Menos bachas">−</button>
             <span style={S.bachaStepN}>{numBachas}</span>
-            <button type="button" style={S.bachaStepBtn} disabled={numBachas >= Math.min(6, item.cantidad || 1)} onClick={() => cambiarNumBachas(numBachas + 1)} aria-label="Más bachas">+</button>
+            <button type="button" style={S.bachaStepBtn} disabled={numBachas >= Math.min(maxBachas, item.cantidad || 1)} onClick={() => cambiarNumBachas(numBachas + 1)} aria-label="Más bachas">+</button>
           </div>
         </div>
+        {/* Por qué viene partido: el tanque no da para toda la orden. Sin esto el
+            operario lee "2 bachas" como una decisión ajena y la deshace. */}
+        {bachasSugeridas > 1 && (
+          <div style={{ fontSize: 11.5, color: 'var(--lp-brand-700)', marginTop: 8, lineHeight: 1.45 }}>
+            Esta orden son <strong>{Math.round((item.cantidad || 0) * litPerUnit).toLocaleString('es-MX')} L</strong> y una bacha
+            es un tanque de <strong>{LITROS_POR_BACHA.toLocaleString('es-MX')} L</strong> (un tote):
+            no cabe en una sola mezcla, van <strong>{bachasSugeridas}</strong>.
+            {numBachas < bachasSugeridas && (
+              <span style={{ color: 'var(--lp-danger-600)', fontWeight: 700 }}>
+                {' '}Con {numBachas} {numBachas === 1 ? 'bacha' : 'bachas'} cada mezcla se pasa del tanque.
+              </span>
+            )}
+          </div>
+        )}
         {numBachas > 1 && (
           <>
             <div style={S.bachaCantRow}>
@@ -916,7 +950,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
               ))}
             </div>
             <div style={{ ...S.bachaSum, color: sumaCantBachas === (item.cantidad || 0) ? 'var(--lp-success-600)' : 'var(--lp-danger-600)' }}>
-              Reparto: {sumaCantBachas} / {item.cantidad} {item.medida || 'cub'} {sumaCantBachas === (item.cantidad || 0) ? '✓ cuadra' : '— debe sumar el total'}
+              Reparto: {sumaCantBachas} / {item.cantidad} cub {sumaCantBachas === (item.cantidad || 0) ? '✓ cuadra' : '— debe sumar el total'}
             </div>
           </>
         )}
@@ -1048,6 +1082,22 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
               {step.desc || 'Consumo real vs fórmula. Ajusta lo que REALMENTE usaste: sube/baja el kg, sustituye una MP por otra del catálogo, o agrega una extra. Si todo fue igual a la fórmula, no toques nada y avanza.'}
             </div>
 
+            {/* La tabla es el TOTAL de la orden. Con el reparto por debajo de lo
+                que el tanque aguanta, esos kg leídos como una sola mezcla son el
+                error que reportó el dueño (800 kg de agua en un tanque de 400).
+                Un checkpoint guardado antes de este arreglo restaura numBachas=1,
+                así que el aviso tiene que estar AQUÍ, junto a los números. */}
+            {numBachas < bachasSugeridas && (
+              <div style={{ padding: '10px 12px', marginBottom: 12, borderRadius: 10,
+                background: 'var(--lp-danger-50)', border: '1px solid var(--lp-danger-200)',
+                color: 'var(--lp-danger-700)', fontSize: 12, lineHeight: 1.5 }}>
+                <strong>Ojo: estos kg son el total de la orden, no de una mezcla.</strong> Son{' '}
+                {Math.round((item.cantidad || 0) * litPerUnit).toLocaleString('es-MX')} L y el tanque
+                es de {LITROS_POR_BACHA.toLocaleString('es-MX')} L: van {bachasSugeridas} bachas.
+                Sube el número de bachas arriba para ver cuánto lleva cada una.
+              </div>
+            )}
+
             <datalist id="cr-mp-list">
               {mpCatalogo.map(n => <option key={n} value={n} />)}
             </datalist>
@@ -1058,7 +1108,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 80px auto', gap: 8, fontSize: 10.5, fontWeight: 700, textTransform: 'uppercase', color: 'var(--lp-text-tertiary)', padding: '0 8px 6px' }}>
-                <span>Materia prima</span><span style={{ textAlign: 'right' }}>Teórico</span><span style={{ textAlign: 'right' }}>Real</span><span />
+                <span>Materia prima</span><span style={{ textAlign: 'right' }}>{numBachas > 1 ? 'Teór. total' : 'Teórico'}</span><span style={{ textAlign: 'right' }}>Real</span><span />
               </div>
             )}
 
@@ -1086,6 +1136,14 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
                     )}
                     {r.sustituyeA && <div style={{ fontSize: 10.5, color: 'var(--lp-brand-600)', marginTop: 2 }}>sustituye a {r.sustituyeA}</div>}
                     {r.esExtra && <div style={{ fontSize: 10.5, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>extra (fuera de fórmula)</div>}
+                    {/* Lo que se pesa EN EL TANQUE. El teórico de la derecha es el
+                        total de la orden (lo que se descuenta de inventario); si son
+                        varias bachas, esos kg NO van juntos en una sola mezcla. */}
+                    {!editable && numBachas > 1 && (
+                      <div style={{ fontSize: 10.5, color: 'var(--lp-brand-700)', marginTop: 2, fontFamily: 'var(--lp-font-mono)' }}>
+                        {(teo / numBachas).toFixed(2)} kg por bacha × {numBachas}
+                      </div>
+                    )}
                   </div>
                   <span style={{ textAlign: 'right', fontSize: 12.5, fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>{editable ? '—' : teo.toFixed(2)}</span>
                   <input type="number" step="0.01" min="0" inputMode="decimal"
@@ -1151,7 +1209,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
               return (
                 <div key={b} style={numBachas > 1 ? S.qcBachaBlock : undefined}>
                   {numBachas > 1 && (
-                    <div style={S.qcBachaTitle}>Bacha {b} de {numBachas} · {cantBachas[b - 1] || 0} {item.medida || 'cub'}</div>
+                    <div style={S.qcBachaTitle}>Bacha {b} de {numBachas} · {cantBachas[b - 1] || 0} cub</div>
                   )}
                   <div style={S.qcGrid}>
                     {(step.pruebas || []).map(p => {

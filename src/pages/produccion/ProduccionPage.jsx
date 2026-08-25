@@ -10,7 +10,7 @@ import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
-import { etiquetaMedidaReal } from '../../utils/ptMedidas';
+import { etiquetaMedidaReal, bachasParaLitros } from '../../utils/ptMedidas';
 import { ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, normEstado, ESTADO_LOTE_POST_PRODUCCION } from '../../lib/estados';
 import LoteDetalleModal from './LoteDetalleModal';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
@@ -569,6 +569,24 @@ export function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess 
 /* ═══════════════════════════════════════════════════════════════════ */
 /* MAIN PAGE                                                         */
 /* ═══════════════════════════════════════════════════════════════════ */
+/* ── CUÁNTAS MEZCLAS SON (25-ago-2026) ────────────────────────────────────
+   El dueño produjo un pedido de 2 totes y el flujo le pidió 800 kg de agua
+   para un tanque de 400: la orden entera se trataba como UNA sola mezcla.
+   El arreglo de fondo vive en ProduccionFlow (parte la orden por capacidad de
+   tanque), pero la cola tiene que DECIRLO antes de entrar — así se ve de un
+   vistazo qué otros colores vienen con más de una bacha. Silencioso cuando
+   la orden cabe en una: no ensucia el caso normal. */
+function BachasHint({ item }) {
+  const litPerUnit = Number(item.litPerUnit) || Number(item._raw?.litPerUnit) || 19;
+  const n = bachasParaLitros((Number(item.cantidad) || 0) * litPerUnit);
+  if (n <= 1) return null;
+  return (
+    <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--lp-brand-700)', marginTop: 2 }}>
+      {n} bachas
+    </div>
+  );
+}
+
 export default function ProduccionPage() {
   const { user, can } = useAuth();
   const userName = user?.nombre || '?';
@@ -1029,7 +1047,10 @@ export default function ProduccionPage() {
                                 </div>
                               )}
                             </td>
-                            <td style={{ ...S.td, ...S.tdR, ...S.tdMono }}>{etiquetaMedidaReal(it.medida, it.medidaQty, it.cantidad) || `${it.cantidad} cub`}</td>
+                            <td style={{ ...S.td, ...S.tdR, ...S.tdMono }}>
+                              {etiquetaMedidaReal(it.medida, it.medidaQty, it.cantidad) || `${it.cantidad} cub`}
+                              <BachasHint item={it} />
+                            </td>
                             <td style={S.td}><EstadoBadge color={est.color} label={est.label} /></td>
                             <td style={{ ...S.td, ...S.tdR }}>{renderProdAction(it, false)}</td>
                           </tr>
@@ -1064,6 +1085,7 @@ export default function ProduccionPage() {
                           || <><span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600 }}>{it.cantidad}</span> cubetas</>}
                         {it.fechaCreacion && ` · ${it.fechaCreacion}`}
                         {it.notas && ` · ${it.notas}`}
+                        <BachasHint item={it} />
                       </div>
                       {enCurso && (
                         <div style={{ marginTop: 2, fontSize: 12 }}><Cronometro desde={it.fechaInicioProduccion} /></div>
