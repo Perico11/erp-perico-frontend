@@ -6,11 +6,13 @@
    Apariencia y comportamiento documentados en el handoff. Espera:
      - pedido: { codigo, producto, cantidad, presentacion, solicitante,
                  fecha|creado_en, prioridad? }
-     - onResolve: ('accept'|'reject'|'cola'|'detail') => void
+     - onResolve: ('accept'|'reject'|'cola'|'detail', motivo?) => void
+       ('reject' SIEMPRE llega con motivo: el backend lo exige ≥5 chars —
+        auditoría 24-ago-2026: antes se mandaba '' y el rechazo daba 400 SIEMPRE)
 
    No conoce nada de backend ni cola; eso lo maneja PedidoIncomingManager.
    ═══════════════════════════════════════════════════════════════════════ */
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 import PruebaBadge, { esPrueba as esPruebaItem } from './ui/PruebaBadge';
 
@@ -133,6 +135,13 @@ const btn = {
 export default function PedidoModal({ pedido, onResolve }) {
   useBodyScrollLock(); /* FIX jun 2026: sin scroll-bleed al body en móvil */
   const acceptBtnRef = useRef(null);
+  /* Rechazo en dos pasos (auditoría 24-ago-2026): el backend exige motivo
+     ≥5 chars y este modal mandaba '' → 400 SIEMPRE y el pedido se quedaba en
+     cola. Sin window.prompt (bloqueado en PWA standalone iOS — regla L3). */
+  const [rejectMode, setRejectMode] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const motivoOk = motivo.trim().length >= 5;
+  useEffect(() => { setRejectMode(false); setMotivo(''); }, [pedido?.id, pedido?.codigo]);
   useEffect(() => { injectKeyframes(); }, []);
 
   /* Focus inicial en Aceptar (handoff §9 — accesibilidad) */
@@ -142,12 +151,17 @@ export default function PedidoModal({ pedido, onResolve }) {
     }
   }, [pedido?.id, pedido?.codigo]);
 
-  /* Esc => "En cola" (NO resuelve aceptar/rechazar). Handoff §6. */
+  /* Esc => sale del paso de motivo si está abierto; si no, "En cola"
+     (NO resuelve aceptar/rechazar). Handoff §6. */
   useEffect(() => {
-    const h = (e) => { if (e.key === 'Escape') onResolve('cola'); };
+    const h = (e) => {
+      if (e.key !== 'Escape') return;
+      if (rejectMode) setRejectMode(false);
+      else onResolve('cola');
+    };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
-  }, [onResolve]);
+  }, [onResolve, rejectMode]);
 
   if (!pedido) return null;
   const urgente = pedido.prioridad === 'urgente';
@@ -268,11 +282,60 @@ export default function PedidoModal({ pedido, onResolve }) {
             Layout responsive vía clase CSS (ver injectKeyframes):
               · ≥640px: una sola fila, Aceptar ocupa el resto (flex:1)
               · <640px: vertical apilado, los 3 al 100% width */}
+        {rejectMode && (
+          <div style={{ margin: '0 26px 14px' }}>
+            <label htmlFor="pedido-modal-motivo" style={{
+              display: 'block', fontSize: 12.5, fontWeight: 600, marginBottom: 6,
+              color: 'var(--lp-text-secondary)',
+            }}>
+              Motivo del rechazo <span style={{ color: 'var(--lp-text-tertiary)', fontWeight: 400 }}>(mínimo 5 caracteres — el solicitante lo verá)</span>
+            </label>
+            <textarea
+              id="pedido-modal-motivo"
+              autoFocus
+              rows={2}
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ej. sin stock de resina hasta el jueves"
+              style={{
+                width: '100%', boxSizing: 'border-box', resize: 'vertical',
+                fontFamily: 'var(--lp-font-sans)', fontSize: 14, lineHeight: 1.45,
+                padding: '10px 12px', borderRadius: 'var(--lp-radius-md)',
+                border: '1px solid var(--lp-border-default)',
+                background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-primary)',
+              }}
+            />
+          </div>
+        )}
         <div className="lp-pedido-actions">
+          {rejectMode ? (
+            <>
+              <button
+                type="button"
+                style={btn.neutral}
+                onClick={() => setRejectMode(false)}
+                aria-label="Volver sin rechazar"
+              >
+                Volver
+              </button>
+              <div className="lp-acc-grow">
+                <button
+                  type="button"
+                  style={{ ...btn.reject, width: '100%', opacity: motivoOk ? 1 : 0.55, cursor: motivoOk ? 'pointer' : 'not-allowed' }}
+                  disabled={!motivoOk}
+                  onClick={() => motivoOk && onResolve('reject', motivo.trim())}
+                  aria-label="Confirmar rechazo del pedido"
+                >
+                  <XIco />Confirmar rechazo
+                </button>
+              </div>
+            </>
+          ) : (
+          <>
           <button
             type="button"
             style={btn.reject}
-            onClick={() => onResolve('reject')}
+            onClick={() => setRejectMode(true)}
             aria-label="Rechazar pedido"
           >
             <XIco />Rechazar
@@ -296,6 +359,8 @@ export default function PedidoModal({ pedido, onResolve }) {
               <Check />Aceptar
             </button>
           </div>
+          </>
+          )}
         </div>
 
         {/* Link "Ver detalle" */}

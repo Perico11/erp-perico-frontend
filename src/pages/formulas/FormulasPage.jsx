@@ -370,24 +370,21 @@ function NuevaMPModal({ nombreInicial, onClose, onCreated }) {
     setSaving(true);
     setErr('');
     try {
-      /* Crear MP en maestro con todas sus propiedades */
-      const body = {
-        mp: nombre.trim(),
-        campos: {
-          categoria,
-          estado: 'activo',
-          stock: { qty: parseFloat(stock) || 0, min: parseFloat(stockMin) || 0 },
-          costo: {
-            costoBase: parseFloat(precioBase) || 0,
-            flete: parseFloat(flete) || 0,
-            costoKg: (parseFloat(precioBase) || 0) + (parseFloat(flete) || 0),
-            monedaOriginal: moneda,
-            ultimaActualizacion: new Date().toISOString().slice(0, 10),
-          },
-          densidad: parseFloat(densidad) || 1,
-        },
-      };
-      await api.post('/api/maestro-mp', body);
+      /* Auditoría 24-ago-2026 (F1-03): este botón mandaba {mp, campos:{…}} a
+         POST /api/maestro-mp — que espera {mp, campo, valor} — y respondía 400
+         SIEMPRE: crear una MP desde el editor de fórmulas nunca funcionó. El
+         alta canónica es api.crearMP → /api/maestro-mp/crear (permiso altaMP),
+         que además siembra el inventario y espeja el costo. El costo viaja
+         LANDED en MXN (base + flete), como lo modela /crear. */
+      await api.crearMP({
+        nombre: nombre.trim(),
+        categoria,
+        stockInicial: parseFloat(stock) || 0,
+        min: parseFloat(stockMin) || 0,
+        costoKg: (parseFloat(precioBase) || 0) + (parseFloat(flete) || 0),
+        densidad: parseFloat(densidad) || 1,
+        presentacion: '',
+      });
       onCreated({
         nombre: nombre.trim(),
         categoria,
