@@ -9,7 +9,7 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
-import CorregirCantidadModal from './CorregirCantidadModal';
+import CorregirCantidadModal from '../../components/CorregirCantidadModal';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { etiquetaMedidaReal, bachasParaLitros } from '../../utils/ptMedidas';
 import { ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, normEstado, ESTADO_LOTE_POST_PRODUCCION } from '../../lib/estados';

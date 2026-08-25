@@ -6,6 +6,7 @@ import api from '../../services/api';
 import { useApiData } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import useConfirm from '../../hooks/useConfirm';
+import CorregirCantidadModal from '../../components/CorregirCantidadModal';
 import useIsDesktop from '../../hooks/useIsDesktop';
 import Cronometro from '../../components/Cronometro';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
@@ -500,6 +501,7 @@ export default function PedidosPage() {
   const [prefillProducto, setPrefillProducto] = useState(null);
   const [err, setErr] = useState('');
   const [busyId, setBusyId] = useState('');
+  const [corregirModal, setCorregirModal] = useState(null); /* pedido cuya cantidad se corrige */
   const [confirm, ConfirmEl] = useConfirm();
   /* NDA gate — pendingProd guarda el pedido a iniciar mientras el usuario lee el NDA */
   const [pendingProd, setPendingProd] = useState(null);
@@ -944,6 +946,14 @@ export default function PedidosPage() {
             const mostrarAceptar = tabOperable && p.estado === 'pendiente' && canAceptar;
             const mostrarIniciar = tabOperable && p.estado === 'aceptado' && canAceptar;
             const mostrarIrProduccion = tabOperable && p.estado === 'en_produccion' && canAceptar;
+            /* CORREGIR CANTIDAD (25-ago-2026, reporte del dueño). El botón nació en
+               la cola de Producción, pero esa cola solo lista pedidos que YA
+               arrancaron: un pedido en 'pendiente' o 'aceptado' —justo cuando
+               conviene corregirlo— no lo tenía en ninguna parte. Aquí sí, que es
+               ANTES de producir. A partir de 'producido' el server lo rechaza
+               (la MP ya se descontó), así que no se ofrece. */
+            const mostrarCorregir = tabOperable && user?.rol === 'admin' && !p.eliminado
+              && ['pendiente', 'aceptado', 'en_produccion'].includes(p.estado);
             /* LIMPIEZA 21-jul-2026 (auditoría: "dos verbos, un efecto"): antes el
                Cancelar de admin llamaba al MISMO /api/pedidos/eliminar que el botón
                Eliminar de al lado. Ahora los verbos se distinguen de verdad:
@@ -962,7 +972,7 @@ export default function PedidosPage() {
                el botón "Eliminar pedido" no aplica (rompería contra un id de
                orden). Se oculta para esas entradas. */
             const mostrarEliminar = esAdmin && !p._esOrdenInterna;
-            const tieneAcciones = mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
+            const tieneAcciones = mostrarCorregir || mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
 
             /* Cantidad → número + unidad para el numeral (desktop). */
             const qtyTxt = etiquetaMedidaReal(p.medida, p.medidaQty, p.cantidad) || `${p.cantidad} cubetas`;
@@ -1029,6 +1039,18 @@ export default function PedidosPage() {
                     mockup cableados a los handlers reales. */}
                 {tieneAcciones && (
                   <div style={C.actions}>
+                    {mostrarCorregir && (
+                      <button
+                        style={C.btn('ghost')}
+                        data-id="pedidos.btn.corregir-cantidad"
+                        data-rol="admin"
+                        disabled={busyId === p.id}
+                        onClick={() => setCorregirModal(p)}
+                        title="Corregir cuántos totes/cubetas se van a producir"
+                      >
+                        Corregir cantidad
+                      </button>
+                    )}
                     {mostrarAceptar && (
                       <button
                         style={C.btn('primary')}
@@ -1189,6 +1211,13 @@ export default function PedidosPage() {
           productoNombre={pendingProd.producto}
           onAccept={handleNDAAccept}
           onReject={handleNDAReject}
+        />
+      )}
+      {corregirModal && (
+        <CorregirCantidadModal
+          pedido={corregirModal}
+          onClose={() => setCorregirModal(null)}
+          onSaved={() => { setCorregirModal(null); reload(); reloadOrd(); }}
         />
       )}
       {ConfirmEl}
