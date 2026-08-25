@@ -21,14 +21,17 @@ export default function PedidoIncomingManager() {
   if (!activo) return null;
   if (!peek) return null;
 
-  const handleResolve = async (accion) => {
+  const handleResolve = async (accion, motivo) => {
     if (busy) return;
     setBusy(true);
     try {
       if (accion === 'accept') {
         await accept(peek);
       } else if (accion === 'reject') {
-        await reject(peek, '');
+        /* Auditoría 24-ago-2026: el backend exige motivo ≥5 chars — antes se
+           mandaba '' y el rechazo daba 400 SIEMPRE. El modal ahora lo captura
+           y llega aquí como segundo argumento. */
+        await reject(peek, String(motivo || '').trim());
       } else if (accion === 'cola') {
         markSeen(peek); /* sigue en backlog pero el modal no reabre */
       } else if (accion === 'detail') {

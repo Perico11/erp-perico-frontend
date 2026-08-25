@@ -247,7 +247,12 @@ export default function DevolucionesMPPage({ embedded = false }) {
       )}
       {cerrar && (
         <CerrarSheet
-          isDesktop={isDesktop} dev={cerrar}
+          /* Auditoría 24-ago-2026 (F1-02): la card móvil guarda el wrapper
+             {dev, tipo} (línea del onCerrar de DevCard) y aquí se pasaba el
+             wrapper ENTERO → dev.id undefined → POST /mp/cerrar respondía 400
+             «id requerido» SIEMPRE, y el sheet abría en NC aunque se hubiera
+             elegido Reembolso. Mismo desempaque que la rama de escritorio. */
+          isDesktop={isDesktop} dev={cerrar.dev} initialTipo={cerrar.tipo}
           onClose={() => setCerrar(null)}
           onSaved={() => { setCerrar(null); reload(); }}
         />
