@@ -903,14 +903,12 @@ export default function ProduccionPage() {
     const puedeCorregir = it._tipo === 'pedido' && user?.rol === 'admin'
       && ['pendiente', 'aceptado', 'en_produccion'].includes(it.estado);
     return (
+      /* "Corregir cantidad" va ANTES de "Producir" (indicación del dueño,
+         25-ago): revisar el cuánto es el paso PREVIO a arrancar, y una vez
+         producido ya no se puede corregir. El orden de lectura tiene que
+         seguir al orden de la decisión. */
       <div style={{ display: 'inline-flex', gap: 6, alignItems: 'center', flexWrap: 'wrap',
         ...(full ? { width: '100%' } : {}) }}>
-        <button
-          style={btn(isAceptado ? 'warning' : 'success', full)}
-          onClick={() => handleStartProduccion(it)}
-        >
-          <IcoPlay size={14} /> {isAceptado ? 'Iniciar producción' : 'Producir'}
-        </button>
         {puedeCorregir && (
           <button
             style={{ height: full ? 44 : 32, padding: '0 12px', borderRadius: 10, cursor: 'pointer',
@@ -922,6 +920,12 @@ export default function ProduccionPage() {
             Corregir cantidad
           </button>
         )}
+        <button
+          style={btn(isAceptado ? 'warning' : 'success', full)}
+          onClick={() => handleStartProduccion(it)}
+        >
+          <IcoPlay size={14} /> {isAceptado ? 'Iniciar producción' : 'Producir'}
+        </button>
       </div>
     );
   };
