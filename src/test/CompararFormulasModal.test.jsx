@@ -8,9 +8,12 @@
        /api/formulas/todas — ese endpoint dice en su comentario "NO incluye
        datos de costo". Ahora se leen de /api/reports/margenes, que ya los
        calcula por fórmula con los costos auxiliares configurables.
-     · Los técnicos (PVC, densidad, viscosidad, sólidos, finish) viven
-       ANIDADOS bajo `tecnico` en formulas_custom, y se leían al nivel
-       superior: salían vacíos aunque estuvieran capturados.
+     · Las propiedades (PVC, densidad, sólidos, acabado) viven en el array
+       `summary` de formulas_custom.json —las calcula
+       scripts/propagar_propiedades_correctas.js— y /api/formulas/todas ni
+       siquiera las devolvía: el dato existía en el ERP y no salía por la API.
+       Se arregló el endpoint y aquí se consume summary, con los nombres que
+       usa de verdad (nv_peso, nv_vol, acabado_texto).
 
    Y un tercer detalle que hacía ver el modal como roto aunque tuviera datos:
    las dos tarjetas se titulaban con el nombre de cada fórmula, pero agrupan
@@ -26,18 +29,21 @@ vi.mock('../services/api', () => ({
 }));
 import api from '../services/api';
 
-/* Como llegan de /api/formulas/todas: técnicos ANIDADOS bajo `tecnico`. */
+/* Como llegan de /api/formulas/todas: el recetario en `formulas`… */
 const FORMULAS = [
   {
     nombre: 'AMARILLO CANARIO ASTRA',
     ingredientes: [{ nombre: 'RESINA', kg19: 8 }, { nombre: 'AGUA', kg19: 4 }],
-    tecnico: { pvc: 42, densidad: 1.24, viscosidad: 95, solidosPeso: 55, solidosVolumen: 38, finish: 'Mate' },
   },
   {
     nombre: 'AMARILLO MEDIO ASTRA',
     ingredientes: [{ nombre: 'RESINA', kg19: 7 }, { nombre: 'AGUA', kg19: 4 }, { nombre: 'OXIDO', kg19: 1 }],
-    tecnico: { pvc: 47, densidad: 1.31, viscosidad: 102, solidosPeso: 58, solidosVolumen: 41, finish: 'Satín' },
   },
+];
+/* …y las propiedades en `summary`, con los nombres reales del ERP. */
+const SUMMARY = [
+  { nombre: 'AMARILLO CANARIO ASTRA', pvc: 42, densidad: 1.24, nv_peso: 55, nv_vol: 38, acabado_texto: 'Mate', rendimiento_m2_L: 8.13 },
+  { nombre: 'AMARILLO MEDIO ASTRA', pvc: 47, densidad: 1.31, nv_peso: 58, nv_vol: 41, acabado_texto: 'Satín', rendimiento_m2_L: 7.5 },
 ];
 
 const MARGENES = {
@@ -55,7 +61,7 @@ beforeEach(() => {
 
 describe('Comparar fórmulas', () => {
   it('muestra los económicos que vienen de /api/reports/margenes', async () => {
-    render(<CompararFormulasModal formulas={FORMULAS} onClose={() => {}} />);
+    render(<CompararFormulasModal formulas={FORMULAS} summary={SUMMARY} onClose={() => {}} />);
     await waitFor(() => expect(api.getMargenes).toHaveBeenCalled());
 
     /* Costo, precio, margen y producción de AMBAS fórmulas, no "–". */
@@ -71,33 +77,35 @@ describe('Comparar fórmulas', () => {
     expect(screen.getByText('26')).toBeInTheDocument();
   });
 
-  it('lee los técnicos anidados bajo `tecnico` (antes se leían al nivel superior)', async () => {
-    render(<CompararFormulasModal formulas={FORMULAS} onClose={() => {}} />);
+  it('lee las propiedades de summary[] con sus nombres reales (nv_peso, nv_vol, acabado_texto)', async () => {
+    render(<CompararFormulasModal formulas={FORMULAS} summary={SUMMARY} onClose={() => {}} />);
     await waitFor(() => expect(api.getMargenes).toHaveBeenCalled());
 
     expect(screen.getByText('42')).toBeInTheDocument();      /* PVC A */
     expect(screen.getByText('47')).toBeInTheDocument();      /* PVC B */
     expect(screen.getByText('1.24')).toBeInTheDocument();    /* densidad A */
-    expect(screen.getByText('102')).toBeInTheDocument();     /* viscosidad B */
-    expect(screen.getByText('Mate')).toBeInTheDocument();
+    expect(screen.getByText('55')).toBeInTheDocument();      /* nv_peso → sólidos w/w A */
+    expect(screen.getByText('41')).toBeInTheDocument();      /* nv_vol → sólidos v/v B */
+    expect(screen.getByText('Mate')).toBeInTheDocument();    /* acabado_texto A */
     expect(screen.getByText('Satín')).toBeInTheDocument();
+    expect(screen.getByText('8.13')).toBeInTheDocument();    /* rendimiento A */
   });
 
-  it('sigue leyendo los técnicos al nivel superior (compat formulas_v2)', async () => {
+  it('si no hay summary cae a `tecnico`/plano (compat formulas_v2)', async () => {
     const planas = [
       { nombre: 'PLANA A', ingredientes: [], pvc: 30, densidad: 1.1, finish: 'Brillante' },
-      { nombre: 'PLANA B', ingredientes: [], pvc: 33, densidad: 1.2, finish: 'Mate' },
+      { nombre: 'PLANA B', ingredientes: [], tecnico: { pvc: 33, densidad: 1.2, finish: 'Mate' } },
     ];
-    render(<CompararFormulasModal formulas={planas} onClose={() => {}} />);
+    render(<CompararFormulasModal formulas={planas} summary={[]} onClose={() => {}} />);
     await waitFor(() => expect(api.getMargenes).toHaveBeenCalled());
 
-    expect(screen.getByText('30')).toBeInTheDocument();
-    expect(screen.getByText('1.2')).toBeInTheDocument();
+    expect(screen.getByText('30')).toBeInTheDocument();   /* plano */
+    expect(screen.getByText('1.2')).toBeInTheDocument();  /* anidado en tecnico */
     expect(screen.getByText('Brillante')).toBeInTheDocument();
   });
 
   it('las tarjetas se titulan por GRUPO de métricas, con leyenda A/B de cada fórmula', async () => {
-    render(<CompararFormulasModal formulas={FORMULAS} onClose={() => {}} />);
+    render(<CompararFormulasModal formulas={FORMULAS} summary={SUMMARY} onClose={() => {}} />);
     await waitFor(() => expect(api.getMargenes).toHaveBeenCalled());
 
     /* El título dice qué contiene la tarjeta, no el nombre de una fórmula:
@@ -118,7 +126,7 @@ describe('Comparar fórmulas', () => {
 
   it('si los costos no cargan lo DICE, en vez de dejar guiones mudos', async () => {
     api.getMargenes.mockRejectedValue(new Error('403 sin permisos'));
-    render(<CompararFormulasModal formulas={FORMULAS} onClose={() => {}} />);
+    render(<CompararFormulasModal formulas={FORMULAS} summary={SUMMARY} onClose={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getByText(/No se pudieron cargar los costos y precios/)).toBeInTheDocument();
@@ -135,27 +143,27 @@ describe('Comparar fórmulas', () => {
         { nombre: 'AMARILLO MEDIO ASTRA', costoMP: 610.75, costoTotal: 735.1, precioVenta: 0, margenPct: null, prodMensual: 12 },
       ],
     });
-    render(<CompararFormulasModal formulas={FORMULAS} onClose={() => {}} />);
+    render(<CompararFormulasModal formulas={FORMULAS} summary={SUMMARY} onClose={() => {}} />);
 
     await waitFor(() => {
       expect(screen.getByText(/Sin precio de venta capturado/)).toBeInTheDocument();
     });
   });
 
-  it('avisa cuando ninguna fórmula tiene datos técnicos capturados', async () => {
+  it('avisa cuando ninguna fórmula tiene propiedades calculadas', async () => {
     const sinTec = [
       { nombre: 'SIN TEC A', ingredientes: [{ nombre: 'X', kg19: 1 }] },
       { nombre: 'SIN TEC B', ingredientes: [{ nombre: 'Y', kg19: 2 }] },
     ];
-    render(<CompararFormulasModal formulas={sinTec} onClose={() => {}} />);
+    render(<CompararFormulasModal formulas={sinTec} summary={[]} onClose={() => {}} />);
 
     await waitFor(() => {
-      expect(screen.getByText(/Ninguna de las dos fórmulas tiene datos técnicos/)).toBeInTheDocument();
+      expect(screen.getByText(/Ninguna de las dos fórmulas tiene propiedades calculadas/)).toBeInTheDocument();
     });
   });
 
   it('la comparación de ingredientes sigue intacta', async () => {
-    render(<CompararFormulasModal formulas={FORMULAS} onClose={() => {}} />);
+    render(<CompararFormulasModal formulas={FORMULAS} summary={SUMMARY} onClose={() => {}} />);
     await waitFor(() => expect(api.getMargenes).toHaveBeenCalled());
 
     const resumen = screen.getByText(/Ingredientes comparados/);

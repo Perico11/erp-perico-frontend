@@ -151,19 +151,30 @@ function MetricRow({ label, valA, valB, fmtFn = fmt, mejorMenor = true }) {
      eso salían vacíos incluso cuando estaban capturados. Se leen de los dos
      sitios (`tecnico.x` y, por compatibilidad con formulas_v2, `x`).
    ──────────────────────────────────────────────────────────────────────────── */
-const CAMPOS_TEC = ['pvc', 'densidad', 'viscosidad', 'solidosPeso', 'solidosVolumen', 'finish'];
-function tec(f, campo) {
-  if (!f) return null;
-  const anidado = f.tecnico && f.tecnico[campo];
-  const plano = f[campo];
-  const v = anidado != null && anidado !== '' ? anidado : (plano != null && plano !== '' ? plano : null);
-  if (v == null) return null;
-  if (campo === 'finish') return String(v);
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+const CAMPOS_TEC = ['pvc', 'densidad', 'solidosPeso', 'solidosVolumen', 'finish'];
+/* Nombre del campo en summary[] — lo escribe
+   scripts/propagar_propiedades_correctas.js con el motor de cálculo validado. */
+const EN_SUMMARY = {
+  pvc: 'pvc',
+  densidad: 'densidad',
+  solidosPeso: 'nv_peso',        /* no-volátiles en peso */
+  solidosVolumen: 'nv_vol',      /* no-volátiles en volumen */
+  finish: 'acabado_texto',
+};
+/* Orden de búsqueda: summary (fuente real del ERP) → tecnico.x → x plano
+   (compat con formulas_v2, que sí los guarda al nivel superior). */
+function tec(f, campo, sum) {
+  const enSum = sum ? sum[EN_SUMMARY[campo]] : null;
+  const anidado = f && f.tecnico ? f.tecnico[campo] : null;
+  const plano = f ? f[campo] : null;
+  const primero = [enSum, anidado, plano].find(v => v != null && v !== '');
+  if (primero == null) return null;
+  if (campo === 'finish') return String(primero);
+  const n = Number(primero);
+  return Number.isFinite(n) ? +n.toFixed(2) : null;
 }
 
-export default function CompararFormulasModal({ formulas, onClose }) {
+export default function CompararFormulasModal({ formulas, summary, onClose }) {
   /* formulas: array de objetos formula con { nombre, ingredientes, tecnico?, ... } */
   const lista = formulas || [];
   const [selAName, setSelAName] = useState(lista[0]?.nombre || '');
@@ -189,6 +200,15 @@ export default function CompararFormulasModal({ formulas, onClose }) {
   const ecoDe = (f) => (f && eco ? eco[f.nombre] : null) || null;
   const ecoA = ecoDe(fmA);
   const ecoB = ecoDe(fmB);
+
+  /* Propiedades físico-químicas: summary[] indexado por nombre de fórmula. */
+  const sumIdx = useMemo(() => {
+    const idx = {};
+    (summary || []).forEach(x => { if (x && x.nombre) idx[x.nombre] = x; });
+    return idx;
+  }, [summary]);
+  const sumA = fmA ? sumIdx[fmA.nombre] : null;
+  const sumB = fmB ? sumIdx[fmB.nombre] : null;
 
   /* Comparación de ingredientes */
   const ingDiff = useMemo(() => {
@@ -268,12 +288,15 @@ export default function CompararFormulasModal({ formulas, onClose }) {
                     <span style={S.colHeadVal}>A</span>
                     <span style={S.colHeadVal}>B</span>
                   </div>
-                  <MetricRow label="PVC %" valA={tec(fmA, 'pvc')} valB={tec(fmB, 'pvc')} mejorMenor />
-                  <MetricRow label="Densidad" valA={tec(fmA, 'densidad')} valB={tec(fmB, 'densidad')} />
-                  <MetricRow label="Viscosidad KU" valA={tec(fmA, 'viscosidad')} valB={tec(fmB, 'viscosidad')} />
-                  <MetricRow label="Sólidos w/w" valA={tec(fmA, 'solidosPeso')} valB={tec(fmB, 'solidosPeso')} mejorMenor={false} />
-                  <MetricRow label="Sólidos v/v" valA={tec(fmA, 'solidosVolumen')} valB={tec(fmB, 'solidosVolumen')} mejorMenor={false} />
-                  <MetricRow label="Finish" valA={tec(fmA, 'finish')} valB={tec(fmB, 'finish')} fmtFn={(x) => x || '—'} />
+                  {/* "Viscosidad KU" se retiró: no existe en summary ni en el
+                      recetario ni en el Sheet — era un renglón condenado a "–".
+                      Cuando se capture, vuelve con una línea. */}
+                  <MetricRow label="PVC %" valA={tec(fmA, 'pvc', sumA)} valB={tec(fmB, 'pvc', sumB)} mejorMenor />
+                  <MetricRow label="Densidad" valA={tec(fmA, 'densidad', sumA)} valB={tec(fmB, 'densidad', sumB)} />
+                  <MetricRow label="Sólidos w/w" valA={tec(fmA, 'solidosPeso', sumA)} valB={tec(fmB, 'solidosPeso', sumB)} mejorMenor={false} />
+                  <MetricRow label="Sólidos v/v" valA={tec(fmA, 'solidosVolumen', sumA)} valB={tec(fmB, 'solidosVolumen', sumB)} mejorMenor={false} />
+                  <MetricRow label="Acabado" valA={tec(fmA, 'finish', sumA)} valB={tec(fmB, 'finish', sumB)} fmtFn={(x) => x || '—'} />
+                  <MetricRow label="Rendimiento m²/L" valA={sumA?.rendimiento_m2_L != null ? +Number(sumA.rendimiento_m2_L).toFixed(2) : null} valB={sumB?.rendimiento_m2_L != null ? +Number(sumB.rendimiento_m2_L).toFixed(2) : null} mejorMenor={false} />
                 </div>
               </div>
 
@@ -293,10 +316,10 @@ export default function CompararFormulasModal({ formulas, onClose }) {
                   por eso el margen sale vacío. Se captura en Precios de venta.
                 </div>
               )}
-              {eco && !ecoErr && CAMPOS_TEC.every(c => tec(fmA, c) == null && tec(fmB, c) == null) && (
+              {eco && !ecoErr && CAMPOS_TEC.every(c => tec(fmA, c, sumA) == null && tec(fmB, c, sumB) == null) && (
                 <div style={S.aviso}>
-                  Ninguna de las dos fórmulas tiene datos técnicos capturados en el ERP
-                  (PVC, densidad, viscosidad, sólidos, finish). Se capturan al editar la fórmula.
+                  Ninguna de las dos fórmulas tiene propiedades calculadas (PVC, densidad,
+                  sólidos, acabado). Se generan al recalcular las fórmulas en el ERP.
                 </div>
               )}
 
