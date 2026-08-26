@@ -1,16 +1,14 @@
 /* ════════════════════════════════════════════════════════════════════════════
-   EL # DE LOTE SE VE DESDE QUE SE ASIGNA (25-ago-2026).
+   EL # DE LOTE LLEGA A LAS PANTALLAS (25-ago-2026; reescrito el 26).
 
-   Pedido del dueño: "cuando Josué hace un pedido de cualquier clase se debe
-   crear un lote #… que se herede desde que se asigna hasta que se saca en
-   Terán a envasar con el botón. TODO DEBE COINCIDIR."
+   El COMPORTAMIENTO del badge se prueba renderizándolo en LoteBadge.test.jsx.
+   Aquí queda sólo lo que de verdad es una propiedad del fuente: que el dato
+   viaje por todos los caminos que alimentan las pantallas, y que no queden
+   ejemplos del formato viejo invitando a teclear un código que ya no existe.
 
-   El número lo acuña el BACKEND al crear el pedido (LP-0007-001) y viaja
-   pedido → orden → lote → tote. El frontend no lo inventa —nunca lo hizo— pero
-   antes tampoco lo enseñaba: entre aceptar y cerrar el lote, la pantalla no
-   sabía nombrar lo que se estaba fabricando. Lo que se fija aquí es que ese
-   número LLEGUE a la cola de producción y a la tarjeta del pedido, para poder
-   compararlo contra la etiqueta impresa.
+   La versión anterior de este archivo comparaba cadenas del componente y la
+   revisión adversarial la marcó por frágil: falso verde si el componente
+   cambiaba de forma haciendo lo correcto. Eso se movió a pruebas de render.
    ════════════════════════════════════════════════════════════════════════════ */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -18,39 +16,33 @@ import path from 'node:path';
 
 const leer = (p) => fs.readFileSync(path.join(process.cwd(), p), 'utf8');
 const PRODUCCION = leer('src/pages/produccion/ProduccionPage.jsx');
+const MISACTIVOS = leer('src/pages/produccion/MisActivosTab.jsx');
 const PEDIDOS = leer('src/pages/pedidos/PedidosPage.jsx');
 const API = leer('src/services/api.js');
 
-describe('la cola de Producción nombra el lote antes de producirlo', () => {
-  it('el código viaja al item, venga de una orden o de un pedido', () => {
-    /* Dos mapeos distintos alimentan la misma cola: si solo uno lo trajera,
-       el número aparecería y desaparecería según por dónde entró el trabajo. */
-    const veces = PRODUCCION.match(/codigoLote: [op]\.codigoLote \|\| '',/g) || [];
-    expect(veces.length).toBe(2);
+describe('el dato llega por todos los caminos', () => {
+  it('la cola de Producción lo trae venga de una orden o de un pedido', () => {
+    /* Dos mapeos distintos alimentan la misma cola: si sólo uno lo trajera, el
+       número aparecería y desaparecería según por dónde entró el trabajo. */
+    expect(PRODUCCION.match(/codigoLote: [op]\.codigoLote \|\| '',/g) || []).toHaveLength(2);
   });
 
-  it('se pinta en escritorio Y en móvil', () => {
-    const veces = PRODUCCION.match(/<LoteBadge codigo=\{it\.codigoLote\} \/>/g) || [];
-    expect(veces.length).toBe(2);
+  it('"Mis activos" cae al número que apartó el pedido si el lote aún no existe', () => {
+    /* Es el mismo trabajo: mientras no se produce, el código del encargo ES el
+       que acabará en la etiqueta. Antes esta pestaña se quedaba en blanco. */
+    expect(MISACTIVOS).toContain('lote?.codigoLote || lote?.codigo || p.codigoLote');
   });
 
-  it('sin código no pinta nada: mejor vacío que un número inventado', () => {
-    /* Lo anterior al cambio no tiene serie; enseñar un placeholder ahí sería
-       peor que no enseñar nada — el piso lo copiaría a la etiqueta. */
-    expect(PRODUCCION).toMatch(/function LoteBadge\(\{ codigo \}\) \{\s*if \(!codigo\) return null;/);
+  it('las dos pantallas usan el MISMO badge, no dos copias que se separen', () => {
+    for (const f of [PRODUCCION, MISACTIVOS]) {
+      expect(f).toMatch(/import LoteBadge from '\.\.\/\.\.\/components\/LoteBadge'/);
+      expect(f).toMatch(/import \{ bachasDeItem \} from '\.\.\/\.\.\/utils\/loteSerie'/);
+      expect(f).toMatch(/<LoteBadge codigo=\{[\w.]+\.codigoLote\} bachas=\{bachasDeItem\([\w.]+\)\} \/>/);
+    }
   });
-});
 
-describe('la tarjeta del pedido muestra su lote', () => {
-  it('prefiere la serie del sistema sobre el campo viejo escrito a mano', () => {
+  it('la tarjeta del pedido prefiere la serie del sistema al campo escrito a mano', () => {
     expect(PEDIDOS).toContain('const codLote = p.codigoLote || p.lote;');
-    expect(PEDIDOS).toMatch(/if \(codLote\) metaParts\.push\(<>Lote <code/);
-  });
-
-  it('el campo viejo `lote` no se pierde para lo que ya existía', () => {
-    /* Hay pedidos con lote escrito a mano de antes del cambio. */
-    expect(PEDIDOS).not.toMatch(/metaParts\.push\(<>Lote <code[^)]*\{p\.lote\}/);
-    expect(PEDIDOS).toContain('p.codigoLote || p.lote');
   });
 });
 
@@ -59,18 +51,22 @@ describe('el frontend NO acuña códigos de lote', () => {
     expect(API).toContain("crearLote: (lote) => request('POST', '/api/trazabilidad/lote', { lote })");
   });
 
-  it('no queda ningún LP-FECHA en textos de la interfaz', () => {
-    /* El formato viejo (LP-20260825-001) ya no se genera; los ejemplos que
-       lo enseñaban invitaban a teclear un código que el sistema no da. */
+  it('no queda ningún ejemplo con el formato viejo en la interfaz', () => {
     for (const f of [
       'src/components/QRModal.jsx',
+      'src/components/LoteBadge.jsx',
       'src/pages/devoluciones/DevolucionesPage.jsx',
       'src/pages/produccion/ProduccionPage.jsx',
+      'src/pages/produccion/MisActivosTab.jsx',
       'src/pages/pedidos/PedidosPage.jsx',
       'src/services/api.js',
       'src/pages/trazabilidad/TrazabilidadPage.jsx',
     ]) {
-      expect(leer(f)).not.toMatch(/LP-(?:20\d{6}|2026)-/);
+      /* LP-20260825-001 y LP-2026-001-A: los dos formatos que ya no se generan.
+         (LoteBadge menciona LP-2026-08-13 en un comentario a propósito — es el
+         caso real que motivó el arreglo — así que se excluye esa forma.) */
+      const txt = leer(f).replace(/LP-2026-08-13/g, '');
+      expect(txt).not.toMatch(/LP-(?:20\d{6}|2026)-/);
     }
   });
 });
