@@ -779,6 +779,17 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         }
         const loteCreado = loteRes.lote;
         folios.push(loteCreado.codigoLote);
+        /* REENVÍO DEL CIERRE (27-ago-2026). Si se cayó la conexión a media
+           tanda y el técnico le dio otra vez, el server devuelve el lote que YA
+           existía en vez de duplicarlo, y lo marca con `reenvio`. Ese lote ya
+           pasó su QC: volver a pedirla falla —la máquina de estados no deja ir
+           de qc_aprobado a qc_aprobado— y el resumen acabaría diciéndole al
+           técnico "producido" de algo que en realidad está aprobado. Se toma el
+           estado real del lote y se salta la auto-QC. */
+        if (loteRes.reenvio) {
+          estadosFinales.push(loteCreado.estado || 'producido');
+          continue;
+        }
 
         /* Auto-QC POR BACHA: si TODAS las lecturas de ESTA bacha están en rango →
            aprobarQC; si no → qc_hold. Cada bacha decide independiente (una puede
