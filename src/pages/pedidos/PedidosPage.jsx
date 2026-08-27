@@ -984,7 +984,11 @@ export default function PedidosPage() {
             const metaParts = [];
             if (p.solicitante) metaParts.push(<>solicitó <b style={C.metaB}>{p.solicitante}</b></>);
             if (p.fecha) metaParts.push(<span title={new Date(p.fecha).toLocaleString('es-MX')}>{fmtRel(p.fecha)}</span>);
-            if (p.lote) metaParts.push(<>Lote <code style={{ fontFamily: 'var(--lp-font-mono)' }}>{p.lote}</code></>);
+            /* El # de lote NACE con el pedido (25-ago-2026, LP-0001-001): se ve
+               desde aquí y no hasta que producción cierre el lote. `p.lote` es
+               el campo viejo, escrito a mano; se respeta si no hay serie. */
+            const codLote = p.codigoLote || p.lote;
+            if (codLote) metaParts.push(<>Lote <code style={{ fontFamily: 'var(--lp-font-mono)' }}>{codLote}</code></>);
             if (p.creadoPor && p.creadoPor !== p.solicitante) metaParts.push(<>por {p.creadoPor}</>);
             if (p.estado === 'en_produccion' && p.produccionIniciadaPor) metaParts.push(<>Producción por <b style={C.metaB}>{p.produccionIniciadaPor}</b></>);
             const metaJoined = metaParts.map((m, i) => <Fragment key={i}>{i > 0 ? ' · ' : ''}{m}</Fragment>);

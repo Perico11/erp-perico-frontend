@@ -12,6 +12,8 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import PruebaBadge from '../../components/ui/PruebaBadge';
 import { ESTADO_PEDIDO_TERMINAL, ESTADO_LOTE_INTERNO_OCULTO } from '../../lib/estados';
+import LoteBadge from '../../components/LoteBadge';
+import { bachasDeItem } from '../../utils/loteSerie';
 
 /* Icono SVG line (sin glyphs) */
 const IcoPlay = () => (
@@ -192,7 +194,9 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
         id: p.id,
         codigo: p.codigo || p.id,
         codigoOrden: orden?.codigo,
-        codigoLote: lote?.codigoLote || lote?.codigo,
+        /* Mientras no hay lote todavía, vale el número que el PEDIDO apartó:
+           es el mismo trabajo y el mismo código que acabará en la etiqueta. */
+        codigoLote: lote?.codigoLote || lote?.codigo || p.codigoLote,
         producto: p.producto || lote?.producto || lote?.nombre || '-',
         cantidad: p.cantidad,
         litPerUnit: p.litPerUnit || lote?.litPerUnit,
@@ -263,7 +267,7 @@ export default function MisActivosTab({ pedidos, ordenes, lotes }) {
                 <div style={S.codigo}>
                   {it.codigo}
                   {it.codigoOrden && ` · ${it.codigoOrden}`}
-                  {it.codigoLote && ` · ${it.codigoLote}`}
+                  {it.codigoLote && <> · <LoteBadge codigo={it.codigoLote} bachas={bachasDeItem(it)} /></>}
                   {it.esPrueba && <> · <PruebaBadge inline size="sm" /></>}
                   {it.origen === 'interna' && ' · INTERNA'}
                 </div>

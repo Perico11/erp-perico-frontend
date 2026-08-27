@@ -11,7 +11,7 @@ import Cronometro from '../../components/Cronometro';
 import ProduccionFlow from './ProduccionFlow';
 import CorregirCantidadModal from '../../components/CorregirCantidadModal';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
-import { etiquetaMedidaReal, bachasParaLitros } from '../../utils/ptMedidas';
+import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 import { ESTADO_PEDIDO_LABEL, ESTADO_PEDIDO_COLOR, normEstado, ESTADO_LOTE_POST_PRODUCCION } from '../../lib/estados';
 import LoteDetalleModal from './LoteDetalleModal';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
@@ -21,6 +21,8 @@ import PageTabs from '../../components/ui/PageTabs';
    completo; después sigue su ciclo en Pedidos. Card canónica + modal inline. */
 import PedidoLoteActions from '../../components/PedidoLoteActions';
 import { EnvasadoModal, ReenvasadoModal, SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
+import LoteBadge from '../../components/LoteBadge';
+import { bachasDeItem } from '../../utils/loteSerie';
 
 /* ═══════════════════════════════════════════════════════════════════ */
 /* ICONOS — line SVG (sin emojis). Diseño verde Claude Design.         */
@@ -578,8 +580,7 @@ export function QCModal({ orden, lotes, qcRecords, userName, onClose, onSuccess 
    vistazo qué otros colores vienen con más de una bacha. Silencioso cuando
    la orden cabe en una: no ensucia el caso normal. */
 function BachasHint({ item }) {
-  const litPerUnit = Number(item.litPerUnit) || Number(item._raw?.litPerUnit) || 19;
-  const n = bachasParaLitros((Number(item.cantidad) || 0) * litPerUnit);
+  const n = bachasDeItem(item);
   if (n <= 1) return null;
   return (
     <div style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--lp-brand-700)', marginTop: 2 }}>
@@ -812,6 +813,7 @@ export default function ProduccionPage() {
       fechaCreacion: o.fechaCreacion,
       notas: o.notas,
       pedidoId: o.pedidoId || '',
+      codigoLote: o.codigoLote || '',
     }));
     const fromPedido = pedidosListos.map(p => ({
       _tipo: 'pedido',
@@ -829,6 +831,7 @@ export default function ProduccionPage() {
       fechaCreacion: p.fecha,
       notas: p.solicitante ? `Solicitante: ${p.solicitante}` : '',
       pedidoId: p.id,
+      codigoLote: p.codigoLote || '',
     }));
     /* Pedidos primero (cronómetro corriendo arriba), luego órdenes.
        FIX jun 2026 (censo Pre#2): DEDUPE — un pedido lanzado con
@@ -1093,6 +1096,7 @@ export default function ProduccionPage() {
                             <td style={S.td}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                                 <span style={S.folio}>{it.codigo}</span>
+                                <LoteBadge codigo={it.codigoLote} bachas={bachasDeItem(it)} />
                                 {it._tipo === 'pedido' && <span style={B('var(--lp-brand-100)', 'var(--lp-brand-700)')}>Pedido</span>}
                                 {it.prioridad === 'urgente' && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>URGENTE</span>}
                                 {it.prioridad === 'alta' && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>ALTA</span>}
@@ -1135,6 +1139,7 @@ export default function ProduccionPage() {
                     <div key={it._tipo + ':' + it.id} style={S.card(enCurso)}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, flexWrap: 'wrap' }}>
                         <span style={S.folio}>{it.codigo}</span>
+                        <LoteBadge codigo={it.codigoLote} bachas={bachasDeItem(it)} />
                         <EstadoBadge color={est.color} label={est.label} />
                         {it.prioridad === 'urgente' && <span style={B('var(--lp-danger-100)', 'var(--lp-danger-600)')}>URGENTE</span>}
                         {it.prioridad === 'alta' && <span style={B('var(--lp-warning-100)', 'var(--lp-warning-600)')}>ALTA</span>}

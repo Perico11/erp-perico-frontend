@@ -302,7 +302,7 @@ function DevolucionSheet({ isDesktop, onClose, onSaved }) {
           </div>
           <div style={S.field}>
             <label style={S.label}>Código de lote (opcional)</label>
-            <input style={S.input} value={codigoLote} onChange={(e) => setCodigoLote(e.target.value)} placeholder="LP-2026-001-A" />
+            <input style={S.input} value={codigoLote} onChange={(e) => setCodigoLote(e.target.value)} placeholder="LP-0001-001-A" />
           </div>
           <div style={S.field}>
             <label style={S.label}>Motivo</label>
