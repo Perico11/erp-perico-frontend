@@ -296,6 +296,9 @@ const api = {
   getStkAmericano: (almacen) => request('GET', '/api/stk-americano' + (almacen && almacen !== '1' ? '?almacen=' + almacen : '')),
   /* Transferencia simple entre almacenes americanos (2 es extensión del 1, 18-jul). */
   transferirStkAmericano: (payload) => request('POST', '/api/stk-americano/transferir', payload),
+  /* Mezclar colores (28-ago-2026): fusiona orígenes (americano y/o fábrica) en
+     un color destino con su lote de mezcla. Ver MezclarAmericanoModal. */
+  mezclarStkAmericano: (payload) => request('POST', '/api/stk-americano/mezclar', payload),
   colorStkAmericano: ({ almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }) =>
     request('POST', '/api/stk-americano/color', { almacen, nombre, cubetas, galones, totesLitros, proveedor, costoLitro, nota, modo }),
   /* Sustitución manual de nombre — backend la limita a Emmanuel (11-ago). */
