@@ -23,7 +23,7 @@ import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { QRScanner } from '../../components/QRModal';
 import humanizeError from '../../utils/humanizeError';
 
-const LBL_PRES = { cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador' };
+const LBL_PRES = { cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador', pieza: 'Pieza' };
 /* Quien TRANSPORTA y entrega en la sucursal (rol 'recolector'). Se resuelve del
    padrón de usuarios para que el documento siga bien si cambia la persona; el
    respaldo es el titular actual. */
@@ -75,6 +75,28 @@ export function catalogoPT(teran) {
     .filter(p => p.envasado || p.sinEnvasar > 0)
     /* lo entregable primero; lo que hay que re-envasar, después */
     .sort((a, b) => (b.envasado - a.envasado) || a.nombre.localeCompare(b.nombre));
+}
+/* Envases vacíos (2-sep-2026, pedido dueño): a la tienda también viajan
+   envases, en PIEZAS y SIEMPRE del stock de Terán — las entregas salen del
+   CEDIS. Subcategorías de envases.json y tapas (marcadas) en una lista. */
+function catalogoEnvases(envData) {
+  const out = [];
+  const cats = envData?.categorias || {};
+  Object.keys(cats).forEach(ck => {
+    const subs = cats[ck]?.subcategorias || {};
+    Object.keys(subs).forEach(sk => {
+      const sub = subs[sk] || {};
+      const teran = Math.floor(Number(sub.teran) || 0);
+      if (teran > 0) out.push({ nombre: sub.nombre || sk, key: sk, disp: { pieza: teran } });
+    });
+  });
+  const tapas = envData?.tapas || {};
+  Object.keys(tapas).forEach(tk => {
+    const t = tapas[tk] || {};
+    const teran = Math.floor(Number(t.teran) || 0);
+    if (teran > 0) out.push({ nombre: `${t.nombre || tk} — tapa`, key: tk, tapa: true, disp: { pieza: teran } });
+  });
+  return out.sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 const nf = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return (iso || '').slice(0, 16); } };
@@ -193,7 +215,7 @@ export function RemisionOverlay({ entrega, onClose }) {
               return (
                 <tr key={i}>
                   <td style={{ color: '#9c9589' }}>{i + 1}</td>
-                  <td>{l.producto}{l.fuente === 'americano' ? ` (Americano ${l.almacen})` : ''}</td>
+                  <td>{l.producto}{l.fuente === 'americano' ? ` (Americano ${l.almacen})` : l.fuente === 'envases' ? ' (envase vacío)' : ''}</td>
                   <td className="lote">{lotes.length ? lotes.join(', ') : '—'}</td>
                   <td>{LBL_PRES[l.presentacion] || l.presentacion}</td>
                   <td className="r">{l.cantidad}</td>
@@ -233,7 +255,9 @@ export function RemisionOverlay({ entrega, onClose }) {
 function lineasAEditor(entrega) {
   return (entrega?.lineas || []).map(l => (l.fuente === 'americano'
     ? { fuente: 'americano', almacen: String(l.almacen || '1'), producto: l.key || l.producto, nombre: l.producto, presentacion: l.presentacion, cantidad: Number(l.cantidad) || 0 }
-    : { fuente: 'pt', producto: l.producto, presentacion: l.presentacion, cantidad: Number(l.cantidad) || 0 }
+    : l.fuente === 'envases'
+      ? { fuente: 'envases', key: l.key || l.producto, ...(l.tapa ? { tapa: true } : {}), producto: l.producto, presentacion: 'pieza', cantidad: Number(l.cantidad) || 0 }
+      : { fuente: 'pt', producto: l.producto, presentacion: l.presentacion, cantidad: Number(l.cantidad) || 0 }
   )).filter(l => l.cantidad > 0);
 }
 
@@ -245,7 +269,7 @@ export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, on
   const editando = !!entrega;
   const [tienda, setTienda] = useState(entrega ? (entrega.tienda || '') : '');
   const [lineas, setLineas] = useState(() => (entrega ? lineasAEditor(entrega) : []));
-  const [fuente, setFuente] = useState('americano1'); /* americano1 | americano2 | pt */
+  const [fuente, setFuente] = useState('americano1'); /* americano1 | americano2 | pt | envases */
   const [producto, setProducto] = useState('');
   const [presentacion, setPresentacion] = useState('cubeta');
   const [cantidad, setCantidad] = useState('');
@@ -262,8 +286,10 @@ export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, on
   const { data: am1 } = useApiData(() => api.getStkAmericano('1'), null, 0);
   const { data: am2 } = useApiData(() => api.getStkAmericano('2'), null, 0);
   const { data: ptUbi } = useApiData(() => api.getPTPorUbicacion(), null, 0);
+  const { data: envResp } = useApiData(() => api.getEnvases(), null, 0);
 
   const catalogo = useMemo(() => {
+    if (fuente === 'envases') return catalogoEnvases(envResp?.data || envResp || {});
     if (fuente === 'pt') return catalogoPT(ptUbi?.teran || ptUbi?.data?.teran || {});
     const src = fuente === 'americano2' ? am2 : am1;
     const colores = src?.data?.colores || src?.colores || [];
@@ -271,24 +297,28 @@ export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, on
       .map(c => ({ nombre: c.nombre, key: c.key, disp: { cubeta: Number(c.cubetas) || 0, galon: Number(c.galones) || 0 } }))
       .filter(c => c.disp.cubeta > 0 || c.disp.galon > 0)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [fuente, am1, am2, ptUbi]);
+  }, [fuente, am1, am2, ptUbi, envResp]);
 
   const sel = catalogo.find(c => c.nombre === producto);
-  const presOpts = fuente === 'pt' ? PRES_PT : ['cubeta', 'galon'];
+  const presOpts = fuente === 'pt' ? PRES_PT : fuente === 'envases' ? ['pieza'] : ['cubeta', 'galon'];
   /* Al EDITAR, lo que esta entrega ya descontó vuelve a estar disponible: el
      backend devuelve todo antes de aplicar lo nuevo. Sin esto la pantalla
      diría "solo hay 0" para una entrega que se acaba de llevar las 10. */
   const yaEnEstaEntrega = useMemo(() => {
     const m = {};
     (entrega?.lineas || []).forEach(l => {
-      const k = [l.fuente, l.almacen || '-', String(l.producto || '').toUpperCase(), l.presentacion].join('|');
+      const k = l.fuente === 'envases'
+        ? ['envases', l.tapa ? 'tapa' : 'sub', String(l.key || l.producto || '').toUpperCase()].join('|')
+        : [l.fuente, l.almacen || '-', String(l.producto || '').toUpperCase(), l.presentacion].join('|');
       m[k] = (m[k] || 0) + (Number(l.cantidad) || 0);
     });
     return m;
   }, [entrega]);
   const dispBase = sel ? (Number(sel.disp[presentacion]) || 0) : 0;
   const devuelto = sel
-    ? (yaEnEstaEntrega[[fuente === 'pt' ? 'pt' : 'americano', fuente === 'pt' ? '-' : (fuente === 'americano2' ? '2' : '1'), String(sel.nombre || '').toUpperCase(), presentacion].join('|')] || 0)
+    ? (yaEnEstaEntrega[fuente === 'envases'
+        ? ['envases', sel.tapa ? 'tapa' : 'sub', String(sel.key || '').toUpperCase()].join('|')
+        : [fuente === 'pt' ? 'pt' : 'americano', fuente === 'pt' ? '-' : (fuente === 'americano2' ? '2' : '1'), String(sel.nombre || '').toUpperCase(), presentacion].join('|')] || 0)
     : 0;
   const disp = dispBase + devuelto;
   const n = parseInt(cantidad, 10) || 0;
@@ -302,7 +332,9 @@ export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, on
          inventario muestra 52 en Terán parece un error del sistema; la
          diferencia suele estar en un tote sin abrir o en granel, que no se
          entrega hasta re-envasarlo. */
-      const base = `Solo hay ${nf(disp)} ${LBL_PRES[presentacion]?.toLowerCase() || presentacion}(s) envasado(s)`;
+      const base = fuente === 'envases'
+        ? `Solo hay ${nf(disp)} pieza(s) de ese envase en Terán`
+        : `Solo hay ${nf(disp)} ${LBL_PRES[presentacion]?.toLowerCase() || presentacion}(s) envasado(s)`;
       setErr(sel?.sinEnvasar > 0
         ? `${base}. Hay ${nf(sel.sinEnvasar)} cub más en Terán${sel.totes ? ` (${sel.totes} tote${sel.totes === 1 ? '' : 's'} sin abrir)` : ' a granel'}: re-envásalas desde Inventario ▸ PT para poder entregarlas.`
         : base);
@@ -310,7 +342,9 @@ export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, on
     }
     const nueva = fuente === 'pt'
       ? { fuente: 'pt', producto: sel.nombre, presentacion, cantidad: n }
-      : { fuente: 'americano', almacen: fuente === 'americano2' ? '2' : '1', producto: sel.key || sel.nombre, nombre: sel.nombre, presentacion, cantidad: n };
+      : fuente === 'envases'
+        ? { fuente: 'envases', key: sel.key, ...(sel.tapa ? { tapa: true } : {}), producto: sel.nombre, presentacion: 'pieza', cantidad: n }
+        : { fuente: 'americano', almacen: fuente === 'americano2' ? '2' : '1', producto: sel.key || sel.nombre, nombre: sel.nombre, presentacion, cantidad: n };
     setLineas(ls => {
       const i = ls.findIndex(l => l.fuente === nueva.fuente && l.almacen === nueva.almacen && l.producto === nueva.producto && l.presentacion === nueva.presentacion);
       if (i >= 0) { const cp = [...ls]; cp[i] = { ...cp[i], cantidad: cp[i].cantidad + n }; return cp; }
@@ -405,8 +439,8 @@ export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, on
 
           <label style={S.lbl}>Agregar producto</label>
           <div style={S.seg}>
-            {[['americano1', 'Americano 1'], ['americano2', 'Americano 2'], ['pt', 'PT Terán']].map(([v, l]) => (
-              <button key={v} type="button" style={S.segBtn(fuente === v)} onClick={() => { setFuente(v); setProducto(''); setPresentacion('cubeta'); }} data-id={`entregas.fuente.${v}`}>{l}</button>
+            {[['americano1', 'Americano 1'], ['americano2', 'Americano 2'], ['pt', 'PT Terán'], ['envases', 'Envases']].map(([v, l]) => (
+              <button key={v} type="button" style={S.segBtn(fuente === v)} onClick={() => { setFuente(v); setProducto(''); setPresentacion(v === 'envases' ? 'pieza' : 'cubeta'); }} data-id={`entregas.fuente.${v}`}>{l}</button>
             ))}
           </div>
 
@@ -496,7 +530,7 @@ export function NuevaEntregaSheet({ isDesktop, tiendasPrev, entrega, onClose, on
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.nombre || l.producto}</div>
                     <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>
-                      {l.fuente === 'americano' ? `Americano ${l.almacen}` : 'PT Terán'} · {LBL_PRES[l.presentacion]}
+                      {l.fuente === 'americano' ? `Americano ${l.almacen}` : l.fuente === 'envases' ? 'Envases · Terán' : 'PT Terán'} · {LBL_PRES[l.presentacion]}
                       {l.sublotes?.length ? ` · ${l.sublotes.length} QR` : ''}
                     </div>
                   </div>
@@ -754,7 +788,7 @@ export default function EntregasPage({ embedded = false }) {
                 <div key={i} style={S.linea}>
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.producto}</span>
                   <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
-                    <span style={S.badge(l.fuente === 'americano')}>{l.fuente === 'americano' ? `AM ${l.almacen}` : 'PT'}</span>
+                    <span style={S.badge(l.fuente === 'americano')}>{l.fuente === 'americano' ? `AM ${l.almacen}` : l.fuente === 'envases' ? 'ENV' : 'PT'}</span>
                     <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{l.cantidad}</strong> {LBL_PRES[l.presentacion]?.toLowerCase() || l.presentacion}{l.cantidad === 1 ? '' : (l.presentacion === 'atomizador750' ? 'es' : 's')}
                   </span>
                 </div>
