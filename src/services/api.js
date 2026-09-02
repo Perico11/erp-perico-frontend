@@ -180,7 +180,9 @@ const api = {
   reenvasarPTFabrica: (producto, origen, destinos, nota, extra) =>
     request('POST', '/api/inventario/pt/reenvasar-fabrica', { producto, origen, destinos, nota, ...(extra || {}) }),
   /* ── Entregas a tiendas (jul 2026): la baja del CEDIS al entregar ── */
-  getEntregas: () => request('GET', '/api/entregas'),
+  /* todas=true → historial COMPLETO (la búsqueda y el reporte por producto
+     no pueden trabajar sobre la lista recortada a 200). */
+  getEntregas: (todas) => request('GET', '/api/entregas' + (todas ? '?todas=1' : '')),
   crearEntrega: (payload) => request('POST', '/api/entregas/crear', payload),
   resolverEntregaQR: (cod) => request('GET', '/api/entregas/resolver?cod=' + encodeURIComponent(cod)),
   /* Alta de sucursal (ago 2026): la tienda destino se elige del catálogo. */
