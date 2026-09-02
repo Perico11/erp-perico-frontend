@@ -428,6 +428,12 @@ const api = {
      huérfana producible). */
   rechazarPedido: (pedidoId, motivo) =>
     request('POST', '/api/pedidos/rechazar', { pedidoId, motivo }),
+  /* Marcar entregado A MANO (2-sep-2026, dueño): para pedidos cuya pintura ya
+     viajó a Terán por otro flujo (OT) y quedaron atorados en Activos. Cambia
+     SOLO la etiqueta del pedido y su orden a 'entregado' — el server no toca
+     inventario, ni trazabilidad, ni kardex ("sin que se sumen o resten"). */
+  marcarPedidoEntregado: (pedidoId) =>
+    request('POST', '/api/pedidos/marcar-entregado', { pedidoId }),
   /* Corregir CUÁNTO se va a producir (admin). No es upsert: ese número decide
      la MP que se descuenta y el PT que entra a stock al cerrar producción, así
      que el server lo blinda (solo admin, solo antes de 'producido', motivo

@@ -20,6 +20,7 @@ import {
   ESTADO_PEDIDO_LABEL as ESTADO_LABEL,
   ESTADO_PEDIDO_COLOR as ESTADO_COLOR,
   bucketPedido, esPedidoTerminal, normEstado, esPedidoFueraDeFabrica,
+  esPedidoPorEntregar,
 } from '../../lib/estados';
 import { etiquetaMedidaReal } from '../../utils/ptMedidas';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
@@ -715,6 +716,32 @@ export default function PedidosPage() {
     }
   };
 
+  /* Marcar entregado A MANO (2-sep-2026, dueño): "aparecen pedidos ya
+     entregados y subidos al inventario de Terán y dados de baja del stock de
+     Fábrica, pero siguen apareciendo. Deberíamos eliminarlos SIN que se sumen
+     o resten." El hueco: la pintura viajó por OT (que mueve escalares pero no
+     cierra pedidos) y la card se quedó en Activos para siempre. Este botón la
+     manda a Historial como ENTREGADO — el server cambia SOLO la etiqueta del
+     pedido y su orden; cero movimientos de inventario. */
+  const handleMarcarEntregado = async (p) => {
+    setErr('');
+    const okGo = await confirm(
+      `¿"${p.producto}" (pedido ${p.id}) ya se entregó y está en Terán? El pedido se va a Historial como ENTREGADO. No suma ni resta inventario — sólo cambia la etiqueta.`,
+      { title: 'Marcar como entregado', confirmText: 'Sí, ya se entregó' }
+    );
+    if (!okGo) return;
+    setBusyId(p.id);
+    try {
+      const r = await api.marcarPedidoEntregado(p.id);
+      if (!r?.ok) throw new Error(r?.error || 'No se pudo marcar entregado');
+      reload(); reloadOrd();
+    } catch (e) {
+      setErr(humanizeError(e));
+    } finally {
+      setBusyId('');
+    }
+  };
+
   /* §7 Eliminar pedido — SOLO admin (data-rol="admin").
      Distinto de Cancelar/Rechazar: borrado definitivo (soft-delete con
      auditoría) que también cae en cascada sobre la orden vinculada y revierte
@@ -972,7 +999,14 @@ export default function PedidosPage() {
                el botón "Eliminar pedido" no aplica (rompería contra un id de
                orden). Se oculta para esas entradas. */
             const mostrarEliminar = esAdmin && !p._esOrdenInterna;
-            const tieneAcciones = mostrarCorregir || mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar;
+            /* "Ya se entregó" (2-sep-2026, dueño): salida manual para pedidos
+               cuya pintura ya vive en Terán (viajó por OT) pero que el flujo
+               nunca cerró. Solo en estados por-entregar — antes de envasar se
+               usa Cancelar/Eliminar, que sí saben revertir MP. */
+            const mostrarMarcarEntregado = tabOperable && !p._esOrdenInterna
+              && esPedidoPorEntregar(p.estado)
+              && (esAdmin || user?.rol === 'almacen' || user?.rol === 'tecnico');
+            const tieneAcciones = mostrarCorregir || mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar || mostrarMarcarEntregado;
 
             /* Cantidad → número + unidad para el numeral (desktop). */
             const qtyTxt = etiquetaMedidaReal(p.medida, p.medidaQty, p.cantidad) || `${p.cantidad} cubetas`;
@@ -1096,6 +1130,21 @@ export default function PedidosPage() {
                         title="Ir a Producción para completar el lote"
                       >
                         Ir a Producción {Icon.arrow}
+                      </button>
+                    )}
+                    {/* "Ya se entregó" — cierra a mano un pedido cuya entrega
+                        física ya ocurrió por otro flujo (OT). Solo etiqueta:
+                        el server NO suma ni resta inventario. */}
+                    {mostrarMarcarEntregado && (
+                      <button
+                        style={C.btn('ghost')}
+                        data-id="pedidos.btn.ya-entregado"
+                        data-rol="almacen,tecnico,admin"
+                        disabled={busyId === p.id}
+                        onClick={() => handleMarcarEntregado(p)}
+                        title="La pintura ya está en Terán — mandar el pedido a Historial como ENTREGADO (no toca inventario)"
+                      >
+                        {busyId === p.id ? '…' : <>{Icon.check} Ya se entregó</>}
                       </button>
                     )}
                     {/* Cancelar = rechazo SUAVE (motivo, sin PIN, sin borrar).
