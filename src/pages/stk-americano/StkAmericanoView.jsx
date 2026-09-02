@@ -22,7 +22,6 @@ import SalidaAmericanoModal from './SalidaAmericanoModal';
 import EnvasarAmericanoModal from './EnvasarAmericanoModal';
 import TransferirAmericanoModal from './TransferirAmericanoModal';
 import CensoTotesModal from './CensoTotesModal';
-import MezclarAmericanoModal from './MezclarAmericanoModal';
 import TotesColorModal from './TotesColorModal';
 
 const S = {
@@ -71,7 +70,6 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
   const [envasarColor, setEnvasarColor] = useState(null);
   const [transferirColor, setTransferirColor] = useState(null);
   const [censoColor, setCensoColor] = useState(null);
-  const [mezclarAbierto, setMezclarAbierto] = useState(false);
   const [totesColor, setTotesColor] = useState(null);
   const [printLote, setPrintLote] = useState(null);
   const [toast, setToast] = useState('');
@@ -165,15 +163,8 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14"/></svg>
               Agregar color
             </button>
-            {/* Mezclar colores (28-ago): fusionar orígenes —americano y/o
-                fábrica— en un color nuevo con su lote de mezcla. */}
-            <button
-              style={{ ...S.btnAdd, background: 'var(--lp-bg-raised)', color: 'var(--lp-brand-700)', border: '1.5px solid var(--lp-brand-600)' }}
-              data-id="stkAmericano.btn.mezclar" data-rol="admin,almacen"
-              onClick={() => setMezclarAbierto(true)}
-            >
-              Mezclar
-            </button>
+            {/* Mezclar colores vive en la pestaña "Mezclas" (2-sep): un solo
+                botón para no duplicar el mismo flujo en tres lugares. */}
             {/* Etiquetas de TODOS los totes con lote asignado (18-jul): un solo
                 trabajo de impresión, una etiqueta por tote, formato+rotación
                 memorizados de la impresora. */}
@@ -333,19 +324,6 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
           />
         );
       })()}
-      {mezclarAbierto && (
-        <MezclarAmericanoModal
-          colores={colores}
-          almacen={almacen}
-          onClose={() => setMezclarAbierto(false)}
-          onSaved={(r) => {
-            const lote = (r && r.lote) || '';
-            const nom = (r && r.color && r.color.nombre) || '';
-            showToast(`Mezcla lista${nom ? `: ${nom}` : ''}${lote ? ` · lote ${lote}` : ''}`);
-            reload && reload();
-          }}
-        />
-      )}
       {censoColor && (
         <CensoTotesModal
           color={censoColor}
