@@ -415,6 +415,12 @@ const PRESENTACIONES_META = [
     icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 2h6v3l1 2v13a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V7l1-2V2Z"/><path d="M8 11h8"/></svg>),
   },
   {
+    /* Atomizador 750 ml (2-sep-2026, pedido dueño — caso ASTRA-LAST): antes se
+       capturaba por "Otros" y el tipo quedaba fuera de la tabla de medidas. */
+    key: 'atomizador750', nombre: 'Atomizador', cap: '0.75 L',
+    icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M9 8h6v11a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2V8Z"/><path d="M10 8V6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v2"/><path d="M12 5V3h4"/><path d="m18 2 2 1-2 1"/></svg>),
+  },
+  {
     key: 'otros', nombre: 'Otros', cap: 'bote/funda',
     icon: (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>),
   },
@@ -445,7 +451,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   /* Detectores explícitos — NO usar negaciones que dan falso positivo con
      sublotes legacy donde claseSublote/fase pueden ser undefined.
      PRESENTACIONES_FINALES = solo las realmente finales. */
-  const PRESENTACIONES_FINALES = ['cubeta', 'galon', 'litro'];
+  const PRESENTACIONES_FINALES = ['cubeta', 'galon', 'litro', 'atomizador750'];
   const haySublotesFinales = sublotesActuales.some(s =>
     s.claseSublote === 'envasado_final' ||
     s.fase === 2 ||
@@ -497,7 +503,9 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
      resuelve a `cubeta-premium`, para galón a `galon-premium`, etc. */
   const subcatList = useMemo(() => {
     if (isTote) return [];
-    const cat = envases?.categorias?.[tipo];
+    /* El envase del atomizador vive en la categoría "otros" de envases.json —
+       la MISMA convención del reenvase de Terán (REENV_TIPO_CAT). */
+    const cat = envases?.categorias?.[tipo === 'atomizador750' ? 'otros' : tipo];
     if (!cat?.subcategorias) return [];
     return Object.entries(cat.subcategorias)
       .map(([k, v]) => ({
@@ -537,7 +545,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
 
   /* Capacidad: "otros" usa la capacidad_ml individual del item (bote 750ml,
      funda 250ml, etc.) — antes caía al default 19L (censo H5). */
-  const capMap = { cubeta: 19, galon: 3.785, litro: 1, tote: 1 };
+  const capMap = { cubeta: 19, galon: 3.785, litro: 1, atomizador750: 0.75, tote: 1 };
   const litPorUnidad = (tipo === 'otros' && subcatActual?.capacidad_ml > 0)
     ? +(subcatActual.capacidad_ml / 1000).toFixed(3)
     : (capMap[tipo] || 19);
@@ -591,7 +599,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
         subKey: subKey || undefined,
         env: isTote
           ? `Tote ${q}L`
-          : (subcatActual?.nombre || (tipo === 'cubeta' ? '19L Estandar' : tipo === 'galon' ? '3.785L' : '1L')),
+          : (subcatActual?.nombre || (tipo === 'cubeta' ? '19L Estandar' : tipo === 'galon' ? '3.785L' : tipo === 'atomizador750' ? '750ml' : '1L')),
         marca: marca || null,
         qty: isTote ? 1 : q,
         lit: litExact,
@@ -703,7 +711,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
                   <span style={S.presIc}>{p.icon}</span>
                   <span style={{ minWidth: 0 }}>
                     <span style={S.presN}>{p.nombre}</span>
-                    <span style={S.presL}>{p.cap}{['cubeta', 'galon', 'litro'].includes(p.key) ? ' c/u' : ''}</span>
+                    <span style={S.presL}>{p.cap}{['cubeta', 'galon', 'litro', 'atomizador750'].includes(p.key) ? ' c/u' : ''}</span>
                   </span>
                 </button>
               );
@@ -780,7 +788,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
           <QuienEnvaso vaciadores={vaciadores} valor={envasadorId} onChange={elegirVaciador}
             dataId="stock.sel.vaciador" nota="Queda grabado en cada sublote de este envasado." />
 
-          <div style={S.sec}>{isTote ? 'Cuántos litros' : `Cuántas ${tipo === 'cubeta' ? 'cubetas' : tipo === 'galon' ? 'galones' : 'unidades'}`}</div>
+          <div style={S.sec}>{isTote ? 'Cuántos litros' : `Cuántos/as ${tipo === 'cubeta' ? 'cubetas' : tipo === 'galon' ? 'galones' : tipo === 'atomizador750' ? 'atomizadores' : 'unidades'}`}</div>
           {isTote ? (
             /* TOTE = litros directos (regla indivisible: se sugiere todo el lote) */
             <input style={{ ...S.fieldInput, marginBottom: 0, fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 18, textAlign: 'center', height: 48 }}
@@ -818,7 +826,7 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
              marca · litros en mono. Conserva los datos extra del ticket viejo
              (quedará en lote, tapa y tapas restantes) como filas compactas. */}
           {qty && parseFloat(qty) > 0 && (() => {
-            const PLURAL = { cubeta: 'cubetas', galon: 'galones', litro: 'litros', otros: 'envases' };
+            const PLURAL = { cubeta: 'cubetas', galon: 'galones', litro: 'litros', atomizador750: 'atomizadores', otros: 'envases' };
             const n = parseInt(qty) || 0;
             const presNombre = PRESENTACIONES_META.find(p => p.key === tipo)?.nombre || tipo;
             return (
@@ -913,7 +921,9 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
   const lugarReenv = (tote?.ub === 'teran') ? 'teran' : 'fabrica';
   const lugarReenvLbl = lugarReenv === 'teran' ? 'Terán' : 'Fábrica';
   const subcatListReenv = useMemo(() => {
-    const cat = envases?.categorias?.[tipo];
+    /* Atomizador: su envase vive en la categoría "otros" (misma convención
+       que REENV_TIPO_CAT del reenvase de Terán). */
+    const cat = envases?.categorias?.[tipo === 'atomizador750' ? 'otros' : tipo];
     if (!cat?.subcategorias) return [];
     return Object.entries(cat.subcategorias)
       .map(([k, v]) => ({
@@ -946,7 +956,7 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
     return Math.max(0, (Number(tote.lit) || 0) - litUsed);
   })();
 
-  const capMap = { cubeta: 19, galon: 3.785, litro: 1 };
+  const capMap = { cubeta: 19, galon: 3.785, litro: 1, atomizador750: 0.75 };
   const litPorUnidad = capMap[tipo] || 19;
   const maxUnidades = Math.floor(litDisponible / litPorUnidad);
   const litTotal = (parseInt(qty) || 0) * litPorUnidad;
@@ -1093,6 +1103,7 @@ export function ReenvasadoModal({ lote, envases, userName, onClose, onSuccess, t
               { id: 'cubeta', nombre: 'Cubeta', sub: '19 L' },
               { id: 'galon', nombre: 'Galón', sub: '3.785 L' },
               { id: 'litro', nombre: 'Litro', sub: '1 L' },
+              { id: 'atomizador750', nombre: 'Atomizador', sub: '0.75 L' },
             ]}
             valor={tipo}
             onChange={setTipo}
