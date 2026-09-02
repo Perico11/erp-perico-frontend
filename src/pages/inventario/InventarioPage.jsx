@@ -1607,6 +1607,7 @@ export default function InventarioPage({ embedded = false }) {
   /* Sprint X: modal "Agregar PT a almacén" (fábrica = qty / Terán = pool manual). { ubicacion } */
   const [agregarPtUbic, setAgregarPtUbic] = useState(null);
   const [reenvasarTeran, setReenvasarTeran] = useState(null); /* { producto, scalar } */
+  const [reenvasarFabrica, setReenvasarFabrica] = useState(null); /* { producto, desglose } — 2-sep, caso ASTRA-LAST */
   /* Cola de QRs de la tanda recién envasada en Terán (jul 2026): tras envasar,
      se abre el print modal por cada sublote hijo creado — igual que Americano. */
   const [printTeranQR, setPrintTeranQR] = useState([]);
@@ -2629,6 +2630,7 @@ export default function InventarioPage({ embedded = false }) {
                 onEliminarTeran={handleEliminarPTTeran}
                 onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : undefined}
                 onReenvasar={canReenvasar ? (producto, scalar, totes) => setReenvasarTeran({ producto, scalar, totes }) : undefined}
+                onEnvasarFabrica={canReenvasar ? (producto, desglose) => setReenvasarFabrica({ producto, desglose }) : undefined}
               />
             )}
           </>
@@ -2858,6 +2860,34 @@ export default function InventarioPage({ embedded = false }) {
                 sublotes: [{ cod: h.cod, qrPayload: h.qrPayload, qty: h.qty, env: null, marca: null }],
                 lote: { producto: h.producto || r.producto, codigoLote: h.codigoLote },
                 isTote: false, q: h.qty, tipo: (REENV_TIPO_LBL[h.tipo] || h.tipo), desdeTote: h.fromTote,
+              })));
+            }
+          }}
+        />
+      )}
+
+      {/* ── Envasar PT en FÁBRICA (2-sep-2026): declarar cambio de presentación ── */}
+      {reenvasarFabrica && (
+        <ReenvasarFabricaModal
+          producto={reenvasarFabrica.producto}
+          desglose={reenvasarFabrica.desglose}
+          envData={envData?.data || envData}
+          isDesktop={isDesktop}
+          onClose={() => setReenvasarFabrica(null)}
+          onDone={(r) => {
+            setReenvasarFabrica(null);
+            setToastMsg(`${r.producto} envasado en Fábrica`);
+            reloadInv();
+            reloadPtUbi();
+            reloadEnv();
+            setTimeout(() => setToastMsg(''), 4500);
+            /* Misma cola de impresión de QR que el reenvase de Terán. */
+            const hijos = (r && r.espejo && Array.isArray(r.espejo.hijos)) ? r.espejo.hijos : [];
+            if (hijos.length) {
+              setPrintTeranQR(hijos.map(h => ({
+                sublotes: [{ cod: h.cod, qrPayload: h.qrPayload, qty: h.qty, env: null, marca: null }],
+                lote: { producto: h.producto || r.producto, codigoLote: h.codigoLote },
+                isTote: false, q: h.qty, tipo: (REENV_TIPO_LBL[h.tipo] || h.tipo),
               })));
             }
           }}
@@ -3293,12 +3323,170 @@ function ReenvasarTeranModal({ producto, scalar, totes, envData, isDesktop, onCl
   );
 }
 
+/* ── Envasar PT en FÁBRICA (2-sep-2026, pedido dueño — caso ASTRA-LAST) ─────
+   "En Fábrica los productos en stock deben tener la opción de envasar; este
+   producto aparece como 7 cubetas pero ya está transformado a envase de .750."
+   Gemelo del modal de Terán con la diferencia de fondo: aquí el origen son
+   las PIEZAS rastreadas en sublotes (el backend consume FEFO y conserva los
+   litros); "Otras piezas" abarca capturas viejas con tipo fuera de tabla.
+   Consume envases vacíos del stock de FÁBRICA. */
+const FAB_ORIGEN_LBL = { cubeta: 'Cubetas', galon: 'Galones', litro: 'Litros', atomizador750: 'Atomizadores', otros: 'Otras piezas' };
+export function ReenvasarFabricaModal({ producto, desglose, envData, isDesktop, onClose, onDone }) {
+  const d = desglose || {};
+  const nDe = (t) => Number(t === 'atomizador750' ? d.atm : d[t]) || 0;
+  const origenes = ['cubeta', 'galon', 'litro', 'atomizador750', 'otros'].filter(t => nDe(t) > 0);
+  const [origen, setOrigen] = useState(origenes[0] || 'cubeta');
+  const destinoOpts = ['cubeta', 'galon', 'litro', 'atomizador750'].filter(t => t !== origen);
+  const [destinoTipo, setDestinoTipo] = useState(destinoOpts[0] || 'atomizador750');
+  const [qty, setQty] = useState('');
+  const [subKey, setSubKey] = useState('');
+  const [tapaKey, setTapaKey] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState('');
+  const { vaciadores, envasadorId, elegir: elegirVaciador, camposSublote } = useVaciadores();
+
+  const cats = envData?.categorias || {};
+  const tapas = envData?.tapas || {};
+  const catKey = REENV_TIPO_CAT[destinoTipo];
+  const subs = Object.entries(cats[catKey]?.subcategorias || {});
+  const usaTapa = !!cats[catKey]?.usa_tapa;
+  const tapaList = Object.entries(tapas);
+
+  const n = parseInt(qty, 10);
+  const litDestino = !isNaN(n) && n > 0 ? +((n * (REENV_ML[destinoTipo] || 0)) / 1000).toFixed(2) : 0;
+  /* Litros del origen: exactos para tipos conocidos; para "otras piezas", el
+     total menos lo conocido (el backend valida contra los litros REALES de
+     cada sublote — esto sólo orienta el tope del modal). */
+  const litConocidos = ['cubeta', 'galon', 'litro', 'atomizador750']
+    .reduce((a, t) => a + nDe(t) * (REENV_ML[t] / 1000), 0);
+  const litOrigen = origen === 'otros'
+    ? Math.max(0, +(((Number(d.totalLitros) || 0) - litConocidos - (Number(d.tote) || 0) * (REENV_ML.tote / 1000))).toFixed(1))
+    : +(nDe(origen) * (REENV_ML[origen] / 1000)).toFixed(1);
+  const subSel = subs.find(([sk]) => sk === subKey);
+  const tapaSel = tapaList.find(([tk]) => tk === tapaKey);
+  const limites = [
+    { n: Math.floor(litOrigen / ((REENV_ML[destinoTipo] || 19000) / 1000)), motivo: 'los litros del origen' },
+    ...(subSel ? [{ n: Math.round(Number(subSel[1].stock) || 0), motivo: 'los envases en Fábrica' }] : []),
+    ...(usaTapa && tapaSel ? [{ n: Math.round(Number(tapaSel[1].stock) || 0), motivo: 'las tapas en Fábrica' }] : []),
+  ];
+  const maxUnid = Math.max(0, Math.min(...limites.map(l => l.n)));
+  const valido = !isNaN(n) && n > 0 && litDestino <= litOrigen + 0.5;
+
+  const submit = async () => {
+    if (!valido || saving) return;
+    if (!subKey) return setErr('Elige el envase que estás usando — su stock se descuenta de Fábrica');
+    if (n > Math.round(Number(subSel?.[1]?.stock) || 0)) {
+      return setErr(`Stock insuficiente de "${subSel?.[1]?.nombre || subKey}" en Fábrica: hay ${Math.round(Number(subSel?.[1]?.stock) || 0)}, necesitas ${n}`);
+    }
+    setSaving(true); setErr('');
+    try {
+      const destinos = [{ tipo: destinoTipo, qty: n, subKey, tapaKey: usaTapa ? (tapaKey || null) : null }];
+      const r = await api.reenvasarPTFabrica(producto, origen, destinos, null, { ...(camposSublote || {}) });
+      onDone(r);
+    } catch (e) { setErr(e?.data?.error || e.message || 'No se pudo envasar'); setSaving(false); }
+  };
+
+  const selStyle = { width: '100%', padding: '9px 12px', borderRadius: 10, border: '1.5px solid var(--lp-border-subtle)', fontSize: 13, background: 'var(--lp-bg-base)', color: 'var(--lp-text-primary)' };
+
+  return (
+    <div style={S.sheetOverlay(isDesktop)}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shH}>Envasar en Fábrica</div>
+        <div style={S.shS}>{producto}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', margin: '8px 0 14px', lineHeight: 1.5 }}>
+          Declara el <strong>cambio de presentación</strong> del stock que ya está en piso — los litros se conservan, sólo cambia la forma. Consume envases vacíos del stock de <strong>Fábrica</strong> y al terminar se abre la <strong>etiqueta QR</strong> para imprimir. "Otras piezas" abarca capturas viejas sin medida conocida.
+        </div>
+
+        <label style={S.flbl}>Origen</label>
+        <select style={selStyle} value={origen} data-id="inventario.sel.origen-fab"
+          onChange={e => {
+            const v = e.target.value;
+            setOrigen(v);
+            /* El destino no puede ser el mismo tipo que el origen; el envase y
+               la tapa se resetean porque dependen de la categoría del destino. */
+            const opts = ['cubeta', 'galon', 'litro', 'atomizador750'].filter(t => t !== v);
+            if (!opts.includes(destinoTipo)) setDestinoTipo(opts[0]);
+            setSubKey(''); setTapaKey('');
+          }}>
+          {origenes.map(t => (
+            <option key={t} value={t}>{FAB_ORIGEN_LBL[t]} — {Math.round(nDe(t))} pieza{Math.round(nDe(t)) === 1 ? '' : 's'}</option>
+          ))}
+        </select>
+
+        <Sec>En qué se envasa</Sec>
+        <PresPills
+          opciones={destinoOpts.map(t => ({
+            id: t, nombre: REENV_TIPO_LBL[t],
+            sub: REENV_ML[t] ? (REENV_ML[t] / 1000) + ' L' : null,
+          }))}
+          valor={destinoTipo}
+          onChange={(v) => { setDestinoTipo(v); setSubKey(''); setTapaKey(''); }}
+          dataId="inventario.pres-fab"
+        />
+
+        <EnvaseSelect
+          etiqueta="Envase (stock de Fábrica)"
+          opciones={subs.map(([sk, sub]) => ({
+            value: sk,
+            disabled: (Number(sub.stock) || 0) <= 0,
+            label: `${sub.nombre} · ${Math.round(Number(sub.stock) || 0) <= 0 ? 'sin stock' : `${Math.round(Number(sub.stock) || 0)} en Fábrica`}`,
+          }))}
+          valor={subKey}
+          onChange={setSubKey}
+          vacio="— elige el envase —"
+          dataId="inventario.sel.envase-fab"
+        />
+        {!subKey && (
+          <div style={{ marginTop: -4, marginBottom: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+            Obligatorio: su stock se descuenta de Fábrica.
+          </div>
+        )}
+
+        {usaTapa && (
+          <TapaSelect
+            opciones={tapaList.map(([tk, t]) => ({
+              value: tk, color: t.color || undefined,
+              disabled: (Number(t.stock) || 0) <= 0,
+              label: `${t.color_nombre || t.nombre} · ${Math.round(Number(t.stock) || 0) <= 0 ? 'sin stock' : `${Math.round(Number(t.stock) || 0)} en Fábrica`}`,
+            }))}
+            valor={tapaKey}
+            onChange={setTapaKey}
+            vacio="— sin tapa —"
+            dataId="inventario.sel.tapa-fab"
+          />
+        )}
+
+        <QuienEnvaso vaciadores={vaciadores} valor={envasadorId} onChange={elegirVaciador}
+          dataId="inventario.sel.vaciador-fab" />
+
+        <Sec>Cuántas {(REENV_TIPO_LBL[destinoTipo] || '').toLowerCase()}s</Sec>
+        <Contador valor={qty} onChange={(v) => setQty(String(v))} max={maxUnid} min={0} dataId="inventario.qty-fab" />
+        <TopeHint limites={limites} />
+
+        <div style={{ marginTop: 14, padding: '10px 12px', background: 'var(--lp-bg-sunken)', borderRadius: 8, fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6 }}>
+          Disponible en <strong>{FAB_ORIGEN_LBL[origen]}</strong>: <strong>~{litOrigen.toLocaleString('es-MX')} L</strong><br />
+          Producirás: <strong>{n > 0 ? n : 0} {(REENV_TIPO_LBL[destinoTipo] || '').toLowerCase()}</strong> = {litDestino.toLocaleString('es-MX')} L<br />
+          {valido && <>Los litros se conservan — el origen queda con <strong>~{Math.max(0, +(litOrigen - litDestino).toFixed(1)).toLocaleString('es-MX')} L</strong></>}
+        </div>
+
+        {err && <div style={{ marginTop: 10, fontSize: 12.5, color: 'var(--lp-danger-700)', fontWeight: 600 }}>{err}</div>}
+        <div style={S.shActs}>
+          <button style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
+          <button style={{ ...S.act2(true), opacity: valido && subKey && !saving ? 1 : 0.5 }} disabled={!valido || !subKey || saving} onClick={submit}>
+            {saving ? 'Envasando…' : 'Envasar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Fase 3 (ago 2026, "se cuenta lo que se puede tocar") ────────────────────
    Tarjeta de PIEZAS por producto para las vistas Fábrica/Terán de PT: cubetas/
    galones como chips grandes, cada tote como renglón físico con su folio y una
    barra de litros, y la contabilidad (lotes, granel cub-equiv, residual/manual)
    plegada en "Ver detalle". El descuadre contable-vs-piezas solo lo ve admin. */
-function PTPiezasCard({ nombre, d, ubicacion, esFabrica, acentColor, lotes, invPT, esAdmin, canPedir, onPedir, onTransferir, puedeReenvasar, onReenvasar, canEdit, onEliminarTeran }) {
+function PTPiezasCard({ nombre, d, ubicacion, esFabrica, acentColor, lotes, invPT, esAdmin, canPedir, onPedir, onTransferir, puedeReenvasar, onReenvasar, onEnvasarFabrica, canEdit, onEliminarTeran }) {
   const [detalle, setDetalle] = useState(false);
   const fmtN = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
   const tf = d.totesFisicos;
@@ -3347,6 +3535,17 @@ function PTPiezasCard({ nombre, d, ubicacion, esFabrica, acentColor, lotes, invP
               onClick={() => onReenvasar(nombre, d.teranPresScalar, d.totesFisicos)}
               title="Envasar: convertir tote/granel en cubetas o galones (consume envases de Terán) e imprimir etiqueta QR"
               style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>Envasar</button>
+          )}
+          {/* Envasar en FÁBRICA (2-sep-2026, caso ASTRA-LAST): declarar la
+              transformación de presentación del stock en piso — "aparece como
+              7 cubetas pero ya está transformado a envase de .750". Sólo si
+              hay PIEZAS finales rastreadas (los totes tienen su propio flujo). */}
+          {esFabrica && onEnvasarFabrica
+            && ((Number(d.cubeta) || 0) + (Number(d.galon) || 0) + (Number(d.litro) || 0) + (Number(d.atm) || 0) + (Number(d.otros) || 0)) > 0 && (
+            <button type="button" data-id="inventario.btn.envasar-fabrica" data-rol="admin,tecnico,almacen"
+              onClick={() => onEnvasarFabrica(nombre, d)}
+              title="Envasar: declarar el cambio de presentación del stock de Fábrica (consume envases vacíos de Fábrica) e imprimir etiqueta QR"
+              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-warning-600)', borderColor: 'color-mix(in srgb, var(--lp-warning-600) 45%, transparent)' }}>Envasar</button>
           )}
         </div>
       </div>
@@ -3435,7 +3634,7 @@ function PTPiezasCard({ nombre, d, ubicacion, esFabrica, acentColor, lotes, invP
   );
 }
 
-function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar, invPT, esAdmin }) {
+function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar, onEnvasarFabrica, invPT, esAdmin }) {
   const bucket = data?.[ubicacion] || {};
   const productos = Object.entries(bucket)
     .filter(([nombre]) => {
@@ -3560,6 +3759,7 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
               onTransferir={onTransferir}
               puedeReenvasar={reenvasable(d)}
               onReenvasar={onReenvasar}
+              onEnvasarFabrica={onEnvasarFabrica}
               canEdit={canEdit}
               onEliminarTeran={onEliminarTeran}
             />

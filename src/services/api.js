@@ -175,6 +175,10 @@ const api = {
      [{tipo,qty,subKey,tapaKey}] consumiendo envases de Terán. No cambia el total. */
   reenvasarPTTeran: (producto, origen, destinos, nota, extra) =>
     request('POST', '/api/inventario/pt/reenvasar-teran', { producto, origen, destinos, nota, ...(extra || {}) }),
+  /* Envasar en FÁBRICA (2-sep-2026, caso ASTRA-LAST): declara el cambio de
+     presentación del stock en piso — litros conservados, sublotes FEFO. */
+  reenvasarPTFabrica: (producto, origen, destinos, nota, extra) =>
+    request('POST', '/api/inventario/pt/reenvasar-fabrica', { producto, origen, destinos, nota, ...(extra || {}) }),
   /* ── Entregas a tiendas (jul 2026): la baja del CEDIS al entregar ── */
   getEntregas: () => request('GET', '/api/entregas'),
   crearEntrega: (payload) => request('POST', '/api/entregas/crear', payload),
