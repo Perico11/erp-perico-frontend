@@ -11,6 +11,7 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import { EliminarMPModal, SustituirMPModal, MPActionsMenu } from './MPActions';
 import AgregarPTModal from './AgregarPTModal';
 import StkAmericanoView from '../stk-americano/StkAmericanoView';
+import MezclasView from '../stk-americano/MezclasView';
 import { SubloteQRPrintModal } from '../stock-fabrica/StockFabricaPage';
 import CostosMPPanel from '../admin/CostosMPPanel';
 import MaestroMPInline from './MaestroMPInline';
@@ -1809,6 +1810,9 @@ export default function InventarioPage({ embedded = false }) {
        nombres reales de las bodegas: 1 = Terán, 2 = Almacén 2. */
     if (canSeeStkAmericano) t.push({ id: 'stkAmericano', label: 'Americano Terán' });
     if (canSeeStkAmericano) t.push({ id: 'stkAmericano2', label: 'Americano Alm. 2' });
+    /* Pestaña propia de Mezclar (31-ago, pedido dueño): historial de fusiones
+       —qué se mezcló, cuándo, quién, lote— con el botón aquí mismo. */
+    if (canSeeStkAmericano) t.push({ id: 'mezclas', label: 'Mezclas' });
     return t;
   }, [hideMP, hidePT, canSeeStkAmericano]);
 
@@ -2306,7 +2310,7 @@ export default function InventarioPage({ embedded = false }) {
         {/* Toolbar (mockup): fila buscador prominente + fila segmented MP/PT con
             chips de severidad a la derecha. En móvil se apilan igual que el mockup. */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
-          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }), ...(activeTab === 'stkAmericano' || activeTab === 'stkAmericano2' ? { display: 'none' } : {}) }}>
+          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }), ...(activeTab === 'stkAmericano' || activeTab === 'stkAmericano2' || activeTab === 'mezclas' ? { display: 'none' } : {}) }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query}
               onChange={e => setQuery(e.target.value)}
@@ -2728,6 +2732,17 @@ export default function InventarioPage({ embedded = false }) {
             canDelete={rol === 'admin'}
             almacen="2"
             embedded
+          />
+        )}
+
+        {/* ════════ TAB: MEZCLAS (historial + botón; 31-ago, pedido dueño) ════════ */}
+        {activeTab === 'mezclas' && (
+          <MezclasView
+            colores1={stkResp?.data?.colores || []}
+            colores2={stkResp2?.data?.colores || []}
+            reload1={reloadStk}
+            reload2={reloadStk2}
+            canEdit={rol === 'admin' || rol === 'almacen'}
           />
         )}
       </div>
