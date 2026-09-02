@@ -6,7 +6,7 @@
    Terán, pintura de FÁBRICA del pool (inv.pt[X].teran, mostrado en litros).
    El resultado nace como tote(s) del color destino —existente o NUEVO— con UN
    lote de mezcla: el manual manda (una fecha lleva secuencia), sin manual sale
-   folio del sistema. El backend guarda la COMPOSICIÓN en cada tambo; por eso
+   folio del sistema. El backend guarda la COMPOSICIÓN en cada tote; por eso
    el resultado NO hereda el lote del fabricante — ya no es su pintura.
 
    Permisos backend: admin + almacen. POST /api/stk-americano/mezclar. */
@@ -17,7 +17,7 @@ import useVaciadores from '../../hooks/useVaciadores';
 import humanizeError from '../../utils/humanizeError';
 
 const CUB_L = 19;           /* litros por cubeta — espejo del backend */
-const LITROS_TAMBO = 1000;  /* el resultado se parte en tambos de hasta 1000 L */
+const LITROS_TOTE = 1000;  /* el resultado se parte en totes de hasta 1000 L */
 
 const S = {
   overlay: { position: 'fixed', inset: 0, zIndex: 1100, background: 'rgba(15,12,8,0.6)', backdropFilter: 'blur(3px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 },
@@ -93,7 +93,7 @@ export default function MezclarAmericanoModal({ colores = [], almacen = '1', onC
   const quitarIng = (i) => setIngs(prev => prev.filter((_, j) => j !== i));
 
   const totalL = ings.reduce((a, f) => a + (Number(f.litros) > 0 ? Number(f.litros) : 0), 0);
-  const nTambos = totalL > 0 ? Math.ceil((totalL - 0.001) / LITROS_TAMBO) : 0;
+  const nTotes = totalL > 0 ? Math.ceil((totalL - 0.001) / LITROS_TOTE) : 0;
   const excedidos = ings.filter(f => Number(f.litros) > 0 && Number(f.litros) > dispDe(f) + 0.05);
   const completos = ings.filter(f => Number(f.litros) > 0 && (f.fuente === 'pt' ? f.producto : f.key));
   const destinoExiste = useMemo(() => colores.some(c => norm(c.nombre) === norm(destino)), [colores, destino]);
@@ -159,7 +159,7 @@ export default function MezclarAmericanoModal({ colores = [], almacen = '1', onC
                       <option value={GRANEL}>Granel (juntar sobrantes)</option>
                       {(colorDe(f.key).totes || []).filter(t => t.litros > 0).map(t => (
                         <option key={t.codigoLote} value={t.codigoLote}>
-                          Tambo {t.codigoLote} · {nf(t.litros)} L{t.loteProveedor ? ` · lote ${t.loteProveedor}` : ''}
+                          Tote {t.codigoLote} · {nf(t.litros)} L{t.loteProveedor ? ` · lote ${t.loteProveedor}` : ''}
                         </option>
                       ))}
                     </select>
@@ -210,7 +210,7 @@ export default function MezclarAmericanoModal({ colores = [], almacen = '1', onC
 
           {totalL > 0 && (
             <div style={S.resumen(!!excedidos.length)} data-id="stkAmericano.mezclar.resumen">
-              <strong>{nf(totalL)} L</strong> en {nTambos} tambo{nTambos === 1 ? '' : 's'}
+              <strong>{nf(totalL)} L</strong> en {nTotes} tote{nTotes === 1 ? '' : 's'}
               {norm(destino) ? <> → <strong>{destino.trim().toUpperCase()}</strong>{!destinoExiste && ' (nuevo)'}</> : null}
               {excedidos.length ? <><br />Hay ingredientes con más litros de los disponibles.</> : null}
             </div>

@@ -23,12 +23,23 @@ vi.mock('../services/api', () => ({
 }));
 vi.mock('../hooks/useRealtimeSync', () => ({ useRealtimeSync: () => ({ connected: false }) }));
 
+/* Registro VIEJO (antes del 2-sep): el campo se llamaba `tambos`. La vista
+   debe seguir leyéndolo — los movimientos guardados no se migran. */
 const MEZCLA = {
   id: 'm-1', fecha: '2026-08-28T22:00:00.000Z', tipo: 'mezcla_stk_americano',
   producto: 'BLANCO OFF WHITE', ubicacion: 'teran', cantidad: 950, unidad: 'L',
   lote: 'USA-0019-01', tambos: ['USA-0019-01'], colorNuevo: true,
   composicion: [{ color: 'BLANCO', litros: 700 }, { color: 'BEIGE', litros: 250 }],
   usuario: 'Josué', mezcladoPor: 'Kendy',
+};
+
+/* Registro NUEVO: el mismo dato viaja como `totes` (lenguaje del piso, 2-sep). */
+const MEZCLA_NUEVA = {
+  id: 'm-2', fecha: '2026-09-02T18:00:00.000Z', tipo: 'mezcla_stk_americano',
+  producto: 'GRIS PERLA', ubicacion: 'teran', cantidad: 1400, unidad: 'L',
+  lote: 'USA-0021-01', totes: ['USA-0021-01', 'USA-0021-02'],
+  composicion: [{ color: 'BLANCO', litros: 900 }, { color: 'NEGRO', litros: 500 }],
+  usuario: 'Josué',
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -46,6 +57,18 @@ describe('MezclasView', () => {
     expect(card).toContain('USA-0019-01');
     expect(card).toContain('Kendy');
     expect(card).toContain('Terán');
+  });
+
+  it('lee las dos eras: registros viejos con `tambos` y nuevos con `totes` — y dice totes', async () => {
+    api.getMezclasAmericano.mockResolvedValue({ ok: true, mezclas: [MEZCLA_NUEVA, MEZCLA] });
+    render(<MezclasView canEdit />);
+    await waitFor(() => expect(document.querySelectorAll('[data-id="mezclas.card"]').length).toBe(2));
+    const cards = [...document.querySelectorAll('[data-id="mezclas.card"]')].map(c => c.textContent);
+    const nueva = cards.find(c => c.includes('GRIS PERLA'));
+    const vieja = cards.find(c => c.includes('BLANCO OFF WHITE'));
+    expect(nueva).toContain('2 totes');
+    expect(nueva).not.toContain('tambo');
+    expect(vieja).toContain('USA-0019-01');
   });
 
   it('historial vacío: lo dice, no truena ni queda en blanco', async () => {

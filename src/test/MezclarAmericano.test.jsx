@@ -23,7 +23,7 @@ vi.mock('../services/api', () => ({
 }));
 vi.mock('../hooks/useRealtimeSync', () => ({ useRealtimeSync: () => ({ connected: false }) }));
 
-/* El piso real: navajo con su tambo del proveedor, beige con granel. */
+/* El piso real: navajo con su tote del proveedor, beige con granel. */
 const COLORES = [
   { key: 'navajo', nombre: 'NAVAJO', cubetas: 0, galones: 0, totesLitros: 1000,
     totes: [{ codigoLote: 'GD89810 #07', litros: 1000, loteProveedor: 'GD89810 #07' }] },
