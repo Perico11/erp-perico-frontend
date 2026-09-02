@@ -87,7 +87,11 @@ export default function MezclasView({ colores1 = [], colores2 = [], reload1, rel
         </div>
       )}
 
-      {Array.isArray(mezclas) && mezclas.map(m => (
+      {Array.isArray(mezclas) && mezclas.map(m => {
+        /* Los movimientos nuevos traen `totes`; los guardados antes del 2-sep
+           traen `tambos` — mismo dato, el nombre cambió con el lenguaje del piso. */
+        const codigos = Array.isArray(m.totes) && m.totes.length ? m.totes : (Array.isArray(m.tambos) ? m.tambos : []);
+        return (
         <div key={m.id || m.fecha} style={S.card} data-id="mezclas.card">
           <div style={S.cardHead}>
             <div style={S.destino}>
@@ -104,13 +108,14 @@ export default function MezclasView({ colores1 = [], colores2 = [], reload1, rel
             {m.mermaLitros > 0 && <span> (merma {m.mermaLitros} L)</span>}
           </div>
           <div style={S.meta}>
-            <span>Lote <span style={S.lote}>{m.lote || (Array.isArray(m.tambos) ? m.tambos.join(', ') : '')}</span></span>
-            {Array.isArray(m.tambos) && m.tambos.length > 1 && <span>{m.tambos.length} tambos</span>}
+            <span>Lote <span style={S.lote}>{m.lote || codigos.join(', ')}</span></span>
+            {codigos.length > 1 && <span>{codigos.length} totes</span>}
             <span>Mezcló {m.mezcladoPor || m.usuario || '?'}</span>
             {m.mezcladoPor && m.usuario && m.mezcladoPor !== m.usuario && <span>Capturó {m.usuario}</span>}
           </div>
         </div>
-      ))}
+        );
+      })}
 
       {abierto && (
         <MezclarAmericanoModal

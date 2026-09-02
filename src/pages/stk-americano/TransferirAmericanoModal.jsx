@@ -4,7 +4,7 @@
    lotes viajan con las unidades y los TOTES viajan con su folio cuando se
    mueven litros.
 
-   ELEGIR EL TAMBO (21-ago-2026). Esta pantalla pedía LITROS y nada más, así que
+   ELEGIR EL TOTE (21-ago-2026). Esta pantalla pedía LITROS y nada más, así que
    con varios totes iguales el sistema escogía uno — y no tenía por qué ser el
    que el almacenista cargó. Pasó: se quiso mandar a Terán el tote del lote
    GD89563 y viajó otro, así que en Terán apareció material que no era el
@@ -65,7 +65,7 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
   /* Sólo los totes con contenido: uno vacío no se puede cargar. */
   const totes = esLitros ? (color.totes || []).filter(t => t && (Number(t.litros) || 0) > 0) : [];
   const tote = totes.find(t => t.codigoLote === toteSel) || null;
-  /* Con un tambo elegido el techo es ESE tambo, no el granel del color: pedir
+  /* Con un tote elegido el techo es ESE tote, no el granel del color: pedir
      más saldría de otro tote y volveríamos al problema original. */
   const dispSel = tote ? (Number(tote.litros) || 0) : disp[pres];
   const excede = Number.isFinite(n) && n > dispSel + 0.001;
@@ -105,12 +105,12 @@ export default function TransferirAmericanoModal({ color, deAlmacen = '1', onClo
 
           {esLitros && totes.length > 0 && (
             <>
-              <label style={S.label}>Qué tambo se movió</label>
+              <label style={S.label}>Qué tote se movió</label>
               <select style={S.input} value={toteSel} data-id="stkAmericano.transferir.tote"
                 onChange={e => {
                   const cod = e.target.value;
                   setToteSel(cod);
-                  /* Mover un tambo COMPLETO es el caso normal: se precarga con
+                  /* Mover un tote COMPLETO es el caso normal: se precarga con
                      sus litros para no teclear el número y equivocarse. */
                   const t = totes.find(x => x.codigoLote === cod);
                   setCantidad(t ? String(t.litros) : '');

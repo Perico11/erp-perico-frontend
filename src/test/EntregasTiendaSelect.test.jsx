@@ -11,6 +11,7 @@ vi.mock('../services/api', () => ({
   default: {
     getStkAmericano: vi.fn(() => Promise.resolve({ data: { colores: [] } })),
     getPTPorUbicacion: vi.fn(() => Promise.resolve({ teran: {} })),
+    getEnvases: vi.fn(() => Promise.resolve({ ok: true, data: { categorias: {}, tapas: {} } })),
     crearSucursal: vi.fn(() => Promise.resolve({ ok: true, tienda: { nombre: 'CENTRO' } })),
     corregirTiendaEntrega: vi.fn(() => Promise.resolve({ ok: true, entrega: { tienda: 'YUGOSLAVIA' } })),
     editarEntrega: vi.fn(() => Promise.resolve({ ok: true, entrega: { folio: 'ENT-20260807-001', tienda: 'PALACO', lineas: [] } })),
