@@ -923,6 +923,27 @@ export function ImportarSheetModal({ onClose, onSuccess }) {
   const [omitir, setOmitir] = useState(false);
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState('');
+  const [exportHint, setExportHint] = useState('');
+
+  /* La ida del ciclo: si una fórmula se editó o nació EN el ERP, la Sheet
+     está vieja — este botón baja el libro fresco para reemplazarla. */
+  const exportar = async () => {
+    if (cargando) return;
+    setError(''); setExportHint('');
+    setCargando(true);
+    try {
+      const r = await api.exportarFormulasXlsx();
+      const { xlsxBase64, nombreArchivo } = r?.data || {};
+      const bytes = Uint8Array.from(atob(xlsxBase64 || ''), ch => ch.charCodeAt(0));
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = nombreArchivo || 'Formulas ERP.xlsx'; a.click();
+      URL.revokeObjectURL(url);
+      setExportHint('Libro descargado. En la Sheet: Archivo → Importar → Subir → REEMPLAZAR hoja de cálculo — la URL y los permisos no cambian.');
+    } catch (err) {
+      setError(err.message || 'No se pudo exportar');
+    } finally { setCargando(false); }
+  };
 
   const onFile = async (e) => {
     const file = e.target.files && e.target.files[0];
@@ -985,6 +1006,19 @@ export function ImportarSheetModal({ onClose, onSuccess }) {
                 style={{ ...S.fieldInput, padding: 8 }}
                 data-id="formulas.importar.archivo"
               />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+                  ¿Editaste o creaste una fórmula EN el ERP? Refresca la Sheet primero:
+                </span>
+                <button style={S.btnSmall} onClick={exportar} disabled={cargando} data-id="formulas.importar.exportar">
+                  Exportar el ERP → .xlsx
+                </button>
+              </div>
+              {exportHint && (
+                <div style={{ padding: '8px 12px', borderRadius: 8, background: 'var(--lp-success-50)', color: 'var(--lp-success-700)', fontSize: 12.5, fontWeight: 600 }} data-id="formulas.importar.export-hint">
+                  {exportHint}
+                </div>
+              )}
             </>
           )}
 

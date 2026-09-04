@@ -15,7 +15,7 @@ import path from 'node:path';
 vi.mock('../hooks/useBodyScrollLock', () => ({ default: () => {} }));
 vi.mock('../hooks/useRealtimeSync', () => ({ useRealtimeSync: () => ({ connected: false }) }));
 vi.mock('../services/api', () => ({
-  default: { importarFormulasXlsx: vi.fn() },
+  default: { importarFormulasXlsx: vi.fn(), exportarFormulasXlsx: vi.fn() },
 }));
 
 import api from '../services/api';
@@ -120,6 +120,28 @@ describe('ImportarSheetModal', () => {
   });
 });
 
+describe('la ida del ciclo: Exportar el ERP → .xlsx', () => {
+  it('baja el libro fresco y enseña cómo REEMPLAZAR la Sheet', async () => {
+    /* jsdom no trae createObjectURL: se suplanta para la descarga programática */
+    URL.createObjectURL = vi.fn(() => 'blob:libro');
+    URL.revokeObjectURL = vi.fn();
+    api.exportarFormulasXlsx.mockResolvedValue({
+      ok: true,
+      data: { xlsxBase64: btoa('PK-libro-fresco'), nombreArchivo: 'Formulas Perico — ERP 2026-09-04.xlsx', numFormulas: 69 },
+    });
+
+    await act(async () => { render(<ImportarSheetModal onClose={() => {}} onSuccess={() => {}} />); });
+    await act(async () => {
+      fireEvent.click(document.querySelector('[data-id="formulas.importar.exportar"]'));
+    });
+
+    expect(api.exportarFormulasXlsx).toHaveBeenCalledTimes(1);
+    expect(URL.createObjectURL).toHaveBeenCalledTimes(1);
+    const hint = document.querySelector('[data-id="formulas.importar.export-hint"]');
+    expect(hint.textContent).toContain('REEMPLAZAR hoja de cálculo');
+  });
+});
+
 describe('cableado en la página y en api', () => {
   const PAGE = fs.readFileSync(path.join(process.cwd(), 'src/pages/formulas/FormulasPage.jsx'), 'utf8');
   const API = fs.readFileSync(path.join(process.cwd(), 'src/services/api.js'), 'utf8');
@@ -132,5 +154,10 @@ describe('cableado en la página y en api', () => {
   it('api manda el libro al endpoint nuevo y solo escribe con APLICAR', () => {
     expect(API).toMatch(/request\('POST', '\/api\/formulas\/importar-xlsx'/);
     expect(API).toMatch(/\.\.\.\(aplicar \? \{ aplicar \} : \{\}\)/);
+  });
+
+  it('la exportación pega al GET del libro fresco', () => {
+    expect(API).toMatch(/exportarFormulasXlsx: \(\) => request\('GET', '\/api\/formulas\/exportar-xlsx'\)/);
+    expect(PAGE).toContain('data-id="formulas.importar.exportar"');
   });
 });
