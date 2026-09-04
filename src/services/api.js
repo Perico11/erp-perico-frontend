@@ -508,6 +508,14 @@ const api = {
 
   /* ── Fórmulas ── */
   getFormulas: () => request('GET', '/api/formulas/todas'),
+  /* La Google Sheet de fórmulas entra al ERP: dry-run sin `aplicar`,
+     escribir exige 'APLICAR' con todas sus letras. */
+  importarFormulasXlsx: (xlsxBase64, aplicar, omitirBloqueadas) =>
+    request('POST', '/api/formulas/importar-xlsx', {
+      xlsxBase64,
+      ...(aplicar ? { aplicar } : {}),
+      ...(omitirBloqueadas ? { omitirBloqueadas: true } : {}),
+    }),
   updateFormula: (formulaId, ingredientes, tecnico) =>
     request('POST', '/api/formulas/update-formula', { formulaId, ingredientes, tecnico }),
   renameFormula: (oldName, newName) =>
