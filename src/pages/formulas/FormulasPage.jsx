@@ -904,6 +904,219 @@ function FormulaCard({ id, formula, isAdmin, oculta, onOcultar, onRename, onEdit
 /* ═══════════════════════════════════════════════════════════════════ */
 /* JUL 2026: `embedded` — la pantalla también vive como vista del hub "Fórmulas
    y lab" (/formulas) del admin (patrón AlmacenPage). Solo suprime su TopBar. */
+/* ═══════════════════════════════════════════════════════════════════ */
+/* IMPORTAR LA GOOGLE SHEET (4-sep-2026, pedido dueño: "conéctala")     */
+/* ═══════════════════════════════════════════════════════════════════ */
+/* El flujo del INDICE de la Sheet, pero terminando AQUÍ en vez de en un
+   chat: descargar el libro (.xlsx), subirlo, ver el plan (dry-run del
+   servidor: qué cambia, qué se bloquea) y APLICAR con respaldo. */
+const SHEET_FORMULAS_URL = 'https://docs.google.com/spreadsheets/d/129aTdHXyZMI4DBgyTd59vRrU0DaTtc1LFeTVzv2HN4A/edit';
+
+const kgTxt = (n) => Number(n).toFixed(3).replace(/\.?0+$/, '');
+
+export function ImportarSheetModal({ onClose, onSuccess }) {
+  useBodyScrollLock(true);
+  const [b64, setB64] = useState(null);
+  const [nombreArchivo, setNombreArchivo] = useState('');
+  const [plan, setPlan] = useState(null);
+  const [resultado, setResultado] = useState(null);
+  const [omitir, setOmitir] = useState(false);
+  const [cargando, setCargando] = useState(false);
+  const [error, setError] = useState('');
+
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    setError(''); setPlan(null); setResultado(null); setOmitir(false); setCargando(true);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result).split(',')[1] || '');
+        r.onerror = () => reject(new Error('No se pudo leer el archivo'));
+        r.readAsDataURL(file);
+      });
+      setB64(base64); setNombreArchivo(file.name);
+      const r = await api.importarFormulasXlsx(base64);
+      setPlan(r?.data?.plan || null);
+    } catch (err) {
+      setError(err.message || 'No se pudo armar el plan');
+    } finally { setCargando(false); }
+  };
+
+  const hayQueEscribir = plan ? (plan.cambios.length + plan.altas.length) : 0;
+  const bloqueada = !!(plan && plan.bloqueos.length && !omitir);
+
+  const aplicar = async () => {
+    if (!b64 || !plan || cargando) return;
+    if (!window.confirm(`Se van a escribir ${hayQueEscribir} fórmula(s) en el ERP (con respaldo previo). ¿Aplicar?`)) return;
+    setCargando(true); setError('');
+    try {
+      const r = await api.importarFormulasXlsx(b64, 'APLICAR', omitir);
+      setResultado(r?.data || null);
+    } catch (err) {
+      setError(err.message || 'No se pudo aplicar');
+    } finally { setCargando(false); }
+  };
+
+  const seccion = { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-secondary)', margin: '14px 0 6px' };
+  const linea = { fontSize: 12.5, padding: '3px 0', color: 'var(--lp-text-primary)', lineHeight: 1.5 };
+  const mono = { fontFamily: 'var(--lp-font-mono)' };
+
+  return (
+    <div style={S.overlay} onClick={onClose}>
+      <div style={{ ...S.modal, maxWidth: 640 }} onClick={e => e.stopPropagation()}>
+        <div style={S.modalHeader}>
+          <div style={{ fontSize: 15, fontWeight: 700 }}>Importar fórmulas desde la Sheet</div>
+          <button style={S.btnSecondary} onClick={onClose}>Cerrar</button>
+        </div>
+        <div style={S.modalBody} data-id="formulas.importar.cuerpo">
+          {!resultado && (
+            <>
+              <div style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.6, marginBottom: 12 }}>
+                1) Abre la <a href={SHEET_FORMULAS_URL} target="_blank" rel="noreferrer" style={{ color: 'var(--lp-brand-600)', fontWeight: 700 }}>Sheet de fórmulas</a> y
+                edita solo <strong>Materia Prima</strong> y <strong>kg/19L</strong>. 2) <strong>Archivo → Descargar → .xlsx</strong>.
+                3) Súbelo aquí: primero se enseña el plan, no se escribe nada hasta APLICAR.
+              </div>
+              <input
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                onChange={onFile}
+                disabled={cargando}
+                style={{ ...S.fieldInput, padding: 8 }}
+                data-id="formulas.importar.archivo"
+              />
+            </>
+          )}
+
+          {cargando && <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)' }}>Trabajando…</div>}
+          {error && (
+            <div style={{ padding: '10px 12px', borderRadius: 8, background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', fontSize: 12.5, fontWeight: 600, marginTop: 8 }}>
+              {error}
+            </div>
+          )}
+
+          {plan && !resultado && (
+            <div data-id="formulas.importar.plan">
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginTop: 4 }}>
+                {nombreArchivo} — cambian {plan.cambios.length} · altas {plan.altas.length} · sin cambio {plan.sinCambio.length} · bloqueadas {plan.bloqueos.length}
+              </div>
+
+              {plan.cambios.length > 0 && (
+                <>
+                  <div style={seccion}>Cambios de receta</div>
+                  {plan.cambios.map(c => (
+                    <div key={c.nombre} style={{ ...linea, borderBottom: '1px solid var(--lp-bg-sunken)', paddingBottom: 6, marginBottom: 4 }} data-id="formulas.importar.cambio">
+                      <strong>{c.nombre}</strong> <span style={{ color: 'var(--lp-text-tertiary)' }}>[{kgTxt(c.pesoAntes)} → {kgTxt(c.pesoDespues)} kg]</span>
+                      {c.modificados.map(m => (
+                        <div key={'m' + m.mp} style={mono}>~ {m.mp}: {kgTxt(m.antes)} → {kgTxt(m.despues)} kg</div>
+                      ))}
+                      {c.agregados.map(a => (
+                        <div key={'a' + a.mp} style={{ ...mono, color: 'var(--lp-success-700)' }}>+ {a.mp}: {kgTxt(a.kg19)} kg (nueva en esta fórmula)</div>
+                      ))}
+                      {c.quitados.map(q => (
+                        <div key={'q' + q.mp} style={{ ...mono, color: 'var(--lp-danger-600)' }}>− {q.mp}: llevaba {kgTxt(q.kg19)} kg (sale)</div>
+                      ))}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {plan.altas.length > 0 && (
+                <>
+                  <div style={seccion}>Fórmulas nuevas</div>
+                  {plan.altas.map(a => (
+                    <div key={a.nombre} style={linea}>+ <strong>{a.nombre}</strong>: {a.numIngredientes} ingredientes, {kgTxt(a.pesoDespues)} kg</div>
+                  ))}
+                </>
+              )}
+
+              {plan.avisos.length > 0 && (
+                <>
+                  <div style={{ ...seccion, color: 'var(--lp-warning-700)' }}>Avisos (no impiden aplicar)</div>
+                  {plan.avisos.map((a, i) => (
+                    <div key={i} style={{ ...linea, color: 'var(--lp-warning-700)' }}>⚠ {a.nombre}: {a.texto}</div>
+                  ))}
+                </>
+              )}
+
+              {plan.bloqueos.length > 0 && (
+                <>
+                  <div style={{ ...seccion, color: 'var(--lp-danger-600)' }}>Bloqueos (estas fórmulas NO se aplican)</div>
+                  {plan.bloqueos.map((b, i) => (
+                    <div key={i} style={{ ...linea, color: 'var(--lp-danger-600)' }} data-id="formulas.importar.bloqueo">✖ {b.nombre}: {b.motivo}</div>
+                  ))}
+                  {plan.mpNuevas.length > 0 && (
+                    <div style={{ ...linea, color: 'var(--lp-text-secondary)' }}>
+                      Las MP desconocidas se dan de alta en el maestro (Fórmulas → Nueva MP) y se reintenta.
+                    </div>
+                  )}
+                  <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 12.5, marginTop: 8, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={omitir} onChange={e => setOmitir(e.target.checked)} data-id="formulas.importar.omitir" />
+                    Aplicar solo las fórmulas sanas y saltar las bloqueadas
+                  </label>
+                </>
+              )}
+
+              {plan.enErpFueraDelLibro.length > 0 && (
+                <div style={{ ...linea, color: 'var(--lp-text-tertiary)', marginTop: 10 }}>
+                  {plan.enErpFueraDelLibro.length} fórmula(s) del ERP no vienen en el libro: se dejan intactas (el importador nunca borra).
+                </div>
+              )}
+            </div>
+          )}
+
+          {resultado && (
+            <div data-id="formulas.importar.resultado">
+              {resultado.aplicado ? (
+                <>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--lp-success-700)' }}>
+                    Aplicado: {resultado.formulasEscritas.length} fórmula(s) escritas, {resultado.mpsResincronizadas} MP resincronizadas.
+                  </div>
+                  <div style={{ ...linea, ...mono, fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
+                    Respaldo: {resultado.backupDir}
+                  </div>
+                  <div style={{ ...linea, marginTop: 4 }}>
+                    {resultado.propagar.corrido
+                      ? (resultado.propagar.ok
+                        ? 'Propiedades (PVC, densidad, sólidos) recalculadas.'
+                        : 'OJO: el recálculo de propiedades falló — avisar a soporte. Las recetas sí quedaron.')
+                      : `Recálculo de propiedades pendiente: ${resultado.propagar.motivo || 'correrlo a mano'}.`}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13, fontWeight: 700 }}>
+                  El ERP ya coincide con el libro: no había nada que escribir.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+        <div style={S.modalFooter}>
+          {resultado ? (
+            <button style={S.btnPrimary} onClick={() => onSuccess(resultado.aplicado
+              ? `${resultado.formulasEscritas.length} fórmula(s) importadas de la Sheet`
+              : 'El ERP ya coincidía con la Sheet')}>
+              Listo
+            </button>
+          ) : (
+            <>
+              <button style={S.btnSecondary} onClick={onClose}>Cancelar</button>
+              <button
+                style={{ ...S.btnPrimary, opacity: (!plan || !hayQueEscribir || bloqueada || cargando) ? 0.5 : 1 }}
+                disabled={!plan || !hayQueEscribir || bloqueada || cargando}
+                onClick={aplicar}
+                data-id="formulas.importar.aplicar"
+              >
+                {bloqueada ? 'Hay bloqueos' : hayQueEscribir ? `APLICAR (${hayQueEscribir})` : 'Nada que aplicar'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function FormulasPage({ embedded = false }) {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -920,6 +1133,7 @@ export default function FormulasPage({ embedded = false }) {
   const [editTarget, setEditTarget] = useState(null); // { id, formula }
   const [toastMsg, setToastMsg] = useState('');
   const [comparar, setComparar] = useState(false);
+  const [importar, setImportar] = useState(false);
 
   /* Realtime (T3 jul 2026): canal 'formulas' — cambios de fórmula / precio MP
      hechos en otra sesión refrescan el summary (badge de recálculo en vivo,
@@ -1052,6 +1266,22 @@ export default function FormulasPage({ embedded = false }) {
           >
             Comparar dos fórmulas
           </button>
+          {isAdmin && (
+            <button
+              onClick={() => setImportar(true)}
+              data-id="formulas.btn.importar-sheet"
+              style={{
+                padding: '10px 16px', fontSize: 12, fontWeight: 700,
+                borderRadius: 'var(--lp-radius-sm)',
+                border: '1.5px solid var(--lp-brand-600)',
+                background: 'var(--lp-bg-raised)',
+                color: 'var(--lp-brand-700)',
+                cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+              }}
+            >
+              Importar Sheet (.xlsx)
+            </button>
+          )}
           {isAdmin && numOcultas > 0 && (
             <button
               onClick={() => setVerOcultas(v => !v)}
@@ -1126,6 +1356,14 @@ export default function FormulasPage({ embedded = false }) {
              formulas_custom.json, no dentro de cada fórmula. */
           summary={fData?.data?.summary || fData?.summary || []}
           onClose={() => setComparar(false)}
+        />
+      )}
+
+      {/* La Sheet de fórmulas entra al ERP (plan → APLICAR) */}
+      {importar && (
+        <ImportarSheetModal
+          onClose={() => setImportar(false)}
+          onSuccess={(msg) => { setImportar(false); reload(); showToast(msg); }}
         />
       )}
 
