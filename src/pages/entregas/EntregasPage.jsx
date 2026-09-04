@@ -22,6 +22,7 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { QRScanner } from '../../components/QRModal';
 import humanizeError from '../../utils/humanizeError';
+import { filtrarEntregas, productosDeEntregas, reporteEnvios, fechaLocalYMD } from '../../utils/reporteEnvios';
 
 const LBL_PRES = { cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador', pieza: 'Pieza' };
 /* Quien TRANSPORTA y entrega en la sucursal (rol 'recolector'). Se resuelve del
@@ -99,6 +100,15 @@ function catalogoEnvases(envData) {
   return out.sort((a, b) => a.nombre.localeCompare(b.nombre));
 }
 const nf = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
+/* Plurales de verdad: "galón"+s daba "galóns" (estaba así en el historial). */
+const PLURAL_PRES = { cubeta: 'cubetas', galon: 'galones', litro: 'litros', atomizador750: 'atomizadores', pieza: 'piezas' };
+const presUnidad = (p, n) => (n === 1
+  ? (LBL_PRES[p]?.toLowerCase() || p)
+  : (PLURAL_PRES[p] || ((LBL_PRES[p]?.toLowerCase() || p) + 's')));
+/* "120 cubetas · 30 galones" a partir de {cubeta:120, galon:30} */
+const presTxt = (porPres) => Object.entries(porPres || {})
+  .map(([p, n]) => `${nf(n)} ${presUnidad(p, n)}`)
+  .join(' · ');
 const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return (iso || '').slice(0, 16); } };
 const fechaLarga = (iso) => { try { return new Date(iso || Date.now()).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }); } catch { return (iso || '').slice(0, 10); } };
 
@@ -662,6 +672,203 @@ export function CorregirTiendaSheet({ isDesktop, entrega, tiendas, onClose, onDo
   );
 }
 
+/* ── Reporte de envíos por producto (2-sep-2026, pedido dueño) ─────────────
+   "Ejemplo PROCAUCHO: cuántas se han enviado y a qué tiendas, y poder
+   seleccionar las fechas." La cuenta la hace utils/reporteEnvios (pura) sobre
+   el historial COMPLETO; aquí solo los controles y la lectura. El producto
+   matchea por CONTIENE y vacío = todos los envíos del rango. */
+export function ReporteEnviosSheet({ isDesktop, entregas, onClose }) {
+  useBodyScrollLock(true);
+  const [q, setQ] = useState('');
+  /* Default: últimos 30 días. Inicializadores perezosos — leer el reloj en el
+     cuerpo del render es impuro (regla del compilador de React). */
+  const [desde, setDesde] = useState(() => fechaLocalYMD(new Date(Date.now() - 30 * 864e5).toISOString()));
+  const [hasta, setHasta] = useState(() => fechaLocalYMD(new Date().toISOString()));
+  const [imprimir, setImprimir] = useState(false);
+
+  const productos = useMemo(() => productosDeEntregas(entregas), [entregas]);
+  const rep = useMemo(() => reporteEnvios(entregas, { q, desde, hasta }), [entregas, q, desde, hasta]);
+  /* ¿el texto matchea un solo producto? → la tabla no repite la columna */
+  const productosEnRep = useMemo(() => [...new Set(rep.porTienda.map(r => r.producto))], [rep]);
+
+  return (
+    <div style={{ ...S.overlay, ...(isDesktop ? S.overlayDesk : {}) }}>
+      <div style={S.sheet(isDesktop)} onClick={e => e.stopPropagation()}>
+        <div style={S.shHead}>
+          <div style={S.shTitle}>Reporte de envíos a tiendas</div>
+          <button style={{ background: 'transparent', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--lp-text-tertiary)', padding: 4, lineHeight: 1 }} onClick={onClose} aria-label="Cerrar">×</button>
+        </div>
+        <div style={S.shBody}>
+          <label style={S.lbl}>Producto</label>
+          <input style={S.input} list="lp-rep-prods" value={q} onChange={e => setQ(e.target.value)}
+            placeholder="Ej: PROCAUCHO — vacío = todos los productos" data-id="entregas.reporte.producto" />
+          <datalist id="lp-rep-prods">
+            {productos.map(p => <option key={p} value={p} />)}
+          </datalist>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
+              <label style={S.lbl}>Desde</label>
+              <input style={S.input} type="date" value={desde} max={hasta || undefined}
+                onChange={e => setDesde(e.target.value)} data-id="entregas.reporte.desde" />
+            </div>
+            <div>
+              <label style={S.lbl}>Hasta</label>
+              <input style={S.input} type="date" value={hasta} min={desde || undefined}
+                onChange={e => setHasta(e.target.value)} data-id="entregas.reporte.hasta" />
+            </div>
+          </div>
+
+          {/* Totales del rango */}
+          <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-brand-600) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-brand-600) 25%, transparent)' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' }}>
+              Total enviado{q.trim() ? ` · "${q.trim()}"` : ''}
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 700, marginTop: 3 }} data-id="entregas.reporte.total">
+              {rep.totalUnidades > 0 ? presTxt(rep.totalPorPres) : 'Nada en este rango'}
+            </div>
+            <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>
+              {rep.entregas.length} entrega{rep.entregas.length === 1 ? '' : 's'} · {rep.porTienda.length === 0 ? 'ninguna tienda' : `${[...new Set(rep.porTienda.map(r => r.tienda))].length} tienda(s)`} · del {desde || '—'} al {hasta || '—'}
+            </div>
+          </div>
+
+          {/* Por tienda */}
+          {rep.porTienda.length > 0 && (
+            <div style={S.cart}>
+              <div style={S.cartHead}>Por tienda</div>
+              {rep.porTienda.map((r, i) => (
+                <div key={i} style={S.cartRow} data-id="entregas.reporte.fila-tienda">
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.tienda}</div>
+                    <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {productosEnRep.length > 1 ? `${r.producto} · ` : ''}{presTxt(r.porPres)}
+                    </div>
+                  </div>
+                  <strong style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 15, whiteSpace: 'nowrap' }}>{nf(r.unidades)} u.</strong>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Entregas del rango (rastro) */}
+          {rep.entregas.length > 0 && (
+            <div style={S.cart}>
+              <div style={S.cartHead}>Entregas · {rep.entregas.length}</div>
+              {rep.entregas.map(e => (
+                <div key={e.id || e.folio} style={S.cartRow}>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 600 }}>
+                      <span style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-brand-700)' }}>{e.folio}</span>
+                      <span style={{ marginLeft: 8 }}>{e.tienda}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {fmtFecha(e.fecha)} · {e.lineas.map(l => `${nf(l.cantidad)} ${presUnidad(l.presentacion, l.cantidad)} ${l.producto}`).join(' · ')}
+                    </div>
+                  </div>
+                  <strong style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 14 }}>{nf(e.lineas.reduce((a, l) => a + l.cantidad, 0))}</strong>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div style={S.shFoot}>
+          <button style={S.act(false)} onClick={onClose}>Cerrar</button>
+          <button style={S.act(true, rep.entregas.length === 0)} disabled={rep.entregas.length === 0}
+            onClick={() => setImprimir(true)} data-id="entregas.reporte.imprimir">
+            Imprimir reporte
+          </button>
+        </div>
+      </div>
+      {imprimir && <ReporteImpresion rep={rep} q={q} desde={desde} hasta={hasta} productosEnRep={productosEnRep} onClose={() => setImprimir(false)} />}
+    </div>
+  );
+}
+
+/* Versión imprimible del reporte — mismo patrón que la remisión (documento
+   SIEMPRE claro, aislado en print con el truco de visibility). */
+function ReporteImpresion({ rep, q, desde, hasta, productosEnRep, onClose }) {
+  const INK = '#16241F', MUT = '#6b6560', BRAND = '#0F6E56';
+  return (
+    <div className="lp-repov">
+      <style>{`
+        .lp-repov{ position:fixed; inset:0; background:rgba(10,16,14,.55); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; padding:22px; z-index:9999; }
+        .lp-repdoc{ background:#fff; color:${INK}; width:100%; max-width:560px; max-height:72vh; overflow-y:auto; border-radius:14px; padding:24px 22px; font-family:var(--lp-font-sans); box-shadow:0 20px 50px rgba(0,0,0,.3); box-sizing:border-box; }
+        .lp-rep-h{ display:flex; align-items:flex-start; justify-content:space-between; border-bottom:2px solid ${INK}; padding-bottom:12px; margin-bottom:14px; }
+        .lp-rep-brand{ font-size:16px; font-weight:600; color:${BRAND}; }
+        .lp-rep-brand small{ display:block; font-size:10px; font-weight:500; color:${MUT}; letter-spacing:.06em; text-transform:uppercase; }
+        .lp-rep-doc{ text-align:right; }
+        .lp-rep-doc .t{ font-size:13px; font-weight:600; }
+        .lp-rep-doc .d{ font-size:11px; color:${MUT}; margin-top:2px; }
+        .lp-rep-row{ display:flex; justify-content:space-between; font-size:13px; padding:3px 0; }
+        .lp-rep-row .k{ color:${MUT}; } .lp-rep-row .v{ font-weight:600; }
+        .lp-rep-tbl{ width:100%; border-collapse:collapse; margin-top:10px; font-size:13px; }
+        .lp-rep-tbl th{ text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.04em; color:#9c9589; border-bottom:1px solid #E8E6DE; padding:6px 0; }
+        .lp-rep-tbl td{ padding:7px 0; border-bottom:1px solid #F0EEE8; vertical-align:top; }
+        .lp-rep-tbl td.r, .lp-rep-tbl th.r{ text-align:right; font-family:var(--lp-font-mono); }
+        .lp-rep-tbl td.mono{ font-family:var(--lp-font-mono); font-size:11px; }
+        .lp-rep-sec{ margin-top:16px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:${MUT}; }
+        .lp-rep-btns{ display:flex; gap:10px; width:100%; max-width:560px; }
+        .lp-rep-btn{ flex:1; height:46px; border-radius:12px; border:none; cursor:pointer; font-family:var(--lp-font-sans); font-size:13.5px; font-weight:600; }
+        .lp-rep-btn.ghost{ background:#fff; color:${MUT}; border:1px solid rgba(0,0,0,.12); }
+        .lp-rep-btn.primary{ background:var(--lp-brand-600); color:#fff; }
+        @page{ size: letter portrait; margin: 16mm; }
+        @media print{
+          body *{ visibility:hidden !important; }
+          #lp-repdoc, #lp-repdoc *{ visibility:visible !important; }
+          #lp-repdoc{ position:fixed; inset:0; width:auto; max-width:none; max-height:none; border-radius:0; box-shadow:none; padding:24px 10px; overflow:visible; font-size:13px; }
+        }
+      `}</style>
+      <div className="lp-repdoc" id="lp-repdoc">
+        <div className="lp-rep-h">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <img src="/logos/app-icon.svg" alt="" style={{ width: 42, height: 42, borderRadius: 9, flexShrink: 0 }} />
+            <div className="lp-rep-brand">Pinturas El Perico<small>CEDIS Terán · Reporte de envíos</small></div>
+          </div>
+          <div className="lp-rep-doc">
+            <div className="t">Envíos a tiendas</div>
+            <div className="d">Del {desde || '—'} al {hasta || '—'}</div>
+            <div className="d">Impreso {fechaLarga(new Date().toISOString())}</div>
+          </div>
+        </div>
+        <div className="lp-rep-row"><span className="k">Producto</span><span className="v">{q.trim() || 'Todos'}</span></div>
+        <div className="lp-rep-row"><span className="k">Total enviado</span><span className="v">{presTxt(rep.totalPorPres)} ({nf(rep.totalUnidades)} u.)</span></div>
+        <div className="lp-rep-sec">Por tienda</div>
+        <table className="lp-rep-tbl">
+          <thead><tr><th>Tienda</th>{productosEnRep.length > 1 ? <th>Producto</th> : null}<th>Cantidades</th><th className="r">Unidades</th></tr></thead>
+          <tbody>
+            {rep.porTienda.map((r, i) => (
+              <tr key={i}>
+                <td>{r.tienda}</td>
+                {productosEnRep.length > 1 ? <td>{r.producto}</td> : null}
+                <td>{presTxt(r.porPres)}</td>
+                <td className="r">{nf(r.unidades)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div className="lp-rep-sec">Entregas del rango · {rep.entregas.length}</div>
+        <table className="lp-rep-tbl">
+          <thead><tr><th>Folio</th><th>Fecha</th><th>Tienda</th><th className="r">Unidades</th></tr></thead>
+          <tbody>
+            {rep.entregas.map(e => (
+              <tr key={e.id || e.folio}>
+                <td className="mono">{e.folio}</td>
+                <td>{fmtFecha(e.fecha)}</td>
+                <td>{e.tienda}</td>
+                <td className="r">{nf(e.lineas.reduce((a, l) => a + l.cantidad, 0))}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="lp-rep-btns">
+        <button type="button" className="lp-rep-btn ghost" onClick={onClose}>Cerrar</button>
+        <button type="button" className="lp-rep-btn primary" data-id="entregas.reporte.btn-print" onClick={() => window.print()}>Imprimir</button>
+      </div>
+    </div>
+  );
+}
+
 /* ── Menú ⋮ de la entrega (ago 2026) ───────────────────────────────────────
    Las acciones de una entrega ya hecha viven aquí en vez de llenar la tarjeta
    de botones. Cierra al hacer click fuera o con Escape — es un desplegable, no
@@ -713,13 +920,21 @@ export default function EntregasPage({ embedded = false }) {
   const [editar, setEditar] = useState(null);
   const [remision, setRemision] = useState(null);
   const [toast, setToast] = useState('');
+  /* Búsqueda + reporte (2-sep-2026, pedido dueño): por eso el fetch trae el
+     historial COMPLETO (todas=1) — buscar "PALACO" o reportar PROCAUCHO por
+     fechas no puede trabajar sobre una lista recortada a 200. */
+  const [busca, setBusca] = useState('');
+  const [reporte, setReporte] = useState(false);
 
-  const { data, reload } = useApiData(() => api.getEntregas(), null, 60000);
+  const { data, reload } = useApiData(() => api.getEntregas(true), null, 60000);
   /* 'entregas' → onEntregas (kebab→camel automático del hook). */
   useRealtimeSync({ onEntregas: () => reload(), onInventario: () => reload(), onStkAmericano: () => reload() });
 
-  const entregas = data?.data?.entregas || [];
+  /* useMemo: `|| []` crearía un array nuevo por render y el memo de la
+     búsqueda perdería el sentido (aviso de exhaustive-deps). */
+  const entregas = useMemo(() => data?.data?.entregas || [], [data]);
   const tiendas = data?.data?.tiendas || [];
+  const filtradas = useMemo(() => filtrarEntregas(entregas, busca), [entregas, busca]);
   const hoyStr = new Date().toISOString().slice(0, 10);
   const deHoy = entregas.filter(e => (e.fecha || '').slice(0, 10) === hoyStr);
   const unidadesHoy = deHoy.reduce((a, e) => a + (e.lineas || []).reduce((x, l) => x + (Number(l.cantidad) || 0), 0), 0);
@@ -740,23 +955,60 @@ export default function EntregasPage({ embedded = false }) {
           <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5, flex: '1 1 260px' }}>
             La <strong>baja del CEDIS</strong> ocurre aquí: cada entrega descuenta cubetas/galones (Americano y PT Terán) y deja remisión con folio.
           </div>
-          {canCrear && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button style={S.btnAdd} onClick={() => setSheet(true)} data-id="entregas.btn.nueva" data-rol="admin,almacen">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                Nueva entrega
-              </button>
-              <button style={S.btnSec} onClick={() => setSheetSucursal(true)} data-id="entregas.btn.nueva-sucursal" data-rol="admin,almacen">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>
-                Agregar sucursal
-              </button>
-            </div>
-          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {canCrear && (
+              <>
+                <button style={S.btnAdd} onClick={() => setSheet(true)} data-id="entregas.btn.nueva" data-rol="admin,almacen">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                  Nueva entrega
+                </button>
+                <button style={S.btnSec} onClick={() => setSheetSucursal(true)} data-id="entregas.btn.nueva-sucursal" data-rol="admin,almacen">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18M5 21V7l7-4 7 4v14M9 9h.01M9 13h.01M9 17h.01M15 9h.01M15 13h.01M15 17h.01" /></svg>
+                  Agregar sucursal
+                </button>
+              </>
+            )}
+            {/* El reporte es solo LECTURA: lo ve cualquiera que vea la pantalla. */}
+            <button style={S.btnSec} onClick={() => setReporte(true)} data-id="entregas.btn.reporte">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 15l4-4 3 3 5-6" /></svg>
+              Reporte
+            </button>
+          </div>
         </div>
+
+        {/* Búsqueda del historial (2-sep-2026, pedido dueño): "ver qué se ha
+            mandado a cada tienda". Matchea tienda, folio o producto, sin
+            distinguir acentos/mayúsculas — filtra sobre el historial completo. */}
+        {entregas.length > 0 && (
+          <div style={{ position: 'relative', marginBottom: 12 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+              style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--lp-text-tertiary)', pointerEvents: 'none' }}>
+              <circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" />
+            </svg>
+            <input
+              style={{ ...S.input, paddingLeft: 38, paddingRight: busca ? 38 : 12 }}
+              value={busca} onChange={e => setBusca(e.target.value)}
+              placeholder="Buscar por tienda, producto o folio…"
+              data-id="entregas.input.buscar"
+            />
+            {busca && (
+              <button type="button" onClick={() => setBusca('')} aria-label="Limpiar búsqueda"
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, borderRadius: 6, border: 'none', background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}
+                data-id="entregas.btn.limpiar-busqueda">×</button>
+            )}
+            {busca && (
+              <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
+                {filtradas.length} de {entregas.length} entregas coinciden
+              </div>
+            )}
+          </div>
+        )}
 
         {entregas.length === 0 ? (
           <div style={S.empty}>Aún no hay entregas registradas. Con "Nueva entrega" descuentas del inventario lo que se va a cada tienda.</div>
-        ) : entregas.map(e => (
+        ) : filtradas.length === 0 ? (
+          <div style={S.empty}>Nada coincide con «{busca}». Prueba con parte del nombre de la tienda, del producto o el folio.</div>
+        ) : filtradas.map(e => (
           <div key={e.id} style={S.card} data-id="entregas.card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <div>
@@ -789,7 +1041,7 @@ export default function EntregasPage({ embedded = false }) {
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.producto}</span>
                   <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
                     <span style={S.badge(l.fuente === 'americano')}>{l.fuente === 'americano' ? `AM ${l.almacen}` : l.fuente === 'envases' ? 'ENV' : 'PT'}</span>
-                    <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{l.cantidad}</strong> {LBL_PRES[l.presentacion]?.toLowerCase() || l.presentacion}{l.cantidad === 1 ? '' : (l.presentacion === 'atomizador750' ? 'es' : 's')}
+                    <strong style={{ fontFamily: 'var(--lp-font-mono)' }}>{l.cantidad}</strong> {presUnidad(l.presentacion, l.cantidad)}
                   </span>
                 </div>
               ))}
@@ -850,6 +1102,7 @@ export default function EntregasPage({ embedded = false }) {
           }}
         />
       )}
+      {reporte && <ReporteEnviosSheet isDesktop={isDesktop} entregas={entregas} onClose={() => setReporte(false)} />}
       {remision && <RemisionOverlay entrega={remision} onClose={() => setRemision(null)} />}
       {toast && <div style={S.toast}>{toast}</div>}
     </>

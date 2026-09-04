@@ -1,0 +1,91 @@
+/* ════════════════════════════════════════════════════════════════════════════
+   Reporte de envíos a tiendas (2-sep-2026, pedido del dueño).
+
+   "Me gustaría un reporte, ejemplo PROCAUCHO: cuántas se han enviado y a qué
+   tiendas, y poder seleccionar las fechas."
+
+   Lógica PURA sobre el historial de entregas (GET /api/entregas?todas=1):
+     · `filtrarEntregas(entregas, q)` — la barra de búsqueda del historial:
+       matchea tienda, folio o cualquier producto de las líneas, sin
+       distinguir acentos ni mayúsculas ("teran" encuentra "Terán").
+     · `reporteEnvios(entregas, { q, desde, hasta })` — el reporte por
+       producto: q matchea por CONTIENE ("procaucho" agarra todas sus
+       variantes), las fechas son locales e inclusivas (YYYY-MM-DD), y
+       devuelve totales por presentación, el desglose por tienda (y por
+       producto, si el texto matchea varios) y las entregas involucradas.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+export const norm = (s) => String(s || '')
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/\s+/g, ' ').trim().toLowerCase();
+
+/* La fecha del registro es ISO-UTC; el dueño piensa en días LOCALES. sv-SE
+   formatea YYYY-MM-DD, comparable como texto contra los <input type=date>. */
+export const fechaLocalYMD = (iso) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso || '').slice(0, 10);
+  return d.toLocaleDateString('sv-SE');
+};
+
+const enRango = (e, desde, hasta) => {
+  const f = fechaLocalYMD(e.fecha);
+  if (desde && f < desde) return false;
+  if (hasta && f > hasta) return false;
+  return true;
+};
+
+/* Búsqueda del historial: tienda, folio o producto de cualquier línea. */
+export function filtrarEntregas(entregas, q) {
+  const nq = norm(q);
+  if (!nq) return Array.isArray(entregas) ? entregas : [];
+  return (Array.isArray(entregas) ? entregas : []).filter(e => e && (
+    norm(e.tienda).includes(nq) ||
+    norm(e.folio).includes(nq) ||
+    (e.lineas || []).some(l => l && norm(l.producto).includes(nq))
+  ));
+}
+
+/* Catálogo de productos vistos en el historial (para el datalist del reporte). */
+export function productosDeEntregas(entregas) {
+  const set = new Set();
+  (Array.isArray(entregas) ? entregas : []).forEach(e =>
+    (e?.lineas || []).forEach(l => { if (l && l.producto) set.add(l.producto); }));
+  return [...set].sort((a, b) => a.localeCompare(b, 'es'));
+}
+
+export function reporteEnvios(entregas, { q, desde, hasta } = {}) {
+  const nq = norm(q);
+  const totalPorPres = {};
+  const porTiendaMap = new Map();
+  const detalle = [];
+  let totalUnidades = 0;
+
+  (Array.isArray(entregas) ? entregas : []).forEach(e => {
+    if (!e || !enRango(e, desde, hasta)) return;
+    const mias = (e.lineas || []).filter(l => l && (!nq || norm(l.producto).includes(nq)));
+    if (!mias.length) return;
+    const tienda = e.tienda || '(sin tienda)';
+    mias.forEach(l => {
+      const cant = Number(l.cantidad) || 0;
+      const pres = l.presentacion || 'unidad';
+      totalUnidades += cant;
+      totalPorPres[pres] = (totalPorPres[pres] || 0) + cant;
+      const k = tienda + '|' + l.producto;
+      if (!porTiendaMap.has(k)) porTiendaMap.set(k, { tienda, producto: l.producto, porPres: {}, unidades: 0 });
+      const row = porTiendaMap.get(k);
+      row.porPres[pres] = (row.porPres[pres] || 0) + cant;
+      row.unidades += cant;
+    });
+    detalle.push({
+      id: e.id, folio: e.folio, fecha: e.fecha, tienda,
+      lineas: mias.map(l => ({ producto: l.producto, presentacion: l.presentacion, cantidad: Number(l.cantidad) || 0 })),
+    });
+  });
+
+  const porTienda = [...porTiendaMap.values()]
+    .sort((a, b) => (b.unidades - a.unidades) || a.tienda.localeCompare(b.tienda, 'es') || a.producto.localeCompare(b.producto, 'es'));
+  /* desc por fecha, como el historial */
+  detalle.sort((a, b) => String(b.fecha || '').localeCompare(String(a.fecha || '')));
+
+  return { totalUnidades, totalPorPres, porTienda, entregas: detalle };
+}
