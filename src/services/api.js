@@ -516,6 +516,8 @@ const api = {
       ...(aplicar ? { aplicar } : {}),
       ...(omitirBloqueadas ? { omitirBloqueadas: true } : {}),
     }),
+  /* La ida del ciclo: el libro fresco del ERP para reemplazar la Sheet. */
+  exportarFormulasXlsx: () => request('GET', '/api/formulas/exportar-xlsx'),
   updateFormula: (formulaId, ingredientes, tecnico) =>
     request('POST', '/api/formulas/update-formula', { formulaId, ingredientes, tecnico }),
   renameFormula: (oldName, newName) =>
