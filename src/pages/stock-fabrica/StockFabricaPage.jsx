@@ -1542,7 +1542,7 @@ export function SubloteQRPrintModal({ payload, onClose }) {
 /* ═══════════════════════════════════════════════════════════════════ */
 function buildLoteAcciones(lote, ctx) {
   const { canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
-    onReenvasar, onEnviarRecolectar, onIrQC, onReenvasarTote, onEliminarPrueba } = ctx;
+    onReenvasar, onEnviarRecolectar, onProductoEnviado, onIrQC, onReenvasarTote, onEliminarPrueba } = ctx;
   const total = Number(lote.litrosTotal) || 0;
   const rest = Math.max(0, total - litUsed(lote));
   const envSt = envEstado(lote);
@@ -1576,6 +1576,24 @@ function buildLoteAcciones(lote, ctx) {
       dataId: 'stock.btn.enviar-recolectar', dataRol: 'almacen,admin',
       title: 'Marcar listos para recolectar — Luis recibe notificación',
       onClick: () => onEnviarRecolectar(lote) });
+  }
+  /* Producto enviado — DECISIÓN OWNER 9-sep-2026: "eliminemos lo del QR para
+     recoger y pongamos un botón en Enrique de producto enviado; Luis no ha
+     funcionado como puente". Enrique (técnico) marca que el producto YA SALIÓ
+     de fábrica y todo lo envasado pasa a en_camino sin el escaneo de Luis.
+     NO es el "Transferir a Terán" que se eliminó en junio: aquél brincaba la
+     recepción; este solo lo pone EN CAMINO y sigue llegando a Terán únicamente
+     cuando Josué lo recibe (su escaneo estampa ub=teran, igual que siempre).
+     También levanta rezagados en_recoleccion que Luis nunca recogió — por eso
+     el gate de estado incluye 'en_recoleccion' además de los despachables. */
+  const haySublotesPorEnviar = sublotes.some(s =>
+    (s.estado === 'envasado' || s.estado === 'en_recoleccion') && !s.esMerma);
+  if (canEnvasar && lote.estado !== 'qc_hold' && haySublotesPorEnviar && onProductoEnviado
+      && (ESTADO_LOTE_DESPACHABLE.includes(lote.estado) || lote.estado === 'en_recoleccion')) {
+    acciones.push({ key: 'producto-enviado', label: 'Producto enviado', icon: Icon.truck, kind: 'success',
+      dataId: 'stock.btn.producto-enviado', dataRol: 'tecnico,admin',
+      title: 'El producto ya salió de fábrica — pasa a "Por recibir" de Josué en Terán, sin escaneo de recolección',
+      onClick: () => onProductoEnviado(lote) });
   }
   /* QC opcional (producido) */
   if (canEnvasar && lote.estado === 'producido') {
@@ -1764,7 +1782,7 @@ const CF = {
   btnSec: (danger) => ({ flex: '1 1 auto', minHeight: 44, padding: '0 14px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontSize: 13, fontWeight: 500, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, whiteSpace: 'nowrap', background: danger ? 'transparent' : '#fff', border: `1px solid ${danger ? 'rgba(179,38,30,.30)' : 'rgba(0,0,0,.08)'}`, color: danger ? '#b3261e' : CF_TXT }),
 };
 
-function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
+function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onProductoEnviado, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
   const [showSublotes, setShowSublotes] = useState(!!autoExpand);
   const total = Number(lote.litrosTotal) || 0;
   const used = litUsed(lote);
@@ -1775,7 +1793,7 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
 
   const acciones = buildLoteAcciones(lote, {
     canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
-    onEnviarRecolectar, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
+    onEnviarRecolectar, onProductoEnviado, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
   });
 
   /* Badge de estado en paleta forest: QC aprobado/azul · Parcial/ámbar ·
@@ -1877,7 +1895,7 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
 /* Columnas: Lote · Producto · Litros · Envasado · Estado · Acción     */
 /* Fila expandible con sublotes (mismo SublotesList que móvil).        */
 /* ═══════════════════════════════════════════════════════════════════ */
-function LoteTableRow({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
+function LoteTableRow({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onProductoEnviado, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
   const [open, setOpen] = useState(!!autoExpand);
   const est = ESTADO_MAP[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
   const total = Number(lote.litrosTotal) || 0;
@@ -1888,7 +1906,7 @@ function LoteTableRow({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnv
 
   const acciones = buildLoteAcciones(lote, {
     canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
-    onEnviarRecolectar, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
+    onEnviarRecolectar, onProductoEnviado, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
   });
   /* Primaria = primera acción; el resto va como ghost al lado */
   return (
@@ -2203,6 +2221,48 @@ export default function StockFabricaPage({ embedded = false }) {
     }
   }, [reloadTraz, showToast, confirm, rol]);
 
+  /* DECISIÓN OWNER 9-sep-2026: botón "Producto enviado" de Enrique — todo lo
+     envasado (y los rezagados en_recoleccion que Luis nunca recogió) pasa a
+     en_camino vía scan-bulk marcarEnviadoTeran, SIN escaneo de recolección.
+     Josué lo ve llegar a "Por recibir" de Recepción Terán y lo recibe con su
+     escaneo igual que siempre. Misma UX de FEFO que "Enviar a recolectar". */
+  const handleProductoEnviado = useCallback(async (lote) => {
+    const porEnviar = (lote.sublotes || []).filter(s =>
+      (s.estado === 'envasado' || s.estado === 'en_recoleccion') && !s.esMerma);
+    if (porEnviar.length === 0) return showToast('No hay sublotes envasados para enviar');
+
+    const caducado = lote.fechaCaducidad && new Date(lote.fechaCaducidad).getTime() < Date.now();
+    let overridePayload = {};
+    if (caducado) {
+      const fecha = String(lote.fechaCaducidad).slice(0, 10);
+      if (rol !== 'admin') {
+        return showToast(`Lote CADUCADO (venció ${fecha}). No puede salir de fábrica — avisa a un administrador.`);
+      }
+      const nota = await confirm(
+        `Este lote está CADUCADO (venció ${fecha}). Enviarlo de todas formas requiere tu autorización y queda en auditoría. Indica el motivo.`,
+        { title: 'Forzar envío de lote caducado', confirmText: 'Forzar con esta nota', danger: true,
+          prompt: { label: 'Motivo del override', placeholder: 'Ej: cliente lo acepta, uso no crítico…', required: true, minLength: 5, maxLength: 300, rows: 2 } }
+      );
+      if (!nota) return;
+      overridePayload = { overrideCaducidad: true, notaOverride: nota };
+    } else {
+      const ok = await confirm(
+        `Confirmar que ${porEnviar.length} sublote(s) de ${lote.codigoLote || lote.codigo} ya salieron de fábrica rumbo a Terán. Josué los verá en "Por recibir" y los dará de alta al recibirlos.`,
+        { confirmText: 'Producto enviado', title: 'Producto enviado a Terán' }
+      );
+      if (!ok) return;
+    }
+    try {
+      await api.escanearLoteBulk({ loteId: lote.id, accion: 'marcarEnviadoTeran', ...overridePayload });
+      reloadTraz();
+      showToast(caducado
+        ? 'Lote caducado enviado con override — Josué lo verá en "Por recibir"'
+        : `${porEnviar.length} sublote(s) en camino a Terán — Josué los verá en "Por recibir"`);
+    } catch (err) {
+      showToast(humanizeError(err)); /* AUDIT UX 16-jul (U4) */
+    }
+  }, [reloadTraz, showToast, confirm, rol]);
+
   /* Sprint G-1: anular sublote mal capturado. El backend repone envase/tapa
      al stock y marca el sublote como cancelado:true para auditoría (no se
      borra para preservar trazabilidad). */
@@ -2310,6 +2370,7 @@ export default function StockFabricaPage({ embedded = false }) {
                 onEnvasar={setEnvasadoModal}
                 onCerrar={handleCerrar}
                 onEnviarRecolectar={handleEnviarRecolectar}
+                onProductoEnviado={handleProductoEnviado}
                 onReenvasar={setReenvasadoModal}
                 onQR={setQrLote}
                 onEliminarPrueba={handleEliminarPrueba}

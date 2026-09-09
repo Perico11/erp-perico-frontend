@@ -33,6 +33,11 @@ export const TRANSICIONES_SUBLOTE = {
      re-despachar después o llevarlo por OT. */
   cancelarRecoleccion:    { desde: ['en_recoleccion'], a: 'envasado', roles: ['almacen','admin'] },
   escanearRecoger:        { desde: ['envasado','en_recoleccion','tote_activo'], a: 'en_camino', roles: ['recolector','admin'] },
+  /* DECISIÓN OWNER 9-sep-2026: "eliminemos lo del QR para recoger y pongamos
+     un botón en Enrique de producto enviado — Luis no ha funcionado como
+     puente". Enrique manda directo a en_camino SIN escaneo; Josué recibe en
+     Terán igual que siempre. El camino de Luis queda como respaldo. */
+  marcarEnviadoTeran:     { desde: ['envasado','en_recoleccion','tote_activo'], a: 'en_camino', roles: ['tecnico','admin'] },
   /* FIX jun 2026 (Sprint R): sync con backend — quitamos 'envasado' del
      origen. Josué solo puede recibir cuando Luis ya recogió (en_camino) o
      en caso de TOTE directo. Antes el banner "Recibir aquí" aparecía
@@ -74,6 +79,7 @@ export const LABELS_ACCION_SUBLOTE = {
   marcarRecoleccion:    'Marcar listo para recolectar',
   cancelarRecoleccion:  'Luis no disponible — regresar a envasado',
   escanearRecoger:      'Voy por él',
+  marcarEnviadoTeran:   'Producto enviado',
   cancelarEnCamino:     'Escaneado por error — regresar a recolección',
   escanearRecibirTeran: 'Recibir',
   reenvasarTote:        'Re-envasar TOTE',
@@ -158,6 +164,8 @@ export const NOTIF_TARGETS_POR_EVENTO = {
   'sublote.marcarRecoleccion':    ['recolector', 'almacen', 'admin'],
   'sublote.cancelarRecoleccion':  ['recolector', 'almacen', 'admin'],
   'sublote.escanearRecoger':      ['recolector', 'almacen', 'admin'],
+  /* marcarEnviadoTeran (9-sep-2026): Josué la ve llegar; Luis fuera a propósito. */
+  'sublote.marcarEnviadoTeran':   ['almacen', 'tecnico', 'admin'],
   'sublote.escanearRecibirTeran': ['almacen', 'tecnico', 'recolector', 'admin'],
   'sublote.reenvasarTote':        ['tecnico', 'admin'],
   /* vaciarTote: Josué (almacen) también — el buffer de TOTEs vive en su
