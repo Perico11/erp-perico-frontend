@@ -130,6 +130,16 @@ export const normEstado = e => {
    al comportamiento histórico). El "Historial = lo que produje" del técnico se
    suma aparte en PedidosPage desde el ledger (no es estado de pedido). */
 export const esPedidoTerminal  = e => ESTADO_PEDIDO_TERMINAL.includes(normEstado(e));
+/* Orden ACTIVA = "producción asignada que aún no se cierra" — el complemento
+   de las terminales (con normEstado: la variante 'entregada' también cierra).
+   FIX 9-sep-2026 (tarjeta "Órdenes en proceso" clavada en 0): las órdenes
+   ESPEJAN el estado de su lote vía el sync canónico del servidor, así que
+   viven en TODO el dominio del lote (producido, qc_*, en_envasado, envasado,
+   en_recoleccion, en_camino, en_almacen, en_proceso…). ESTADO_ORDEN_PENDIENTE
+   solo cubre hasta en_produccion: en cuanto la producción avanzaba, la orden
+   desaparecía del conteo aunque siguiera abierta. La tab "Activas" de
+   OrdenesPage siempre contó por complemento; el dashboard ahora cuenta igual. */
+export const esOrdenActiva     = e => !ESTADO_ORDEN_TERMINAL.includes(normEstado(e));
 export const esPedidoRechazado = e => { const n = normEstado(e); return n === 'rechazado' || n === 'cancelado'; };
 /* Pedido "por entregar": usa normEstado → atrapa variantes (en_stock_teran → en_almacen). */
 export const esPedidoPorEntregar = e => ESTADO_PEDIDO_POR_ENTREGAR.includes(normEstado(e));

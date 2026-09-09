@@ -9,13 +9,15 @@ import MisLotesPipeline from './MisLotesPipeline';
 import InicioScreen from '../../screens/InicioScreen';
 import {
   ESTADO_PEDIDO_PENDIENTE as PEND_PEDIDOS,
-  ESTADO_ORDEN_PENDIENTE as PEND_ORDENES,
   ESTADO_LOTE_PRE_QC as PEND_PRODUCCION,
   ESTADO_LOTE_QC as PEND_QC,
   ESTADO_LOTE_ENVASANDO as PEND_ENVASADO,
   ESTADO_LOTE_RECOLECCION as PEND_RECOLECCION,
   ESTADO_LOTE_EN_CAMINO as PEND_ALMACEN,
   esPedidoPorEntregar,
+  esOrdenActiva,
+  esPedidoFueraDeFabrica,
+  normEstado,
 } from '../../lib/estados';
 
 /* ════════════════════════════════════════════════════════════════════
@@ -99,8 +101,22 @@ export default function DashboardPage() {
     const lc = (s) => (s || '').toLowerCase();
 
     const pedidosPendientes = peds.filter(p => PEND_PEDIDOS.includes(lc(p.estado)));
-    const pedidosPorEntregar = peds.filter(p => esPedidoPorEntregar(p.estado));
-    const ordenesPendientes = ords.filter(o => PEND_ORDENES.includes(lc(o.estado)));
+    /* "Por entregar" = la lista compartida + 'en_proceso' (entrega PARCIAL: el
+       roll-up deja pedido/lote en en_proceso con el resto terminado por viajar).
+       Se suma AQUÍ y no en ESTADO_PEDIDO_POR_ENTREGAR: esa lista también gatea
+       el botón "Ya se entregó" (PedidosPage) y el backend rechaza a propósito
+       cerrar a mano un pedido en_proceso. */
+    const pedidosPorEntregar = peds.filter(p => esPedidoPorEntregar(p.estado) || normEstado(p.estado) === 'en_proceso');
+    /* FIX 9-sep-2026: órdenes ACTIVAS (no terminales), como la tab "Activas" de
+       OrdenesPage — las órdenes espejan el estado de su LOTE, y la lista de
+       arranque PEND_ORDENES las perdía en cuanto la producción avanzaba (la
+       tarjeta marcaba 0 con órdenes reales abiertas). Al técnico se le restan
+       las fuera-de-fábrica (regla dueño jul 2026, igual que en la pantalla):
+       su tarjeta cuenta lo mismo que va a encontrar al abrirla. */
+    const ordenesActivas = ords.filter(o => esOrdenActiva(o.estado));
+    const ordenesPendientes = user?.rol === 'tecnico'
+      ? ordenesActivas.filter(o => !esPedidoFueraDeFabrica(o.estado))
+      : ordenesActivas;
     const lotesProducidos = lotes.filter(l => PEND_PRODUCCION.includes(lc(l.estado)));
     const lotesQC = lotes.filter(l => PEND_QC.includes(lc(l.estado)));
     const lotesEnvasado = lotes.filter(l => PEND_ENVASADO.includes(lc(l.estado)));
@@ -111,7 +127,8 @@ export default function DashboardPage() {
       if (!oc.fechaEntrega) return false;
       try { return new Date(oc.fechaEntrega) < new Date(); } catch { return false; }
     });
-    const devsPendRecibir = (devoluciones || []).filter(d => d && d.estado === 'pendiente');
+    /* Paridad con el resto de tarjetas: las de PRUEBA no son operación real. */
+    const devsPendRecibir = (devoluciones || []).filter(d => d && !d.esPrueba && !d.eliminado && d.estado === 'pendiente');
     const devsPorReembolsar = (devoluciones || []).filter(d => d && d.disposicion === 'regresar' && !d.reembolsoEmitido);
     const ocsPorAprobar = ocList.filter(oc => {
       const est = lc(oc.estado);
@@ -124,7 +141,7 @@ export default function DashboardPage() {
       lotesRecoleccion, lotesEnCamino, ocsActivas, ocsVencidas,
       devsPendRecibir, devsPorReembolsar, ocsPorAprobar, conteosVencidos,
     };
-  }, [pedidos, ordenes, trazabilidad, ocs, devoluciones, conteosPend]);
+  }, [pedidos, ordenes, trazabilidad, ocs, devoluciones, conteosPend, user?.rol]);
 
   const muestraNombres = (arr, key = 'codigoLote', n = 3) => {
     if (!arr.length) return '';
