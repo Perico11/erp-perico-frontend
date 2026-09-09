@@ -3,7 +3,7 @@
    bucketeo de PEDIDO que antes vivía inline en PedidosPage. */
 import { describe, it, expect } from 'vitest';
 import {
-  normEstado, esPedidoTerminal, esPedidoRechazado, esPedidoHistorial, bucketPedido,
+  normEstado, esPedidoTerminal, esPedidoRechazado, esPedidoHistorial, bucketPedido, esOrdenActiva,
 } from '../lib/estados';
 
 describe('normEstado — normaliza variantes/fantasmas a canónico', () => {
@@ -57,5 +57,25 @@ describe('bucketPedido — Activos / Pruebas / Rechazados / Historial', () => {
     expect(esPedidoHistorial({ estado: 'entregado' })).toBe(true);
     expect(esPedidoHistorial({ estado: 'entregado', esPrueba: true })).toBe(false);
     expect(esPedidoHistorial({ estado: 'en_almacen' })).toBe(false);
+  });
+});
+
+describe('esOrdenActiva — la tarjeta "Órdenes en proceso" cuenta TODO lo no cerrado (FIX 9-sep-2026)', () => {
+  it('los estados del dominio del LOTE que la lista de arranque perdía SÍ son activos', () => {
+    for (const e of ['producido', 'qc_hold', 'qc_aprobado', 'en_envasado', 'envasado',
+      'en_recoleccion', 'en_camino', 'en_almacen', 'en_proceso']) {
+      expect(esOrdenActiva(e), e).toBe(true);
+    }
+  });
+  it('los de arranque siguen activos', () => {
+    for (const e of ['pendiente', 'aceptado', 'en_produccion']) expect(esOrdenActiva(e), e).toBe(true);
+  });
+  it('las terminales NO cuentan — la variante "entregada" tampoco (vía norm)', () => {
+    for (const e of ['entregado', 'entregada', 'cancelado', 'rechazado', 'eliminado']) {
+      expect(esOrdenActiva(e), e).toBe(false);
+    }
+  });
+  it('la variante en_stock_teran cuenta como en_almacen: activa', () => {
+    expect(esOrdenActiva('en_stock_teran')).toBe(true);
   });
 });
