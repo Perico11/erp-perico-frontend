@@ -180,7 +180,10 @@ function fromTileInfo(s, esRecibido) {
     const t = llegada && llegada.fecha
       ? `recibido ${_hm(llegada.fecha)}`
       : (salida.fecha ? `salió ${_hm(salida.fecha)}` : '');
-    return { verbo: 'Recolectó', who: salida.usuario, t };
+    /* 9-sep-2026 (dueño): con el botón "Producto enviado" de Enrique nadie
+       recolectó — el verbo sale de la ACCIÓN real del historial. */
+    const verbo = salida.accion === 'marcarEnviadoTeran' ? 'Envió' : 'Recolectó';
+    return { verbo, who: salida.usuario, t };
   }
   /* Sublote nacido en Terán (hijo de re-envasado de TOTE): nunca viajó —
      "Recolectó" sería falso. Mostramos quién lo dio de alta en stock. */
