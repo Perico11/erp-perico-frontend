@@ -130,8 +130,8 @@ const SECCIONES = [
       { path: '/devoluciones-mp', label: 'Devol. proveedor', icon: ICONS.devol, perm: 'devoluciones', roles: ['compras'] },
       { path: '/sat',          label: 'SAT / CFDI',   icon: ICONS.sat,        perm: 'compras', roles: ['compras'] },
       { path: '/pos-aliases',  label: 'POS Aliases',  icon: ICONS.posAliases, perm: 'compras', roles: ['compras'] },
-      /* Luis/Josué directa; admin dentro del hub Logística. */
-      { path: '/recoleccion',  label: 'Recolección',  icon: ICONS.recol, perm: 'recoleccion', roles: ['recolector','almacen'] },
+      /* F4 (14-sep-2026): Recolección fuera del menú — Luis conserva su tab
+         fijo (abajo) y la ruta sigue viva; el camino visible es el de Enrique. */
       { path: '/trazabilidad', label: 'Trazabilidad', icon: ICONS.traz,  perm: 'trazabilidad' },
     ],
   },

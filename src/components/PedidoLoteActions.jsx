@@ -197,6 +197,10 @@ function LoteActionsCard({ pedido, lote, userRol, userName, onSuccess, onError, 
   const navigate = useNavigate();
   const [busy, setBusy] = useState('');
   const [qcMode, setQcMode] = useState(null); /* 'aprobarQC' | 'rechazarQC' | null */
+  /* F4 (14-sep-2026, muebles de Luis): "Enviar a recolectar" ya no es el botón
+     protagonista — el camino visible es "Producto enviado" de Enrique. El de
+     Luis queda PLEGADO detrás de este toggle (dos toques); nada se borra. */
+  const [respaldoLuis, setRespaldoLuis] = useState(false);
   const [scanRecepcion, setScanRecepcion] = useState(false); /* escáner QR de recepción Terán */
   /* FIX jun 2026 (bug "Ver sublotes roto"): los sublotes se EXPANDEN aquí mismo
      — antes navegaba a /stock-fabrica?lote= y con la regla en_almacen el lote
@@ -491,8 +495,33 @@ function LoteActionsCard({ pedido, lote, userRol, userName, onSuccess, onError, 
           quedan al lado en sus celdas del grid. */}
       {!qcMode && (
         <>
-          {puedeEnviarRecolectar && (
+          {/* F4 (14-sep-2026): el envío normal lo hace Enrique con "Producto
+              enviado" (Stock Fábrica). El camino de Luis sigue vivo pero
+              PLEGADO: primer toque abre el respaldo, segundo toque lo manda. */}
+          {puedeEnviarRecolectar && !respaldoLuis && (
             <button
+              data-id="pedido.btn.respaldo-luis"
+              data-rol="almacen,admin,tecnico"
+              style={{
+                alignSelf: 'flex-start',
+                display: 'inline-flex', alignItems: 'center', gap: 6,
+                padding: '8px 12px', fontSize: 11.5, fontWeight: 600,
+                fontFamily: 'var(--lp-font-sans)', cursor: 'pointer',
+                borderRadius: 8, minHeight: 36, marginBottom: 4,
+                background: 'transparent',
+                border: '1px dashed var(--lp-border-subtle)',
+                color: 'var(--lp-text-tertiary)',
+              }}
+              onClick={() => setRespaldoLuis(true)}
+              title='El camino normal es "Producto enviado" (Enrique, en Stock Fábrica). Abre el respaldo con Luis solo si lo necesitas.'
+            >
+              Camino de respaldo (con Luis)…
+            </button>
+          )}
+          {puedeEnviarRecolectar && respaldoLuis && (
+            <button
+              data-id="pedido.btn.enviar-recolectar"
+              data-rol="almacen,admin,tecnico"
               style={{
                 ...S.btn('success'),
                 padding: '11px 14px',
@@ -504,9 +533,9 @@ function LoteActionsCard({ pedido, lote, userRol, userName, onSuccess, onError, 
               }}
               disabled={!!busy}
               onClick={handleEnviarRecolectar}
-              title="Marcar todos los sublotes envasados como listos — Luis recibe notificación"
+              title="RESPALDO: marcar todos los sublotes envasados para que Luis los recoja — Luis recibe notificación"
             >
-              {busy === 'enviarRecolectar' ? '…' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Enviar a recolectar</span>}
+              {busy === 'enviarRecolectar' ? '…' : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>Enviar a recolectar (respaldo)</span>}
             </button>
           )}
 
@@ -601,12 +630,14 @@ function LoteActionsCard({ pedido, lote, userRol, userName, onSuccess, onError, 
               <span style={{ ...S.sublotesResumen, gridColumn: '1 / -1' }}>
                 {/* FIX jun 2026: el mensaje genérico parecía botón faltante (reporte
                     owner: "no avanza a envasado"). Ahora dice QUIÉN sigue. */}
+                {/* F4 (14-sep-2026): los textos de turno nombran el camino real
+                    — Enrique envía con "Producto enviado"; Luis es respaldo. */}
                 {['producido', 'qc_aprobado', 'en_envasado'].includes(lote.estado)
-                  ? 'Esperando envasado — lo hace el técnico (o admin) desde aquí o en Stock Fábrica. Tu turno llega en "Enviar a recolectar".'
+                  ? 'Esperando envasado — lo hace el técnico (o admin) desde aquí o en Stock Fábrica. Después Enrique lo manda con "Producto enviado" y te llega a "Por recibir".'
                   : lote.estado === 'envasado' || lote.estado === 'en_proceso'
-                    ? 'Envasado listo — Almacén (o admin) lo manda con "Enviar a recolectar".'
+                    ? 'Envasado listo — Enrique (o admin) lo manda con "Producto enviado" desde Stock Fábrica.'
                     : lote.estado === 'en_recoleccion'
-                      ? 'Esperando a Luis — ya fue notificado para recoger el lote.'
+                      ? 'Camino de respaldo en curso — Luis ya fue notificado para recoger el lote.'
                       : lote.estado === 'en_camino'
                         ? 'En camino — Almacén Terán lo recibe escaneando el QR.'
                         : 'Sin acciones disponibles para tu rol en este estado.'}
