@@ -35,6 +35,7 @@ const ICONS = {
   check: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>,
   fabrica: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>,
   pin: <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>,
+  tienda: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>,
   qr: <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M21 21v-3M14 21h3"/></svg>,
   plus: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
   search: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>,
@@ -369,7 +370,7 @@ function LoteTimeline({ lote, isDesktop }) {
 /* defaultOpen: al enfocar un lote desde la pill del selector (mockup =
    detalle único con bitácora visible) la card monta ya expandida. El cambio
    de selección cambia el `key` → remonta y el default aplica. */
-function LoteCard({ lote, isDesktop, onShowQR, defaultOpen = false }) {
+function LoteCard({ lote, isDesktop, onShowQR, onShowDestinos, defaultOpen = false }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const est = ESTADO_CONFIG[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
   const sublotes = lote.sublotes || [];
@@ -404,6 +405,21 @@ function LoteCard({ lote, isDesktop, onShowQR, defaultOpen = false }) {
             {hasTotes && <span style={S.badge('var(--lp-brand-50)', 'var(--lp-brand-700)')}>2 fases</span>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            {/* Destinos del lote (E2a): ¿a qué tiendas fue? — solo lectura */}
+            <button
+              data-id="traza.btn.destinos"
+              data-rol="admin,tecnico,almacen,compras,recolector,inventario"
+              onClick={(e) => { e.stopPropagation(); onShowDestinos && onShowDestinos(lote); }}
+              title="¿A qué tiendas fue este lote?"
+              style={{
+                width: 36, height: 36, borderRadius: 10,
+                background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)',
+                color: 'var(--lp-text-secondary)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              {ICONS.tienda}
+            </button>
             {/* QR del lote — abre QRModal con el lote */}
             <button
               data-id="traza.btn.ver-qr"
@@ -531,6 +547,148 @@ function LoteCard({ lote, isDesktop, onShowQR, defaultOpen = false }) {
   );
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   DestinosModal (E2a, 14-sep-2026) — "¿a qué tiendas fue este lote?".
+   La mitad delantera del recall, solo lectura: GET /api/lotes/destinos
+   junta el ledger de entregas de cada sublote (tiendas, piezas, fechas,
+   folios), lo que sigue en casa (Terán/Fábrica/en camino) y lo que ya no
+   es stock (merma, consumido, tote vaciado…). Un lote AMERICANO se
+   reconstruye de los documentos de entrega.
+   ════════════════════════════════════════════════════════════════════════ */
+const CLASE_OTROS = {
+  merma: 'Merma',
+  consumido: 'Consumido en mezclas',
+  reenvasado: 'Tote vaciado (reenvasado)',
+  solo_etiqueta: 'Solo etiqueta (material en el pool)',
+  cancelado: 'Cancelado',
+};
+const CASA_LABEL = { teran: 'En Terán', fabrica: 'En Fábrica', enCamino: 'En camino' };
+
+function _piezasTxt(t) {
+  const pres = Object.entries(t.presentaciones || {}).map(([k, v]) => `${v} ${k}`).join(' + ');
+  const lit = t.litros > 0 ? ` · ${t.litros} L${t.litrosParciales ? '+' : ''}` : '';
+  return `${pres || `${t.piezas} pza`}${lit}`;
+}
+
+function DestinosModal({ lote, onClose }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  const codigo = lote.codigoLote || lote.id;
+
+  useEffect(() => {
+    let vivo = true;
+    api.getDestinosLote(codigo)
+      .then(r => { if (!vivo) return; if (r?.ok && r?.data) setData(r.data); else setErr(r?.error || 'Sin datos'); })
+      .catch(e => { if (vivo) setErr(e?.message || 'No se pudo consultar los destinos'); });
+    return () => { vivo = false; };
+  }, [codigo]);
+
+  const seccion = { fontSize: 11, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase', color: 'var(--lp-text-tertiary)', margin: '16px 0 8px' };
+  const fila = { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 10, padding: '9px 12px', borderRadius: 10, background: 'var(--lp-bg-sunken)', marginBottom: 6, flexWrap: 'wrap' };
+  const mono = { fontFamily: 'var(--lp-font-mono)', fontSize: 11.5, color: 'var(--lp-text-tertiary)' };
+  const casa = data?.enCasa;
+  const casaFilas = casa ? Object.entries(CASA_LABEL).filter(([k]) => casa[k] && casa[k].piezas > 0) : [];
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(15,23,19,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        data-id="traza.modal.destinos"
+        style={{ width: 'min(560px, 100%)', maxHeight: '86vh', overflowY: 'auto', background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-lg)', padding: '20px 20px 22px', fontFamily: 'var(--lp-font-sans)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 2 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+            <span style={{ color: 'var(--lp-brand-600)', display: 'inline-flex', flexShrink: 0 }}>{ICONS.tienda}</span>
+            <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--lp-text-primary)' }}>Destinos del lote</span>
+          </div>
+          <button
+            data-id="traza.modal.destinos.cerrar"
+            onClick={onClose}
+            aria-label="Cerrar"
+            style={{ width: 34, height: 34, borderRadius: 10, border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontSize: 15, flexShrink: 0 }}
+          >
+            ✕
+          </button>
+        </div>
+        <div style={{ ...mono, fontSize: 12.5, color: 'var(--lp-brand-600)', fontWeight: 700 }}>{codigo}</div>
+        {(data?.lote?.producto || lote.producto) && (
+          <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--lp-text-secondary)', marginTop: 2 }}>
+            {data?.lote?.producto || lote.producto}
+          </div>
+        )}
+
+        {err && <div style={{ marginTop: 16, padding: '10px 12px', borderRadius: 10, background: 'var(--lp-danger-100)', color: 'var(--lp-danger-600)', fontSize: 13, fontWeight: 600 }}>{err}</div>}
+        {!err && !data && <div style={{ marginTop: 20, fontSize: 13, color: 'var(--lp-text-tertiary)' }}>Consultando…</div>}
+
+        {data && (
+          <>
+            {data.tipoLote === 'americano' && (
+              <div style={{ marginTop: 10, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>
+                Lote americano: lo entregado se reconstruye de los documentos de entrega.
+              </div>
+            )}
+
+            <div style={seccion}>Tiendas ({data.totales?.tiendasCount || 0})</div>
+            {(data.tiendas || []).length === 0 && (
+              <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)', padding: '10px 12px', borderRadius: 10, background: 'var(--lp-bg-sunken)' }}>
+                Este lote no ha salido a ninguna tienda.
+              </div>
+            )}
+            {(data.tiendas || []).map(t => (
+              <div key={t.tienda} style={{ ...fila, display: 'block' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--lp-text-primary)' }}>{t.tienda}</span>
+                  <span style={{ fontWeight: 600, fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>{_piezasTxt(t)}</span>
+                </div>
+                {(t.eventos || []).map((ev, i) => (
+                  <div key={i} style={{ ...mono, marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <span>{(ev.fecha || '').slice(0, 10) || 's/f'}</span>
+                    <span>{ev.qty} {ev.tipo || 'pza'}</span>
+                    {ev.cod && <span>{ev.cod}</span>}
+                    {ev.folio && <span style={{ color: 'var(--lp-brand-600)' }}>{ev.folio}</span>}
+                    {ev.usuario && <span>· {ev.usuario}</span>}
+                    {ev.compartida && <span title="La línea de la entrega traía varios lotes">línea compartida</span>}
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            {casaFilas.length > 0 && (
+              <>
+                <div style={seccion}>Todavía en casa</div>
+                {casaFilas.map(([k, b]) => (
+                  <div key={k} style={fila}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--lp-text-primary)' }}>{CASA_LABEL[k]}</span>
+                    <span style={{ fontSize: 12.5, color: 'var(--lp-text-secondary)' }}>
+                      {b.piezas} pza{b.piezas === 1 ? '' : 's'}{b.litros > 0 ? ` · ${b.litros} L${b.litrosParciales ? '+' : ''}` : ''}
+                      <span style={{ ...mono, marginLeft: 8 }}>{(b.sublotes || []).map(s => s.cod).join(' · ')}</span>
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
+
+            {(data.otros || []).length > 0 && (
+              <>
+                <div style={seccion}>Ya no es stock</div>
+                {(data.otros || []).map((o, i) => (
+                  <div key={i} style={fila}>
+                    <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--lp-text-secondary)' }}>{CLASE_OTROS[o.clase] || o.clase}</span>
+                    <span style={mono}>{o.cod}{o.qty ? ` · ${o.qty} ${o.tipo || 'pza'}` : ''}{o.lit ? ` · ${o.lit} L` : ''}</span>
+                  </div>
+                ))}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* ================================================================ */
 /* MAIN PAGE                                                         */
 /* ================================================================ */
@@ -551,6 +709,7 @@ export default function TrazabilidadPage() {
   const [selLote, setSelLote] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [qrLote, setQrLote] = useState(null);
+  const [destLote, setDestLote] = useState(null); /* Destinos del lote (E2a) */
   const [toast, setToast] = useState(null);
   const [confirm, ConfirmEl] = useConfirm();
 
@@ -798,6 +957,7 @@ export default function TrazabilidadPage() {
               lote={lote}
               isDesktop={isDesktop}
               onShowQR={setQrLote}
+              onShowDestinos={setDestLote}
               defaultOpen={focusOn}
             />
           ))
@@ -814,6 +974,9 @@ export default function TrazabilidadPage() {
 
       {/* QR del lote — modal compartido (no se modifica QRModal.jsx) */}
       {qrLote && <QRModal lote={qrLote} onClose={() => setQrLote(null)} />}
+
+      {/* Destinos del lote (E2a) — ¿a qué tiendas fue? */}
+      {destLote && <DestinosModal lote={destLote} onClose={() => setDestLote(null)} />}
 
       {/* Toast */}
       {toast && (
