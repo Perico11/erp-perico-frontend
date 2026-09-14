@@ -71,10 +71,11 @@ const NAV_GROUPS = [
        opera dentro del hub Logística. */
     { key: 'entregas',     label: 'Entregas',     path: '/entregas',      icon: icons.entregas,     perm: 'inventario',  roles: ['almacen'] },
     { key: 'cycleCount',   label: 'Conteo',       path: '/conteo',        icon: icons.cycleCount,   perm: 'cycleCount',  roles: ['inventario'] },
-    /* Hub "Logística" (admin): Transferencias · Entregas · Recolección en una
-       entrada. Los operadores conservan su entrada directa "Transferencias". */
-    { key: 'logistica',    label: 'Logística',    path: '/transferencias', icon: icons.transferencias, perm: 'transferencias', roles: ['admin'] },
-    { key: 'transferencias', label: 'Transferencias', path: '/transferencias', icon: icons.transferencias, perm: 'transferencias', roles: ['almacen','inventario','tecnico'] },
+    /* Logística — UN SOLO NOMBRE para todos (F6, 14-sep-2026): la misma ruta
+       se llamaba "Logística" para admin y "Transferencias" para el piso, y esa
+       doble identidad confundía. Admin conserva su hub de 3 vistas; los demás
+       ven su misma pantalla de transferencias bajo el mismo título. */
+    { key: 'logistica',    label: 'Logística',    path: '/transferencias', icon: icons.transferencias, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
     /* Ingresos: Enrique da de alta pedidos del proveedor con foto de factura;
        admin revisa dentro del hub Inventario. */
     { key: 'ingresos',     label: 'Ingresos proveedor', path: '/ingresos',  icon: icons.pedidos,      perm: 'ingresos',    roles: ['tecnico','almacen'] },
