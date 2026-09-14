@@ -387,6 +387,9 @@ const api = {
 
   /* ── Producción / Trazabilidad ── */
   getTrazabilidad: () => request('GET', '/api/trazabilidad'),
+  /* Destinos del lote (E2a, 14-sep-2026): "¿a qué tiendas fue el lote X?" —
+     acepta codigoLote, id o el COD de un sublote (el QR de la cubeta). */
+  getDestinosLote: (lote) => request('GET', `/api/lotes/destinos?lote=${encodeURIComponent(lote)}`),
   /* X2 (jun 2026): upsertTrazabilidad eliminado — backend retorna 410 sin header
      x-trazabilidad-overwrite-confirm:SI. Usar crearLote o api.transicionLote/Sublote. */
   /* Crear UN lote nuevo — el server asigna el código canónico dentro del
