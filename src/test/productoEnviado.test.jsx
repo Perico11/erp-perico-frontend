@@ -100,11 +100,16 @@ describe('Stock Fábrica — el botón en la página real', () => {
     expect(args.qrPayload).toBeUndefined();
   });
 
-  it('Josué (almacén) NO lo ve — él conserva "Enviar a recolectar"', async () => {
+  it('Josué (almacén) NO lo ve — su "Enviar a recolectar" vive PLEGADO como respaldo (F4)', async () => {
     rolActual = 'almacen';
     render(<MemoryRouter><StockFabricaPage embedded /></MemoryRouter>);
     await screen.findByText('AZUL PALLETS PRINCE 5.0');
     expect(btn()).toBeNull();
+    /* F4 (14-sep-2026): ya no hay botón directo — primero el toggle de respaldo. */
+    expect(document.querySelector('[data-id="stock.btn.enviar-recolectar"]')).toBeNull();
+    const toggle = document.querySelector('[data-id="stock.btn.respaldo-luis"]');
+    expect(toggle).toBeTruthy();
+    fireEvent.click(toggle);
     expect(document.querySelector('[data-id="stock.btn.enviar-recolectar"]')).toBeTruthy();
   });
 });

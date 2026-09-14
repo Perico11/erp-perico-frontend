@@ -1570,12 +1570,22 @@ function buildLoteAcciones(lote, ctx) {
       onClick: () => onEnvasar(lote) });
   }
   /* Enviar a recolectar — §8 almacen,admin. FIX jun 2026 (auditoría #8):
-     +'en_proceso' para no perder el botón tras un despacho parcial. */
+     +'en_proceso' para no perder el botón tras un despacho parcial.
+     F4 (14-sep-2026, muebles de Luis): el camino visible es "Producto
+     enviado" de Enrique; el de Luis queda PLEGADO — primer toque abre el
+     respaldo (ghost), segundo toque lo manda. Nada se borra. */
   if (canTransfer && ESTADO_LOTE_DESPACHABLE.includes(lote.estado) && haySublotesEnvasados && onEnviarRecolectar) {
-    acciones.push({ key: 'recolectar', label: 'Enviar a recolectar', icon: Icon.truck, kind: 'success',
-      dataId: 'stock.btn.enviar-recolectar', dataRol: 'almacen,admin',
-      title: 'Marcar listos para recolectar — Luis recibe notificación',
-      onClick: () => onEnviarRecolectar(lote) });
+    if (ctx.respaldoAbierto) {
+      acciones.push({ key: 'recolectar', label: 'Enviar a recolectar (respaldo)', icon: Icon.truck, kind: 'ghost',
+        dataId: 'stock.btn.enviar-recolectar', dataRol: 'almacen,admin',
+        title: 'RESPALDO: marcar listos para que Luis los recoja — Luis recibe notificación',
+        onClick: () => onEnviarRecolectar(lote) });
+    } else {
+      acciones.push({ key: 'respaldo-luis', label: 'Camino de respaldo (Luis)…', icon: null, kind: 'ghost',
+        dataId: 'stock.btn.respaldo-luis', dataRol: 'almacen,admin',
+        title: 'El camino normal es "Producto enviado" (Enrique). Abre el respaldo con Luis solo si lo necesitas.',
+        onClick: () => ctx.onAbrirRespaldo && ctx.onAbrirRespaldo() });
+    }
   }
   /* Producto enviado — DECISIÓN OWNER 9-sep-2026: "eliminemos lo del QR para
      recoger y pongamos un botón en Enrique de producto enviado; Luis no ha
@@ -1612,8 +1622,9 @@ function buildLoteAcciones(lote, ctx) {
      paralelo que movía el sublote a Terán brincándose el flujo Luis→Josué:
      hacía "desaparecer" el lote de Stock Fábrica sin avisar a dónde iba y
      confundía. El producto llega a Terán SOLO cuando Josué lo RECIBE por
-     escaneo (escanearRecibirTeran). El camino canónico es:
-       envasado → "Enviar a recolectar" → Luis recoge → Josué escanea/recibe.
+     escaneo (escanearRecibirTeran). El camino canónico DESDE 9-sep-2026 es:
+       envasado → "Producto enviado" (Enrique) → Josué escanea/recibe;
+     el de Luis (Enviar a recolectar → recoger) queda como RESPALDO plegado.
      (El endpoint /api/envasado/transferir se conserva por compat, sin botón.) */
   /* Re-envasar TOTE — NO es "envasar inicial": roles SM reenvasarTote =
      almacen/tecnico/admin. Josué (almacen) lo conserva vía canTransfer aunque
@@ -1784,6 +1795,8 @@ const CF = {
 
 function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onProductoEnviado, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
   const [showSublotes, setShowSublotes] = useState(!!autoExpand);
+  /* F4: el camino de Luis vive plegado; este toggle lo abre por tarjeta. */
+  const [respaldoAbierto, setRespaldoAbierto] = useState(false);
   const total = Number(lote.litrosTotal) || 0;
   const used = litUsed(lote);
   const rest = Math.max(0, total - used);
@@ -1794,6 +1807,7 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
   const acciones = buildLoteAcciones(lote, {
     canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
     onEnviarRecolectar, onProductoEnviado, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
+    respaldoAbierto, onAbrirRespaldo: () => setRespaldoAbierto(true),
   });
 
   /* Badge de estado en paleta forest: QC aprobado/azul · Parcial/ámbar ·
@@ -1897,6 +1911,8 @@ function LoteCard({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar
 /* ═══════════════════════════════════════════════════════════════════ */
 function LoteTableRow({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnvasar, onCerrar, onTransferir, onReenvasar, onEnviarRecolectar, onProductoEnviado, onQR, onEliminarPrueba, onIrQC, onAnularSublote, autoExpand }) {
   const [open, setOpen] = useState(!!autoExpand);
+  /* F4: mismo pliegue del respaldo de Luis que en la card móvil. */
+  const [respaldoAbierto, setRespaldoAbierto] = useState(false);
   const est = ESTADO_MAP[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
   const total = Number(lote.litrosTotal) || 0;
   const used = litUsed(lote);
@@ -1907,6 +1923,7 @@ function LoteTableRow({ lote, canEnvasar, canTransfer, canAnular, isAdmin, onEnv
   const acciones = buildLoteAcciones(lote, {
     canEnvasar, canTransfer, isAdmin, onEnvasar, onCerrar, onTransferir,
     onEnviarRecolectar, onProductoEnviado, onIrQC, onReenvasarTote: onReenvasar, onEliminarPrueba,
+    respaldoAbierto, onAbrirRespaldo: () => setRespaldoAbierto(true),
   });
   /* Primaria = primera acción; el resto va como ghost al lado */
   return (

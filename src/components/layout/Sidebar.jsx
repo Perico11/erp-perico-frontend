@@ -97,8 +97,10 @@ const NAV_GROUPS = [
     { key: 'devolucionesMp', label: 'Devol. a proveedor', path: '/devoluciones-mp', icon: icons.devoluciones, perm: 'devoluciones', roles: ['compras'] },
     { key: 'sat',          label: 'SAT / CFDI',   path: '/sat',           icon: icons.sat,          perm: 'compras',     roles: ['compras'] },
     { key: 'posAliases',   label: 'POS Aliases',  path: '/pos-aliases',   icon: icons.posAliases,   perm: 'compras',     roles: ['compras'] },
-    /* Recolección: Luis y Josué directa; admin dentro del hub Logística. */
-    { key: 'recoleccion',  label: 'Recolección',  path: '/recoleccion',   icon: icons.recoleccion,  perm: 'recoleccion', roles: ['recolector','almacen'] },
+    /* F4 (14-sep-2026, muebles de Luis): Recolección SALE del menú — el camino
+       visible es el botón "Producto enviado" de Enrique. Nada se borra: la
+       ruta /recoleccion sigue viva por URL, en el hub Logística del admin y
+       en el tab fijo del teléfono de Luis (él opera el respaldo). */
     { key: 'trazabilidad', label: 'Trazabilidad', path: '/trazabilidad',  icon: icons.trazabilidad, perm: 'trazabilidad' },
   ]},
   { id: 'otros', titulo: 'Otros', items: [
