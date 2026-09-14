@@ -110,8 +110,8 @@ const SECCIONES = [
       /* STK Americano vive en Inventarios > Americano Terán / Alm. 2 (dueño 16-jul). */
       { path: '/entregas',     label: 'Entregas',     icon: ICONS.entregas, perm: 'inventario', roles: ['almacen'] },
       { path: '/conteo',       label: 'Conteo',       icon: ICONS.conteo,   perm: 'cycleCount', roles: ['inventario'] },
-      { path: '/transferencias', label: 'Logística',  icon: ICONS.transfer, perm: 'transferencias', roles: ['admin'] },
-      { path: '/transferencias', label: 'Transferencias', icon: ICONS.transfer, perm: 'transferencias', roles: ['almacen','inventario','tecnico'] },
+      /* F6 (14-sep-2026): un solo nombre — "Logística" para todos los roles. */
+      { path: '/transferencias', label: 'Logística',  icon: ICONS.transfer, perm: 'transferencias', roles: ['admin','almacen','inventario','tecnico'] },
       { path: '/ingresos',     label: 'Ingresos proveedor', icon: ICONS.recepcion, perm: 'ingresos', roles: ['tecnico','almacen'] },
       { path: '/devoluciones', label: 'Devoluciones', icon: ICONS.devol,    perm: 'devoluciones', roles: ['admin','tecnico','almacen'] },
       { path: '/reportes',     label: 'Reportes',     icon: ICONS.reportes, perm: 'inventario', roles: ['admin','inventario','compras'] },

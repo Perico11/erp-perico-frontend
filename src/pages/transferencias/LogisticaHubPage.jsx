@@ -19,8 +19,18 @@ import RecoleccionPage from '../recoleccion/RecoleccionPage';
 
 export default function LogisticaHubPage() {
   const { user } = useAuth();
-  /* No-admin (almacén/inventario/técnico): idéntico a antes. */
-  if (user?.rol !== 'admin') return <TransferenciasPage />;
+  /* No-admin (almacén/inventario/técnico): su misma pantalla de siempre, pero
+     bajo el título "Logística" — F6 (14-sep-2026): el menú y el encabezado
+     dicen LO MISMO para todos; con una sola vista el hub no pinta selector. */
+  if (user?.rol !== 'admin') {
+    return (
+      <HubVistas
+        title="Logística"
+        hubId="logistica"
+        vistas={[{ id: 'transferencias', label: 'Transferencias', render: () => <TransferenciasPage embedded /> }]}
+      />
+    );
+  }
   return (
     <HubVistas
       title="Logística"

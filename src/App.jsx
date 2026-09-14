@@ -34,7 +34,6 @@ const CycleCountPage      = lazy(() => import('./pages/cycle-count/CycleCountPag
    se montan COMPLETOS adentro — cero acciones perdidas. /stock-fabrica
    redirige preservando el query (?tab interno de fábrica sigue vivo). */
 const AlmacenPage         = lazy(() => import('./pages/almacen/AlmacenPage'));
-const FlujoPage           = lazy(() => import('./pages/flujo/FlujoPage'));
 const NotificacionesPage  = lazy(() => import('./pages/notificaciones/NotificacionesPage'));
 /* JUL 2026 (simplificación menús): /devoluciones monta el HUB — para admin son
    2 vistas (cliente PT · proveedor MP, ?vista=pt|mp); para técnico/almacén se ve
@@ -186,7 +185,10 @@ export default function App() {
               <Route path="pedidos"        element={<RoleRoute roles={['admin','almacen','tecnico']}><ErrorBoundary><PedidosPage /></ErrorBoundary></RoleRoute>} />
               <Route path="transferencias" element={<RoleRoute roles={['admin','almacen','inventario','tecnico']}><ErrorBoundary><LogisticaHubPage /></ErrorBoundary></RoleRoute>} />
               <Route path="ingresos"       element={<RoleRoute roles={['admin','tecnico','almacen']}><ErrorBoundary><IngresosPage /></ErrorBoundary></RoleRoute>} />
-              <Route path="flujo"          element={<RoleRoute roles={['admin','tecnico','almacen','recolector']}><ErrorBoundary><FlujoPage /></ErrorBoundary></RoleRoute>} />
+              {/* F6 (14-sep-2026): /flujo era una ruta huérfana — vivía sin
+                  entrada de menú y duplicaba los flujos por rol. Redirige a
+                  Inicio; el camino único de verdad se diseñará aparte (F1). */}
+              <Route path="flujo"          element={<Navigate to="/" replace />} />
               <Route path="produccion"     element={<RoleRoute roles={['admin','tecnico']}><ErrorBoundary><ProduccionPage /></ErrorBoundary></RoleRoute>} />
               {/* P2 (21-jul-2026): ruta vieja → vista "En fábrica" de Almacén */}
               <Route path="stock-fabrica"  element={<StockFabricaRedirect />} />
