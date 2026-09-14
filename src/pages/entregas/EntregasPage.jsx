@@ -953,7 +953,13 @@ export default function EntregasPage({ embedded = false }) {
 
         <div style={S.topRow}>
           <div style={{ fontSize: 12.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.5, flex: '1 1 260px' }}>
-            La <strong>baja del CEDIS</strong> ocurre aquí: cada entrega descuenta cubetas/galones (Americano y PT Terán) y deja remisión con folio.
+            {/* F5 (14-sep-2026): una sola explicación para las tres maneras de
+                "entregar" — aquí la REAL; la de etiqueta y la automática se
+                nombran para que nadie dude cuál aplica. */}
+            La <strong>entrega real</strong> ocurre aquí: descuenta el inventario de Terán
+            (Americano y PT) y deja remisión con folio. El botón «Ya se entregó» de Pedidos
+            solo cierra la <em>etiqueta</em> sin tocar inventario, y una OT recibida cierra
+            su pedido sola.
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {canCrear && (

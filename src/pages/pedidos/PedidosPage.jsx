@@ -1006,7 +1006,15 @@ export default function PedidosPage() {
             const mostrarMarcarEntregado = tabOperable && !p._esOrdenInterna
               && esPedidoPorEntregar(p.estado)
               && (esAdmin || user?.rol === 'almacen' || user?.rol === 'tecnico');
-            const tieneAcciones = mostrarCorregir || mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar || mostrarMarcarEntregado;
+            /* F5 (14-sep-2026, paquete "Ahora"): un pedido EN PROCESO no se
+               puede cerrar a mano (el backend lo rechaza a propósito: parte
+               del lote sigue vivo en Fábrica) — y la pantalla no lo explicaba
+               DE ANTEMANO: el botón solo desaparecía. Ahora se muestra
+               bloqueado, con la razón visible antes de intentar. */
+            const explicarNoCierreEnProceso = tabOperable && !p._esOrdenInterna
+              && normEstado(p.estado) === 'en_proceso'
+              && (esAdmin || user?.rol === 'almacen' || user?.rol === 'tecnico');
+            const tieneAcciones = mostrarCorregir || mostrarAceptar || mostrarIniciar || mostrarIrProduccion || mostrarCancelar || mostrarEliminar || mostrarMarcarEntregado || explicarNoCierreEnProceso;
 
             /* Cantidad → número + unidad para el numeral (desktop). */
             const qtyTxt = etiquetaMedidaReal(p.medida, p.medidaQty, p.cantidad) || `${p.cantidad} cubetas`;
@@ -1142,10 +1150,29 @@ export default function PedidosPage() {
                         data-rol="almacen,tecnico,admin"
                         disabled={busyId === p.id}
                         onClick={() => handleMarcarEntregado(p)}
-                        title="La pintura ya está en Terán — mandar el pedido a Historial como ENTREGADO (no toca inventario)"
+                        title="Cierre de ETIQUETA: manda el pedido a Historial como ENTREGADO sin tocar inventario — para pintura que ya vive en Terán. La entrega que SÍ descuenta vive en Entregas; una OT recibida cierra su pedido sola."
                       >
                         {busyId === p.id ? '…' : <>{Icon.check} Ya se entregó</>}
                       </button>
+                    )}
+                    {/* F5: la explicación ANTES del rechazo — botón bloqueado + razón. */}
+                    {explicarNoCierreEnProceso && (
+                      <>
+                        <button
+                          style={{ ...C.btn('ghost'), opacity: 0.55, cursor: 'not-allowed' }}
+                          data-id="pedidos.btn.ya-entregado-bloqueado"
+                          data-rol="almacen,tecnico,admin"
+                          disabled
+                          title="Un pedido EN PROCESO no se puede cerrar a mano: parte del lote sigue vivo en Fábrica."
+                        >
+                          {Icon.check} Ya se entregó
+                        </button>
+                        <span style={{ flexBasis: '100%', fontSize: 11.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.45 }}>
+                          En proceso: parte del lote sigue en Fábrica, por eso no se puede cerrar a mano.
+                          Se cierra solo cuando lo que falta se recibe en Terán (OT) — y si ya salió a
+                          tienda, regístralo en Entregas (esa sí descuenta inventario).
+                        </span>
+                      </>
                     )}
                     {/* Cancelar = rechazo SUAVE (motivo, sin PIN, sin borrar).
                         El borrado definitivo con reversa de MP es Eliminar. */}
