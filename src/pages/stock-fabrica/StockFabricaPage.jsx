@@ -433,7 +433,34 @@ const PRESENTACIONES_META = [
 /* ═══════════════════════════════════════════════════════════════════ */
 /* ENVASADO MODAL                                                     */
 /* ═══════════════════════════════════════════════════════════════════ */
-export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
+
+/* F9 (14-sep-2026, paquete "Ahora"): MEMORIA AL ENVASAR — la última
+   combinación usada PARA ESE PRODUCTO, derivada de los sublotes que la
+   página ya tiene cargados (cero backend). El AZUL 5.0 casi siempre sale
+   en la misma presentación y marca; precargarla quita la mitad de los
+   toques del paso más repetido del piso — Enrique solo confirma o corrige.
+   Solo mira envases FINALES (el TOTE tiene su propia regla indivisible)
+   y nunca cuenta mermas ni solo-etiqueta. */
+function memoriaEnvasadoDeProducto(lotes, producto) {
+  const FINALES = ['cubeta', 'galon', 'litro', 'atomizador750', 'otros'];
+  const nom = String(producto || '').trim().toUpperCase();
+  if (!nom) return null;
+  let mejor = null;
+  for (const l of (Array.isArray(lotes) ? lotes : [])) {
+    if (!l || String(l.producto || l.nombre || '').trim().toUpperCase() !== nom) continue;
+    for (const s of (Array.isArray(l.sublotes) ? l.sublotes : [])) {
+      if (!s || s.esMerma || s.soloEtiqueta) continue;
+      if (!FINALES.includes(s.tipo)) continue;
+      const ts = (s.historial && s.historial[0] && s.historial[0].ts) || s.fecha || l.fecha || '';
+      if (!mejor || String(ts) > String(mejor.ts)) {
+        mejor = { ts, tipo: s.tipo, marca: s.marca || '', tapaKey: s.tapaKey || '' };
+      }
+    }
+  }
+  return mejor ? { tipo: mejor.tipo, marca: mejor.marca, tapaKey: mejor.tapaKey } : null;
+}
+
+export function EnvasadoModal({ lote, envases, userName, memoria = null, onClose, onSuccess }) {
   useBodyScrollLock(); /* FIX jun 2026: sin scroll-bleed al body en móvil */
   /* REGLA DE NEGOCIO: TOTE indivisible.
      Un TOTE es un contenedor de transporte a granel. Si el lote se envasa en
@@ -460,11 +487,13 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
   const haySublotesTote = sublotesActuales.some(s =>
     s.claseSublote === 'tote' || s.tipo === 'tote' || s.fase === 1
   );
-  /* Si ya hay TOTEs, forzar tipo='tote'. Si ya hay finales, default='cubeta'. */
-  const tipoInicial = haySublotesTote ? 'tote' : 'cubeta';
+  /* Si ya hay TOTEs, forzar tipo='tote'. Si no, F9: arrancar con la última
+     combinación usada para ESTE producto (memoria) — Enrique confirma o
+     corrige. Sin memoria, el default de siempre: 'cubeta'. */
+  const tipoInicial = haySublotesTote ? 'tote' : ((memoria && memoria.tipo) || 'cubeta');
   const [tipo, setTipo] = useState(tipoInicial);
-  const [marca, setMarca] = useState('');
-  const [tapaKey, setTapaKey] = useState('');
+  const [marca, setMarca] = useState((!haySublotesTote && memoria && memoria.marca) || '');
+  const [tapaKey, setTapaKey] = useState((!haySublotesTote && memoria && memoria.tapaKey) || '');
   const [qty, setQty] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -667,6 +696,12 @@ export function EnvasadoModal({ lote, envases, userName, onClose, onSuccess }) {
               </span>
               {' '}· {lote.producto || lote.nombre} · {rest.toFixed(1)} L disponibles de {(lote.litrosTotal || 0).toFixed(1)} L
             </div>
+            {/* F9: aviso honesto de que los campos vienen precargados. */}
+            {memoria && !haySublotesTote && (
+              <div style={{ marginTop: 5, fontSize: 11.5, color: 'var(--lp-text-tertiary)', lineHeight: 1.4 }}>
+                Precargado como la última vez de este producto — confirma o corrige.
+              </div>
+            )}
           </div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--lp-text-tertiary)', display: 'flex', padding: 4, flexShrink: 0 }} aria-label="Cerrar">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -2388,6 +2423,7 @@ export default function StockFabricaPage({ embedded = false }) {
           lote={envasadoModal}
           envases={envases}
           userName={userName}
+          memoria={memoriaEnvasadoDeProducto(allLotes, envasadoModal.producto || envasadoModal.nombre)}
           onClose={() => setEnvasadoModal(null)}
           onSuccess={(payload) => {
             setEnvasadoModal(null);
