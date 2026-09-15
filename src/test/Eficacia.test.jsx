@@ -40,8 +40,18 @@ const TABLERO = {
     totalPiezas: 145, totalLitros: 1330.5, litrosParciales: true,
     prev: { totalPiezas: 120, totalLitros: 1100, litrosParciales: false },
     tiendas: [
-      { tienda: 'Terán', piezas: 90, litros: 830.5, litrosParciales: true, porSemana: [400, 200, 150, 80.5] },
-      { tienda: 'Centro', piezas: 55, litros: 500, litrosParciales: false, porSemana: [100, 150, 200, 50] },
+      {
+        tienda: 'Terán', piezas: 90, litros: 830.5, litrosParciales: true, porSemana: [400, 200, 150, 80.5],
+        ritmo: { reciente: 600, anterior: 230.5, deltaLitros: 369.5, pct: 160 }, /* acelera */
+      },
+      {
+        tienda: 'Centro', piezas: 55, litros: 500, litrosParciales: false, porSemana: [100, 150, 200, 50],
+        ritmo: { reciente: 250, anterior: 250, deltaLitros: 0, pct: 0 }, /* pareja */
+      },
+      {
+        tienda: 'Ruby', piezas: 10, litros: 90, litrosParciales: false, porSemana: [0, 0, 45, 45],
+        ritmo: { reciente: 0, anterior: 90, deltaLitros: -90, pct: -100 }, /* frena en seco */
+      },
     ],
   },
   conteos: {
@@ -95,6 +105,12 @@ describe('E3 — EficaciaPage', () => {
     expect(cuerpo).toContain('90 pzas');
     expect(cuerpo).toContain('830.5 L');
     expect(cuerpo).toContain('Centro');
+    /* Ritmo por tienda (2 semanas vs 2): acelera con %, pareja dice "igual",
+       frenón en seco marca −100%; la leyenda explica la flecha */
+    expect(cuerpo).toContain('+160%');
+    expect(cuerpo).toContain('igual');
+    expect(cuerpo).toContain('-100%');
+    expect(cuerpo).toContain('verde acelera, rojo frena');
     /* El más lento del periodo, con nombre y días */
     expect(cuerpo).toContain('PED-A');
     expect(cuerpo).toContain('9.5');
@@ -129,7 +145,10 @@ describe('E3 — EficaciaPage', () => {
     await screen.findByText('4.2 días');
 
     expect(document.body.textContent).toContain('sin producción en el periodo');
-    expect(document.body.textContent).not.toContain('0%');
+    /* El número grande de merma sería un nodo '0%' exacto si se inventara;
+       substring no sirve: el '-100%' del ritmo de Ruby contiene '0%'. */
+    expect(screen.queryByText('0%')).toBeNull();
+    expect(screen.getByText('—')).toBeTruthy();
   });
 
   it('si el backend falla, muestra el error humanizado en lugar de cards vacías', async () => {
