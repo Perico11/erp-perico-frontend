@@ -43,15 +43,22 @@ const TABLERO = {
       {
         tienda: 'Terán', piezas: 90, litros: 830.5, litrosParciales: true, porSemana: [400, 200, 150, 80.5],
         ritmo: { reciente: 600, anterior: 230.5, deltaLitros: 369.5, pct: 160 }, /* acelera */
+        frecuenciaDias: 3.5, entregasDias: 8,
       },
       {
         tienda: 'Centro', piezas: 55, litros: 500, litrosParciales: false, porSemana: [100, 150, 200, 50],
         ritmo: { reciente: 250, anterior: 250, deltaLitros: 0, pct: 0 }, /* pareja */
+        frecuenciaDias: 7, entregasDias: 4,
       },
       {
         tienda: 'Ruby', piezas: 10, litros: 90, litrosParciales: false, porSemana: [0, 0, 45, 45],
         ritmo: { reciente: 0, anterior: 90, deltaLitros: -90, pct: -100 }, /* frena en seco */
+        frecuenciaDias: null, entregasDias: 1, /* un solo día: no se inventa */
       },
+    ],
+    topProductos: [
+      { producto: 'AZUL PALLETS', piezas: 60, litros: 900.5, litrosParciales: false },
+      { producto: 'KILZ', piezas: 20, litros: 75.7, litrosParciales: true },
     ],
   },
   conteos: {
@@ -85,11 +92,14 @@ describe('E3 — EficaciaPage', () => {
     expect(screen.getByText('1330.5 L')).toBeTruthy();
     expect(screen.getByText('3 de 4')).toBeTruthy();
 
-    /* Las 4 tarjetas por nombre */
-    expect(screen.getByText('Días de pedido → Terán')).toBeTruthy();
+    /* Las 5 tarjetas por nombre. La primera se renombró (15-sep): "Días de
+       pedido → Terán" hacía pensar en pedidos de TIENDAS, que no existen. */
+    expect(screen.getByText('Surtido Fábrica → Terán')).toBeTruthy();
+    expect(screen.queryByText('Días de pedido → Terán')).toBeNull();
     expect(screen.getByText('% de merma')).toBeTruthy();
     expect(screen.getByText('Rotación por tienda')).toBeTruthy();
     expect(screen.getByText('Conteos cíclicos')).toBeTruthy();
+    expect(screen.getByText('Top 10 · lo más pedido por tiendas')).toBeTruthy();
 
     const cuerpo = document.body.textContent;
     /* Tendencias con la dirección buena resuelta: días bajaron (-1.9) y
@@ -120,6 +130,15 @@ describe('E3 — EficaciaPage', () => {
     expect(cuerpo).toContain('último hace 2 días');
     /* Ventana declarada */
     expect(cuerpo).toContain('28 días');
+    /* La tarjeta 1 explica qué mide (no son pedidos de tiendas) */
+    expect(cuerpo).toContain('días del pedido del almacén a su entrega en Terán');
+    /* Frecuencia por tienda: con dato sale "cada ~X d"; Ruby (1 día) no inventa */
+    expect(cuerpo).toContain('cada ~3.5 d');
+    expect(cuerpo).toContain('cada ~7 d');
+    /* Top 10 con ranking, litros y honestidad */
+    expect(cuerpo).toContain('900.5 L');
+    expect(cuerpo).toContain('75.7 L');
+    expect(cuerpo).toContain('no captura pedidos de tienda');
   });
 
   it('HONESTIDAD visible: sin-fechas y litros incompletos se dicen en pantalla', async () => {
