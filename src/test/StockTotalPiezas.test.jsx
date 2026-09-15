@@ -16,8 +16,14 @@ import { MemoryRouter } from 'react-router-dom';
 const PT_UBI = {
   ok: true,
   fabrica: { 'BLANCO OFFWHITE 4.0': { cubeta: 12, galon: 0, litro: 0, tote: 1, atm: 0, otros: 0, granel: 0, residual: 0 } },
-  teran:   { 'BLANCO OFFWHITE 4.0': { cubeta: 17, galon: 21, litro: 6, tote: 1, atm: 0, otros: 0, granel: 18.105, manual: 0 } },
-  total:   { 'BLANCO OFFWHITE 4.0': { cubeta: 29, galon: 21, litro: 6, tote: 2, atm: 0, otros: 0, granel: 18.105 } },
+  teran:   {
+    'BLANCO OFFWHITE 4.0': { cubeta: 17, galon: 21, litro: 6, tote: 1, atm: 0, otros: 0, granel: 18.105, manual: 0 },
+    'AZUL REY 4.0': { cubeta: 11, galon: 0, litro: 0, tote: 0, atm: 0, otros: 0, granel: 0, manual: 0 },
+  },
+  total:   {
+    'BLANCO OFFWHITE 4.0': { cubeta: 29, galon: 21, litro: 6, tote: 2, atm: 0, otros: 0, granel: 18.105 },
+    'AZUL REY 4.0': { cubeta: 11, galon: 0, litro: 0, tote: 0, atm: 0, otros: 0, granel: 0 },
+  },
   descuadres: {},
 };
 const TRAZA = [{
@@ -27,7 +33,13 @@ const TRAZA = [{
     { cod: 'SL-CUB', tipo: 'cubeta', estado: 'en_stock_teran', qty: 17, lit: 323, ub: 'teran' },
   ],
 }];
-const INV = { ok: true, data: { mp: {}, pt: { 'BLANCO OFFWHITE 4.0': { qty: 64, teran: 39.587, min: 30, sku: 'PT-BOW-CUB' } } } };
+/* AZUL REY está agotado en Fábrica pero tiene 11 cub en Terán; ROJO ÓXIDO no
+   tiene nada en ningún lado. */
+const INV = { ok: true, data: { mp: {}, pt: {
+  'BLANCO OFFWHITE 4.0': { qty: 64, teran: 39.587, min: 30, sku: 'PT-BOW-CUB' },
+  'AZUL REY 4.0': { qty: 0, teran: 11, min: 20, sku: 'PT-ARY-CUB' },
+  'ROJO ÓXIDO 4.0': { qty: 0, min: 15, sku: 'PT-ROX-CUB' },
+} } };
 
 /* La página monta media pantalla de Inventarios (tarjeta canónica, americano,
    menús…). Se declara lo que importa para este caso y cualquier otra llamada
@@ -114,6 +126,9 @@ describe('Stock ▸ Total del PT · piezas por presentación', () => {
     expect(screen.getByText('Contar existencia')).toBeInTheDocument();
 
     await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Terán · 752.2 L/ })); });
+    /* El tote abierto de Terán se precarga como 344 L, no como tote lleno. */
+    expect(document.querySelector('[data-id="inventario.contar.tote"]').value).toBe('0');
+    expect(document.querySelector('[data-id="inventario.contar.granelL"]').value).toBe('344');
     await act(async () => {
       fireEvent.change(document.querySelector('[data-id="inventario.contar.galon"]'), { target: { value: '19' } });
     });
@@ -128,6 +143,16 @@ describe('Stock ▸ Total del PT · piezas por presentación', () => {
     expect(ubicacion).toBe('teran');
     expect(piezas).toEqual({ tote: 0, granelL: 344, cubeta: 17, galon: 19, litro: 6, atomizador750: 0 });
     expect(nota).toBe('Conteo físico');
+  });
+
+  it('los KPIs cuentan el TOTAL, como la fila: con stock en Terán no es crítico', async () => {
+    await abrirPT();
+    /* AZUL REY: 0 en Fábrica pero 11 cub en Terán → bajo, no crítico. Antes el
+       KPI lo contaba por el escalar de Fábrica y contradecía a su propia fila. */
+    const fila = screen.getByText('AZUL REY 4.0').closest('tr');
+    expect(within(fila).getByText('Bajo')).toBeInTheDocument();
+    expect(within(screen.getByText('En crítico').parentElement).getByText('1')).toBeInTheDocument();
+    expect(within(screen.getByText('Stock bajo').parentElement).getByText('1')).toBeInTheDocument();
   });
 
   it('"Editar ficha" (nombre/SKU/mínimo) sigue disponible en el menú ⋯', async () => {

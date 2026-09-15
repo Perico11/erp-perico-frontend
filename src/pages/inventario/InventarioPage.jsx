@@ -1080,7 +1080,7 @@ const resumenPiezas = (p) => {
   if (p.granelL > 0) s.push(`granel ${fmtL(p.granelL)} L`);
   if (p.cubeta > 0) s.push(`${fmtCub(p.cubeta)} cub`);
   if (p.galon > 0) s.push(`${fmtCub(p.galon)} gal`);
-  if (p.litro > 0) s.push(`${fmtCub(p.litro)} de 1 L`);
+  if (p.litro > 0) s.push(`${fmtCub(p.litro)} env. 1 L`);
   if (p.atomizador750 > 0) s.push(`${fmtCub(p.atomizador750)} atm`);
   return s.length ? s.join(' · ') : 'sin piezas';
 };
@@ -1547,8 +1547,9 @@ function AccionesSheet({ rows, importExportNode, onClose }) {
 
 /* KPIs de escritorio (mockup .kpis, propuesta A "Centro de control") */
 function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal, valorMercado, extra = [] }) {
-  const crit = items.filter(i => (i.inv.qty || 0) <= 0);
-  const bajo = items.filter(i => (i.inv.qty || 0) > 0 && i.pct <= 100);
+  const qtyDe = (i) => (i.displayQty != null ? i.displayQty : (i.inv.qty || 0));
+  const crit = items.filter(i => qtyDe(i) <= 0);
+  const bajo = items.filter(i => qtyDe(i) > 0 && i.pct <= 100);
   /* Valor a COSTO (producción): si el backend lo proveyó (admin) se usa ese —
      incluye PT (costo por cubeta = fórmula + envase + tapa + MO + merma) y Envases,
      que el cliente no puede calcular. Si no, fallback client-side SOLO para MP con
