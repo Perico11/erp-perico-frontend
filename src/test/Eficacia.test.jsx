@@ -37,10 +37,11 @@ const TABLERO = {
     prev: { mermaCub: 4, producidoCub: 120, pct: 3.3 },
   },
   rotacion: {
-    totalPiezas: 145, prev: { totalPiezas: 120 },
+    totalPiezas: 145, totalLitros: 1330.5, litrosParciales: true,
+    prev: { totalPiezas: 120, totalLitros: 1100, litrosParciales: false },
     tiendas: [
-      { tienda: 'Terán', piezas: 90, litros: 830.5, litrosParciales: true, porSemana: [40, 20, 20, 10] },
-      { tienda: 'Centro', piezas: 55, litros: 500, litrosParciales: false, porSemana: [10, 15, 20, 10] },
+      { tienda: 'Terán', piezas: 90, litros: 830.5, litrosParciales: true, porSemana: [400, 200, 150, 80.5] },
+      { tienda: 'Centro', piezas: 55, litros: 500, litrosParciales: false, porSemana: [100, 150, 200, 50] },
     ],
   },
   conteos: {
@@ -67,9 +68,11 @@ describe('E3 — EficaciaPage', () => {
     api.getEficaciaTablero.mockResolvedValue({ ok: true, data: TABLERO });
     render(<MemoryRouter><EficaciaPage /></MemoryRouter>);
 
-    /* Los 4 números grandes (espera al fetch con el primero) */
+    /* Los 4 números grandes (espera al fetch con el primero). El de rotación
+       es LITROS — el dueño pidió que el litro mandara sobre las piezas. */
     expect(await screen.findByText('4.2 días')).toBeTruthy();
     expect(screen.getByText('2.1%')).toBeTruthy();
+    expect(screen.getByText('1330.5 L')).toBeTruthy();
     expect(screen.getByText('3 de 4')).toBeTruthy();
 
     /* Las 4 tarjetas por nombre */
@@ -80,13 +83,17 @@ describe('E3 — EficaciaPage', () => {
 
     const cuerpo = document.body.textContent;
     /* Tendencias con la dirección buena resuelta: días bajaron (-1.9) y
-       rotación subió (+25) — ambas se muestran con el valor previo. */
+       rotación subió (+230.5 L) — ambas se muestran con el valor previo. */
     expect(cuerpo).toContain('-1.9 días');
     expect(cuerpo).toContain('(6.1 días)');
-    expect(cuerpo).toContain('+25 pzas');
-    /* Rotación: total y desglose por tienda */
-    expect(cuerpo).toContain('145');
+    expect(cuerpo).toContain('+230.5 L');
+    expect(cuerpo).toContain('(1100 L)');
+    /* Rotación: piezas quedan de dato secundario, y el desglose por tienda
+       lleva los litros como número fuerte */
+    expect(cuerpo).toContain('145 piezas en total');
     expect(cuerpo).toContain('Terán');
+    expect(cuerpo).toContain('90 pzas');
+    expect(cuerpo).toContain('830.5 L');
     expect(cuerpo).toContain('Centro');
     /* El más lento del periodo, con nombre y días */
     expect(cuerpo).toContain('PED-A');

@@ -144,7 +144,10 @@ export default function EficaciaPage() {
   const merma = d.merma || {};
   const rot = d.rotacion || { tiendas: [] };
   const cc = d.conteos || {};
-  const hayLitrosParciales = (rot.tiendas || []).some(t => t.litrosParciales);
+  /* La comparación también se ensucia si la ventana PREVIA traía líneas sin
+     equivalencia — por eso entran los tres orígenes de la bandera. */
+  const hayLitrosParciales = (rot.tiendas || []).some(t => t.litrosParciales)
+    || !!rot.litrosParciales || !!(rot.prev && rot.prev.litrosParciales);
 
   return (
     <>
@@ -236,8 +239,15 @@ export default function EficaciaPage() {
                 <span style={S.dot('var(--lp-brand-600)')} />
                 <div style={S.cardLabel}>Rotación por tienda</div>
               </div>
-              <div style={S.big}>{rot.totalPiezas || 0} piezas</div>
-              <Tendencia actual={rot.totalPiezas || 0} previo={rot.prev?.totalPiezas} bajarEsBueno={false} unidad=" pzas" />
+              {/* LITROS MANDAN (pide el dueño, 15-sep-2026): "piezas" mezclaba
+                  galones con cubetas. El litro es el número grande, el orden y
+                  las barritas; las piezas quedan de dato secundario. El
+                  fallback a piezas cubre un backend viejo sin totalLitros. */}
+              <div style={S.big}>
+                {rot.totalLitros != null ? `${rot.totalLitros} L` : `${rot.totalPiezas || 0} piezas`}
+              </div>
+              <Tendencia actual={rot.totalLitros} previo={rot.prev?.totalLitros} bajarEsBueno={false} unidad=" L" />
+              <div style={S.sub}>{rot.totalPiezas || 0} piezas en total (cubetas, galones y demás)</div>
               {(rot.tiendas || []).length === 0 ? (
                 <div style={S.sub}>Sin entregas a tiendas en la ventana.</div>
               ) : (
@@ -247,12 +257,12 @@ export default function EficaciaPage() {
                       <span style={S.filaNombre}>
                         {t.tienda}
                         <span style={S.filaDetalle}>
-                          {' '}· {t.litros} L{t.litrosParciales ? ' (≈ incompleto)' : ''}
+                          {' '}· {t.piezas} pzas{t.litrosParciales ? ' · ≈ incompleto' : ''}
                         </span>
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <MiniSemanas semanas={t.porSemana} />
-                        <span style={S.filaNum}>{t.piezas} pzas</span>
+                        <span style={S.filaNum}>{t.litros} L</span>
                       </span>
                     </li>
                   ))}
