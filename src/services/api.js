@@ -256,6 +256,8 @@ const api = {
   },
   getForecastSugerencia: (mp) => request('GET', '/api/forecast/sugerencia/' + encodeURIComponent(mp)),
   generarOCsBulkForecast: (items, notas) => request('POST', '/api/forecast/generar-oc-bulk', { items, notas }),
+  /* E1: resumen ligero para la tarjeta de reorden del Inicio (admin/compras) */
+  getResumenReorden: () => request('GET', '/api/forecast/resumen-reorden'),
 
   /* ── Reportes / cierre mensual ── */
   getSnapshotsList: () => request('GET', '/api/reportes/snapshots'),

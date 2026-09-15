@@ -56,6 +56,7 @@ export default function DashboardPage() {
   const [ocs, setOCs] = useState([]);
   const [devoluciones, setDevoluciones] = useState([]);
   const [conteosPend, setConteosPend] = useState([]);
+  const [reorden, setReorden] = useState(null);
 
   const cargar = useCallback(() => {
     setLoading(true);
@@ -67,7 +68,11 @@ export default function DashboardPage() {
       api.getOCs().then(r => r.data || r.ocs || []).catch(() => []),
       api.getDevoluciones().then(r => Array.isArray(r) ? r : (r.data || [])).catch(() => []),
       api.get('/api/reportes/calendario-conteos').then(r => r.data || r.items || []).catch(() => []),
-    ]).then(([exec, peds, ords, trz, ocList, devs, conteos]) => {
+      /* E1: resumen de reorden — el backend lo gatea a admin/compras; para el
+         resto responde 403 y aquí cae a null → la tarjeta simplemente no sale
+         (no se inventa un cero). */
+      api.getResumenReorden().then(r => r.data).catch(() => null),
+    ]).then(([exec, peds, ords, trz, ocList, devs, conteos, reord]) => {
       setData(exec);
       setPedidos(Array.isArray(peds) ? peds : []);
       setOrdenes(Array.isArray(ords) ? ords : []);
@@ -75,6 +80,7 @@ export default function DashboardPage() {
       setOCs(Array.isArray(ocList) ? ocList : []);
       setDevoluciones(Array.isArray(devs) ? devs : []);
       setConteosPend(Array.isArray(conteos) ? conteos : []);
+      setReorden(reord && typeof reord === 'object' ? reord : null);
     }).catch(e => setErr(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -156,6 +162,12 @@ export default function DashboardPage() {
      "QC retenidos" y "Por envasar" jamás se creaban para Enrique. Donde la tarjeta es
      genuinamente específica de un rol (recepción en Terán) se usa user.rol. */
   const esRol = (...rs) => rs.includes(user?.rol);
+  /* E1: la tarjeta de reorden lista el top del pronóstico (≤3 MPs por nombre)
+     y suma el resto como +N, igual que muestraNombres con las demás. */
+  const reordenItems = reorden && Array.isArray(reorden.top)
+    ? reorden.top.map(t => t.mp).join(' · ')
+      + (reorden.sugeridas > reorden.top.length ? ` · +${reorden.sugeridas - reorden.top.length}` : '')
+    : '';
   const cards = [
     can('crearPedidos') ? { key: 'pedidos', titulo: 'Pedidos por preparar', desc: 'Pedidos de almacén esperando crear orden', count: tareas.pedidosPendientes.length, items: muestraNombres(tareas.pedidosPendientes, 'codigo'), accent: ACC.info, ruta: '/pedidos' } : null,
     can('ordenes') ? { key: 'ordenes', titulo: 'Órdenes en proceso', desc: 'Producción asignada que aún no se cierra', count: tareas.ordenesPendientes.length, items: muestraNombres(tareas.ordenesPendientes, 'codigo'), accent: ACC.amber, ruta: '/ordenes' } : null,
@@ -168,6 +180,10 @@ export default function DashboardPage() {
     can('recoleccion') ? { key: 'recoleccion', titulo: 'Por recolectar', desc: 'Envasado esperando salir a Terán', count: tareas.lotesRecoleccion.length, items: muestraNombres(tareas.lotesRecoleccion), accent: ACC.ok, ruta: '/recoleccion' } : null,
     esRol('admin', 'almacen') ? { key: 'almacen', titulo: 'En camino a Almacén', desc: 'Luis ya escaneó, esperando confirmación de recepción', count: tareas.lotesEnCamino.length, items: muestraNombres(tareas.lotesEnCamino), accent: ACC.info, ruta: '/almacen' } : null,
     esRol('admin', 'almacen', 'tecnico', 'recolector') ? { key: 'pedidos-entregar', titulo: 'Pedidos de stock por entregar', desc: 'Producto terminado, pendiente de entrega', count: tareas.pedidosPorEntregar.length, items: muestraNombres(tareas.pedidosPorEntregar, 'codigo'), accent: ACC.info, ruta: '/pedidos?tab=activos' } : null,
+    /* E1 (15-sep-2026): el pronóstico ya existía — esta tarjeta lo pone en el
+       Inicio para que se adopte. Solo con dato real (si el resumen falló o el
+       rol no puede verlo, la tarjeta no sale — un cero inventado miente). */
+    (can('compras') && reorden) ? { key: 'reorden', titulo: 'Materias bajo punto de reorden', desc: 'El pronóstico sugiere reponer antes de que falten', count: reorden.sugeridas || 0, items: reordenItems, accent: (reorden.criticas > 0 ? ACC.critHi : ACC.amber), ruta: '/pronostico' } : null,
     can('compras') ? { key: 'oc-vencidas', titulo: 'OCs vencidas', desc: 'Órdenes de compra que pasaron fecha de entrega', count: tareas.ocsVencidas.length, items: muestraNombres(tareas.ocsVencidas, 'codigo'), accent: ACC.critHi, ruta: '/compras' } : null,
     can('compras') ? { key: 'ocs-por-aprobar', titulo: 'OCs por aprobar', desc: 'Solicitudes pendientes de asignar proveedor/precio', count: tareas.ocsPorAprobar.length, items: muestraNombres(tareas.ocsPorAprobar, 'codigo'), accent: ACC.amber, ruta: '/compras' } : null,
     (can('produccion') || esRol('admin')) ? { key: 'dev-recibir', titulo: 'Devoluciones por recibir', desc: 'Producto del cliente por inspeccionar en fábrica', count: tareas.devsPendRecibir.length, items: muestraNombres(tareas.devsPendRecibir, 'id'), accent: ACC.mut, ruta: '/devoluciones' } : null,
@@ -232,14 +248,14 @@ export default function DashboardPage() {
     pedidos: 'ordenes', ordenes: 'ordenes', qc: 'qc', 'qc-hold': 'alert',
     envasado: 'stock', recoleccion: 'stock', almacen: 'inventario',
     'pedidos-entregar': 'stock',
-    'oc-vencidas': 'compras', 'ocs-por-aprobar': 'compras',
+    'oc-vencidas': 'compras', 'ocs-por-aprobar': 'compras', reorden: 'compras',
     'dev-recibir': 'devoluciones', 'dev-reembolsar': 'devoluciones', 'conteos-vencidos': 'qc',
   };
   const HERO_VERB = {
     pedidos: 'Preparar', ordenes: 'Revisar', qc: 'Revisar', 'qc-hold': 'Atender',
     envasado: 'Envasar', recoleccion: 'Recolectar', almacen: 'Recibir',
     'pedidos-entregar': 'Revisar',
-    'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar',
+    'oc-vencidas': 'Atender', 'ocs-por-aprobar': 'Aprobar', reorden: 'Revisar',
     'dev-recibir': 'Recibir', 'dev-reembolsar': 'Emitir', 'conteos-vencidos': 'Contar',
   };
   /* Título del hero en el tono del mockup Inicio Resumen.html ("4 lotes
@@ -257,6 +273,7 @@ export default function DashboardPage() {
     'pedidos-entregar': n => `${n} ${uno(n, 'pedido', 'pedidos')} de stock por entregar`,
     'oc-vencidas': n => `${n} ${uno(n, 'OC vencida', 'OCs vencidas')}`,
     'ocs-por-aprobar': n => `${n} ${uno(n, 'OC', 'OCs')} por aprobar`,
+    reorden: n => `${n} ${uno(n, 'materia', 'materias')} bajo su punto de reorden`,
     'dev-recibir': n => `${n} ${uno(n, 'devolución', 'devoluciones')} por recibir`,
     'dev-reembolsar': n => `${n} ${uno(n, 'reembolso', 'reembolsos')} por emitir`,
     'conteos-vencidos': n => `${n} ${uno(n, 'conteo vencido', 'conteos vencidos')}`,
