@@ -339,6 +339,17 @@ const api = {
       sesionConteoFolio: opts.sesionConteoFolio,
       codigoAutorizacion: opts.codigoAutorizacion,
     }),
+  /* CONTEO POR PIEZAS de un PT en UNA ubicación (15-sep-2026, propuesta A):
+     piezas = { tote, granelL, cubeta, galon, litro, atomizador750 } fija lo
+     que hay en Fábrica o Terán; el backend deriva el escalar en cubetas-
+     equivalente (qty / teran) y guarda el desglose (fabricaPres / teranPres).
+     Mismo candado que ajustePT (sesión de conteo, TOTP o código admin). */
+  ptConteo: (producto, ubicacion, piezas, nota, opts = {}) =>
+    request('POST', '/api/inventario/pt/conteo', {
+      producto, ubicacion, piezas, nota,
+      sesionConteoFolio: opts.sesionConteoFolio,
+      codigoAutorizacion: opts.codigoAutorizacion,
+    }),
   /* Metadatos de catálogo de un PT (nombre / SKU) — no toca stock, no exige
      candado. El backend bloquea renombrar PTs ligados a fórmula y SKUs
      duplicados (decisión owner jun 2026: Burgos edita nombre + SKU). */
