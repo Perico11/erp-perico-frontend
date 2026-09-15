@@ -33,6 +33,7 @@ const icons = {
   stkAmericano: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="2" y="7" width="20" height="12" rx="1"/><path d="M6 7v12M10 7v12M14 7v12M18 7v12"/></svg>,
   entregas:     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg>,
   chat:         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>,
+  eficacia:     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 20a8 8 0 1 1 8-8"/><path d="M12 12l4.5-4.5"/><circle cx="12" cy="12" r="1"/><path d="M16 20h6"/></svg>,
 };
 
 /* Sprint F (jun 2026): campo `roles` opcional para restringir adicionalmente
@@ -112,6 +113,9 @@ const NAV_GROUPS = [
     { key: 'laboratorio',  label: 'Laboratorio',  path: '/laboratorio',   icon: icons.laboratorio,  perm: 'laboratorio', roles: ['tecnico'] },
   ]},
   { id: 'bottom', items: [
+    /* E3 (15-sep-2026): el tablero de los 4 números del dueño — pestaña
+       propia, solo admin (días pedido→Terán · % merma · rotación · conteos). */
+    { key: 'eficacia',     label: 'Eficacia',     path: '/eficacia',      icon: icons.eficacia,     perm: 'admin',       roles: ['admin'] },
     { key: 'admin',        label: 'Admin',        path: '/admin',         icon: icons.admin,        perm: 'admin' },
   ]},
 ];
