@@ -22,6 +22,7 @@ import TopBar from '../../components/layout/TopBar';
 import api from '../../services/api';
 import humanizeError from '../../utils/humanizeError';
 import useIsDesktop from '../../hooks/useIsDesktop';
+import SegmentedControl from '../../components/ui/SegmentedControl';
 
 const S = {
   wrap: { padding: '0 20px 100px' },
@@ -80,14 +81,15 @@ const flechaAbajo = (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9" /></svg>
 );
 
-/* Comparación contra las 4 semanas previas, con la dirección buena resuelta.
-   Sin dato previo (o actual) no se inventa flecha: "sin comparativa". */
+/* Comparación contra el periodo previo (4 semanas móviles o el mes pasado al
+   mismo corte, según el selector), con la dirección buena resuelta. Sin dato
+   previo (o actual) no se inventa flecha. */
 function Tendencia({ actual, previo, bajarEsBueno, unidad = '', etiqueta = 'vs 4 sem. previas' }) {
   if (actual == null || previo == null) {
-    return <div style={S.tendNeutra}>sin comparativa con las 4 semanas previas</div>;
+    return <div style={S.tendNeutra}>sin dato previo para comparar</div>;
   }
   const delta = +(actual - previo).toFixed(1);
-  if (delta === 0) return <div style={S.tendNeutra}>igual que las 4 semanas previas</div>;
+  if (delta === 0) return <div style={S.tendNeutra}>igual que el periodo previo</div>;
   const mejora = bajarEsBueno ? delta < 0 : delta > 0;
   return (
     <div style={{ ...S.tend, color: mejora ? 'var(--lp-success-600)' : 'var(--lp-danger-600)' }}>
@@ -134,17 +136,21 @@ export default function EficaciaPage() {
 
   /* El efecto solo DISPARA el fetch; todo setState vive en los callbacks del
      promise (asíncronos) — así lo pide react-hooks/set-state-in-effect. El
-     botón Actualizar prende `cargando` en su handler y mueve el tick. */
+     botón Actualizar y el selector prenden `cargando` en su handler. */
   const [tick, setTick] = useState(0);
+  /* 'semanas' = 4 semanas móviles · 'mes' = mes calendario vs el pasado al
+     mismo corte (pide el dueño: "septiembre contra agosto"). */
+  const [modo, setModo] = useState('semanas');
   useEffect(() => {
     let vivo = true;
-    api.getEficaciaTablero()
+    api.getEficaciaTablero(undefined, modo)
       .then((r) => { if (vivo) { setData(r.data); setErr(''); } })
       .catch((e) => { if (vivo) setErr(humanizeError(e)); })
       .finally(() => { if (vivo) setCargando(false); });
     return () => { vivo = false; };
-  }, [tick]);
+  }, [tick, modo]);
   const refrescar = () => { setCargando(true); setErr(''); setTick(t => t + 1); };
+  const cambiarModo = (m) => { if (m === modo) return; setCargando(true); setErr(''); setModo(m); };
 
   const d = data || {};
   const dias = d.diasPedido || {};
@@ -155,6 +161,8 @@ export default function EficaciaPage() {
      equivalencia — por eso entran los tres orígenes de la bandera. */
   const hayLitrosParciales = (rot.tiendas || []).some(t => t.litrosParciales)
     || !!rot.litrosParciales || !!(rot.prev && rot.prev.litrosParciales);
+  const esMes = !!(d.ventana && d.ventana.modo === 'mes');
+  const etiquetaPrev = esMes ? 'vs mes pasado (mismo corte)' : 'vs 4 sem. previas';
 
   return (
     <>
@@ -163,15 +171,33 @@ export default function EficaciaPage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
           <div>
             <div style={S.h1}>Eficacia</div>
-            <div style={S.psub}>Los 4 números del negocio: últimas 4 semanas contra las 4 anteriores.</div>
+            <div style={S.psub}>Los 4 números del negocio, comparados contra el periodo anterior.</div>
           </div>
           <button type="button" style={S.refresh} onClick={refrescar} disabled={cargando}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
             Actualizar
           </button>
         </div>
+        {/* Selector de periodo (pide el dueño): semanas móviles o mes
+            calendario. El modo mes compara contra el mes pasado AL MISMO
+            CORTE — septiembre al día 15 vs agosto al día 15, no agosto
+            completo. */}
+        <div style={{ margin: '2px 0 10px', maxWidth: 360 }}>
+          <SegmentedControl
+            value={modo}
+            onChange={cambiarModo}
+            options={[
+              { value: 'semanas', label: 'Últimas 4 semanas' },
+              { value: 'mes', label: 'Mes vs mes pasado' },
+            ]}
+          />
+        </div>
         {d.ventana && (
-          <div style={S.ventana}>ventana: {fmtDia(d.ventana.desde)} → {fmtDia(d.ventana.hasta)} · {d.ventana.dias} días</div>
+          <div style={S.ventana}>
+            {esMes
+              ? `mes: ${fmtDia(d.ventana.desde)} → ${fmtDia(d.ventana.hasta)} · contra ${fmtDia(d.ventana.prevDesde)} → ${fmtDia(d.ventana.prevHasta)} (mismo corte)`
+              : `ventana: ${fmtDia(d.ventana.desde)} → ${fmtDia(d.ventana.hasta)} · ${d.ventana.dias} días`}
+          </div>
         )}
 
         {err && <div style={S.err}>{err}</div>}
@@ -189,7 +215,7 @@ export default function EficaciaPage() {
               <div style={S.big}>
                 {dias.promedio != null ? `${dias.promedio} días` : '—'}
               </div>
-              <Tendencia actual={dias.promedio} previo={dias.prev?.promedio} bajarEsBueno unidad=" días" />
+              <Tendencia actual={dias.promedio} previo={dias.prev?.promedio} bajarEsBueno unidad=" días" etiqueta={etiquetaPrev} />
               <div style={S.sub}>
                 {dias.entregados || 0} pedido{(dias.entregados || 0) === 1 ? '' : 's'} entregado{(dias.entregados || 0) === 1 ? '' : 's'} en la ventana
                 {dias.prev?.entregados != null ? ` · ${dias.prev.entregados} en la previa` : ''}
@@ -224,7 +250,7 @@ export default function EficaciaPage() {
               {merma.pct == null && (
                 <div style={S.bigNota}>sin producción en el periodo — no hay porcentaje honesto que dar</div>
               )}
-              <Tendencia actual={merma.pct} previo={merma.prev?.pct} bajarEsBueno unidad="%" />
+              <Tendencia actual={merma.pct} previo={merma.prev?.pct} bajarEsBueno unidad="%" etiqueta={etiquetaPrev} />
               <div style={S.sub}>
                 {merma.mermaCub || 0} cub de merma · {merma.producidoCub || 0} cub producidas en la ventana
               </div>
@@ -253,7 +279,7 @@ export default function EficaciaPage() {
               <div style={S.big}>
                 {rot.totalLitros != null ? `${rot.totalLitros} L` : `${rot.totalPiezas || 0} piezas`}
               </div>
-              <Tendencia actual={rot.totalLitros} previo={rot.prev?.totalLitros} bajarEsBueno={false} unidad=" L" />
+              <Tendencia actual={rot.totalLitros} previo={rot.prev?.totalLitros} bajarEsBueno={false} unidad=" L" etiqueta={etiquetaPrev} />
               <div style={S.sub}>{rot.totalPiezas || 0} piezas en total (cubetas, galones y demás)</div>
               {(rot.tiendas || []).length === 0 ? (
                 <div style={S.sub}>Sin entregas a tiendas en la ventana.</div>
@@ -299,7 +325,7 @@ export default function EficaciaPage() {
               <div style={S.barraMeta} role="progressbar" aria-valuenow={cc.cumplimientoPct || 0} aria-valuemin={0} aria-valuemax={100}>
                 <div style={S.barraMetaFill(cc.cumplimientoPct)} />
               </div>
-              <Tendencia actual={cc.finalizados} previo={cc.prev?.finalizados} bajarEsBueno={false} etiqueta="conteos vs 4 sem. previas" />
+              <Tendencia actual={cc.finalizados} previo={cc.prev?.finalizados} bajarEsBueno={false} etiqueta={'conteos ' + etiquetaPrev} />
               <div style={S.sub}>
                 Meta: {cc.metaNota || '1 por semana'} · cumplimiento {cc.cumplimientoPct != null ? `${cc.cumplimientoPct}%` : '—'}
                 {cc.diasDesdeUltimo != null
