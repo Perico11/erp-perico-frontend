@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import DashboardPage from '../pages/dashboard/DashboardPage';
+import api from '../services/api';
 
 const navMock = vi.fn();
 vi.mock('react-router-dom', async (orig) => ({
@@ -50,6 +51,8 @@ vi.mock('../services/api', () => ({
     getDevoluciones: vi.fn(() => Promise.resolve(DEVOLUCIONES)),
     get: vi.fn(() => Promise.resolve({ data: [] })),
     getNotificaciones: vi.fn(() => Promise.resolve({ data: [] })),
+    /* E1: sin dato de reorden por default — la tarjeta no debe salir. */
+    getResumenReorden: vi.fn(() => Promise.resolve({ data: null })),
   },
 }));
 
@@ -102,5 +105,43 @@ describe('DashboardPage — tarjetas de pendientes con datos reales', () => {
     render(<DashboardPage />);
     /* ORD-3 (en_almacen) sale de su vista → 2 activas. */
     expect(await screen.findByText('2 órdenes en proceso')).toBeInTheDocument();
+  });
+
+  /* ── E1 (15-sep-2026): la tarjeta de reorden — el pronóstico al Inicio ── */
+
+  it('E1: la tarjeta de reorden lista el top por nombre, suma +N y navega a /pronostico', async () => {
+    api.getResumenReorden.mockResolvedValueOnce({
+      data: {
+        sugeridas: 4, criticas: 0, altas: 2, medias: 2,
+        top: [{ mp: 'RESINA A' }, { mp: 'PIGMENTO B' }, { mp: 'CAL' }],
+      },
+    });
+    render(<DashboardPage />);
+    /* Sin críticas la tarjeta es ámbar y el hero sigue siendo órdenes. */
+    await screen.findByText('3 órdenes en proceso');
+    const row = fila('reorden');
+    expect(row).toBeTruthy();
+    expect(row.textContent).toContain('Materias bajo punto de reorden');
+    expect(row.textContent).toContain('RESINA A · PIGMENTO B · CAL · +1');
+    expect(row.textContent.trim().endsWith('4')).toBe(true);
+    fireEvent.click(row);
+    expect(navMock).toHaveBeenCalledWith('/pronostico');
+  });
+
+  it('E1: con materias CRÍTICAS la tarjeta escala a hero del Inicio', async () => {
+    api.getResumenReorden.mockResolvedValueOnce({
+      data: {
+        sugeridas: 4, criticas: 2, altas: 1, medias: 1,
+        top: [{ mp: 'RESINA A' }, { mp: 'PIGMENTO B' }],
+      },
+    });
+    render(<DashboardPage />);
+    expect(await screen.findByText('4 materias bajo su punto de reorden')).toBeInTheDocument();
+  });
+
+  it('E1: sin dato del backend la tarjeta NO aparece — un cero inventado miente', async () => {
+    render(<DashboardPage />); /* default: { data: null } */
+    await screen.findByText('3 órdenes en proceso');
+    expect(fila('reorden')).toBeNull();
   });
 });
