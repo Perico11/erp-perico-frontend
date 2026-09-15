@@ -10,7 +10,7 @@
      · Si el backend falla, se muestra el error humanizado, no cards vacías.
    ════════════════════════════════════════════════════════════════════════════ */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { NAV_ITEMS } from '../components/layout/Sidebar';
 import api from '../services/api';
@@ -149,6 +149,32 @@ describe('E3 — EficaciaPage', () => {
        substring no sirve: el '-100%' del ritmo de Ruby contiene '0%'. */
     expect(screen.queryByText('0%')).toBeNull();
     expect(screen.getByText('—')).toBeTruthy();
+  });
+
+  it('el selector "Mes vs mes pasado" pide modo=mes y la pantalla declara el mismo corte', async () => {
+    api.getEficaciaTablero.mockResolvedValueOnce({ ok: true, data: TABLERO });
+    const TAB_MES = {
+      ...TABLERO,
+      ventana: {
+        desde: '2026-09-01T06:00:00.000Z', hasta: '2026-09-15T12:00:00.000Z', dias: 15,
+        modo: 'mes', prevDesde: '2026-08-01T06:00:00.000Z', prevHasta: '2026-08-15T12:00:00.000Z',
+      },
+    };
+    api.getEficaciaTablero.mockResolvedValueOnce({ ok: true, data: TAB_MES });
+    render(<MemoryRouter><EficaciaPage /></MemoryRouter>);
+    await screen.findByText('4.2 días');
+
+    fireEvent.click(screen.getByText('Mes vs mes pasado'));
+    await waitFor(() => expect(api.getEficaciaTablero).toHaveBeenCalledTimes(2));
+    expect(api.getEficaciaTablero.mock.calls[1][1]).toBe('mes');
+
+    /* La línea de ventana dice el corte, y las tendencias cambian de
+       etiqueta: comparan contra el mes pasado, no contra "4 sem. previas". */
+    const cortes = await screen.findAllByText(/mismo corte/);
+    expect(cortes.length).toBeGreaterThanOrEqual(2); /* ventana + tendencias */
+    expect(document.body.textContent).toContain('mes: 1 sep → 15 sep · contra 1 ago → 15 ago');
+    expect(document.body.textContent).toContain('vs mes pasado');
+    expect(document.body.textContent).not.toContain('vs 4 sem. previas');
   });
 
   it('si el backend falla, muestra el error humanizado en lugar de cards vacías', async () => {
