@@ -1,5 +1,8 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { PT_MEDIDAS, ptMedidaDef, medidaACubetas, etiquetaMedida } from '../../utils/ptMedidas';
+/* Conteo por piezas (15-sep-2026, propuesta A): chips por presentación en la
+   fila Total, existencia en litros y ficha "Contar existencia" por ubicación. */
+import { PIEZAS_CERRADAS, PIEZAS_KEYS, LITROS_TOTE, piezasDeUbicacion, litrosDePiezas, cubDePiezas, payloadPiezas, totesParcialesDeTraza, resumenPiezasTotal, chipsDePiezas, totesAbiertosDe, cubALitros, fmtL, fmtCub } from '../../utils/ptConteo';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
@@ -460,18 +463,28 @@ function TransitoBadge({ transito, unidad }) {
   );
 }
 
-function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir, onOcultar }) {
+function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir, onOcultar, unidadVista = 'cub', onContarPT, onEditarFicha }) {
   /* Regla proyecto: botones NUNCA 100% width en PC (bp 880, igual que la página). */
   const isDesktop = useIsDesktop();
   const { nombre, inv, pct } = item;
   /* PT vista "Total": item.displayQty = Fábrica + Terán. Env/MP no lo traen → qty real. */
   const qty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
   const u = item.unidad || unidad || 'cub'; /* envases = 'pz', PT = 'cub' */
+  /* Propuesta A: la tarjeta PT se lee en la unidad elegida ("Ver en"); los
+     envases (_env) no. Chips de piezas + litros por ubicación cuando el
+     desglose de pt-por-ubicacion ya cargó. */
+  const esPT = !item._env;
+  const enL = esPT && unidadVista === 'L';
+  const uV = enL ? 'L' : u;
+  const qtyV = enL ? cubALitros(qty) : qty;
+  const minV = enL ? cubALitros(inv.min || 0) : (inv.min || 0);
+  const piezas = esPT ? item.piezas : null;
+  const ubicLinea = piezas ? lineaUbicacionPT(item, unidadVista) : null;
   const sev = sevOf(qty, pct);
   const clickable = canEdit || canContar;
   return (
     <div style={S.mCard(clickable)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
-      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
+      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit && onContarPT) onContarPT(item); else if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
       <div style={S.mTop}>
         <span style={S.mName}>{resaltar(nombre, query)}</span>
         {item.oculto && (
@@ -483,30 +496,32 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
         <EstadoBadge qty={qty} pct={pct} />
         {canEdit && <PencilIcon />}
         {/* PT ocultos (jul 2026): menú ⋮ con Ocultar/Mostrar (solo admin) */}
-        {onOcultar && (
+        {(onOcultar || onEditarFicha) && (
           <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
-            <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
-              label: item.oculto ? 'Mostrar' : 'Ocultar',
-              color: item.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
-              onClick: () => onOcultar(item),
-            }]} />
+            <MPActionsMenu mp={nombre} canEdit={true} extraItems={menuItemsPT(item, onEditarFicha, onOcultar)} />
           </span>
         )}
       </div>
       <div style={S.sevBar}><div style={S.sevFill(barPctOf(qty, inv.min || 0), sev.color)} /></div>
       <div style={S.mNums}>
-        <span style={S.mQty(sev.key === 'critico')}>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {u}</span>
-        <span style={S.mMin}>mín {(inv.min || 0).toLocaleString('es-MX')} {u}</span>
+        <span style={S.mQty(sev.key === 'critico')}>
+          {qtyV.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {uV}
+          {esPT && <span style={{ fontSize: 10.5, fontWeight: 500, color: 'var(--lp-text-tertiary)', marginLeft: 5 }}>≈ {enL ? `${fmtCub(qty)} cub` : `${fmtL(cubALitros(qty))} L`}</span>}
+        </span>
+        <span style={S.mMin}>mín {esPT ? minV.toLocaleString('es-MX', { maximumFractionDigits: 1 }) : (inv.min || 0).toLocaleString('es-MX')} {uV}</span>
         {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
-        {!item._env && inv.medida && <PTMedidaBadge medida={inv.medida} medidaQty={inv.medidaQty} qty={qty} />}
+        {!item._env && !piezas && inv.medida && <PTMedidaBadge medida={inv.medida} medidaQty={inv.medidaQty} qty={qty} />}
         {/* Desglose Fábrica/Terán cuando hay stock en Terán (vista Total, jun 2026) */}
-        {(Number(item.teranQty) || 0) > 0 && (
+        {!piezas && (Number(item.teranQty) || 0) > 0 && (
           <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)' }}>Fáb {Math.round(item.fabQty)} · Terán {Math.round(item.teranQty)}</span>
         )}
         {/* OT (jun 2026): stock en camino Fábrica→Terán. Visible en cualquier sub-vista. */}
-        <TransitoBadge transito={item.transito} unidad={u} />
+        <TransitoBadge transito={enL ? cubALitros(item.transito) : item.transito} unidad={uV} />
         {canContar && !canEdit && <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 600, color: 'var(--lp-brand-700)' }}>Contar →</span>}
       </div>
+      {/* Propuesta A: piezas reales por presentación + litros por ubicación */}
+      {piezas && <PTPiezasChips piezas={piezas} />}
+      {ubicLinea && <div data-id="inventario.pt.ubicaciones" style={{ ...S.provSub, marginTop: 4 }}>{ubicLinea}</div>}
       {/* Sprint Y2 (jun 2026): transferir envase/tapa de Fábrica → Terán (espeja el
           botón de PT Fábrica). Solo se pasa onTransferir en la sub-vista 'fabrica'. */}
       {onTransferir && (
@@ -978,15 +993,248 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
   );
 }
 
+/* ── Propuesta A (15-sep-2026): PIEZAS por presentación en la fila Total ────
+   El dueño: "la lógica dice que tengo N cubetas, pero el stock viene en totes
+   (llenos o parciales), cubetas, galones y litros". La fila deja de decir
+   "104 cub" a secas: chips con las piezas reales (ámbar = tote lleno; morado
+   = tote parcial / granel; verde = piezas cerradas; gris = etiquetas sin
+   tipo), la existencia en litros con el cub-equiv debajo, y "Contar" abre la
+   ficha por ubicación. La lógica pura vive en utils/ptConteo. */
+const TONO_CHIP = {
+  tote:   { c: 'var(--lp-warning-700)', b: 'var(--lp-warning-600)' },
+  granel: { c: 'var(--lp-granel-700)',  b: 'var(--lp-granel-600)' },
+  pieza:  { c: 'var(--lp-brand-700)',   b: 'var(--lp-brand-600)' },
+  neutro: { c: 'var(--lp-text-secondary)', b: 'var(--lp-text-tertiary)' },
+};
+export function PTPiezasChips({ piezas }) {
+  const chips = chipsDePiezas(piezas);
+  if (!chips.length) return null;
+  return (
+    <div data-id="inventario.pt.piezas" style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+      {chips.map(ch => {
+        const t = TONO_CHIP[ch.tono] || TONO_CHIP.neutro;
+        return (
+          <span key={ch.key} style={{
+            display: 'inline-flex', alignItems: 'center', height: 20, padding: '0 8px', borderRadius: 999,
+            fontSize: 11, fontWeight: 600, fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+            color: t.c, background: `color-mix(in srgb, ${t.b} 12%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${t.b} 30%, transparent)`,
+          }}>{ch.texto}</span>
+        );
+      })}
+    </div>
+  );
+}
+
+/* "Fábrica 1,216 L · Terán 760 L · en camino 190 L" (o en cubetas), desde el
+   escalar de cada ubicación — suma exactamente la Existencia de la fila. */
+function lineaUbicacionPT(it, unidadVista) {
+  const enL = unidadVista === 'L';
+  const f = (cub) => (enL ? `${fmtL(cubALitros(cub))} L` : `${fmtCub(cub)} cub`);
+  const partes = [];
+  if ((Number(it.fabQty) || 0) > 0) partes.push(`Fábrica ${f(it.fabQty)}`);
+  if ((Number(it.teranQty) || 0) > 0) partes.push(`Terán ${f(it.teranQty)}`);
+  if ((Number(it.transito) || 0) > 0) partes.push(`en camino ${f(it.transito)}`);
+  return partes.length ? partes.join(' · ') : null;
+}
+
+/* Menú ⋯ de una fila PT: "Editar ficha" (nombre / SKU / mínimo / medida — la
+   ficha de siempre, que escribe el escalar de Fábrica) + Ocultar/Mostrar (admin). */
+function menuItemsPT(it, onEditarFicha, onOcultar) {
+  const items = [];
+  if (onEditarFicha) items.push({ label: 'Editar ficha…', onClick: () => onEditarFicha(it) });
+  if (onOcultar) {
+    items.push({
+      label: it.oculto ? 'Mostrar' : 'Ocultar',
+      color: it.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
+      onClick: () => onOcultar(it),
+    });
+  }
+  return items;
+}
+
+/* KPI "Totes abiertos" (escritorio, vista Total): litros a granel en el piso
+   — el dato que desde Total nadie veía. */
+function kpiTotesAbiertos(items) {
+  const t = totesAbiertosDe(items);
+  return [['Totes abiertos', String(t.n), t.litros > 0 ? `${fmtL(t.litros)} L a granel en el piso` : 'Sin granel en el piso', 'var(--lp-granel-600)', 'var(--lp-granel-700)']];
+}
+
+/* ── Ficha "Contar existencia" (propuesta A) ─────────────────────────────────
+   Cuenta PIEZAS en UNA ubicación (Fábrica o Terán): totes llenos, litros del
+   tote parcial / a granel, cubetas, galones, litros y atomizadores. Cada campo
+   llega precargado con lo que el sistema cree que hay ("antes") y se marca al
+   cambiarlo; la vista previa da litros y cubetas-equivalente. El escalar lo
+   deriva el backend (POST /api/inventario/pt/conteo) y NUNCA toca la otra
+   ubicación. El candado (TOTP / código admin) lo pone el padre vía
+   ajustarConCandado, igual que "Ajustar existencia". */
+const CAMPOS_TOTE = [
+  { key: 'tote',    label: 'Llenos',           sub: `${LITROS_TOTE} L`, entero: true },
+  { key: 'granelL', label: 'Parcial / granel', sub: 'litros',           entero: false },
+];
+const NOMBRE_UBIC = { fabrica: 'Fábrica', teran: 'Terán' };
+const aTexto = (p) => Object.fromEntries(PIEZAS_KEYS.map(k => [k, String(p[k] ?? 0)]));
+const resumenPiezas = (p) => {
+  const s = [];
+  if (p.tote > 0) s.push(`${p.tote} tote${p.tote === 1 ? '' : 's'}`);
+  if (p.granelL > 0) s.push(`granel ${fmtL(p.granelL)} L`);
+  if (p.cubeta > 0) s.push(`${fmtCub(p.cubeta)} cub`);
+  if (p.galon > 0) s.push(`${fmtCub(p.galon)} gal`);
+  if (p.litro > 0) s.push(`${fmtCub(p.litro)} de 1 L`);
+  if (p.atomizador750 > 0) s.push(`${fmtCub(p.atomizador750)} atm`);
+  return s.length ? s.join(' · ') : 'sin piezas';
+};
+
+export function ContarPTSheet({ item, buckets, parciales, isDesktop, motivoOpcional = false, ubicacionInicial, onClose, onSave }) {
+  const fabQty = Number(item.fabQty) || 0;
+  const teranQty = Number(item.teranQty) || 0;
+  const [ubic, setUbic] = useState(ubicacionInicial || (fabQty <= 0 && teranQty > 0 ? 'teran' : 'fabrica'));
+  /* Piezas de ESTA ubicación, con el tote abierto contado una sola vez. */
+  const piezasDe = useCallback((u) => piezasDeUbicacion(buckets?.[u], (parciales || []).filter(t => t.ubic === u)), [buckets, parciales]);
+  const antes = useMemo(() => piezasDe(ubic), [piezasDe, ubic]);
+  const [vals, setVals] = useState(() => aTexto(piezasDe(ubic)));
+  const [motivo, setMotivo] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  /* Cambiar de ubicación recarga los "antes" de ESA ubicación (se descarta lo tecleado). */
+  const cambiarUbic = (u) => {
+    if (u === ubic || saving) return;
+    setUbic(u);
+    setVals(aTexto(piezasDe(u)));
+  };
+  const num = (k) => (vals[k] === '' ? 0 : Number(vals[k]));
+  const campoMalo = (k, entero) => { const v = num(k); return !Number.isFinite(v) || v < 0 || (entero && Math.abs(v - Math.round(v)) > 1e-9); };
+  const invalido = PIEZAS_KEYS.some(k => campoMalo(k, k !== 'granelL'));
+  const nuevo = Object.fromEntries(PIEZAS_KEYS.map(k => [k, Number.isFinite(num(k)) ? Math.max(0, num(k)) : 0]));
+  const cambiado = (k) => Math.abs(num(k) - (Number(antes[k]) || 0)) > 1e-9;
+  const algoCambio = PIEZAS_KEYS.some(cambiado);
+  const escalarL = cubALitros(ubic === 'teran' ? teranQty : fabQty); /* lo que el backend registra hoy */
+  const piezasL = litrosDePiezas(antes);                              /* lo que suman las piezas mostradas */
+  const nuevoL = litrosDePiezas(nuevo);
+  const nuevoCub = cubDePiezas(nuevo);
+  const descuadre = Math.abs(piezasL - escalarL) > 0.5;
+  const mueveEscalar = Math.abs(nuevoL - escalarL) > 0.05;
+  const motivoOk = motivoOpcional || motivo.trim().length >= 3;
+  const puedeGuardar = !invalido && (algoCambio || mueveEscalar) && motivoOk;
+  const nombreCampo = (k) => (k === 'tote' ? 'totes llenos' : k === 'granelL' ? 'L a granel' : (PIEZAS_CERRADAS.find(d => d.key === k)?.plur || k));
+  const diffs = PIEZAS_KEYS.filter(cambiado).map(k => `${nombreCampo(k)} ${fmtCub(antes[k])} → ${fmtCub(num(k))}`);
+
+  const handleSave = async () => {
+    if (!puedeGuardar || saving) return;
+    setSaving(true);
+    try {
+      await onSave(ubic, payloadPiezas(nuevo), motivo.trim());
+      onClose();
+    } catch { /* el padre ya avisó; la ficha queda abierta para reintentar */ }
+    finally { setSaving(false); }
+  };
+
+  const campo = (def, autoFocus = false) => {
+    const chg = cambiado(def.key);
+    const malo = campoMalo(def.key, def.entero);
+    return (
+      <div key={def.key} style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-secondary)', margin: '0 2px 4px', display: 'flex', justifyContent: 'space-between', gap: 6 }}>
+          <span>{def.label}</span><span style={{ fontWeight: 500, color: 'var(--lp-text-tertiary)' }}>{def.sub}</span>
+        </div>
+        <input autoFocus={autoFocus} type="number" inputMode={def.entero ? 'numeric' : 'decimal'} min="0" step={def.entero ? '1' : '0.1'}
+          data-id={`inventario.contar.${def.key}`} aria-label={def.label} disabled={saving}
+          value={vals[def.key]} onChange={e => setVals(v0 => ({ ...v0, [def.key]: e.target.value }))}
+          style={{
+            ...S.finQty, height: 46, fontSize: 19,
+            borderColor: malo ? 'var(--lp-danger-600)' : chg ? 'var(--lp-brand-600)' : 'var(--lp-border-subtle)',
+            background: chg ? 'color-mix(in srgb, var(--lp-brand-600) 6%, var(--lp-bg-raised))' : 'var(--lp-bg-raised)',
+          }} />
+        <div style={{ fontSize: 10.5, fontFamily: 'var(--lp-font-mono)', margin: '3px 2px 0', color: chg ? 'var(--lp-brand-700)' : 'var(--lp-text-tertiary)' }}>
+          antes {fmtCub(antes[def.key])}
+        </div>
+      </div>
+    );
+  };
+  const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 };
+
+  return (
+    <div style={S.sheetOverlay(isDesktop)}>
+      <div style={{ ...S.sheet(isDesktop), maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()} data-id="inventario.sheet.contar-pt">
+        <div style={S.shH}>Contar existencia</div>
+        <div style={S.shS}>{item.nombre}{item.inv?.sku ? ` · ${item.inv.sku}` : ''}</div>
+
+        <label style={S.flbl}>Ubicación</label>
+        <div role="tablist" aria-label="Ubicación" style={{ display: 'flex', gap: 4, background: 'var(--lp-bg-raised)', borderRadius: 11, padding: 3 }}>
+          {['fabrica', 'teran'].map(u => {
+            const on = ubic === u;
+            const L = cubALitros(u === 'teran' ? teranQty : fabQty);
+            return (
+              <button key={u} type="button" role="tab" aria-selected={on} data-id={`inventario.contar.ubic.${u}`}
+                onClick={() => cambiarUbic(u)} disabled={saving}
+                style={{
+                  flex: 1, minHeight: 40, border: 'none', borderRadius: 8, cursor: 'pointer',
+                  background: on ? 'var(--lp-bg-base)' : 'transparent',
+                  color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+                  boxShadow: on ? '0 1px 4px rgba(26,24,21,.14)' : 'none',
+                  fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap',
+                }}>
+                {NOMBRE_UBIC[u]} · {fmtL(L)} L
+              </button>
+            );
+          })}
+        </div>
+
+        <div style={{ ...S.bigsis, marginTop: 12 }}>
+          <div style={S.bigK}>Hoy en {NOMBRE_UBIC[ubic]}</div>
+          <div style={S.bigV}>
+            {fmtL(escalarL)} L <span style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 500 }}>· {resumenPiezas(antes)}</span>
+          </div>
+        </div>
+        {descuadre && (
+          <div style={{ marginTop: -6, marginBottom: 12, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 11.5, color: 'var(--lp-warning-700)' }}>
+            El sistema registra <strong>{fmtL(escalarL)} L</strong> pero las piezas mostradas suman <strong>{fmtL(piezasL)} L</strong>. Guardar el conteo deja el registro en lo contado.
+          </div>
+        )}
+        {antes.otros > 0 && (
+          <div style={{ marginTop: -6, marginBottom: 12, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+            Además hay {fmtCub(antes.otros)} piezas sin tipo (etiquetas viejas): cuéntalas en su presentación real.
+          </div>
+        )}
+
+        <label style={S.flbl}>Totes</label>
+        <div style={grid2}>{CAMPOS_TOTE.map((d, i) => campo(d, i === 0))}</div>
+        <label style={{ ...S.flbl, marginTop: 12 }}>Piezas cerradas</label>
+        <div style={grid2}>{PIEZAS_CERRADAS.map(d => campo({ key: d.key, label: d.label, sub: `${d.litros} L`, entero: true }))}</div>
+
+        <AjustePreview actual={escalarL} nuevo={nuevoL} unidad="L"
+          extra={(
+            <div data-id="inventario.contar.preview" style={{ marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-sans)' }}>
+              ≈ <strong>{fmtCub(nuevoCub)}</strong> cubetas-equivalente{diffs.length ? ` · ${diffs.join(' · ')}` : ''}
+            </div>
+          )} />
+
+        <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del conteo{motivoOpcional ? ' (opcional)' : ''}</label>
+        <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, 2 galones rotos"
+          data-id="inventario.contar.motivo" value={motivo} onChange={e => setMotivo(e.target.value)} disabled={saving} />
+
+        <div style={S.shActs}>
+          <button type="button" style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
+          <button type="button" data-id="inventario.contar.guardar" data-rol="admin"
+            style={{ ...S.act2(true), opacity: puedeGuardar && !saving ? 1 : 0.5 }}
+            disabled={!puedeGuardar || saving} onClick={handleSave}>
+            {saving ? 'Guardando…' : `Guardar conteo de ${NOMBRE_UBIC[ubic]}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ── Tabla de inventario (escritorio) ── */
-function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir, onOcultar }) {
+function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir, onOcultar, unidadVista = 'cub', onContarPT, onEditarFicha }) {
   /* La columna "Acción" solo se muestra si el rol tiene ALGUNA acción posible en
      esta tabla. Antes el header "Acción" se pintaba siempre y dejaba celdas vacías
      para roles sin acciones (p.ej. inventario/Burgos: sin editarInventario) → columna
      fantasma. Ahora: si no hay acción, no se pinta la columna.
      onTransferir (envases en sub-vista Fábrica): añade el botón "→ Terán" por fila.
      onOcultar (PT ocultos, jul 2026): menú ⋯ por fila PT con Ocultar/Mostrar (admin). */
-  const showActionCol = canEdit || canContar || !!onTransferir || !!onOcultar || (tipo === 'mp' ? canDelete : canPedir);
+  const showActionCol = canEdit || canContar || !!onTransferir || !!onOcultar || !!onContarPT || !!onEditarFicha || (tipo === 'mp' ? canDelete : canPedir);
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -1011,6 +1259,15 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
             const sev = sevOf(qty, it.pct);
             const prov = tipo === 'mp' ? it.maestro?.proveedor?.principal : null;
             const lowPT = tipo === 'pt' && (qty <= 0 || it.pct <= 100);
+            /* Propuesta A (15-sep-2026): la fila PT se lee en la unidad elegida
+               ("Ver en"): litros con el cub-equiv debajo, o cubetas con los
+               litros debajo. Gauge y mínimo siguen la misma unidad. */
+            const enL = tipo === 'pt' && unidadVista === 'L';
+            const qtyV = enL ? cubALitros(qty) : qty;
+            const minV = enL ? cubALitros(min) : min;
+            const u = enL ? 'L' : unidad;
+            const piezas = tipo === 'pt' ? it.piezas : null;
+            const ubicLinea = piezas ? lineaUbicacionPT(it, unidadVista) : null;
             return (
               <tr key={nombre} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario">
                 <td style={S.td}>
@@ -1026,28 +1283,40 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   {tipo === 'pt' && it.inv.sku && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline', fontFamily: 'var(--lp-font-mono)' }}>· {it.inv.sku}</span>
                   )}
-                  {tipo === 'pt' && it.inv.medida && (
+                  {/* Sin desglose por ubicación aún (pt-por-ubicacion cargando):
+                      badge de medida + "Fáb · Terán" de siempre. */}
+                  {tipo === 'pt' && !piezas && it.inv.medida && (
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
                       <PTMedidaBadge medida={it.inv.medida} medidaQty={it.inv.medidaQty} qty={qty} />
                     </span>
                   )}
                   {/* Desglose Fábrica/Terán cuando hay stock en Terán (vista Total, jun 2026) */}
-                  {tipo === 'pt' && (Number(it.teranQty) || 0) > 0 && (
+                  {tipo === 'pt' && !piezas && (Number(it.teranQty) || 0) > 0 && (
                     <span style={{ ...S.provSub, marginLeft: 8, display: 'inline' }}>· Fáb {Math.round(it.fabQty)} · Terán {Math.round(it.teranQty)}</span>
                   )}
+                  {/* Propuesta A: piezas reales por presentación (sustituyen al
+                      badge de medida) + litros por ubicación. */}
+                  {piezas && <PTPiezasChips piezas={piezas} />}
+                  {ubicLinea && <div data-id="inventario.pt.ubicaciones" style={{ ...S.provSub, marginTop: 4 }}>{ubicLinea}</div>}
                 </td>
                 <td style={S.td}>
-                  <StockGauge qty={qty} min={min} color={sev.color} />
+                  <StockGauge qty={qtyV} min={minV} color={sev.color} />
                 </td>
                 <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
                   <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
-                    <span>{qty.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {unidad}</span>
+                    <span>{qtyV.toLocaleString('es-MX', { maximumFractionDigits: 1 })} {u}</span>
+                    {/* Propuesta A: la otra unidad debajo ("≈ 104 cub" / "≈ 1,976 L"). */}
+                    {tipo === 'pt' && (
+                      <span data-id="inventario.pt.equiv" style={{ fontSize: 11, fontWeight: 500, color: 'var(--lp-text-tertiary)' }}>
+                        ≈ {enL ? `${fmtCub(qty)} cub` : `${fmtL(cubALitros(qty))} L`}
+                      </span>
+                    )}
                     {/* OT (jun 2026): stock en camino Fábrica→Terán. */}
-                    {(Number(it.transito) || 0) > 0 && <TransitoBadge transito={it.transito} unidad={unidad} />}
+                    {(Number(it.transito) || 0) > 0 && <TransitoBadge transito={enL ? cubALitros(it.transito) : it.transito} unidad={u} />}
                   </div>
                 </td>
                 <td style={{ ...S.td, ...S.tdMono, textAlign: 'right', color: 'var(--lp-text-tertiary)' }}>
-                  {min.toLocaleString('es-MX')} {unidad}
+                  {tipo === 'pt' ? minV.toLocaleString('es-MX', { maximumFractionDigits: 1 }) : min.toLocaleString('es-MX')} {u}
                 </td>
                 <td style={S.td}><EstadoBadge qty={qty} pct={it.pct} /></td>
                 {showActionCol && (
@@ -1059,7 +1328,13 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                       + Pedir
                     </button>
                   )}
-                  {canEdit && (
+                  {/* Propuesta A: en PT el botón principal es CONTAR (piezas por
+                      ubicación); "Editar ficha" (nombre/SKU/mínimo) pasa al menú ⋯. */}
+                  {canEdit && tipo === 'pt' && onContarPT ? (
+                    <button type="button" data-id="inventario.btn.contar-pt" data-rol="admin"
+                      style={{ ...S.btnGhost, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' }}
+                      onClick={() => onContarPT(it)}>Contar</button>
+                  ) : canEdit && (
                     <button type="button" data-id="inventario.btn.ajustar" data-rol="admin,tecnico,almacen,compras"
                       style={S.btnGhost} onClick={() => onAdjust(it)}>Ajustar</button>
                   )}
@@ -1087,13 +1362,9 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                     </span>
                   )}
                   {/* PT ocultos (jul 2026): menú ⋯ con Ocultar/Mostrar (solo admin) */}
-                  {tipo === 'pt' && onOcultar && (
+                  {tipo === 'pt' && (onOcultar || onEditarFicha) && (
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
-                      <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
-                        label: it.oculto ? 'Mostrar' : 'Ocultar',
-                        color: it.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
-                        onClick: () => onOcultar(it),
-                      }]} />
+                      <MPActionsMenu mp={nombre} canEdit={true} extraItems={menuItemsPT(it, onEditarFicha, onOcultar)} />
                     </span>
                   )}
                 </td>
@@ -1275,7 +1546,7 @@ function AccionesSheet({ rows, importExportNode, onClose }) {
 }
 
 /* KPIs de escritorio (mockup .kpis, propuesta A "Centro de control") */
-function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal, valorMercado }) {
+function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal, valorMercado, extra = [] }) {
   const crit = items.filter(i => (i.inv.qty || 0) <= 0);
   const bajo = items.filter(i => (i.inv.qty || 0) > 0 && i.pct <= 100);
   /* Valor a COSTO (producción): si el backend lo proveyó (admin) se usa ese —
@@ -1310,6 +1581,8 @@ function KpisInventario({ items, tipo, unidad, valorBackend, valorTotal, valorMe
     ['Stock bajo', String(bajo.length), 'Por debajo del mínimo', 'var(--lp-warning-600)', 'var(--lp-warning-600)'],
     [labelCosto, valor != null ? money(valor) : '—', valorSub, 'var(--lp-info-600)', 'var(--lp-text-primary)'],
   ];
+  /* Propuesta A: KPIs extra del tab (PT: "Totes abiertos") antes del valor. */
+  if (extra.length) K.splice(3, 0, ...extra);
   /* Card "Valor mercado" solo cuando hay precio de venta (PT). */
   if (mercado != null) {
     K.push(['Valor mercado', money(mercado), mercadoSub, 'var(--lp-success-600)', 'var(--lp-success-700)']);
@@ -1648,6 +1921,12 @@ export default function InventarioPage({ embedded = false }) {
   /* AG2 (jun 2026): escritorio = tabla, móvil = cards. Sheet "Ajustar existencia" compartido. */
   const isDesktop = useIsDesktop();
   const [ajusteItem, setAjusteItem] = useState(null);
+  /* Propuesta A (15-sep-2026): ficha "Contar existencia" (piezas por ubicación)
+     y unidad de lectura de la fila PT ("Ver en": litros | cubetas), recordada
+     por navegador. */
+  const [contarItem, setContarItem] = useState(null);
+  const [ptUnidad, setPtUnidadState] = useState(() => { try { return localStorage.getItem('pp_pt_unidad') === 'cub' ? 'cub' : 'L'; } catch { return 'L'; } });
+  const setPtUnidad = useCallback((u) => { setPtUnidadState(u); try { localStorage.setItem('pp_pt_unidad', u); } catch {} }, []);
   /* Importación Excel en 2 pasos: el backend devuelve {importId, preview}; aquí se revisa
      y se confirma. { importId, preview, tipo:'mp'|'pt' } */
   const [importPreview, setImportPreview] = useState(null);
@@ -1736,6 +2015,13 @@ export default function InventarioPage({ embedded = false }) {
     return map;
   }, [trazaData]);
 
+  /* Propuesta A: totes ABIERTOS rastreados (litrosRestante) por producto — el
+     bucket de pt-por-ubicacion los cuenta como 1 tote y no distingue. */
+  const totesParciales = useMemo(() => {
+    const arr = trazaData?.data || trazaData?.lotes || (Array.isArray(trazaData) ? trazaData : []);
+    return totesParcialesDeTraza(arr);
+  }, [trazaData]);
+
   /* FIX jun 2026 (K1): InventarioPage solo polleaba cada 8s. Cualquier
      movimiento (recepción MP, ajuste por conteo, descuento por producción)
      tardaba hasta 8s en aparecer. Realtime cierra el gap. */
@@ -1782,6 +2068,11 @@ export default function InventarioPage({ embedded = false }) {
      de aprobación del admin. El admin (Emmanuel) aplica directo con su candado. */
   const esProponente = !!user && user.rol !== 'admin' && (canEditMP || canEditMinimos);
   const esAdmin = user?.rol === 'admin';
+  /* Propuesta A: contar PIEZAS por ubicación aplica directo (candado TOTP /
+     código admin, POST pt/conteo). La cola de propuestas no entiende de piezas
+     ni de ubicación, así que los proponentes (no-admin) siguen con "Ajustar"
+     → propuesta, y Burgos con su conteo físico en /conteo. */
+  const canContarPiezas = canEditMP && !esProponente;
 
   /* Lista de MPs disponibles para el datalist de sustituir */
   const mpsDisponibles = useMemo(
@@ -1886,6 +2177,12 @@ export default function InventarioPage({ embedded = false }) {
        cada producto aparece aunque nunca se haya producido/dado de alta. */
     const nombres = Array.from(new Set([...Object.keys(ptInv), ...ptCatalogo]))
       .filter(n => verOcultosPT || !ptOcultos[n]);
+    /* Propuesta A: desglose por ubicación (null hasta que cargue). Los buckets
+       van por nombre exacto y, si no, sin distinguir mayúsculas. */
+    const ptUbi = ptUbiData?.total ? ptUbiData : (ptUbiData?.data?.total ? ptUbiData.data : null);
+    const idxDe = (obj) => { const m = {}; Object.keys(obj || {}).forEach(k => { m[k.trim().toLowerCase()] = obj[k]; }); return m; };
+    const idxTotal = idxDe(ptUbi?.total), idxFab = idxDe(ptUbi?.fabrica), idxTeran = idxDe(ptUbi?.teran), idxParc = idxDe(totesParciales);
+    const buscar = (obj, idx, nombre) => (obj && obj[nombre]) || idx[nombre.trim().toLowerCase()] || null;
     return nombres
       .map((nombre) => {
         const inv = ptInv[nombre] || { qty: 0, min: 0 };
@@ -1898,10 +2195,15 @@ export default function InventarioPage({ embedded = false }) {
         /* OT (jun 2026): expone `transito` al nivel del item (igual que envItems)
            para que PTRow/InvTable pinten el badge "en tránsito: N". El inv.pt del
            backend OT lleva { qty, transito, teran, min }. */
-        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty, oculto: !!ptOcultos[nombre] };
+        /* Propuesta A: piezas reales (chips) desde pt-por-ubicacion + totes
+           parciales de trazabilidad; los buckets por ubicación alimentan la
+           ficha "Contar". */
+        const piezas = ptUbi ? resumenPiezasTotal(buscar(ptUbi.total, idxTotal, nombre), buscar(totesParciales, idxParc, nombre)) : null;
+        const buckets = ptUbi ? { fabrica: buscar(ptUbi.fabrica, idxFab, nombre), teran: buscar(ptUbi.teran, idxTeran, nombre) } : null;
+        return { nombre, inv, pct, transito: Number(inv.transito) || 0, teranQty, fabQty, displayQty: totalQty, oculto: !!ptOcultos[nombre], piezas, buckets, parciales: buscar(totesParciales, idxParc, nombre) || [] };
       })
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
-  }, [activeTab, inventory.pt, ptCatalogo, ptOcultos, verOcultosPT]);
+  }, [activeTab, inventory.pt, ptCatalogo, ptOcultos, verOcultosPT, ptUbiData, totesParciales]);
 
   /* ── Filter by KPI click ── */
   const filterFn = useCallback((items, getQty, getPct) => {
@@ -2148,8 +2450,26 @@ export default function InventarioPage({ embedded = false }) {
     setAjusteItem({ tipo: 'mp', nombre: item.mp, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'kg' });
   }, []);
   const handleAdjustPT = useCallback((item) => {
-    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '', medida: item.inv.medida || '', medidaQty: item.inv.medidaQty != null ? item.inv.medidaQty : null });
+    /* ubicLabel: esta ficha escribe el escalar de FÁBRICA (inv.pt.qty), no el
+       Total de la fila — nombrarlo evita el "1000 que no deja el total en 1000". */
+    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '', medida: item.inv.medida || '', medidaQty: item.inv.medidaQty != null ? item.inv.medidaQty : null, ubicLabel: 'Fábrica' });
   }, []);
+  /* Propuesta A: abrir la ficha "Contar existencia" y guardar el conteo por el
+     MISMO candado que Ajustar (ajustarConCandado pide TOTP / código admin). */
+  const handleContarPT = useCallback((item) => setContarItem(item), []);
+  const handleConteoSave = useCallback(async (ubicacion, piezas, motivo) => {
+    if (!contarItem) return;
+    const producto = contarItem.nombre;
+    const ubicLabel = ubicacion === 'teran' ? 'Terán' : 'Fábrica';
+    await ajustarConCandado(
+      (codigo) => api.ptConteo(producto, ubicacion, piezas, motivo || `Conteo por piezas en ${ubicLabel}`,
+        codigo ? { codigoAutorizacion: codigo } : {}),
+      `${producto} · ${ubicLabel}`
+    );
+    reloadPtUbi();
+    setToastMsg(`Conteo de ${ubicLabel} guardado: ${producto}`);
+    setTimeout(() => setToastMsg(''), 4000);
+  }, [contarItem, ajustarConCandado, reloadPtUbi]);
   /* Envases (Sprint Y jun 2026): mismo sheet "Ajustar existencia" que MP/PT.
      Sin candado ni propuesta — guarda directo a /api/envases/stock|tapa/stock. */
   const handleAdjustEnv = useCallback((item) => {
@@ -2380,6 +2700,7 @@ export default function InventarioPage({ embedded = false }) {
           return (
             <>
               <KpisInventario items={kpiItems} tipo={activeTab} unidad={unidad}
+                extra={activeTab === 'pt' ? kpiTotesAbiertos(ptItems) : []}
                 valorBackend={valuation ? (activeTab === 'mp' ? valuation.valorMP : activeTab === 'pt' ? valuation.valorPT : valuation.valorEnvases) : null}
                 valorTotal={valuation ? valuation.valorTotal : null}
                 valorMercado={valuation && activeTab === 'pt' ? valuation.valorMercadoPT : null} />
@@ -2557,6 +2878,15 @@ export default function InventarioPage({ embedded = false }) {
               </div>
               {ptSubtab === 'total' && (
                 <div style={S.actionsCluster(isDesktop)}>
+                  {/* Propuesta A: unidad de lectura de la fila (litros | cubetas). */}
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>Ver en</span>
+                  <div style={S.segWrap} role="tablist" aria-label="Unidad de existencia">
+                    {[['L', 'Litros'], ['cub', 'Cubetas']].map(([k, l]) => (
+                      <button key={k} type="button" role="tab" aria-selected={ptUnidad === k}
+                        data-id={`inventario.ptunidad.${k}`} data-rol="admin,almacen,inventario,tecnico,compras"
+                        style={S.segBtn(ptUnidad === k)} onClick={() => setPtUnidad(k)}>{l}</button>
+                    ))}
+                  </div>
                   {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
                   {canEditMP && isDesktop && (
                     <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
@@ -2599,12 +2929,14 @@ export default function InventarioPage({ embedded = false }) {
                   {isDesktop ? (
                     <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
                       canContar={canContar} onContar={handleContar}
+                      unidadVista={ptUnidad} onContarPT={canContarPiezas ? handleContarPT : null} onEditarFicha={canContarPiezas ? handleAdjustPT : null}
                       onOcultar={user?.rol === 'admin' ? handleOcultarPT : null}
                       onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
                   ) : (
                     <div>
                       {filteredPT.map(item => (
                         <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery}
+                          unidadVista={ptUnidad} onContarPT={canContarPiezas ? handleContarPT : null} onEditarFicha={canContarPiezas ? handleAdjustPT : null}
                           onOcultar={user?.rol === 'admin' ? handleOcultarPT : null} />
                       ))}
                     </div>
@@ -3011,6 +3343,12 @@ export default function InventarioPage({ embedded = false }) {
           onEliminar={ajusteItem.tipo === 'mp' && canDeleteMP
             ? () => { const n = ajusteItem.nombre; setAjusteItem(null); setEliminarMP(n); } : null}
         />
+      )}
+
+      {/* Propuesta A: ficha "Contar existencia" (piezas por ubicación) */}
+      {contarItem && (
+        <ContarPTSheet item={contarItem} buckets={contarItem.buckets} parciales={contarItem.parciales} isDesktop={isDesktop} motivoOpcional={esAdmin}
+          onClose={() => setContarItem(null)} onSave={handleConteoSave} />
       )}
 
       {/* Cola de aprobación (admin) */}
