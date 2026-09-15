@@ -9,7 +9,7 @@
      · el payload al endpoint lleva las 6 claves que el backend entiende. */
 import { describe, it, expect } from 'vitest';
 import {
-  piezasDesdeBucket, piezasDeUbicacion, litrosDePiezas, cubDePiezas, payloadPiezas,
+  piezasDesdeBucket, piezasDeUbicacion, litrosDePiezas, cubDePiezas, payloadPiezas, segmentosComposicion,
   totesParcialesDeTraza, resumenPiezasTotal, chipsDePiezas, totesAbiertosDe,
   cubALitros, litrosACub, LITROS_TOTE,
 } from '../utils/ptConteo';
@@ -162,6 +162,38 @@ describe('resumenPiezasTotal + chips de la fila', () => {
     const p = resumenPiezasTotal({}, []);
     expect(p.vacio).toBe(true);
     expect(chipsDePiezas(p)).toEqual([]);
+  });
+});
+
+describe('segmentosComposicion (la barra de la tarjeta)', () => {
+  const TOTAL = { tote: 2, cubeta: 29, galon: 21, litro: 6, atm: 0, otros: 0, granel: 18.105 };
+  const PARCIALES = [{ cod: 'SL-A', litros: 344, ubic: 'teran' }];
+
+  it('un tramo por presentación, en proporción a sus litros', () => {
+    const segs = segmentosComposicion(resumenPiezasTotal(TOTAL, PARCIALES), 1968.2);
+    expect(segs.map(s => s.key)).toEqual(['tote', 'granel', 'cubeta', 'galon', 'litro']);
+    expect(segs.map(s => s.texto)).toEqual(['1 tote lleno', 'parcial 344 L', '29 cubetas', '21 galones', '6 litros']);
+    expect(segs[0].litros).toBe(988);
+    expect(segs.reduce((a, s) => a + s.pct, 0)).toBeCloseTo(100, 1);
+  });
+
+  it('el tramo diminuto se ve, y la barra sigue sumando 100', () => {
+    const segs = segmentosComposicion(resumenPiezasTotal({ tote: 1, litro: 2 }, []), 989.9);
+    expect(Math.min(...segs.map(s => s.pct))).toBe(1.5);
+    expect(segs.reduce((a, s) => a + s.pct, 0)).toBeCloseTo(100, 1);
+  });
+
+  it('a las piezas sin tipo se les atribuye lo que falta para cuadrar', () => {
+    /* ASTRA-LAST: 173 atomizadores capturados sin tipo, 129.75 L reales. */
+    const segs = segmentosComposicion(resumenPiezasTotal({ otros: 173 }, []), 129.75);
+    expect(segs).toHaveLength(1);
+    expect(segs[0].key).toBe('otros');
+    expect(segs[0].litros).toBe(129.8);
+  });
+
+  it('sin existencia no hay barra', () => {
+    expect(segmentosComposicion(resumenPiezasTotal({}, []), 0)).toEqual([]);
+    expect(segmentosComposicion(null, 100)).toEqual([]);
   });
 });
 

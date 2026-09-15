@@ -176,6 +176,46 @@ export function chipsDePiezas(p) {
   return chips;
 }
 
+/* ── Barra de COMPOSICIÓN (propuesta D) ─────────────────────────────────────
+   De qué está hecho el stock, en litros: totes llenos, tote abierto/granel y
+   cada pieza cerrada. `litrosTotales` es la existencia real (el escalar):
+   cuando hay piezas sin tipo ("otras"), su volumen no se conoce y se le
+   atribuye lo que falta para cuadrar la barra con la existencia. Devuelve
+   segmentos con su porcentaje; sin stock, lista vacía. */
+export function segmentosComposicion(piezas, litrosTotales) {
+  if (!piezas) return [];
+  const segs = [];
+  const add = (key, litros, texto) => { if (litros > 0.01) segs.push({ key, litros: r1(litros), texto }); };
+  add('tote', (piezas.llenos || 0) * LITROS_TOTE, `${piezas.llenos} ${piezas.llenos === 1 ? 'tote lleno' : 'totes llenos'}`);
+  const abiertos = (piezas.litrosParciales || 0) + (piezas.granelL || 0);
+  const nParc = piezas.parciales ? piezas.parciales.length : 0;
+  add('granel', abiertos, nParc > 0
+    ? `${nParc === 1 ? 'parcial' : `${nParc} parciales`} ${fmtL(abiertos)} L`
+    : `a granel ${fmtL(abiertos)} L`);
+  PIEZAS_CERRADAS.forEach(d => {
+    const n = Number(piezas[d.key]) || 0;
+    add(d.key, n * d.litros, `${fmtCub(n)} ${n === 1 ? d.sing : d.plur}`);
+  });
+  if ((piezas.otros || 0) > 0) {
+    const resto = (Number(litrosTotales) || 0) - segs.reduce((s, x) => s + x.litros, 0);
+    add('otros', resto, `${fmtCub(piezas.otros)} ${piezas.otros === 1 ? 'otra pieza' : 'otras piezas'}`);
+  }
+  const total = segs.reduce((s, x) => s + x.litros, 0);
+  if (!(total > 0)) return [];
+  /* Un tramo diminuto (6 litros envasados frente a un tote) se vería como
+     nada: piso de 1.5 % y el exceso se lo come el tramo más grande, para que
+     la barra siga sumando 100. */
+  const MIN_PCT = 1.5;
+  const pcts = segs.map(x => Math.max(MIN_PCT, (x.litros / total) * 100));
+  const exceso = pcts.reduce((a, b) => a + b, 0) - 100;
+  if (exceso > 0) {
+    let iMax = 0;
+    pcts.forEach((p, i) => { if (p > pcts[iMax]) iMax = i; });
+    pcts[iMax] = Math.max(MIN_PCT, pcts[iMax] - exceso);
+  }
+  return segs.map((x, i) => ({ ...x, pct: Math.round(pcts[i] * 10) / 10 }));
+}
+
 /* KPI "Totes abiertos": cada tote parcial rastreado + cada pool con granel
    sin tote rastreado (el granel ES el sobrante de un tote abierto). */
 export function totesAbiertosDe(items) {

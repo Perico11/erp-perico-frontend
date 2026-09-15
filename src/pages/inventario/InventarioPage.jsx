@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { PT_MEDIDAS, ptMedidaDef, medidaACubetas, etiquetaMedida } from '../../utils/ptMedidas';
 /* Conteo por piezas (15-sep-2026, propuesta A): chips por presentación en la
    fila Total, existencia en litros y ficha "Contar existencia" por ubicación. */
-import { PIEZAS_CERRADAS, PIEZAS_KEYS, LITROS_TOTE, piezasDeUbicacion, litrosDePiezas, cubDePiezas, payloadPiezas, totesParcialesDeTraza, resumenPiezasTotal, chipsDePiezas, totesAbiertosDe, cubALitros, fmtL, fmtCub } from '../../utils/ptConteo';
+import { PIEZAS_CERRADAS, PIEZAS_KEYS, LITROS_TOTE, piezasDeUbicacion, segmentosComposicion, litrosDePiezas, cubDePiezas, payloadPiezas, totesParcialesDeTraza, resumenPiezasTotal, chipsDePiezas, totesAbiertosDe, cubALitros, fmtL, fmtCub } from '../../utils/ptConteo';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import TopBar from '../../components/layout/TopBar';
 import { useAuth } from '../../context/AuthContext';
@@ -1226,6 +1226,121 @@ export function ContarPTSheet({ item, buckets, parciales, isDesktop, motivoOpcio
   );
 }
 
+/* ── Tarjeta de PT en Stock ▸ Total (propuesta D, 15-sep-2026) ──────────────
+   El dueño la prefirió a la tabla: "una vista para el dueño y para el piso,
+   no para la hoja de cálculo". La barra dice DE QUÉ está hecho el stock —
+   totes llenos (ámbar), tote abierto y granel (morado), cubetas, galones,
+   litros y atomizadores (verde, de más oscuro a más claro), piezas sin tipo
+   (gris)— en proporción a sus litros. Debajo, la existencia, el mínimo y el
+   reparto por ubicación; y las acciones completas: pedir reposición, contar
+   cada ubicación y la ficha de siempre (nombre, SKU, mínimo, medida). */
+const COLOR_SEG = {
+  tote: 'var(--lp-warning-600)',
+  granel: 'var(--lp-granel-600)',
+  cubeta: 'var(--lp-brand-600)',
+  galon: 'color-mix(in srgb, var(--lp-brand-600) 62%, #FFFFFF)',
+  litro: 'color-mix(in srgb, var(--lp-brand-600) 38%, #FFFFFF)',
+  atomizador750: 'color-mix(in srgb, var(--lp-brand-600) 22%, #FFFFFF)',
+  otros: 'var(--lp-text-tertiary)',
+};
+
+function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onContarPT, onEditarFicha, onOcultar, canContar, onContar }) {
+  const { nombre, inv, pct, piezas } = item;
+  const qty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
+  const enL = unidadVista === 'L';
+  const litros = cubALitros(qty);
+  const sev = sevOf(qty, pct);
+  const segs = piezas ? segmentosComposicion(piezas, litros) : [];
+  const min = inv.min || 0;
+  const bajo = qty <= 0 || pct <= 100;
+  const f = (cub) => (enL ? `${fmtL(cubALitros(cub))} L` : `${fmtCub(cub)} cub`);
+  const ubics = [
+    ['Fábrica', item.fabQty],
+    ['Terán', item.teranQty],
+    ...((Number(item.transito) || 0) > 0 ? [['En camino', item.transito]] : []),
+  ];
+  const btn = (texto, onClick, { acento, dataId, apagado } = {}) => (
+    <button key={texto} type="button" data-id={dataId} onClick={onClick}
+      style={{
+        ...S.btnGhost, flex: '1 1 auto', minWidth: 104, minHeight: 40, padding: '0 12px',
+        color: apagado ? 'var(--lp-text-tertiary)' : acento ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+        borderColor: acento && !apagado ? 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' : 'var(--lp-border-subtle)',
+      }}>{texto}</button>
+  );
+
+  return (
+    <div data-id="inventario.pt.card" data-rol="admin,tecnico,compras,almacen,inventario"
+      style={{ background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 15px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 2 }}>
+        <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0 }}>{resaltar(nombre, query)}</span>
+        {item.oculto && (
+          <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: .5, padding: '2px 7px', borderRadius: 10, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' }}>OCULTO</span>
+        )}
+        <EstadoBadge qty={qty} pct={pct} />
+        {onOcultar && (
+          <span style={{ display: 'inline-flex' }}>
+            <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
+              label: item.oculto ? 'Mostrar' : 'Ocultar',
+              color: item.oculto ? 'var(--lp-brand-700)' : 'var(--lp-warning-700)',
+              onClick: () => onOcultar(item),
+            }]} />
+          </span>
+        )}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        {inv.sku && <span style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-mono)' }}>{inv.sku}</span>}
+        <TransitoBadge transito={enL ? cubALitros(item.transito) : item.transito} unidad={enL ? 'L' : 'cub'} />
+      </div>
+
+      {/* De qué está hecho el stock */}
+      {segs.length > 0 ? (
+        <>
+          <div data-id="inventario.pt.composicion" role="img"
+            aria-label={'Composición: ' + segs.map(s => s.texto).join(', ')}
+            style={{ display: 'flex', height: 10, borderRadius: 999, overflow: 'hidden', background: 'var(--lp-bg-sunken)', marginTop: 8 }}>
+            {segs.map(sg => <span key={sg.key} title={`${sg.texto} · ${fmtL(sg.litros)} L`} style={{ width: `${sg.pct}%`, background: COLOR_SEG[sg.key] || 'var(--lp-text-tertiary)' }} />)}
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', marginTop: 6, fontSize: 11, color: 'var(--lp-text-secondary)' }}>
+            {segs.map(sg => (
+              <span key={sg.key} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 8, height: 8, borderRadius: 2, background: COLOR_SEG[sg.key] || 'var(--lp-text-tertiary)' }} />
+                {sg.texto}
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+          {piezas ? 'Sin existencia registrada.' : 'Cargando el desglose por ubicación…'}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, fontSize: 12, marginTop: 8 }}>
+        <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 16, fontWeight: 700, color: sev.key === 'critico' ? 'var(--lp-danger-600)' : 'var(--lp-text-primary)' }}>
+          {enL ? `${fmtL(litros)} L` : `${fmtCub(qty)} cub`}
+          <span style={{ fontSize: 11, fontWeight: 500, color: 'var(--lp-text-tertiary)', marginLeft: 6 }}>
+            ≈ {enL ? `${fmtCub(qty)} cub` : `${fmtL(litros)} L`}
+          </span>
+        </span>
+        <span style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>mín {enL ? `${fmtL(cubALitros(min))} L` : `${fmtCub(min)} cub`}</span>
+      </div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 14px', marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+        {ubics.map(([l, v]) => (
+          <span key={l}>{l} <b style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: (Number(v) || 0) > 0 ? 'var(--lp-text-secondary)' : 'var(--lp-text-tertiary)' }}>{(Number(v) || 0) > 0 ? f(v) : '—'}</b></span>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+        {bajo && canPedir && btn('+ Pedir', () => onPedir(nombre), { acento: true, dataId: 'inventario.btn.pedir-pt' })}
+        {canEdit && onContarPT && piezas && btn('Contar Fábrica', () => onContarPT(item, 'fabrica'), { acento: true, dataId: 'inventario.btn.contar-fabrica', apagado: (Number(item.fabQty) || 0) <= 0 })}
+        {canEdit && onContarPT && piezas && btn('Contar Terán', () => onContarPT(item, 'teran'), { acento: true, dataId: 'inventario.btn.contar-teran', apagado: (Number(item.teranQty) || 0) <= 0 })}
+        {canEdit && onEditarFicha && btn('Editar ficha', () => onEditarFicha(item), { dataId: 'inventario.btn.ajustar' })}
+        {canContar && !canEdit && btn('Contar →', () => onContar && onContar(), { acento: true, dataId: 'inventario.btn.contar' })}
+      </div>
+    </div>
+  );
+}
+
 /* ── Tabla de inventario (escritorio) ── */
 function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir, onOcultar, unidadVista = 'cub', onContarPT, onEditarFicha }) {
   /* La columna "Acción" solo se muestra si el rol tiene ALGUNA acción posible en
@@ -1928,6 +2043,9 @@ export default function InventarioPage({ embedded = false }) {
   const [contarItem, setContarItem] = useState(null);
   const [ptUnidad, setPtUnidadState] = useState(() => { try { return localStorage.getItem('pp_pt_unidad') === 'cub' ? 'cub' : 'L'; } catch { return 'L'; } });
   const setPtUnidad = useCallback((u) => { setPtUnidadState(u); try { localStorage.setItem('pp_pt_unidad', u); } catch {} }, []);
+  /* Tarjetas (propuesta D, la que eligió el dueño) o la tabla de siempre. */
+  const [ptVista, setPtVistaState] = useState(() => { try { return localStorage.getItem('pp_pt_vista') === 'tabla' ? 'tabla' : 'tarjetas'; } catch { return 'tarjetas'; } });
+  const setPtVista = useCallback((v) => { setPtVistaState(v); try { localStorage.setItem('pp_pt_vista', v); } catch {} }, []);
   /* Importación Excel en 2 pasos: el backend devuelve {importId, preview}; aquí se revisa
      y se confirma. { importId, preview, tipo:'mp'|'pt' } */
   const [importPreview, setImportPreview] = useState(null);
@@ -2457,7 +2575,7 @@ export default function InventarioPage({ embedded = false }) {
   }, []);
   /* Propuesta A: abrir la ficha "Contar existencia" y guardar el conteo por el
      MISMO candado que Ajustar (ajustarConCandado pide TOTP / código admin). */
-  const handleContarPT = useCallback((item) => setContarItem(item), []);
+  const handleContarPT = useCallback((item, ubicacion) => setContarItem(ubicacion ? { ...item, ubicacionInicial: ubicacion } : item), []);
   const handleConteoSave = useCallback(async (ubicacion, piezas, motivo) => {
     if (!contarItem) return;
     const producto = contarItem.nombre;
@@ -2879,7 +2997,15 @@ export default function InventarioPage({ embedded = false }) {
               </div>
               {ptSubtab === 'total' && (
                 <div style={S.actionsCluster(isDesktop)}>
-                  {/* Propuesta A: unidad de lectura de la fila (litros | cubetas). */}
+                  {/* Propuesta D: tarjetas (por omisión) o la tabla de siempre. */}
+                  <div style={S.segWrap} role="tablist" aria-label="Forma de la lista">
+                    {[['tarjetas', 'Tarjetas'], ['tabla', 'Tabla']].map(([k, l]) => (
+                      <button key={k} type="button" role="tab" aria-selected={ptVista === k}
+                        data-id={`inventario.ptvista.${k}`} data-rol="admin,almacen,inventario,tecnico,compras"
+                        style={S.segBtn(ptVista === k)} onClick={() => setPtVista(k)}>{l}</button>
+                    ))}
+                  </div>
+                  {/* Unidad de lectura (litros | cubetas). */}
                   <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>Ver en</span>
                   <div style={S.segWrap} role="tablist" aria-label="Unidad de existencia">
                     {[['L', 'Litros'], ['cub', 'Cubetas']].map(([k, l]) => (
@@ -2927,7 +3053,18 @@ export default function InventarioPage({ embedded = false }) {
                       </button>
                     )}
                   </div>
-                  {isDesktop ? (
+                  {ptVista === 'tarjetas' ? (
+                    <div data-id="inventario.pt.cards" style={{ display: 'grid', gridTemplateColumns: isDesktop ? '1fr 1fr' : '1fr', gap: 10 }}>
+                      {filteredPT.map(item => (
+                        <PTCardTotal key={item.nombre} item={item} unidadVista={ptUnidad} query={debouncedQuery}
+                          canEdit={canEditMP} canPedir={canPedirPT} onPedir={handlePedirPT}
+                          canContar={canContar} onContar={handleContar}
+                          onContarPT={canContarPiezas ? handleContarPT : null}
+                          onEditarFicha={handleAdjustPT}
+                          onOcultar={user?.rol === 'admin' ? handleOcultarPT : null} />
+                      ))}
+                    </div>
+                  ) : isDesktop ? (
                     <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
                       canContar={canContar} onContar={handleContar}
                       unidadVista={ptUnidad} onContarPT={canContarPiezas ? handleContarPT : null} onEditarFicha={canContarPiezas ? handleAdjustPT : null}
@@ -3348,7 +3485,7 @@ export default function InventarioPage({ embedded = false }) {
 
       {/* Propuesta A: ficha "Contar existencia" (piezas por ubicación) */}
       {contarItem && (
-        <ContarPTSheet item={contarItem} buckets={contarItem.buckets} parciales={contarItem.parciales} isDesktop={isDesktop} motivoOpcional={esAdmin}
+        <ContarPTSheet item={contarItem} buckets={contarItem.buckets} parciales={contarItem.parciales} ubicacionInicial={contarItem.ubicacionInicial} isDesktop={isDesktop} motivoOpcional={esAdmin}
           onClose={() => setContarItem(null)} onSave={handleConteoSave} />
       )}
 
