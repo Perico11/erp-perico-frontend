@@ -55,6 +55,8 @@ const SATPage             = lazy(() => import('./pages/sat/SATPage'));
 const PosAliasesPage      = lazy(() => import('./pages/pos-aliases/PosAliasesPage'));
 /* Chat interno entre usuarios (jul 2026): general + DMs + imágenes + menciones. */
 const ChatPage            = lazy(() => import('./pages/chat/ChatPage'));
+/* E3 (sep 2026): tablero de eficacia — los 4 números del dueño, solo admin. */
+const EficaciaPage        = lazy(() => import('./pages/eficacia/EficaciaPage'));
 
 /* Fallback mientras carga la página solicitada */
 function PageLoader() {
@@ -213,6 +215,8 @@ export default function App() {
               <Route path="devoluciones-mp" element={<RoleRoute roles={['admin','compras']}><ErrorBoundary><DevolucionesMPPage /></ErrorBoundary></RoleRoute>} />
               <Route path="entregas"       element={<RoleRoute roles={['admin','almacen']}><ErrorBoundary><EntregasPage /></ErrorBoundary></RoleRoute>} />
               <Route path="reportes"       element={<RoleRoute roles={['admin','inventario','compras']}><ErrorBoundary><ReportesPage /></ErrorBoundary></RoleRoute>} />
+              {/* E3: tablero de eficacia — el backend también exige admin (403). */}
+              <Route path="eficacia"       element={<RoleRoute roles={['admin']}><ErrorBoundary><EficaciaPage /></ErrorBoundary></RoleRoute>} />
               <Route path="admin"          element={<RoleRoute roles={['admin']}><ErrorBoundary><AdminPage /></ErrorBoundary></RoleRoute>} />
               <Route path="seguridad"      element={<RoleRoute roles={['admin','tecnico','inventario','almacen']}><ErrorBoundary><SeguridadPage /></ErrorBoundary></RoleRoute>} />
             </Route>

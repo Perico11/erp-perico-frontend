@@ -574,6 +574,9 @@ const api = {
   getReportProfitability: () => request('GET', '/api/reports/profitability'),
   getReportValuation: () => request('GET', '/api/reports/inventory-valuation'),
 
+  /* ── Eficacia (E3, sep 2026): los 4 números del dueño + ventana previa ── */
+  getEficaciaTablero: (dias) => request('GET', '/api/eficacia/tablero' + (dias ? '?dias=' + encodeURIComponent(dias) : '')),
+
   /* ── Notificaciones ── */
   getNotificaciones: () => request('GET', '/api/notificaciones'),
   marcarNotificacionesLeidas: (items) => request('POST', '/api/notificaciones/leer', { items }),
