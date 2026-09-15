@@ -63,6 +63,7 @@ const S = {
   filaNombre: { color: 'var(--lp-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
   filaDetalle: { color: 'var(--lp-text-tertiary)', fontSize: 11.5 },
   filaNum: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: 'var(--lp-text-primary)', flexShrink: 0 },
+  rank: { display: 'inline-block', width: 22, fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 11.5, color: 'var(--lp-text-tertiary)' },
 
   refresh: {
     background: 'none', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-sm)',
@@ -206,12 +207,16 @@ export default function EficaciaPage() {
         {data && (
           <div style={S.grid(isDesktop)}>
 
-            {/* ── 1. Días de pedido → Terán ─────────────────────────────── */}
-            <section style={S.card} aria-label="Días de pedido a Terán">
+            {/* ── 1. Surtido Fábrica → Terán (renombrada 15-sep-2026: el
+                nombre viejo "Días de pedido → Terán" hacía pensar en pedidos
+                de TIENDAS, que el ERP no captura — esto mide el circuito
+                interno: del pedido del almacén a su entrega en Terán). */}
+            <section style={S.card} aria-label="Surtido Fábrica a Terán">
               <div style={S.cardHead}>
                 <span style={S.dot('var(--lp-info-600)')} />
-                <div style={S.cardLabel}>Días de pedido → Terán</div>
+                <div style={S.cardLabel}>Surtido Fábrica → Terán</div>
               </div>
+              <div style={S.bigNota}>días del pedido del almacén a su entrega en Terán</div>
               <div style={S.big}>
                 {dias.promedio != null ? `${dias.promedio} días` : '—'}
               </div>
@@ -287,10 +292,17 @@ export default function EficaciaPage() {
                 <ul style={S.lista}>
                   {rot.tiendas.map((t, i) => (
                     <li key={i} style={S.fila}>
-                      <span style={S.filaNombre}>
+                      <span
+                        style={S.filaNombre}
+                        title={t.frecuenciaDias != null
+                          ? `recibe cada ~${t.frecuenciaDias} días (${t.entregasDias} días con entrega en el periodo)`
+                          : undefined}
+                      >
                         {t.tienda}
                         <span style={S.filaDetalle}>
-                          {' '}· {t.piezas} pzas{t.litrosParciales ? ' · ≈ incompleto' : ''}
+                          {' '}· {t.piezas} pzas
+                          {t.frecuenciaDias != null ? ` · cada ~${t.frecuenciaDias} d` : ''}
+                          {t.litrosParciales ? ' · ≈ incompleto' : ''}
                         </span>
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -331,6 +343,35 @@ export default function EficaciaPage() {
                 {cc.diasDesdeUltimo != null
                   ? ` · último hace ${cc.diasDesdeUltimo} día${cc.diasDesdeUltimo === 1 ? '' : 's'}`
                   : ' · sin conteos cerrados registrados'}
+              </div>
+            </section>
+
+            {/* ── 5. Top 10 de lo más pedido por tiendas ────────────────── */}
+            <section style={S.card} aria-label="Lo más pedido por tiendas">
+              <div style={S.cardHead}>
+                <span style={S.dot('var(--lp-info-600)')} />
+                <div style={S.cardLabel}>Top 10 · lo más pedido por tiendas</div>
+              </div>
+              {(rot.topProductos || []).length === 0 ? (
+                <div style={S.sub}>Sin entregas a tiendas en el periodo.</div>
+              ) : (
+                <ul style={S.lista}>
+                  {rot.topProductos.map((p, i) => (
+                    <li key={i} style={S.fila}>
+                      <span style={S.filaNombre}>
+                        <span style={S.rank}>{i + 1}.</span>
+                        {p.producto}
+                        <span style={S.filaDetalle}>
+                          {' '}· {p.piezas} pzas{p.litrosParciales ? ' · ≈ incompleto' : ''}
+                        </span>
+                      </span>
+                      <span style={S.filaNum}>{p.litros} L</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div style={S.leyenda}>
+                Medido por lo ENTREGADO a cada tienda — el ERP no captura pedidos de tienda.
               </div>
             </section>
 
