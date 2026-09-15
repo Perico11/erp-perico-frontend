@@ -6,6 +6,9 @@
      2. % de merma               (bajar es bueno)  + top por producto
      3. Rotación por tienda      (subir es bueno)  + piezas/litros/semanas
      4. Conteos cíclicos         (subir es bueno)  vs meta de 1 por semana
+     5. Top 10 de lo entregado a tiendas (E3-7)
+     6. Costeo real vs receta    (bajar es bueno)  — E4: la variancia en pesos
+        de lo que el piso consumió contra la fórmula, por producto
 
    Cada número trae su comparación contra las 4 semanas ANTERIORES, con la
    dirección buena de cada uno ya resuelta (verde = mejora, rojo = empeora).
@@ -129,6 +132,12 @@ const fmtDia = (iso) => {
   try { return new Date(iso).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }); } catch { return '?'; }
 };
 
+/* Pesos con signo explícito: +$85 = el piso gastó de más; -$85 = ahorro. */
+const fmtMxn = (n) => {
+  const v = Math.round(Math.abs(Number(n) || 0)).toLocaleString('es-MX');
+  return (n > 0 ? '+$' : n < 0 ? '-$' : '$') + v;
+};
+
 export default function EficaciaPage() {
   const isDesktop = useIsDesktop();
   const [data, setData] = useState(null);
@@ -172,7 +181,7 @@ export default function EficaciaPage() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
           <div>
             <div style={S.h1}>Eficacia</div>
-            <div style={S.psub}>Los 4 números del negocio, comparados contra el periodo anterior.</div>
+            <div style={S.psub}>Los números del negocio, comparados contra el periodo anterior.</div>
           </div>
           <button type="button" style={S.refresh} onClick={refrescar} disabled={cargando}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polyline points="1 4 1 10 7 10" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>
@@ -374,6 +383,77 @@ export default function EficaciaPage() {
                 Medido por lo ENTREGADO a cada tienda — el ERP no captura pedidos de tienda.
               </div>
             </section>
+
+            {/* ── 6. Costeo real vs receta (E4, 15-sep-2026) ──────────────
+                La variancia que pidió el informe: qué producto se come el
+                margen en PISO y no en papel. Sale del consumo que el técnico
+                captura al producir (teórico congelado ese día) valuado al
+                costo ponderado vigente. Sin bloque costeo (backend viejo) la
+                tarjeta no sale. */}
+            {d.costeo && (() => {
+              const cost = d.costeo;
+              const conDato = (cost.tandas || 0) > 0;
+              return (
+                <section style={S.card} aria-label="Costeo real contra receta">
+                  <div style={S.cardHead}>
+                    <span style={S.dot('var(--lp-warning-700)')} />
+                    <div style={S.cardLabel}>Costeo real vs receta</div>
+                  </div>
+                  <div style={S.bigNota}>lo que el piso gastó de más (+) o de menos (-) contra la fórmula</div>
+                  {conDato ? (
+                    <div style={{ ...S.big, color: cost.deltaMxn > 0 ? 'var(--lp-danger-600)' : (cost.deltaMxn < 0 ? 'var(--lp-success-600)' : 'var(--lp-text-primary)') }}>
+                      {fmtMxn(cost.deltaMxn)}
+                      {cost.deltaPct != null && (
+                        <span style={{ fontSize: 15, fontWeight: 700 }}> ({cost.deltaPct > 0 ? '+' : ''}{cost.deltaPct}%)</span>
+                      )}
+                    </div>
+                  ) : (
+                    <>
+                      <div style={S.big}>—</div>
+                      <div style={S.bigNota}>sin tandas con captura de consumo en el periodo</div>
+                    </>
+                  )}
+                  <Tendencia
+                    actual={conDato ? cost.deltaMxn : null}
+                    previo={cost.prev && (cost.prev.tandas || 0) > 0 ? cost.prev.deltaMxn : null}
+                    bajarEsBueno unidad=" $" etiqueta={etiquetaPrev}
+                  />
+                  {conDato && (
+                    <div style={S.sub}>
+                      real ${Math.round(cost.real).toLocaleString('es-MX')} vs receta ${Math.round(cost.receta).toLocaleString('es-MX')} · {cost.tandas} tanda{cost.tandas === 1 ? '' : 's'}
+                    </div>
+                  )}
+                  {(cost.porProducto || []).length > 0 && (
+                    <ul style={S.lista}>
+                      {cost.porProducto.slice(0, 3).map((p, i) => (
+                        <li key={i} style={S.fila}>
+                          <span style={S.filaNombre} title={`${p.tandas} tanda${p.tandas === 1 ? '' : 's'} · real $${Math.round(p.real).toLocaleString('es-MX')} vs receta $${Math.round(p.receta).toLocaleString('es-MX')}`}>
+                            {p.producto}
+                            {p.parcial ? <span style={S.filaDetalle}> · ≈</span> : null}
+                          </span>
+                          <span style={{ ...S.filaNum, color: p.deltaMxn > 0 ? 'var(--lp-danger-600)' : (p.deltaMxn < 0 ? 'var(--lp-success-600)' : undefined) }}>
+                            {fmtMxn(p.deltaMxn)}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {(cost.tandasSinCaptura || 0) > 0 && (
+                    <div style={S.honesto}>
+                      {cost.tandasSinCaptura} tanda{cost.tandasSinCaptura === 1 ? '' : 's'} del periodo sin captura de consumo — no entra{cost.tandasSinCaptura === 1 ? '' : 'n'} (no se reconstruye{cost.tandasSinCaptura === 1 ? '' : 'n'} con la fórmula de hoy).
+                    </div>
+                  )}
+                  {cost.costoParcial && (
+                    <div style={S.honesto}>
+                      ≈ hubo materias sin costo en el catálogo — sus kilos no se valuaron (no se inventan pesos).
+                    </div>
+                  )}
+                  <div style={S.leyenda}>
+                    Teórico congelado al día de producción · valuado al costo ponderado vigente.
+                  </div>
+                </section>
+              );
+            })()}
 
           </div>
         )}
