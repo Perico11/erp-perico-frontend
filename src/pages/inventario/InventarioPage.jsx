@@ -484,7 +484,7 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
   const clickable = canEdit || canContar;
   return (
     <div style={S.mCard(clickable)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
-      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit && onContarPT) onContarPT(item); else if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
+      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit && onContarPT && piezas) onContarPT(item); else if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
       <div style={S.mTop}>
         <span style={S.mName}>{resaltar(nombre, query)}</span>
         {item.oculto && (
@@ -1330,7 +1330,7 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                   )}
                   {/* Propuesta A: en PT el botón principal es CONTAR (piezas por
                       ubicación); "Editar ficha" (nombre/SKU/mínimo) pasa al menú ⋯. */}
-                  {canEdit && tipo === 'pt' && onContarPT ? (
+                  {canEdit && tipo === 'pt' && onContarPT && piezas ? (
                     <button type="button" data-id="inventario.btn.contar-pt" data-rol="admin"
                       style={{ ...S.btnGhost, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' }}
                       onClick={() => onContarPT(it)}>Contar</button>

@@ -145,6 +145,15 @@ describe('Stock ▸ Total del PT · piezas por presentación', () => {
     expect(nota).toBe('Conteo físico');
   });
 
+  it('sin el desglose por ubicación no ofrece contar: queda el ajuste de siempre', async () => {
+    api.getPTPorUbicacion.mockImplementationOnce(() => new Promise(() => {})); /* nunca resuelve */
+    await act(async () => { render(<MemoryRouter initialEntries={['/inventario?tab=pt']}><InventarioPage /></MemoryRouter>); });
+    await act(async () => { await Promise.resolve(); });
+    const fila = screen.getByText('BLANCO OFFWHITE 4.0').closest('tr');
+    expect(within(fila).queryByRole('button', { name: 'Contar' })).toBeNull();
+    expect(within(fila).getByRole('button', { name: 'Ajustar' })).toBeInTheDocument();
+  });
+
   it('los KPIs cuentan el TOTAL, como la fila: con stock en Terán no es crítico', async () => {
     await abrirPT();
     /* AZUL REY: 0 en Fábrica pero 11 cub en Terán → bajo, no crítico. Antes el
