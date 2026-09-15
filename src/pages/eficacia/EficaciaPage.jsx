@@ -48,6 +48,9 @@ const S = {
 
   tend: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 12.5, fontWeight: 600 },
   tendNeutra: { fontSize: 12, color: 'var(--lp-text-tertiary)' },
+  ritmo: { display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 12, fontWeight: 700, fontFamily: 'var(--lp-font-mono)', flexShrink: 0 },
+  ritmoNeutro: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', flexShrink: 0 },
+  leyenda: { fontSize: 11, color: 'var(--lp-text-tertiary)', lineHeight: 1.35 },
 
   honesto: {
     fontSize: 11.5, color: 'var(--lp-warning-700)', background: 'var(--lp-warning-100)',
@@ -94,24 +97,28 @@ function Tendencia({ actual, previo, bajarEsBueno, unidad = '', etiqueta = 'vs 4
   );
 }
 
-/* Mini-barras por semana (izq = la más vieja, der = la más reciente). */
-function MiniSemanas({ semanas }) {
-  const vals = [...(semanas || [])].reverse();
-  if (!vals.length) return null;
-  const max = Math.max(1, ...vals);
+/* RITMO POR TIENDA (elige el dueño, 15-sep-2026): las mini-barras con escala
+   por fila engañaban — Ruby (la más chica) pintaba barra llena y Lázaro (la
+   #1) un guión, porque cada fila se medía contra su propia mejor semana. En
+   su lugar: flecha con % comparando las últimas 2 semanas de ESA tienda
+   contra sus 2 anteriores. Verde acelera, rojo frena, sin trampas de escala.
+   Sin volumen previo no se inventa % — se muestra el delta en litros. */
+function RitmoTienda({ ritmo }) {
+  if (!ritmo) return null;
+  const delta = Number(ritmo.deltaLitros) || 0;
+  if (delta === 0) return <span style={S.ritmoNeutro} title="mismas ventas que las 2 semanas anteriores">igual</span>;
+  const sube = delta > 0;
+  const texto = ritmo.pct != null
+    ? `${sube ? '+' : ''}${ritmo.pct}%`
+    : `${sube ? '+' : ''}${ritmo.deltaLitros} L`;
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 22, flexShrink: 0 }} aria-hidden="true">
-      {vals.map((v, i) => (
-        <div
-          key={i}
-          style={{
-            width: 9, borderRadius: 2,
-            height: Math.max(2, Math.round((v / max) * 22)),
-            background: i === vals.length - 1 ? 'var(--lp-brand-600)' : 'var(--lp-brand-300)',
-          }}
-        />
-      ))}
-    </div>
+    <span
+      style={{ ...S.ritmo, color: sube ? 'var(--lp-success-600)' : 'var(--lp-danger-600)' }}
+      title={`últimas 2 semanas: ${ritmo.reciente} L · las 2 anteriores: ${ritmo.anterior} L`}
+    >
+      {sube ? flechaArriba : flechaAbajo}
+      {texto}
+    </span>
   );
 }
 
@@ -241,8 +248,8 @@ export default function EficaciaPage() {
               </div>
               {/* LITROS MANDAN (pide el dueño, 15-sep-2026): "piezas" mezclaba
                   galones con cubetas. El litro es el número grande, el orden y
-                  las barritas; las piezas quedan de dato secundario. El
-                  fallback a piezas cubre un backend viejo sin totalLitros. */}
+                  el ritmo; las piezas quedan de dato secundario. El fallback a
+                  piezas cubre un backend viejo sin totalLitros. */}
               <div style={S.big}>
                 {rot.totalLitros != null ? `${rot.totalLitros} L` : `${rot.totalPiezas || 0} piezas`}
               </div>
@@ -261,12 +268,17 @@ export default function EficaciaPage() {
                         </span>
                       </span>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <MiniSemanas semanas={t.porSemana} />
+                        <RitmoTienda ritmo={t.ritmo} />
                         <span style={S.filaNum}>{t.litros} L</span>
                       </span>
                     </li>
                   ))}
                 </ul>
+              )}
+              {(rot.tiendas || []).length > 0 && (
+                <div style={S.leyenda}>
+                  Flecha: las últimas 2 semanas de cada tienda contra sus 2 anteriores — verde acelera, rojo frena.
+                </div>
               )}
               {hayLitrosParciales && (
                 <div style={S.honesto}>
