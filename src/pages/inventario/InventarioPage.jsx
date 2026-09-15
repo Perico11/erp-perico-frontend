@@ -1038,11 +1038,11 @@ function lineaUbicacionPT(it, unidadVista) {
   return partes.length ? partes.join(' · ') : null;
 }
 
-/* Menú ⋯ de una fila PT: "Editar ficha" (nombre / SKU / mínimo / medida — la
-   ficha de siempre, que escribe el escalar de Fábrica) + Ocultar/Mostrar (admin). */
+/* Menú ⋯ de una fila PT: "Ajustar" (la ficha de siempre: nombre, SKU, mínimo
+   y medida, que escribe el escalar de Fábrica) + Ocultar/Mostrar (admin). */
 function menuItemsPT(it, onEditarFicha, onOcultar) {
   const items = [];
-  if (onEditarFicha) items.push({ label: 'Editar ficha…', onClick: () => onEditarFicha(it) });
+  if (onEditarFicha) items.push({ label: 'Ajustar…', onClick: () => onEditarFicha(it) });
   if (onOcultar) {
     items.push({
       label: it.oculto ? 'Mostrar' : 'Ocultar',
@@ -1334,7 +1334,7 @@ function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onC
         {bajo && canPedir && btn('+ Pedir', () => onPedir(nombre), { acento: true, dataId: 'inventario.btn.pedir-pt' })}
         {canEdit && onContarPT && piezas && btn('Contar Fábrica', () => onContarPT(item, 'fabrica'), { acento: true, dataId: 'inventario.btn.contar-fabrica', apagado: (Number(item.fabQty) || 0) <= 0 })}
         {canEdit && onContarPT && piezas && btn('Contar Terán', () => onContarPT(item, 'teran'), { acento: true, dataId: 'inventario.btn.contar-teran', apagado: (Number(item.teranQty) || 0) <= 0 })}
-        {canEdit && onEditarFicha && btn('Editar ficha', () => onEditarFicha(item), { dataId: 'inventario.btn.ajustar' })}
+        {canEdit && onEditarFicha && btn('Ajustar', () => onEditarFicha(item), { dataId: 'inventario.btn.ajustar' })}
         {canContar && !canEdit && btn('Contar →', () => onContar && onContar(), { acento: true, dataId: 'inventario.btn.contar' })}
       </div>
     </div>
@@ -1444,7 +1444,7 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                     </button>
                   )}
                   {/* Propuesta A: en PT el botón principal es CONTAR (piezas por
-                      ubicación); "Editar ficha" (nombre/SKU/mínimo) pasa al menú ⋯. */}
+                      ubicación); "Ajustar" (nombre/SKU/mínimo) pasa al menú ⋯. */}
                   {canEdit && tipo === 'pt' && onContarPT && piezas ? (
                     <button type="button" data-id="inventario.btn.contar-pt" data-rol="admin"
                       style={{ ...S.btnGhost, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' }}

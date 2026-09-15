@@ -154,9 +154,9 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     expect(nota).toBe('Conteo físico');
   });
 
-  it('la ficha de ajuste sigue a un clic: "Editar ficha"', async () => {
+  it('la ficha de ajuste sigue a un clic: "Ajustar"', async () => {
     await abrirPT();
-    await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Editar ficha' })); });
+    await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Ajustar' })); });
     expect(screen.getByText('Ajustar existencia')).toBeInTheDocument();
     /* Esa ficha escribe el escalar de FÁBRICA: lo dice en el subtítulo. */
     expect(screen.getByText(/BLANCO OFFWHITE 4.0 · Fábrica/)).toBeInTheDocument();
@@ -174,7 +174,7 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     await act(async () => { await Promise.resolve(); });
     const c = tarjeta('BLANCO OFFWHITE 4.0');
     expect(within(c).queryByRole('button', { name: /^Contar/ })).toBeNull();
-    expect(within(c).getByRole('button', { name: 'Editar ficha' })).toBeInTheDocument();
+    expect(within(c).getByRole('button', { name: 'Ajustar' })).toBeInTheDocument();
     expect(within(c).getByText(/Cargando el desglose/)).toBeInTheDocument();
   });
 
