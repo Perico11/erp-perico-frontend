@@ -631,8 +631,14 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
          upserts y la creación de lotes, que son idempotentes (el server
          de-duplica bachas por ordenId+bachaIndex). */
       const CODIGOS_YA_HECHO = ['ORDEN_YA_PRODUCIDA', 'LOTE_YA_EXISTE', 'PEDIDO_YA_PRODUCIDO', 'YA_PRODUCIDO'];
+      /* El servidor revisa la cordura del consumo (FL-02). Lo que no tiene lectura
+         posible lo RECHAZA y sale por el catch de abajo; lo que solo llama la
+         atención —consumo muy por debajo del teórico, que puede ser un reproceso
+         legítimo— lo deja pasar y lo devuelve aquí. Hasta hoy esa respuesta se
+         tiraba y el aviso moría en el registro del servidor: se avisaba a nadie. */
+      let avisosProduccion = [];
       try {
-        await api.registrarProduccion({
+        const respProd = await api.registrarProduccion({
           descuentos, producto: productoNombre, lotes,
           ajustesMP: ajustesLimpios, /* enviar para que server lo persista en el historial */
           esPrueba: item.esPrueba || false,
@@ -640,6 +646,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
           pedidoId: tipo === 'pedido' ? item.id : (item.pedidoId || ''),
           usuario: userName,
         });
+        avisosProduccion = Array.isArray(respProd?.avisos) ? respProd.avisos : [];
       } catch (ePro) {
         const codigo = ePro?.data?.codigo || ePro?.codigo || '';
         if (!CODIGOS_YA_HECHO.includes(codigo)) throw ePro;
@@ -859,6 +866,7 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
         codigo: folios.join(' · '),
         cantidad: lotes,
         estadoFinal,
+        avisos: avisosProduccion,
         msg: N > 1
           ? `${folios.length} bachas producidas: ${productoNombre} — lotes ${folios.join(', ')}${sufijoMsg}`
           : `Lote ${folios[0]} producido: ${productoNombre} x${lotes}${sufijoMsg}`,
@@ -922,6 +930,26 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
               {hold && ' QC en HOLD: alguna lectura salió de rango — revísalo en Calidad.'}
               {!okQC && !hold && ' Pendiente de QC.'}
             </div>
+            {(successInfo.avisos || []).length > 0 && (
+              <div role="status" data-id="avisos-produccion" style={{
+                maxWidth: 420, width: '100%', textAlign: 'left',
+                background: 'var(--lp-warning-50)', border: '1px solid var(--lp-warning-300)',
+                borderRadius: 12, padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'flex-start',
+              }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--lp-warning-600)"
+                  strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+                  style={{ flexShrink: 0, marginTop: 1 }}>
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                  <line x1="12" y1="9" x2="12" y2="13" /><line x1="12" y1="17" x2="12.01" y2="17" />
+                </svg>
+                <div style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--lp-warning-800, var(--lp-warning-700))' }}>
+                  <b>El lote quedó registrado, pero revisa esto:</b>
+                  <ul style={{ margin: '6px 0 0', paddingLeft: 18 }}>
+                    {successInfo.avisos.map((a, i) => <li key={i}>{a}</li>)}
+                  </ul>
+                </div>
+              </div>
+            )}
             <button className="lp-btn-acc" style={{ ...S.footPrimary(false), flex: '0 0 auto', padding: '0 28px' }}
               onClick={() => onSuccess(successInfo.msg)}>
               Continuar
