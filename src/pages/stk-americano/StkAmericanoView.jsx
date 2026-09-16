@@ -62,9 +62,15 @@ const S = {
 
 const nf = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 
-export default function StkAmericanoView({ data, loading, reload, canEdit = false, canDelete = false, embedded = false, almacen = '1' }) {
+export default function StkAmericanoView({ data, loading, reload, canEdit = false, canDelete = false, embedded = false, almacen = '1', query: queryExterna }) {
   const isDesktop = useIsDesktop();
-  const { query, debouncedQuery, setQuery } = useSearch(200);
+  /* Cuando la página trae su propio buscador (Inventarios, 16-sep-2026) manda
+     ese: uno solo y siempre en el mismo lugar. Suelta, la vista conserva el
+     suyo. */
+  const { query: queryPropia, debouncedQuery: debouncedPropia, setQuery } = useSearch(200);
+  const buscadorPropio = queryExterna == null;
+  const query = buscadorPropio ? queryPropia : queryExterna;
+  const debouncedQuery = buscadorPropio ? debouncedPropia : queryExterna;
   const [editColor, setEditColor] = useState(undefined); /* undefined=cerrado, null=nuevo, obj=editar */
   const [salidaColor, setSalidaColor] = useState(null);
   const [envasarColor, setEnvasarColor] = useState(null);
@@ -153,10 +159,12 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
 
       {/* Toolbar */}
       <div style={S.topRow}>
-        <div style={S.searchBox}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-          <input style={S.searchInput} type="text" placeholder="Buscar color…" value={query} onChange={e => setQuery(e.target.value)} />
-        </div>
+        {buscadorPropio && (
+          <div style={S.searchBox}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            <input style={S.searchInput} type="text" placeholder="Buscar color…" value={query} onChange={e => setQuery(e.target.value)} />
+          </div>
+        )}
         {canEdit && (
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <button style={S.btnAdd} onClick={() => setEditColor(null)} data-id="stkAmericano.btn.color" data-rol="admin,almacen">

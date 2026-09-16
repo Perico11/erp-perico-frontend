@@ -2907,9 +2907,16 @@ export default function InventarioPage({ embedded = false }) {
         {/* Toolbar (mockup): fila buscador prominente + fila segmented MP/PT con
             chips de severidad a la derecha. En móvil se apilan igual que el mockup. */}
         <div style={{ ...S.toolbarRow, ...(isDesktop ? {} : { flexDirection: 'column', alignItems: 'stretch' }) }}>
-          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }), ...(activeTab === 'stkAmericano' || activeTab === 'stkAmericano2' || activeTab === 'mezclas' ? { display: 'none' } : {}) }}>
+          {/* La barra vive en el MISMO lugar en todas las pestañas (16-sep-2026,
+              pedido del dueño): antes desaparecía en Americano y Mezclas y las
+              pestañas saltaban a la izquierda. En Americano busca el color —la
+              vista ya no trae su propio buscador— y en Mezclas no aplica, así
+              que queda deshabilitada pero en su sitio. */}
+          <div style={{ ...S.searchBox(searchFocus), ...(isDesktop ? {} : { maxWidth: '100%' }), ...(activeTab === 'mezclas' ? { opacity: .55 } : {}) }}>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            <input style={S.searchInput} type="text" placeholder="Buscar material…" value={query}
+            <input style={S.searchInput} type="text" disabled={activeTab === 'mezclas'}
+              placeholder={activeTab === 'stkAmericano' || activeTab === 'stkAmericano2' ? 'Buscar color…' : activeTab === 'mezclas' ? 'La búsqueda no aplica aquí' : 'Buscar material…'}
+              data-id="inventario.buscador" value={query}
               onChange={e => setQuery(e.target.value)}
               onFocus={() => setSearchFocus(true)} onBlur={() => setSearchFocus(false)} />
             {query && (
@@ -3345,7 +3352,7 @@ export default function InventarioPage({ embedded = false }) {
 
         {/* ════════ TAB: STK AMERICANO (PT importado de EE.UU., totes de 1000 L) ════════ */}
         {activeTab === 'stkAmericano' && (
-          <StkAmericanoView
+          <StkAmericanoView query={debouncedQuery}
             data={stkResp?.data || null}
             loading={!stkResp}
             reload={reloadStk}
@@ -3356,7 +3363,7 @@ export default function InventarioPage({ embedded = false }) {
           />
         )}
         {activeTab === 'stkAmericano2' && (
-          <StkAmericanoView
+          <StkAmericanoView query={debouncedQuery}
             data={stkResp2?.data || null}
             loading={!stkResp2}
             reload={reloadStk2}

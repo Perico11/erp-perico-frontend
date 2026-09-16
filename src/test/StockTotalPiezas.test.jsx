@@ -58,7 +58,7 @@ vi.mock('../services/api', () => {
     getTrazabilidad: vi.fn(() => Promise.resolve({ ok: true, data: TRAZA })),
     getAjustesPendientes: vi.fn(() => Promise.resolve({ ok: true, pendientes: [] })),
     getFormulasSummary: vi.fn(() => Promise.resolve({ ok: true, summary: [{ nombre: 'BLANCO OFFWHITE 4.0' }] })),
-    getStkAmericano: vi.fn(() => Promise.resolve(null)),
+    getStkAmericano: vi.fn(() => Promise.resolve({ ok: true, data: { colores: [], catalogo: [], resumen: { cubetas: 0, galones: 0, totesLitros: 0, totesEquiv: 0, colores: 0 } } })),
     getPTOcultos: vi.fn(() => Promise.resolve({ ok: true, ocultos: {} })),
     ptConteo: vi.fn(() => Promise.resolve({ ok: true })),
     setPTUbicacion: vi.fn(() => Promise.resolve({ ok: true })),
@@ -272,6 +272,34 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     expect(within(tarjeta('AZUL REY 4.0')).getByText('Bajo')).toBeInTheDocument();
     expect(within(screen.getByText('En crítico').parentElement).getByText('1')).toBeInTheDocument();
     expect(within(screen.getByText('Stock bajo').parentElement).getByText('1')).toBeInTheDocument();
+  });
+});
+
+describe('El buscador no se mueve de pestaña en pestaña', () => {
+  beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
+
+  /* Queja del dueño: al entrar a Americano la barra desaparecía y las
+     pestañas brincaban a la izquierda. */
+  const posicionDelBuscador = () => {
+    const input = document.querySelector('[data-id="inventario.buscador"]');
+    const fila = input.closest('div').parentElement;          /* la fila del toolbar */
+    return { input, primero: fila.firstElementChild.contains(input) };
+  };
+
+  it('la barra está en el mismo sitio en PT y en Americano', async () => {
+    await abrirPT();
+    const enPT = posicionDelBuscador();
+    expect(enPT.input).toBeVisible();
+    expect(enPT.primero).toBe(true);
+    expect(enPT.input.placeholder).toBe('Buscar material…');
+
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Americano Terán' })); });
+    const enAmericano = posicionDelBuscador();
+    expect(enAmericano.input).toBeVisible();
+    expect(enAmericano.primero).toBe(true);
+    /* Misma barra, ahora buscando colores: la vista ya no trae la suya. */
+    expect(enAmericano.input.placeholder).toBe('Buscar color…');
+    expect(screen.queryByPlaceholderText('Buscar color…')).toBe(enAmericano.input);
   });
 });
 
