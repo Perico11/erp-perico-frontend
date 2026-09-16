@@ -15,12 +15,12 @@ import { MemoryRouter } from 'react-router-dom';
    = 39.587 cub (752.16 L). Total = 103.587 cub ≈ 1,968 L. */
 const PT_UBI = {
   ok: true,
-  fabrica: { 'BLANCO OFFWHITE 4.0': { cubeta: 12, galon: 0, litro: 0, tote: 1, atm: 0, otros: 0, granel: 0, residual: 0 } },
+  fabrica: { 'BLANCO OFFWHITE 4.0': { cubeta: 12, galon: 0, litro: 0, tote: 1, atm: 0, otros: 0, granel: 0, residual: 0, sublotes: 2 } },
   teran:   {
     /* `teranPresScalar` es el desglose CRUDO del pool que publica el backend
        para el modal de envasado. */
     'BLANCO OFFWHITE 4.0': { cubeta: 17, galon: 21, litro: 6, tote: 1, atm: 0, otros: 0, granel: 18.105, manual: 0,
-      teranPresScalar: { tote: 1, granel: 18.105, cubeta: 17, galon: 21, litro: 6 } },
+      sublotes: 3, teranPresScalar: { tote: 1, granel: 18.105, cubeta: 17, galon: 21, litro: 6 } },
     'AZUL REY 4.0': { cubeta: 11, galon: 0, litro: 0, tote: 0, atm: 0, otros: 0, granel: 0, manual: 11 },
   },
   total:   {
@@ -132,6 +132,31 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     const c = tarjeta('BLANCO OFFWHITE 4.0');
     await act(async () => { fireEvent.click(within(c).getByRole('button', { name: 'Envasar' })); });
     expect(screen.getByText('Envasar en Terán')).toBeInTheDocument();
+  });
+
+  it('"→ Terán" sigue ahí, y solo donde hay stock en Fábrica', async () => {
+    await abrirPT();
+    /* Es el mismo flujo de orden de transferencia de la pestaña Fábrica. */
+    expect(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: '→ Terán' })).toBeInTheDocument();
+    /* AZUL REY no tiene nada en Fábrica: no hay qué transferir. */
+    expect(within(tarjeta('AZUL REY 4.0')).queryByRole('button', { name: '→ Terán' })).toBeNull();
+  });
+
+  it('"Ver detalle" trae los lotes, el granel y lo cargado a mano', async () => {
+    await abrirPT();
+    const c = tarjeta('BLANCO OFFWHITE 4.0');
+    await act(async () => { fireEvent.click(within(c).getByRole('button', { name: /Ver detalle/ })); });
+    expect(within(c).getByText('LP-2026-010')).toBeInTheDocument();
+    expect(within(c).getByText(/Granel: 18.1 cub-eq/)).toBeInTheDocument();
+    expect(within(c).getByText(/Sublotes:/)).toBeInTheDocument();
+  });
+
+  it('el registro manual de Terán se puede quitar desde el detalle', async () => {
+    await abrirPT();
+    const c = tarjeta('AZUL REY 4.0');
+    await act(async () => { fireEvent.click(within(c).getByRole('button', { name: /Ver detalle/ })); });
+    expect(within(c).getByText(/Manual en Terán: 11 cub/)).toBeInTheDocument();
+    expect(within(c).getByRole('button', { name: 'Eliminar registro manual' })).toBeInTheDocument();
   });
 
   it('sin nada en ninguna ubicación no ofrece envasar', async () => {
