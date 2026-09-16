@@ -400,6 +400,14 @@ const api = {
      que el lote sale con el número que el encargo ya traía. */
   crearLote: (lote) => request('POST', '/api/trazabilidad/lote', { lote }),
 
+  /* Válvula de escape para un lote ATORADO (auditoría 15-sep-2026, RV-8).
+     El endpoint existe desde siempre y no tenía ni un botón: cuando un lote
+     quedaba en un estado sin salida, la única forma de destrabarlo era llamar
+     la API a mano desde una terminal. Solo admin; el motivo es obligatorio y
+     el servidor exige 20 caracteres porque queda en la auditoría. */
+  forzarTransicionLote: (loteId, nuevoEstado, motivo) =>
+    request('POST', '/api/lotes/forzar-transicion', { loteId, nuevoEstado, motivo }),
+
   /* Sprint G-9: cambiar el PIN propio (self-service, sin admin).
      Requiere conocer el PIN actual. Tras el cambio se cierran las demás
      sesiones del usuario, manteniendo solo la actual. */
