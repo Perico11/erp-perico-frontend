@@ -128,6 +128,7 @@ function QCInline({ lote, accion, userName, onSuccess, onCancel }) {
         usuario: userName,
       });
       /* Registro paralelo en el ledger inmutable de QC */
+      let avisoLedger = '';
       try {
         await api.registrarQC({
           id: Date.now().toString(36),
@@ -141,8 +142,19 @@ function QCInline({ lote, accion, userName, onSuccess, onCancel }) {
           fecha: new Date().toISOString(),
           usuario: userName,
         });
-      } catch {}
-      onSuccess(`QC ${aprobar ? 'aprobado' : 'rechazado'}: ${lote.producto || lote.codigo}`);
+      } catch (eLedger) {
+        /* BT-01 (auditoría 15-sep-2026): este catch estaba VACÍO y la línea de
+           abajo anunciaba "QC aprobado" igual. Si el registro de calidad no se
+           guardaba —sin señal, sesión vencida, error del servidor— el lote
+           avanzaba a envasado sin su viscosidad ni su pH y nadie se enteraba:
+           un hueco de trazabilidad en un producto que sale a la calle.
+           La transición del lote SÍ ocurrió, así que no se puede decir que
+           falló todo; lo que no se puede es callar lo que se perdió. */
+        console.warn('[QC] no se pudo guardar el registro de calidad:', eLedger?.message);
+        avisoLedger = ' — OJO: el lote avanzó pero NO se guardó el registro de calidad '
+          + '(viscosidad/pH). Vuelve a capturarlo o avisa a un administrador.';
+      }
+      onSuccess(`QC ${aprobar ? 'aprobado' : 'rechazado'}: ${lote.producto || lote.codigo}${avisoLedger}`);
     } catch (e) {
       setErr(e.message || 'Error al registrar QC');
     } finally {

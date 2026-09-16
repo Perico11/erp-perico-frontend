@@ -370,7 +370,7 @@ function LoteTimeline({ lote, isDesktop }) {
 /* defaultOpen: al enfocar un lote desde la pill del selector (mockup =
    detalle único con bitácora visible) la card monta ya expandida. El cambio
    de selección cambia el `key` → remonta y el default aplica. */
-function LoteCard({ lote, isDesktop, onShowQR, onShowDestinos, defaultOpen = false }) {
+function LoteCard({ lote, isDesktop, onShowQR, onShowDestinos, onForzar, defaultOpen = false }) {
   const [open, setOpen] = useState(!!defaultOpen);
   const est = ESTADO_CONFIG[lote.estado] || { label: lote.estado, bg: 'var(--lp-bg-sunken)', fg: 'var(--lp-text-tertiary)' };
   const sublotes = lote.sublotes || [];
@@ -420,6 +420,24 @@ function LoteCard({ lote, isDesktop, onShowQR, onShowDestinos, defaultOpen = fal
             >
               {ICONS.tienda}
             </button>
+            {/* RV-8: destrabar un lote atorado. Solo se pinta si el llamador
+                pasa onForzar, y eso solo pasa para admin. */}
+            {onForzar && (
+              <button
+                data-id="traza.btn.forzar"
+                data-rol="admin"
+                onClick={(e) => { e.stopPropagation(); onForzar(lote); }}
+                title="Destrabar: forzar el estado de este lote (solo admin, queda auditado)"
+                style={{
+                  width: 36, height: 36, borderRadius: 10,
+                  background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)',
+                  color: 'var(--lp-danger-700)', cursor: 'pointer', fontSize: 15,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                ⚠
+              </button>
+            )}
             {/* QR del lote — abre QRModal con el lote */}
             <button
               data-id="traza.btn.ver-qr"
@@ -570,6 +588,139 @@ function _piezasTxt(t) {
   return `${pres || `${t.piezas} pza`}${lit}`;
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   RV-8 (auditoría 15-sep-2026) — DESTRABAR UN LOTE ATORADO.
+
+   /api/lotes/forzar-transicion existe desde siempre y NO tenía un solo botón
+   en toda la aplicación: cuando un lote quedaba en un estado del que ningún
+   rol podía sacarlo, la única salida era que alguien abriera una terminal y
+   llamara la API a mano. Es la válvula de escape del sistema y estaba tras una
+   puerta sin manija.
+
+   Solo admin. El motivo es obligatorio y el servidor exige 20 caracteres
+   porque el movimiento queda en la cadena de auditoría y en el historial del
+   lote: forzar un estado se salta la máquina de estados, así que tiene que
+   quedar escrito por qué.
+   ════════════════════════════════════════════════════════════════════════ */
+const ESTADOS_FORZABLES = [
+  'pendiente', 'aceptado', 'en_produccion', 'producido', 'qc_hold', 'qc_aprobado',
+  'en_envasado', 'envasado', 'en_recoleccion', 'en_camino', 'en_almacen', 'entregado',
+  'cancelado', 'rechazado',
+];
+const MOTIVO_MIN = 20;
+
+function ForzarEstadoModal({ lote, onClose, onDone }) {
+  const [nuevoEstado, setNuevoEstado] = useState('');
+  const [motivo, setMotivo] = useState('');
+  const [guardando, setGuardando] = useState(false);
+  const [err, setErr] = useState('');
+  const codigo = lote.codigoLote || lote.id;
+  const faltan = Math.max(0, MOTIVO_MIN - motivo.trim().length);
+  const puede = !!nuevoEstado && nuevoEstado !== lote.estado && faltan === 0 && !guardando;
+
+  const guardar = async () => {
+    if (!puede) return;
+    setGuardando(true); setErr('');
+    try {
+      await api.forzarTransicionLote(lote.id || codigo, nuevoEstado, motivo.trim());
+      onDone(`Lote ${codigo}: estado forzado a "${ESTADO_LOTE_LABEL[nuevoEstado] || nuevoEstado}"`);
+      onClose();
+    } catch (e) {
+      setErr(e?.message || 'No se pudo forzar el estado');
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 1300, background: 'rgba(15,23,19,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        data-id="traza.modal.forzar"
+        data-rol="admin"
+        style={{ width: 'min(520px, 100%)', maxHeight: '86vh', overflowY: 'auto', background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)', borderRadius: 'var(--lp-radius-lg)', padding: '20px', fontFamily: 'var(--lp-font-sans)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--lp-text-primary)' }}>Destrabar lote {codigo}</span>
+          <button onClick={onClose} aria-label="Cerrar"
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: 'var(--lp-text-tertiary)' }}>✕</button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{
+            padding: 10, borderRadius: 8, fontSize: 12, lineHeight: 1.6,
+            background: 'var(--lp-danger-100)', color: 'var(--lp-danger-700)',
+          }}>
+            Esto <strong>se salta la máquina de estados</strong>: no repone inventario ni avisa a
+            nadie, solo cambia la etiqueta del lote. Úsalo cuando un lote quedó atorado y ningún
+            botón normal lo mueve. Queda registrado con tu nombre en la auditoría.
+          </div>
+          <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)' }}>
+            Estado actual: <strong>{ESTADO_LOTE_LABEL[lote.estado] || lote.estado}</strong>
+          </div>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Nuevo estado</span>
+            <select
+              value={nuevoEstado}
+              onChange={(e) => setNuevoEstado(e.target.value)}
+              data-id="traza.forzar.estado"
+              style={{
+                padding: '10px 12px', borderRadius: 8, fontSize: 14,
+                border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-surface)',
+                color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-sans)',
+              }}
+            >
+              <option value="">Elige el estado…</option>
+              {ESTADOS_FORZABLES.filter(e => e !== lote.estado).map(e => (
+                <option key={e} value={e}>{ESTADO_LOTE_LABEL[e] || e}</option>
+              ))}
+            </select>
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>Por qué hay que forzarlo</span>
+            <textarea
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              rows={3}
+              placeholder="Ej.: el lote quedó en camino tras un escaneo por error y no hay botón para regresarlo"
+              data-id="traza.forzar.motivo"
+              style={{
+                padding: '10px 12px', borderRadius: 8, fontSize: 14, resize: 'vertical',
+                border: '1px solid var(--lp-border-subtle)', background: 'var(--lp-bg-surface)',
+                color: 'var(--lp-text-primary)', fontFamily: 'var(--lp-font-sans)',
+              }}
+            />
+            <span style={{ fontSize: 11, color: faltan ? 'var(--lp-danger-700)' : 'var(--lp-text-tertiary)' }}>
+              {faltan ? `Faltan ${faltan} caracteres` : 'Listo'}
+            </span>
+          </label>
+          {err && <div style={{ fontSize: 13, color: 'var(--lp-danger-700)' }}>{err}</div>}
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
+          <button onClick={onClose} disabled={guardando}
+            style={{ padding: '10px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', background: 'transparent', border: '1px solid var(--lp-border-subtle)', color: 'var(--lp-text-secondary)' }}>Cancelar</button>
+          <button
+            onClick={guardar}
+            disabled={!puede}
+            data-id="traza.btn.forzar-confirmar"
+            style={{
+              padding: '10px 16px', borderRadius: 8, fontSize: 14, fontWeight: 600,
+              border: 'none', cursor: puede ? 'pointer' : 'not-allowed',
+              background: puede ? 'var(--lp-danger-700)' : 'var(--lp-bg-sunken)',
+              color: puede ? '#fff' : 'var(--lp-text-disabled)',
+              fontFamily: 'var(--lp-font-sans)',
+            }}
+          >
+            {guardando ? 'Forzando…' : 'Forzar estado'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DestinosModal({ lote, onClose }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
@@ -705,6 +856,9 @@ export default function TrazabilidadPage() {
   const qParam = searchParams.get('q');
   useEffect(() => { if (qParam) setQuery(qParam); }, [qParam, setQuery]);
   const [filter, setFilter] = useState('todos');
+  /* RV-8: lote a destrabar (solo admin ve el botón que lo abre). */
+  const [forzarLote, setForzarLote] = useState(null);
+  const [forzarAviso, setForzarAviso] = useState('');
   /* selector de lote del mockup: pill activa = ver SOLO ese lote, expandido */
   const [selLote, setSelLote] = useState(null);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -958,11 +1112,29 @@ export default function TrazabilidadPage() {
               isDesktop={isDesktop}
               onShowQR={setQrLote}
               onShowDestinos={setDestLote}
+              onForzar={esAdmin ? setForzarLote : undefined}
               defaultOpen={focusOn}
             />
           ))
         )}
       </div>
+
+      {/* RV-8: destrabar un lote atorado (admin). */}
+      {forzarLote && (
+        <ForzarEstadoModal
+          lote={forzarLote}
+          onClose={() => setForzarLote(null)}
+          onDone={(msg) => { setForzarAviso(msg); reload && reload(); setTimeout(() => setForzarAviso(''), 6000); }}
+        />
+      )}
+      {forzarAviso && (
+        <div style={{
+          position: 'fixed', left: '50%', bottom: 24, transform: 'translateX(-50%)', zIndex: 1400,
+          padding: '12px 18px', borderRadius: 10, fontSize: 14, fontFamily: 'var(--lp-font-sans)',
+          background: 'var(--lp-bg-raised)', border: '1.5px solid var(--lp-border-subtle)',
+          color: 'var(--lp-text-primary)', boxShadow: '0 6px 24px rgba(0,0,0,.18)',
+        }}>{forzarAviso}</div>
+      )}
 
       {/* §7: Scanner QR compartido (no se modifica QRModal.jsx) */}
       {scannerOpen && (

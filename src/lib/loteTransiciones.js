@@ -23,11 +23,21 @@ export const TRANSICIONES_LOTE = {
   /* jun 2026: envasado = Enrique (técnico)/admin. Josué (almacén) NO envasa. */
   registrarEnvasado:   { desde: ['producido','qc_aprobado','en_envasado'], a: 'en_envasado', roles: ['tecnico','admin'] },
   marcarEnvasado:      { desde: ['producido','qc_aprobado','en_envasado'], a: 'envasado', roles: ['tecnico','admin'] },
-  cancelarLote:        { desde: ['pendiente','aceptado','en_produccion','producido','qc_hold','en_envasado'], a: 'cancelado', roles: ['admin'] },
+  /* 'qc_aprobado' (auditoría 15-sep-2026, RV-4; sync con backend): faltaba, así
+     que un lote aprobado por calidad ya no se podía cancelar. 'envasado' sigue
+     fuera a propósito: ahí las piezas tienen QR y se anulan una a una. */
+  cancelarLote:        { desde: ['pendiente','aceptado','en_produccion','producido','qc_hold','qc_aprobado','en_envasado'], a: 'cancelado', roles: ['admin'] },
 };
 
 export const TRANSICIONES_SUBLOTE = {
-  marcarRecoleccion:      { desde: ['envasado'], a: 'en_recoleccion', roles: ['almacen','admin'] },
+  /* 'tecnico' (auditoría 15-sep-2026, ROL-A-02; sync con backend): solo en una
+     orden INTERNA con destino Terán — la emergencia que detecta Enrique sin que
+     Josué se haya enterado. La condición va en `soloSi`, no en `roles`, porque
+     depende del PEDIDO y no del sublote; getAccionesSublote la aplica solo si
+     el llamador le pasa ese contexto, y sin contexto responde lo conservador
+     (sin técnico), que es como se comportaba hasta hoy. */
+  marcarRecoleccion:      { desde: ['envasado'], a: 'en_recoleccion', roles: ['almacen','admin','tecnico'],
+                            soloSi: { tecnico: (ctx) => String(ctx && ctx.pedidoDestino || '').toLowerCase() === 'teran' } },
   /* Camino "Luis ausente" (21-jul-2026): deshace marcarRecoleccion — el
      sublote regresa a 'envasado' (nunca salió de fábrica). Josué lo puede
      re-despachar después o llevarlo por OT. */
@@ -183,11 +193,16 @@ export function getAccionesLote(lote, rol) {
   });
 }
 
-export function getAccionesSublote(sublote, rol) {
+export function getAccionesSublote(sublote, rol, ctx) {
   if (!sublote || !rol) return [];
   return Object.keys(TRANSICIONES_SUBLOTE).filter(a => {
     const t = TRANSICIONES_SUBLOTE[a];
-    return _has(t.roles, rol) && _has(t.desde, sublote.estado);
+    if (!_has(t.roles, rol) || !_has(t.desde, sublote.estado)) return false;
+    /* Condición extra para un rol concreto (ver marcarRecoleccion). Sin
+       contexto se niega: la pantalla no pinta un botón que el servidor va a
+       rechazar. */
+    if (t.soloSi && typeof t.soloSi[rol] === 'function') return !!t.soloSi[rol](ctx || {});
+    return true;
   });
 }
 
@@ -204,7 +219,12 @@ export function calcularEstadoLote(lote) {
   if (subs.length === 0) return lote.estado || 'envasado';
 
   const terminales = ['en_stock_teran','tote_vaciado','cancelado','entregado_tienda'];
-  if (subs.every(s => terminales.includes(s.estado))) return 'entregado';
+  if (subs.every(s => terminales.includes(s.estado))) {
+    /* RV-7 (auditoría 15-sep-2026; sync con backend): si NINGUNA pieza quedó
+       viva, el lote está cancelado, no entregado. Antes se archivaba como
+       vendido al cliente y cerraba el pedido como cumplido. */
+    return subs.some(s => s.estado !== 'cancelado') ? 'entregado' : 'cancelado';
+  }
 
   /* REGLA jun 2026 (decisión owner, reemplaza L4; sync con backend): un TOTE
      activo en Terán con litros NO cierra el lote — queda 'en_almacen' (activo,
