@@ -65,6 +65,19 @@ const TABLERO = {
     finalizados: 3, meta: 4, metaNota: '1 por semana', cumplimientoPct: 75,
     diasDesdeUltimo: 2, prev: { finalizados: 1 },
   },
+  /* E4: números chicos a propósito — sin separador de miles las pruebas no
+     dependen del locale. AZUL se come el margen (+$90); KILZ ahorra $5 con
+     costos incompletos (≈). */
+  costeo: {
+    receta: 900, real: 985, deltaMxn: 85, deltaPct: 9.4,
+    tandas: 4, tandasSinCaptura: 2, costoParcial: true,
+    porProducto: [
+      { producto: 'AZUL PALLETS', receta: 400, real: 490, deltaMxn: 90, tandas: 2, parcial: false },
+      { producto: 'KILZ', receta: 500, real: 495, deltaMxn: -5, tandas: 2, parcial: true },
+    ],
+    topTandas: [],
+    prev: { receta: 800, real: 1000, deltaMxn: 200, tandas: 3 },
+  },
 };
 
 beforeEach(() => {
@@ -100,6 +113,7 @@ describe('E3 — EficaciaPage', () => {
     expect(screen.getByText('Rotación por tienda')).toBeTruthy();
     expect(screen.getByText('Conteos cíclicos')).toBeTruthy();
     expect(screen.getByText('Top 10 · lo más pedido por tiendas')).toBeTruthy();
+    expect(screen.getByText('Costeo real vs receta')).toBeTruthy();
 
     const cuerpo = document.body.textContent;
     /* Tendencias con la dirección buena resuelta: días bajaron (-1.9) y
@@ -139,6 +153,18 @@ describe('E3 — EficaciaPage', () => {
     expect(cuerpo).toContain('900.5 L');
     expect(cuerpo).toContain('75.7 L');
     expect(cuerpo).toContain('no captura pedidos de tienda');
+    /* E4 — Costeo real vs receta: el sobrecosto en pesos con su %, el
+       desglose real/receta, el producto que se come el margen primero, y
+       las TRES honestidades (sin captura, costos incompletos, valuación). */
+    expect(cuerpo).toContain('+$85');
+    expect(cuerpo).toContain('(+9.4%)');
+    expect(cuerpo).toContain('real $985 vs receta $900 · 4 tandas');
+    expect(cuerpo).toContain('+$90');   /* AZUL PALLETS se come el margen */
+    expect(cuerpo).toContain('-$5');    /* KILZ ahorra */
+    expect(cuerpo).toContain('-115 $'); /* tendencia: 85 vs 200 previos, mejora */
+    expect(cuerpo).toContain('2 tandas del periodo sin captura de consumo');
+    expect(cuerpo).toContain('materias sin costo en el catálogo');
+    expect(cuerpo).toContain('valuado al costo ponderado vigente');
   });
 
   it('HONESTIDAD visible: sin-fechas y litros incompletos se dicen en pantalla', async () => {
@@ -194,6 +220,39 @@ describe('E3 — EficaciaPage', () => {
     expect(document.body.textContent).toContain('mes: 1 sep → 15 sep · contra 1 ago → 15 ago');
     expect(document.body.textContent).toContain('vs mes pasado');
     expect(document.body.textContent).not.toContain('vs 4 sem. previas');
+  });
+
+  it('E4: sin tandas capturadas el costeo muestra "—" y lo explica — jamás un $0 inventado', async () => {
+    api.getEficaciaTablero.mockResolvedValue({
+      ok: true,
+      data: {
+        ...TABLERO,
+        costeo: {
+          receta: 0, real: 0, deltaMxn: 0, deltaPct: null,
+          tandas: 0, tandasSinCaptura: 3, costoParcial: false,
+          porProducto: [], topTandas: [],
+          prev: { receta: 0, real: 0, deltaMxn: 0, tandas: 0 },
+        },
+      },
+    });
+    render(<MemoryRouter><EficaciaPage /></MemoryRouter>);
+    await screen.findByText('4.2 días');
+
+    const cuerpo = document.body.textContent;
+    expect(cuerpo).toContain('sin tandas con captura de consumo en el periodo');
+    expect(cuerpo).toContain('3 tandas del periodo sin captura de consumo');
+    /* Sin dato actual NI previo (prev.tandas 0), la tendencia no inventa. */
+    expect(cuerpo).toContain('sin dato previo para comparar');
+    expect(screen.getByText('—')).toBeTruthy(); /* único: merma sí trae 2.1% */
+  });
+
+  it('E4: backend viejo sin bloque costeo — la tarjeta simplemente no sale', async () => {
+    const viejo = { ...TABLERO };
+    delete viejo.costeo;
+    api.getEficaciaTablero.mockResolvedValue({ ok: true, data: viejo });
+    render(<MemoryRouter><EficaciaPage /></MemoryRouter>);
+    await screen.findByText('4.2 días');
+    expect(screen.queryByText('Costeo real vs receta')).toBeNull();
   });
 
   it('si el backend falla, muestra el error humanizado en lugar de cards vacías', async () => {
