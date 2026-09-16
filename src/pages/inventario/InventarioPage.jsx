@@ -463,7 +463,7 @@ function TransitoBadge({ transito, unidad }) {
   );
 }
 
-function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir, onOcultar, unidadVista = 'cub', onContarPT, onEditarFicha }) {
+function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, onTransferir, onOcultar, unidadVista = 'cub' }) {
   /* Regla proyecto: botones NUNCA 100% width en PC (bp 880, igual que la página). */
   const isDesktop = useIsDesktop();
   const { nombre, inv, pct } = item;
@@ -484,7 +484,7 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
   const clickable = canEdit || canContar;
   return (
     <div style={S.mCard(clickable)} data-id="inventario.row.item" data-rol="admin,tecnico,compras,almacen,inventario"
-      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit && onContarPT && piezas) onContarPT(item); else if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
+      role={clickable ? 'button' : undefined} onClick={() => { if (canEdit) onAdjust(item); else if (canContar && onContar) onContar(); }}>
       <div style={S.mTop}>
         <span style={S.mName}>{resaltar(nombre, query)}</span>
         {item.oculto && (
@@ -496,9 +496,9 @@ function PTRow({ item, canEdit, canContar, onAdjust, onContar, query, unidad, on
         <EstadoBadge qty={qty} pct={pct} />
         {canEdit && <PencilIcon />}
         {/* PT ocultos (jul 2026): menú ⋮ con Ocultar/Mostrar (solo admin) */}
-        {(onOcultar || onEditarFicha) && (
+        {onOcultar && (
           <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
-            <MPActionsMenu mp={nombre} canEdit={true} extraItems={menuItemsPT(item, onEditarFicha, onOcultar)} />
+            <MPActionsMenu mp={nombre} canEdit={true} extraItems={menuItemsPT(item, null, onOcultar)} />
           </span>
         )}
       </div>
@@ -721,7 +721,7 @@ function EstadoBadge({ qty, pct }) {
 
 /* ── Sheet "Ajustar existencia" (mockup) — usado por tabla y cards ──
    Conserva el candado: el onSave del padre pasa por ajustarConCandado. */
-function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = false, puedeRenombrarMP = false, motivoOpcional = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
+function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = false, puedeRenombrarMP = false, motivoOpcional = false, puedeContarPiezas = false, onClose, onSave, onEliminar, onSustituir, onPedir }) {
   const [qty, setQty] = useState(String(item.qty ?? 0));
   const [min, setMin] = useState(String(item.min ?? 0));
   const [motivo, setMotivo] = useState('');
@@ -744,6 +744,22 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
      en esa medida. La existencia base en cubetas se DERIVA de medida × cantidad. */
   const [medidaEdit, setMedidaEdit] = useState(item.medida || (item.tipo === 'pt' ? 'cubeta' : ''));
   const [cantMedida, setCantMedida] = useState(String(item.medidaQty != null ? item.medidaQty : (item.qty ?? 0)));
+  /* PT (15-sep-2026, pedido del dueño): la ficha ajusta la ubicación que
+     elijas. Fábrica es el escalar de producción (inv.pt.qty, capturado en su
+     medida); Terán es el pool del almacén, que se lleva en cubetas. Cada
+     pestaña guarda por su propia puerta y NUNCA toca la otra. */
+  const [ubicPT, setUbicPT] = useState(item.ubicInicial === 'teran' ? 'teran' : 'fabrica');
+  const [qtyTeran, setQtyTeran] = useState(String(item.teranQty ?? 0));
+  /* Dos formas de corregir: por TOTAL (el número de siempre) o por PIEZAS
+     (totes llenos, litros del tote abierto, cubetas, galones…), que es como
+     de verdad está el stock en el piso. Las piezas van al endpoint de conteo;
+     el total, a los de siempre. */
+  const piezasDeUbic = (u) => piezasDeUbicacion(item.buckets?.[u], (item.parciales || []).filter(t => t.ubic === u));
+  const hayDesglose = esPT && !!item.buckets && puedeContarPiezas;
+  const [captura, setCaptura] = useState('total');
+  const [piezas, setPiezas] = useState(() => (esPT && item.buckets
+    ? Object.fromEntries(PIEZAS_KEYS.map(k => [k, String(piezasDeUbicacion(item.buckets[item.ubicInicial === 'teran' ? 'teran' : 'fabrica'], (item.parciales || []).filter(t => t.ubic === (item.ubicInicial === 'teran' ? 'teran' : 'fabrica')))[k] ?? 0)]))
+    : {}));
   const [saving, setSaving] = useState(false);
   const inputRef = useRef(null);
   useEffect(() => { const t = setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 120); return () => clearTimeout(t); }, []);
@@ -757,32 +773,62 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
      → se fuerza 'fijar' (captura el total en la medida nueva). */
   const medidaActualKey = item.medida || 'cubeta';
   const actualEnMedida = item.medidaQty != null ? item.medidaQty : (item.qty ?? 0);
-  const medidaCambiada = esPT && medidaEdit !== medidaActualKey;
+  const esTeran = esPT && ubicPT === 'teran';
+  const porPiezas = esPT && hayDesglose && captura === 'piezas';
+  const piezasAntes = hayDesglose ? piezasDeUbic(ubicPT) : null;
+  const piezasNuevas = porPiezas ? piezasDeTexto(piezas) : null;
+  const piezasMalas = porPiezas && piezasInvalidas(piezas);
+  const piezasCambio = porPiezas && PIEZAS_KEYS.some(k => Math.abs((piezasNuevas[k] || 0) - (Number(piezasAntes[k]) || 0)) > 1e-9);
+  const teranNum = parseFloat(qtyTeran);
+  /* Existencia de la ubicación que se está editando. */
+  const actualUbic = esTeran ? (item.teranQty ?? 0) : (item.qty ?? 0);
+  const medidaCambiada = esPT && !esTeran && medidaEdit !== medidaActualKey;
   const modoEfectivo = medidaCambiada ? 'fijar' : modo;
-  /* Total final en la unidad de captura (medida para PT, unidad directa MP/Env). */
+  /* Total final en la unidad de captura (medida para PT Fábrica, cubetas para
+     el pool de Terán, unidad directa MP/Env). */
   const cantMedidaFinal = calcularTotalAjuste(modoEfectivo, actualEnMedida, cantMedida);
+  const qtyTeranFinal = calcularTotalAjuste(modoEfectivo, item.teranQty ?? 0, qtyTeran);
   const qtyFinalDirecta = calcularTotalAjuste(modoEfectivo, item.qty ?? 0, qty);
   /* PT: la existencia base (cubetas) se DERIVA de medida × cantidad (total final). */
-  const qtyEfectiva = esPT
-    ? medidaACubetas(medidaEdit, cantMedidaFinal == null ? 0 : cantMedidaFinal)
-    : (qtyFinalDirecta == null ? NaN : qtyFinalDirecta);
-  const qtyValida = esPT
-    ? (cantMedida !== '' && !isNaN(cantMedidaNum) && cantMedidaNum >= 0 && !!medidaEdit)
-    : (qty !== '' && !isNaN(qtyNum) && qtyNum >= 0);
+  const qtyEfectiva = porPiezas
+    ? cubDePiezas(piezasNuevas)
+    : esTeran
+    ? (qtyTeranFinal == null ? NaN : qtyTeranFinal)
+    : esPT
+      ? medidaACubetas(medidaEdit, cantMedidaFinal == null ? 0 : cantMedidaFinal)
+      : (qtyFinalDirecta == null ? NaN : qtyFinalDirecta);
+  const qtyValida = porPiezas
+    ? !piezasMalas
+    : esTeran
+    ? (qtyTeran !== '' && !isNaN(teranNum) && teranNum >= 0)
+    : esPT
+      ? (cantMedida !== '' && !isNaN(cantMedidaNum) && cantMedidaNum >= 0 && !!medidaEdit)
+      : (qty !== '' && !isNaN(qtyNum) && qtyNum >= 0);
   /* Cambiar de modo limpia el campo (sumar/restar) o precarga el total actual
      (fijar), y regresa el foco al input. */
   const cambiarModo = (m) => {
     setModo(m);
-    if (esPT) setCantMedida(m === 'fijar' ? String(actualEnMedida) : '');
+    if (esTeran) setQtyTeran(m === 'fijar' ? String(item.teranQty ?? 0) : '');
+    else if (esPT) setCantMedida(m === 'fijar' ? String(actualEnMedida) : '');
     else setQty(m === 'fijar' ? String(item.qty ?? 0) : '');
     setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 0);
   };
-  const stockChanged = (qtyValida && qtyEfectiva !== (item.qty ?? 0))
-    || (canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
+  /* Cambiar de ubicación recarga los campos de ESA ubicación y vuelve a fijar. */
+  const cambiarUbicPT = (u) => {
+    if (u === ubicPT || saving) return;
+    setUbicPT(u);
+    setModo('fijar');
+    if (u === 'teran') setQtyTeran(String(item.teranQty ?? 0));
+    else { setMedidaEdit(item.medida || 'cubeta'); setCantMedida(String(actualEnMedida)); }
+    if (hayDesglose) setPiezas(Object.fromEntries(PIEZAS_KEYS.map(k => [k, String(piezasDeUbic(u)[k] ?? 0)])));
+    setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 0);
+  };
+  const stockChanged = (qtyValida && (porPiezas ? (piezasCambio || Math.abs(qtyEfectiva - actualUbic) > 0.005) : qtyEfectiva !== actualUbic))
+    || (!esTeran && !porPiezas && canEditMin && min !== '' && !isNaN(minNum) && minNum !== (item.min ?? 0));
   const nombreChanged = mostrarNombre && nombreEdit.trim() !== '' && nombreEdit.trim() !== (item.nombre || '');
   const skuChanged = esPT && skuEdit.trim() !== String(item.sku || '');
   /* medida cambió: distinta medida, o distinta cantidad-en-medida vs lo guardado. */
-  const medidaChanged = esPT && (medidaEdit !== (item.medida || 'cubeta')
+  const medidaChanged = esPT && !esTeran && !porPiezas && (medidaEdit !== (item.medida || 'cubeta')
     || (!isNaN(cantMedidaNum) && cantMedidaNum !== (item.medidaQty != null ? item.medidaQty : (item.qty ?? 0))));
   const metaChanged = nombreChanged || skuChanged || medidaChanged;
 
@@ -800,13 +846,13 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
     setSaving(true);
     /* Rastro del modo en el motivo: "Sumó 20 kg (300 → 320) — <motivo>". Así la
        auditoría distingue un conteo (fijar) de una entrada/salida manual. */
-    const notaModo = stockChanged
+    const notaModo = stockChanged && !porPiezas
       ? notaModoAjuste(
         modoEfectivo,
-        esPT ? actualEnMedida : (item.qty ?? 0),
-        esPT ? cantMedidaNum : qtyNum,
-        esPT ? cantMedidaFinal : qtyFinalDirecta,
-        esPT ? (ptMedidaDef(medidaEdit)?.plur || '') : item.unidad
+        esTeran ? (item.teranQty ?? 0) : esPT ? actualEnMedida : (item.qty ?? 0),
+        esTeran ? teranNum : esPT ? cantMedidaNum : qtyNum,
+        esTeran ? qtyTeranFinal : esPT ? cantMedidaFinal : qtyFinalDirecta,
+        esTeran ? 'cub en Terán' : esPT ? (ptMedidaDef(medidaEdit)?.plur || '') : item.unidad
       )
       : null;
     const motivoFinal = notaModo
@@ -816,12 +862,17 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
       /* 3er arg = nuevo mínimo (solo si el rol puede editarlo; si no, se conserva el actual).
          4to arg = metadatos de catálogo (solo PT) + flags de qué cambió. */
       await onSave(
-        qtyValida ? qtyEfectiva : (item.qty ?? 0),
+        qtyValida ? qtyEfectiva : actualUbic,
         motivoFinal,
         canEditMin ? minNum : (item.min ?? 0),
         {
           stockChanged,
           metaChanged,
+          /* PT: a qué ubicación va el cambio de stock (Fábrica = inv.pt.qty,
+             Terán = el pool). El catálogo (nombre/SKU/medida) es del producto. */
+          ubicacion: esPT ? ubicPT : undefined,
+          /* Capturado por piezas → el backend deriva el escalar del conteo. */
+          piezas: porPiezas ? payloadPiezas(piezasNuevas) : undefined,
           nuevoNombre: nombreChanged ? nombreEdit.trim() : undefined,
           sku: skuChanged ? skuEdit.trim() : undefined,
           medida: (esPT && medidaChanged) ? (medidaEdit || '') : undefined,
@@ -840,13 +891,44 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
         {/* `ubicLabel` (envases/tapas): dice a QUÉ ubicación se va a escribir.
             Sin él, desde la vista "Total" no había forma de saber que el ajuste
             aterriza en Fábrica y no en el total que se ve arriba. */}
-        <div style={S.shS}>{item.nombre}{item.ubicLabel ? ` · ${item.ubicLabel}` : ''}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
+        <div style={S.shS}>{item.nombre}{!esPT && item.ubicLabel ? ` · ${item.ubicLabel}` : ''}{canEditMin ? '' : ` · mín ${(item.min ?? 0).toLocaleString('es-MX')} ${item.unidad}`}</div>
+        {/* PT: qué ubicación se ajusta. Fábrica escribe el escalar de
+            producción; Terán, el pool del almacén. Nunca las dos a la vez. */}
+        {esPT && (
+          <>
+            <label style={S.flbl}>Ubicación</label>
+            <div role="tablist" aria-label="Ubicación" style={{ display: 'flex', gap: 4, background: 'var(--lp-bg-sunken)', borderRadius: 11, padding: 3, marginBottom: 12 }}>
+              {[['fabrica', 'Fábrica'], ['teran', 'Terán']].map(([u, l]) => {
+                const on = ubicPT === u;
+                const v = u === 'teran' ? (item.teranQty ?? 0) : (item.qty ?? 0);
+                return (
+                  <button key={u} type="button" role="tab" aria-selected={on} disabled={saving}
+                    data-id={`inventario.ajuste.ubic.${u}`} data-rol="admin,almacen,inventario,tecnico"
+                    onClick={() => cambiarUbicPT(u)}
+                    style={{
+                      flex: 1, minHeight: 40, border: 'none', borderRadius: 8, cursor: 'pointer',
+                      background: on ? 'var(--lp-bg-raised)' : 'transparent',
+                      color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+                      boxShadow: on ? '0 1px 4px rgba(26,24,21,.14)' : 'none',
+                      fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap',
+                    }}>
+                    {l} · {(Number(v) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
         <div style={S.bigsis}>
-          <div style={S.bigK}>Existencia actual</div>
+          <div style={S.bigK}>Existencia actual{esPT ? ` en ${esTeran ? 'Terán' : 'Fábrica'}` : ''}</div>
           <div style={S.bigV}>
-            {esPT && item.medida
-              ? <>{etiquetaMedida(item.medida, item.medidaQty)} <span style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 500 }}>· {(item.qty ?? 0).toLocaleString('es-MX')} cub</span></>
-              : <>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</>}
+            {porPiezas
+              ? <>{fmtL(cubALitros(actualUbic))} L <span style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 500 }}>· {resumenPiezas(piezasAntes)}</span></>
+              : esTeran
+              ? <>{(item.teranQty ?? 0).toLocaleString('es-MX', { maximumFractionDigits: 1 })} cub</>
+              : esPT && item.medida
+                ? <>{etiquetaMedida(item.medida, item.medidaQty)} <span style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 500 }}>· {(item.qty ?? 0).toLocaleString('es-MX')} cub</span></>
+                : <>{(item.qty ?? 0).toLocaleString('es-MX')} {item.unidad}</>}
           </div>
         </div>
         {/* Catálogo: nombre (PT y MP) + SKU (solo PT). Aplican directo con
@@ -880,7 +962,57 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
             )}
           </>
         )}
-        {esPT ? (
+        {/* Cómo se captura la corrección: el número de siempre, o las piezas
+            reales (lo que se puede tocar en el piso). */}
+        {hayDesglose && (
+          <>
+            <label style={{ ...S.flbl, marginTop: 12 }}>Cómo capturar</label>
+            <div role="tablist" aria-label="Cómo capturar" style={{ display: 'flex', gap: 4, background: 'var(--lp-bg-sunken)', borderRadius: 11, padding: 3 }}>
+              {[['total', 'Por total'], ['piezas', 'Por piezas']].map(([k, l]) => {
+                const on = captura === k;
+                return (
+                  <button key={k} type="button" role="tab" aria-selected={on} disabled={saving}
+                    data-id={`inventario.ajuste.captura.${k}`}
+                    onClick={() => { if (!saving) setCaptura(k); }}
+                    style={{
+                      flex: 1, minHeight: 38, border: 'none', borderRadius: 8, cursor: 'pointer',
+                      background: on ? 'var(--lp-bg-raised)' : 'transparent',
+                      color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+                      boxShadow: on ? '0 1px 4px rgba(26,24,21,.14)' : 'none',
+                      fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600,
+                    }}>{l}</button>
+                );
+              })}
+            </div>
+          </>
+        )}
+        {porPiezas ? (
+          <>
+            <PiezasCampos antes={piezasAntes} vals={piezas} setVals={setPiezas} saving={saving} />
+            <AjustePreview actual={cubALitros(actualUbic)} nuevo={qtyValida ? litrosDePiezas(piezasNuevas) : null} unidad="L"
+              extra={qtyValida ? (
+                <div data-id="inventario.contar.preview" style={{ marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-sans)' }}>
+                  ≈ <strong>{fmtCub(qtyEfectiva)}</strong> cubetas-equivalente en {esTeran ? 'Terán' : 'Fábrica'}
+                </div>
+              ) : null} />
+          </>
+        ) : esTeran ? (
+          <>
+            {/* El pool de Terán se lleva en cubetas-equivalente: aquí se corrige
+                el total del almacén sin tocar lo de Fábrica. Para capturarlo por
+                piezas (totes, cubetas, galones…) está "Contar Terán". */}
+            <label style={{ ...S.flbl, marginTop: 12 }}>Tipo de ajuste</label>
+            <ModoAjusteSelector modo={modoEfectivo} onModo={cambiarModo} dataIdBase="inventario.ajuste.modo" />
+            <label style={{ ...S.flbl, marginTop: 12 }}>{etiquetaCampoAjuste(modoEfectivo, 'cub')}</label>
+            <input ref={inputRef} style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
+              data-id="inventario.ajuste.qty-teran"
+              value={qtyTeran} onChange={e => setQtyTeran(e.target.value)} />
+            <AjustePreview actual={item.teranQty ?? 0} nuevo={qtyTeranFinal} unidad="cub" />
+            <div style={{ marginTop: 6, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+              Solo cambia el pool de <strong>Terán</strong>; lo de Fábrica queda igual. Fijarlo en 0 lo quita del almacén.
+            </div>
+          </>
+        ) : esPT ? (
           <>
             {/* Medida en que está el producto (como en envases) + cantidad en esa
                 medida. La existencia en cubetas se calcula sola. */}
@@ -933,7 +1065,7 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
             <AjustePreview actual={item.qty ?? 0} nuevo={qtyFinalDirecta} unidad={item.unidad} />
           </>
         )}
-        {canEditMin && (
+        {canEditMin && !esTeran && !porPiezas && (
           <>
             <label style={{ ...S.flbl, marginTop: 12 }}>Mínimo ({item.unidad})</label>
             <input style={S.finQty} type="number" inputMode="decimal" step="1" min="0"
@@ -960,7 +1092,9 @@ function AjusteSheet({ item, isDesktop, canEditMin = false, modoPropuesta = fals
               : (modoPropuesta && stockChanged
                 ? 'Enviar a aprobación'
                 : (stockChanged && qtyValida
-                  ? `${modoEfectivo === 'fijar' ? 'Fijar' : 'Guardar'} total: ${qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })} ${esPT ? 'cub' : item.unidad}`
+                  ? (porPiezas
+                    ? `Guardar conteo de ${esTeran ? 'Terán' : 'Fábrica'}`
+                    : `${modoEfectivo === 'fijar' ? 'Fijar' : 'Guardar'} ${esPT ? (esTeran ? 'Terán' : 'Fábrica') : 'total'}: ${qtyEfectiva.toLocaleString('es-MX', { maximumFractionDigits: 1 })} ${esPT ? 'cub' : item.unidad}`)
                   : 'Guardar'))}
           </button>
         </div>
@@ -1072,8 +1206,6 @@ const CAMPOS_TOTE = [
   { key: 'tote',    label: 'Llenos',           sub: `${LITROS_TOTE} L`, entero: true },
   { key: 'granelL', label: 'Parcial / granel', sub: 'litros',           entero: false },
 ];
-const NOMBRE_UBIC = { fabrica: 'Fábrica', teran: 'Terán' };
-const aTexto = (p) => Object.fromEntries(PIEZAS_KEYS.map(k => [k, String(p[k] ?? 0)]));
 const resumenPiezas = (p) => {
   const s = [];
   if (p.tote > 0) s.push(`${p.tote} tote${p.tote === 1 ? '' : 's'}`);
@@ -1085,52 +1217,14 @@ const resumenPiezas = (p) => {
   return s.length ? s.join(' · ') : 'sin piezas';
 };
 
-export function ContarPTSheet({ item, buckets, parciales, isDesktop, motivoOpcional = false, ubicacionInicial, onClose, onSave }) {
-  const fabQty = Number(item.fabQty) || 0;
-  const teranQty = Number(item.teranQty) || 0;
-  const [ubic, setUbic] = useState(ubicacionInicial || (fabQty <= 0 && teranQty > 0 ? 'teran' : 'fabrica'));
-  /* Piezas de ESTA ubicación, con el tote abierto contado una sola vez. */
-  const piezasDe = useCallback((u) => piezasDeUbicacion(buckets?.[u], (parciales || []).filter(t => t.ubic === u)), [buckets, parciales]);
-  const antes = useMemo(() => piezasDe(ubic), [piezasDe, ubic]);
-  const [vals, setVals] = useState(() => aTexto(piezasDe(ubic)));
-  const [motivo, setMotivo] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  /* Cambiar de ubicación recarga los "antes" de ESA ubicación (se descarta lo tecleado). */
-  const cambiarUbic = (u) => {
-    if (u === ubic || saving) return;
-    setUbic(u);
-    setVals(aTexto(piezasDe(u)));
-  };
+/* Campos de CONTEO por piezas de UNA ubicación (totes llenos, litros del tote
+   abierto y piezas cerradas), con el "antes" bajo cada campo y el campo tocado
+   marcado. Lo usa la ficha de Ajustar cuando se captura "por piezas". */
+function PiezasCampos({ antes, vals, setVals, saving = false }) {
   const num = (k) => (vals[k] === '' ? 0 : Number(vals[k]));
   const campoMalo = (k, entero) => { const v = num(k); return !Number.isFinite(v) || v < 0 || (entero && Math.abs(v - Math.round(v)) > 1e-9); };
-  const invalido = PIEZAS_KEYS.some(k => campoMalo(k, k !== 'granelL'));
-  const nuevo = Object.fromEntries(PIEZAS_KEYS.map(k => [k, Number.isFinite(num(k)) ? Math.max(0, num(k)) : 0]));
-  const cambiado = (k) => Math.abs(num(k) - (Number(antes[k]) || 0)) > 1e-9;
-  const algoCambio = PIEZAS_KEYS.some(cambiado);
-  const escalarL = cubALitros(ubic === 'teran' ? teranQty : fabQty); /* lo que el backend registra hoy */
-  const piezasL = litrosDePiezas(antes);                              /* lo que suman las piezas mostradas */
-  const nuevoL = litrosDePiezas(nuevo);
-  const nuevoCub = cubDePiezas(nuevo);
-  const descuadre = Math.abs(piezasL - escalarL) > 0.5;
-  const mueveEscalar = Math.abs(nuevoL - escalarL) > 0.05;
-  const motivoOk = motivoOpcional || motivo.trim().length >= 3;
-  const puedeGuardar = !invalido && (algoCambio || mueveEscalar) && motivoOk;
-  const nombreCampo = (k) => (k === 'tote' ? 'totes llenos' : k === 'granelL' ? 'L a granel' : (PIEZAS_CERRADAS.find(d => d.key === k)?.plur || k));
-  const diffs = PIEZAS_KEYS.filter(cambiado).map(k => `${nombreCampo(k)} ${fmtCub(antes[k])} → ${fmtCub(num(k))}`);
-
-  const handleSave = async () => {
-    if (!puedeGuardar || saving) return;
-    setSaving(true);
-    try {
-      await onSave(ubic, payloadPiezas(nuevo), motivo.trim());
-      onClose();
-    } catch { /* el padre ya avisó; la ficha queda abierta para reintentar */ }
-    finally { setSaving(false); }
-  };
-
   const campo = (def, autoFocus = false) => {
-    const chg = cambiado(def.key);
+    const chg = Math.abs(num(def.key) - (Number(antes[def.key]) || 0)) > 1e-9;
     const malo = campoMalo(def.key, def.entero);
     return (
       <div key={def.key} style={{ minWidth: 0 }}>
@@ -1152,78 +1246,29 @@ export function ContarPTSheet({ item, buckets, parciales, isDesktop, motivoOpcio
     );
   };
   const grid2 = { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 };
-
   return (
-    <div style={S.sheetOverlay(isDesktop)}>
-      <div style={{ ...S.sheet(isDesktop), maxHeight: '92vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()} data-id="inventario.sheet.contar-pt">
-        <div style={S.shH}>Contar existencia</div>
-        <div style={S.shS}>{item.nombre}{item.inv?.sku ? ` · ${item.inv.sku}` : ''}</div>
-
-        <label style={S.flbl}>Ubicación</label>
-        <div role="tablist" aria-label="Ubicación" style={{ display: 'flex', gap: 4, background: 'var(--lp-bg-raised)', borderRadius: 11, padding: 3 }}>
-          {['fabrica', 'teran'].map(u => {
-            const on = ubic === u;
-            const L = cubALitros(u === 'teran' ? teranQty : fabQty);
-            return (
-              <button key={u} type="button" role="tab" aria-selected={on} data-id={`inventario.contar.ubic.${u}`}
-                onClick={() => cambiarUbic(u)} disabled={saving}
-                style={{
-                  flex: 1, minHeight: 40, border: 'none', borderRadius: 8, cursor: 'pointer',
-                  background: on ? 'var(--lp-bg-base)' : 'transparent',
-                  color: on ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
-                  boxShadow: on ? '0 1px 4px rgba(26,24,21,.14)' : 'none',
-                  fontFamily: 'var(--lp-font-sans)', fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap',
-                }}>
-                {NOMBRE_UBIC[u]} · {fmtL(L)} L
-              </button>
-            );
-          })}
-        </div>
-
-        <div style={{ ...S.bigsis, marginTop: 12 }}>
-          <div style={S.bigK}>Hoy en {NOMBRE_UBIC[ubic]}</div>
-          <div style={S.bigV}>
-            {fmtL(escalarL)} L <span style={{ fontSize: 12, color: 'var(--lp-text-tertiary)', fontWeight: 500 }}>· {resumenPiezas(antes)}</span>
-          </div>
-        </div>
-        {descuadre && (
-          <div style={{ marginTop: -6, marginBottom: 12, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 11.5, color: 'var(--lp-warning-700)' }}>
-            El sistema registra <strong>{fmtL(escalarL)} L</strong> pero las piezas mostradas suman <strong>{fmtL(piezasL)} L</strong>. Guardar el conteo deja el registro en lo contado.
-          </div>
-        )}
-        {antes.otros > 0 && (
-          <div style={{ marginTop: -6, marginBottom: 12, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
-            Además hay {fmtCub(antes.otros)} piezas sin tipo (etiquetas viejas): cuéntalas en su presentación real.
-          </div>
-        )}
-
-        <label style={S.flbl}>Totes</label>
-        <div style={grid2}>{CAMPOS_TOTE.map((d, i) => campo(d, i === 0))}</div>
-        <label style={{ ...S.flbl, marginTop: 12 }}>Piezas cerradas</label>
-        <div style={grid2}>{PIEZAS_CERRADAS.map(d => campo({ key: d.key, label: d.label, sub: `${d.litros} L`, entero: true }))}</div>
-
-        <AjustePreview actual={escalarL} nuevo={nuevoL} unidad="L"
-          extra={(
-            <div data-id="inventario.contar.preview" style={{ marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)', fontFamily: 'var(--lp-font-sans)' }}>
-              ≈ <strong>{fmtCub(nuevoCub)}</strong> cubetas-equivalente{diffs.length ? ` · ${diffs.join(' · ')}` : ''}
-            </div>
-          )} />
-
-        <label style={{ ...S.flbl, marginTop: 12 }}>Motivo del conteo{motivoOpcional ? ' (opcional)' : ''}</label>
-        <input style={S.finTxt} type="text" maxLength={120} placeholder="Ej. Conteo físico, 2 galones rotos"
-          data-id="inventario.contar.motivo" value={motivo} onChange={e => setMotivo(e.target.value)} disabled={saving} />
-
-        <div style={S.shActs}>
-          <button type="button" style={S.act2(false)} onClick={onClose} disabled={saving}>Cancelar</button>
-          <button type="button" data-id="inventario.contar.guardar" data-rol="admin"
-            style={{ ...S.act2(true), opacity: puedeGuardar && !saving ? 1 : 0.5 }}
-            disabled={!puedeGuardar || saving} onClick={handleSave}>
-            {saving ? 'Guardando…' : `Guardar conteo de ${NOMBRE_UBIC[ubic]}`}
-          </button>
-        </div>
-      </div>
-    </div>
+    <>
+      <label style={{ ...S.flbl, marginTop: 12 }}>Totes</label>
+      <div style={grid2}>{CAMPOS_TOTE.map((d, i) => campo(d, i === 0))}</div>
+      <label style={{ ...S.flbl, marginTop: 12 }}>Piezas cerradas</label>
+      <div style={grid2}>{PIEZAS_CERRADAS.map(d => campo({ key: d.key, label: d.label, sub: `${d.litros} L`, entero: true }))}</div>
+    </>
   );
+}
+
+/* ¿Hay algún campo de piezas inválido? (entero salvo los litros del granel) */
+function piezasInvalidas(vals) {
+  return PIEZAS_KEYS.some(k => {
+    const v = vals[k] === '' ? 0 : Number(vals[k]);
+    return !Number.isFinite(v) || v < 0 || (k !== 'granelL' && Math.abs(v - Math.round(v)) > 1e-9);
+  });
+}
+/* {tote:'1', granelL:'344', …} → números saneados para el endpoint. */
+function piezasDeTexto(vals) {
+  return Object.fromEntries(PIEZAS_KEYS.map(k => {
+    const v = vals[k] === '' ? 0 : Number(vals[k]);
+    return [k, Number.isFinite(v) ? Math.max(0, v) : 0];
+  }));
 }
 
 /* ── Tarjeta de PT en Stock ▸ Total (propuesta D, 15-sep-2026) ──────────────
@@ -1244,7 +1289,8 @@ const COLOR_SEG = {
   otros: 'var(--lp-text-tertiary)',
 };
 
-function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onContarPT, onEditarFicha, onOcultar, canContar, onContar }) {
+function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onEnvasar, onAjustar, onTransferir, onEliminarTeran, onOcultar, canContar, onContar, lotes, esAdmin }) {
+  const [detalle, setDetalle] = useState(false);
   const { nombre, inv, pct, piezas } = item;
   const qty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
   const enL = unidadVista === 'L';
@@ -1254,15 +1300,36 @@ function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onC
   const min = inv.min || 0;
   const bajo = qty <= 0 || pct <= 100;
   const f = (cub) => (enL ? `${fmtL(cubALitros(cub))} L` : `${fmtCub(cub)} cub`);
+  /* ¿Hay algo que envasar? En Terán, tote o granel del pool; en Fábrica,
+     piezas cerradas cuyo envase se quiera declarar (caso ASTRA-LAST). */
+  const bTeran = item.buckets?.teran, bFab = item.buckets?.fabrica;
+  const envasableTeran = !!bTeran?.teranPresScalar
+    && Object.entries(bTeran.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
+  const envasableFab = !!bFab
+    && ((Number(bFab.cubeta) || 0) + (Number(bFab.galon) || 0) + (Number(bFab.litro) || 0) + (Number(bFab.atm) || 0) + (Number(bFab.otros) || 0)) > 0;
+  const puedeEnvasar = !!onEnvasar && (envasableTeran || envasableFab);
+  /* Lo que también enseñan (y dejan hacer) las pestañas Fábrica y Terán. */
+  const totesDetalle = [
+    ...((bFab?.totesFisicos?.detalle || []).map(t => ({ ...t, ubic: 'fabrica' }))),
+    ...((bTeran?.totesFisicos?.detalle || []).map(t => ({ ...t, ubic: 'teran' }))),
+  ].filter(t => (Number(t.litrosRestante) || 0) > 0.01);
+  const lotesProd = lotes?.[String(nombre).toUpperCase()] || null;
+  const lotesTodos = [...(lotesProd?.fabrica || []), ...(lotesProd?.teran || [])];
+  const granelCub = (Number(bFab?.granel) || 0) + (Number(bTeran?.granel) || 0);
+  const residual = Number(bFab?.residual) || 0;
+  const manual = Number(bTeran?.manual) || 0;
+  const sublotes = (Number(bFab?.sublotes) || 0) + (Number(bTeran?.sublotes) || 0);
+  const avisoDescuadre = !!esAdmin && (Number(bFab?.descuadre) || 0) > 0.5;
+  const hayDetalle = totesDetalle.length > 0 || lotesTodos.length > 0 || granelCub > 0 || residual > 0 || manual > 0 || sublotes > 0;
   const ubics = [
     ['Fábrica', item.fabQty],
     ['Terán', item.teranQty],
     ...((Number(item.transito) || 0) > 0 ? [['En camino', item.transito]] : []),
   ];
-  const btn = (texto, onClick, { acento, dataId, apagado } = {}) => (
+  const btn = (texto, onClick, { acento, dataId, apagado, ancho } = {}) => (
     <button key={texto} type="button" data-id={dataId} onClick={onClick}
       style={{
-        ...S.btnGhost, flex: '1 1 auto', minWidth: 104, minHeight: 40, padding: '0 12px',
+        ...S.btnGhost, flex: ancho ? '1 1 110px' : '0 0 auto', minWidth: ancho ? 110 : 84, minHeight: 40, padding: '0 10px', fontSize: 12.5,
         color: apagado ? 'var(--lp-text-tertiary)' : acento ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
         borderColor: acento && !apagado ? 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' : 'var(--lp-border-subtle)',
       }}>{texto}</button>
@@ -1324,32 +1391,95 @@ function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onC
         </span>
         <span style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>mín {enL ? `${fmtL(cubALitros(min))} L` : `${fmtCub(min)} cub`}</span>
       </div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 14px', marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 14px', marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
         {ubics.map(([l, v]) => (
           <span key={l}>{l} <b style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: (Number(v) || 0) > 0 ? 'var(--lp-text-secondary)' : 'var(--lp-text-tertiary)' }}>{(Number(v) || 0) > 0 ? f(v) : '—'}</b></span>
         ))}
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-        {bajo && canPedir && btn('+ Pedir', () => onPedir(nombre), { acento: true, dataId: 'inventario.btn.pedir-pt' })}
-        {canEdit && onContarPT && piezas && btn('Contar Fábrica', () => onContarPT(item, 'fabrica'), { acento: true, dataId: 'inventario.btn.contar-fabrica', apagado: (Number(item.fabQty) || 0) <= 0 })}
-        {canEdit && onContarPT && piezas && btn('Contar Terán', () => onContarPT(item, 'teran'), { acento: true, dataId: 'inventario.btn.contar-teran', apagado: (Number(item.teranQty) || 0) <= 0 })}
-        {canEdit && onEditarFicha && btn('Ajustar', () => onEditarFicha(item), { dataId: 'inventario.btn.ajustar' })}
-        {canContar && !canEdit && btn('Contar →', () => onContar && onContar(), { acento: true, dataId: 'inventario.btn.contar' })}
+      <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+        {bajo && canPedir && btn('+ Pedir', () => onPedir(nombre), { acento: true, ancho: true, dataId: 'inventario.btn.pedir-pt' })}
+        {/* Envasar: convertir tote/granel en cubetas o galones (Terán) o
+            declarar el cambio de presentación de lo que hay en Fábrica. */}
+        {puedeEnvasar && btn('Envasar', () => onEnvasar(item), { acento: true, ancho: true, dataId: 'inventario.btn.envasar-pt' })}
+        {!!onTransferir && (Number(item.fabQty) || 0) > 0 && btn('→ Terán', () => onTransferir(nombre), { acento: true, ancho: true, dataId: 'inventario.btn.transferir-pt' })}
+        {canEdit && onAjustar && btn('Ajustar', () => onAjustar(item), { acento: true, ancho: true, dataId: 'inventario.btn.ajustar' })}
+        {canContar && !canEdit && btn('Contar →', () => onContar && onContar(), { acento: true, ancho: true, dataId: 'inventario.btn.contar' })}
       </div>
+      {/* Detalle plegado: lo mismo que enseñan las pestañas Fábrica y Terán —
+          lotes activos, granel, lo que no trae lote y lo cargado a mano— más
+          las acciones que viven ahí (quitar el registro manual de Terán). */}
+      {(hayDetalle || avisoDescuadre) && (
+        <button type="button" data-id="inventario.pt.detalle" onClick={() => setDetalle(v => !v)}
+          style={{ marginTop: 10, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+            fontFamily: 'var(--lp-font-sans)', fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>
+          {detalle ? 'Ocultar detalle ▴' : 'Ver detalle ▾'}
+        </button>
+      )}
+      {detalle && (
+        <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: 'var(--lp-bg-sunken)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Cada tote físico con su folio y sus litros: lo que se puede tocar. */}
+          {totesDetalle.map(t => {
+            const rest = Number(t.litrosRestante) || 0;
+            const pct = Math.min(100, Math.round((rest / LITROS_TOTE) * 100));
+            return (
+              <div key={t.ubic + (t.cod || '')} style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--lp-text-primary)', whiteSpace: 'nowrap' }}>
+                  Tote <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, fontSize: 10.5, color: 'var(--lp-text-tertiary)' }}>{t.toteCod || t.codigoLote || t.cod}</span>
+                </span>
+                <span style={{ flex: 1, minWidth: 80, height: 6, borderRadius: 999, background: 'color-mix(in srgb, var(--lp-text-tertiary) 22%, transparent)', overflow: 'hidden' }}>
+                  <span style={{ display: 'block', height: '100%', width: `${pct}%`, borderRadius: 999, background: rest >= LITROS_TOTE * 0.99 ? 'var(--lp-warning-600)' : 'var(--lp-granel-600)' }} />
+                </span>
+                <span style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 11.5, fontWeight: 700, color: 'var(--lp-granel-700)', whiteSpace: 'nowrap' }}>
+                  {fmtL(rest)} L · {t.ubic === 'teran' ? 'Terán' : 'Fábrica'}
+                </span>
+              </div>
+            );
+          })}
+          {lotesTodos.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Lotes</span>
+              {lotesTodos.map((l, i) => (
+                <span key={(l.codigoLote || '') + i} title={'Lote ' + (l.codigoLote || '') + (l.estado ? ' · ' + l.estado : '')}
+                  style={{ fontSize: 10, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-700)', background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)', borderRadius: 5, padding: '1px 5px' }}>
+                  {l.codigoLote}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ fontSize: 11.5, color: 'var(--lp-text-secondary)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            {granelCub > 0 && <span title="Contenido suelto de totes abiertos, en cubetas-equivalente">Granel: {fmtCub(granelCub)} cub-eq</span>}
+            {residual > 0 && <span title="Stock de Fábrica sin lote rastreado (cargas manuales o producciones previas a la trazabilidad)">Sin lote: {fmtCub(residual)} cub</span>}
+            {manual > 0 && <span title="Registrado a mano en Terán">Manual en Terán: {fmtCub(manual)} cub</span>}
+            {sublotes > 0 && <span>Sublotes: {sublotes}</span>}
+          </div>
+          {avisoDescuadre && (
+            <div style={{ padding: '8px 10px', borderRadius: 8, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 11.5, color: 'var(--lp-warning-700)' }}>
+              Descuadre en Fábrica: las piezas rastreadas suman <strong>{fmtCub(bFab.cubEquiv)}</strong> cub y el contable solo deja mover <strong>{fmtCub(bFab.transferible)}</strong>. Hay que censar este producto.
+            </div>
+          )}
+          {canEdit && onEliminarTeran && manual > 0 && (
+            <button type="button" data-id="inventario.btn.eliminar-manual-teran" onClick={() => onEliminarTeran(nombre)}
+              title={`Quitar de Terán (${Math.round(manual)} cub cargados a mano). No afecta lotes rastreados ni el stock de Fábrica.`}
+              style={{ ...S.btnGhost, alignSelf: 'flex-start', minHeight: 36, color: 'var(--lp-danger-600)', borderColor: 'color-mix(in srgb, var(--lp-danger-600) 45%, transparent)' }}>
+              Eliminar registro manual
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 /* ── Tabla de inventario (escritorio) ── */
-function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir, onOcultar, unidadVista = 'cub', onContarPT, onEditarFicha }) {
+function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDisponibles, onAdjust, onAction, onPedir, canPedir, onContar, query, onTransferir, onOcultar, unidadVista = 'cub' }) {
   /* La columna "Acción" solo se muestra si el rol tiene ALGUNA acción posible en
      esta tabla. Antes el header "Acción" se pintaba siempre y dejaba celdas vacías
      para roles sin acciones (p.ej. inventario/Burgos: sin editarInventario) → columna
      fantasma. Ahora: si no hay acción, no se pinta la columna.
      onTransferir (envases en sub-vista Fábrica): añade el botón "→ Terán" por fila.
      onOcultar (PT ocultos, jul 2026): menú ⋯ por fila PT con Ocultar/Mostrar (admin). */
-  const showActionCol = canEdit || canContar || !!onTransferir || !!onOcultar || !!onContarPT || !!onEditarFicha || (tipo === 'mp' ? canDelete : canPedir);
+  const showActionCol = canEdit || canContar || !!onTransferir || !!onOcultar || (tipo === 'mp' ? canDelete : canPedir);
   return (
     <div style={S.tablewrap}>
       <table style={S.table}>
@@ -1443,13 +1573,7 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                       + Pedir
                     </button>
                   )}
-                  {/* Propuesta A: en PT el botón principal es CONTAR (piezas por
-                      ubicación); "Ajustar" (nombre/SKU/mínimo) pasa al menú ⋯. */}
-                  {canEdit && tipo === 'pt' && onContarPT && piezas ? (
-                    <button type="button" data-id="inventario.btn.contar-pt" data-rol="admin"
-                      style={{ ...S.btnGhost, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' }}
-                      onClick={() => onContarPT(it)}>Contar</button>
-                  ) : canEdit && (
+                  {canEdit && (
                     <button type="button" data-id="inventario.btn.ajustar" data-rol="admin,tecnico,almacen,compras"
                       style={S.btnGhost} onClick={() => onAdjust(it)}>Ajustar</button>
                   )}
@@ -1477,9 +1601,9 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                     </span>
                   )}
                   {/* PT ocultos (jul 2026): menú ⋯ con Ocultar/Mostrar (solo admin) */}
-                  {tipo === 'pt' && (onOcultar || onEditarFicha) && (
+                  {tipo === 'pt' && onOcultar && (
                     <span style={{ marginLeft: 8, display: 'inline-flex', verticalAlign: 'middle' }}>
-                      <MPActionsMenu mp={nombre} canEdit={true} extraItems={menuItemsPT(it, onEditarFicha, onOcultar)} />
+                      <MPActionsMenu mp={nombre} canEdit={true} extraItems={menuItemsPT(it, null, onOcultar)} />
                     </span>
                   )}
                 </td>
@@ -2040,7 +2164,6 @@ export default function InventarioPage({ embedded = false }) {
   /* Propuesta A (15-sep-2026): ficha "Contar existencia" (piezas por ubicación)
      y unidad de lectura de la fila PT ("Ver en": litros | cubetas), recordada
      por navegador. */
-  const [contarItem, setContarItem] = useState(null);
   const [ptUnidad, setPtUnidadState] = useState(() => { try { return localStorage.getItem('pp_pt_unidad') === 'cub' ? 'cub' : 'L'; } catch { return 'L'; } });
   const setPtUnidad = useCallback((u) => { setPtUnidadState(u); try { localStorage.setItem('pp_pt_unidad', u); } catch {} }, []);
   /* Tarjetas (propuesta D, la que eligió el dueño) o la tabla de siempre. */
@@ -2568,17 +2691,36 @@ export default function InventarioPage({ embedded = false }) {
   const handleAdjustMP = useCallback((item) => {
     setAjusteItem({ tipo: 'mp', nombre: item.mp, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'kg' });
   }, []);
-  const handleAdjustPT = useCallback((item) => {
+  const handleAdjustPT = useCallback((item, ubicacion) => {
     /* ubicLabel: esta ficha escribe el escalar de FÁBRICA (inv.pt.qty), no el
        Total de la fila — nombrarlo evita el "1000 que no deja el total en 1000". */
-    setAjusteItem({ tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub', sku: item.inv.sku || '', medida: item.inv.medida || '', medidaQty: item.inv.medidaQty != null ? item.inv.medidaQty : null, ubicLabel: 'Fábrica' });
+    setAjusteItem({
+      tipo: 'pt', nombre: item.nombre, qty: item.inv.qty || 0, min: item.inv.min || 0, unidad: 'cub',
+      sku: item.inv.sku || '', medida: item.inv.medida || '',
+      medidaQty: item.inv.medidaQty != null ? item.inv.medidaQty : null,
+      teranQty: Number(item.teranQty) || Number(item.inv.teran) || 0,
+      ubicInicial: ubicacion === 'teran' ? 'teran' : 'fabrica',
+      /* Desglose por ubicación (pt-por-ubicacion) + totes abiertos rastreados:
+         con eso la ficha puede capturar por PIEZAS. */
+      buckets: item.buckets || null,
+      parciales: item.parciales || [],
+    });
   }, []);
-  /* Propuesta A: abrir la ficha "Contar existencia" y guardar el conteo por el
-     MISMO candado que Ajustar (ajustarConCandado pide TOTP / código admin). */
-  const handleContarPT = useCallback((item, ubicacion) => setContarItem(ubicacion ? { ...item, ubicacionInicial: ubicacion } : item), []);
-  const handleConteoSave = useCallback(async (ubicacion, piezas, motivo) => {
-    if (!contarItem) return;
-    const producto = contarItem.nombre;
+  /* Envasar desde la tarjeta de Total: el pool de Terán manda (tote o granel
+     → cubetas/galones); si allá no hay nada que envasar, se declara el
+     envasado de lo que está en Fábrica (caso ASTRA-LAST). Son los MISMOS
+     modales de las pestañas Fábrica y Terán. */
+  const handleEnvasarDesdeTarjeta = useCallback((item) => {
+    const bTeran = item.buckets?.teran, bFab = item.buckets?.fabrica;
+    const enTeran = bTeran?.teranPresScalar
+      && Object.entries(bTeran.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
+    if (enTeran) setReenvasarTeran({ producto: item.nombre, scalar: bTeran.teranPresScalar, totes: bTeran.totesFisicos });
+    else if (bFab) setReenvasarFabrica({ producto: item.nombre, desglose: bFab });
+  }, []);
+
+  /* El conteo por piezas se guarda con el MISMO candado que el ajuste
+     (ajustarConCandado pide TOTP o código admin cuando el backend lo exige). */
+  const handleConteoSave = useCallback(async (producto, ubicacion, piezas, motivo) => {
     const ubicLabel = ubicacion === 'teran' ? 'Terán' : 'Fábrica';
     await ajustarConCandado(
       (codigo) => api.ptConteo(producto, ubicacion, piezas, motivo || `Conteo por piezas en ${ubicLabel}`,
@@ -2588,7 +2730,7 @@ export default function InventarioPage({ embedded = false }) {
     reloadPtUbi();
     setToastMsg(`Conteo de ${ubicLabel} guardado: ${producto}`);
     setTimeout(() => setToastMsg(''), 4000);
-  }, [contarItem, ajustarConCandado, reloadPtUbi]);
+  }, [ajustarConCandado, reloadPtUbi]);
   /* Envases (Sprint Y jun 2026): mismo sheet "Ajustar existencia" que MP/PT.
      Sin candado ni propuesta — guarda directo a /api/envases/stock|tapa/stock. */
   const handleAdjustEnv = useCallback((item) => {
@@ -2677,6 +2819,21 @@ export default function InventarioPage({ embedded = false }) {
       }
     }
     const minFinal = newMin != null ? newMin : ajusteItem.min;
+    /* PT capturado por PIEZAS: va al endpoint de conteo, que deriva el escalar
+       de la ubicación y guarda el desglose. */
+    if (ajusteItem.tipo === 'pt' && extras.piezas) {
+      await handleConteoSave(nombreEfectivo, extras.ubicacion || 'fabrica', extras.piezas, motivo);
+      return;
+    }
+    /* PT en TERÁN: el pool del almacén tiene su propio endpoint
+       (/api/inventario/pt/ubicacion, mismo candado). El de Fábrica sigue
+       siendo ajuste-pt. Ninguno toca la otra ubicación. */
+    if (ajusteItem.tipo === 'pt' && extras.ubicacion === 'teran') {
+      await handleSavePTUbic(nombreEfectivo, 'teran', newQty, 'fijar', motivo || 'Ajuste del pool de Terán');
+      setToastMsg(`Terán actualizado: ${nombreEfectivo}`);
+      setTimeout(() => setToastMsg(''), 4000);
+      return;
+    }
     /* Proponente (Burgos/no-admin): NO aplica — crea una propuesta pendiente de aprobación. */
     if (esProponente) {
       await api.proponerAjuste(ajusteItem.tipo, nombreEfectivo, newQty, minFinal, motivo);
@@ -2690,7 +2847,7 @@ export default function InventarioPage({ embedded = false }) {
     }
     if (ajusteItem.tipo === 'mp') await handleSaveMP(nombreEfectivo, newQty, minFinal, motivo);
     else await handleSavePT(nombreEfectivo, newQty, minFinal, motivo);
-  }, [ajusteItem, esProponente, handleSaveMP, handleSavePT, handleSaveEnv, reloadPendientes, reloadInv]);
+  }, [ajusteItem, esProponente, handleSaveMP, handleSavePT, handleSavePTUbic, handleConteoSave, handleSaveEnv, reloadPendientes, reloadInv]);
 
   /* ── KPI click handler ── */
   const handleKpiClick = (filter) => {
@@ -3059,22 +3216,25 @@ export default function InventarioPage({ embedded = false }) {
                         <PTCardTotal key={item.nombre} item={item} unidadVista={ptUnidad} query={debouncedQuery}
                           canEdit={canEditMP} canPedir={canPedirPT} onPedir={handlePedirPT}
                           canContar={canContar} onContar={handleContar}
-                          onContarPT={canContarPiezas ? handleContarPT : null}
-                          onEditarFicha={handleAdjustPT}
+                          onEnvasar={canReenvasar ? handleEnvasarDesdeTarjeta : null}
+                          onAjustar={handleAdjustPT}
+                          onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : null}
+                          onEliminarTeran={canEditMP ? handleEliminarPTTeran : null}
+                          lotes={lotesPorProductoUbic} esAdmin={esAdmin}
                           onOcultar={user?.rol === 'admin' ? handleOcultarPT : null} />
                       ))}
                     </div>
                   ) : isDesktop ? (
                     <InvTable items={filteredPT} tipo="pt" unidad="cub" canEdit={canEditMP}
                       canContar={canContar} onContar={handleContar}
-                      unidadVista={ptUnidad} onContarPT={canContarPiezas ? handleContarPT : null} onEditarFicha={canContarPiezas ? handleAdjustPT : null}
+                      unidadVista={ptUnidad}
                       onOcultar={user?.rol === 'admin' ? handleOcultarPT : null}
                       onAdjust={handleAdjustPT} onPedir={handlePedirPT} canPedir={canPedirPT} query={debouncedQuery} />
                   ) : (
                     <div>
                       {filteredPT.map(item => (
                         <PTRow key={item.nombre} item={item} canEdit={canEditMP} canContar={canContar} onAdjust={handleAdjustPT} onContar={handleContar} query={debouncedQuery}
-                          unidadVista={ptUnidad} onContarPT={canContarPiezas ? handleContarPT : null} onEditarFicha={canContarPiezas ? handleAdjustPT : null}
+                          unidadVista={ptUnidad}
                           onOcultar={user?.rol === 'admin' ? handleOcultarPT : null} />
                       ))}
                     </div>
@@ -3469,6 +3629,7 @@ export default function InventarioPage({ embedded = false }) {
           item={ajusteItem}
           isDesktop={isDesktop}
           canEditMin={ajusteItem.tipo === 'env' ? true : canEditMinimos}
+          puedeContarPiezas={canContarPiezas}
           modoPropuesta={ajusteItem.tipo === 'env' ? false : esProponente}
           puedeRenombrarMP={esAdmin}
           motivoOpcional={esAdmin}
@@ -3481,12 +3642,6 @@ export default function InventarioPage({ embedded = false }) {
           onEliminar={ajusteItem.tipo === 'mp' && canDeleteMP
             ? () => { const n = ajusteItem.nombre; setAjusteItem(null); setEliminarMP(n); } : null}
         />
-      )}
-
-      {/* Propuesta A: ficha "Contar existencia" (piezas por ubicación) */}
-      {contarItem && (
-        <ContarPTSheet item={contarItem} buckets={contarItem.buckets} parciales={contarItem.parciales} ubicacionInicial={contarItem.ubicacionInicial} isDesktop={isDesktop} motivoOpcional={esAdmin}
-          onClose={() => setContarItem(null)} onSave={handleConteoSave} />
       )}
 
       {/* Cola de aprobación (admin) */}

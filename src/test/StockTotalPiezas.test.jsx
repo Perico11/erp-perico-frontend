@@ -15,10 +15,13 @@ import { MemoryRouter } from 'react-router-dom';
    = 39.587 cub (752.16 L). Total = 103.587 cub ≈ 1,968 L. */
 const PT_UBI = {
   ok: true,
-  fabrica: { 'BLANCO OFFWHITE 4.0': { cubeta: 12, galon: 0, litro: 0, tote: 1, atm: 0, otros: 0, granel: 0, residual: 0 } },
+  fabrica: { 'BLANCO OFFWHITE 4.0': { cubeta: 12, galon: 0, litro: 0, tote: 1, atm: 0, otros: 0, granel: 0, residual: 0, sublotes: 2 } },
   teran:   {
-    'BLANCO OFFWHITE 4.0': { cubeta: 17, galon: 21, litro: 6, tote: 1, atm: 0, otros: 0, granel: 18.105, manual: 0 },
-    'AZUL REY 4.0': { cubeta: 11, galon: 0, litro: 0, tote: 0, atm: 0, otros: 0, granel: 0, manual: 0 },
+    /* `teranPresScalar` es el desglose CRUDO del pool que publica el backend
+       para el modal de envasado. */
+    'BLANCO OFFWHITE 4.0': { cubeta: 17, galon: 21, litro: 6, tote: 1, atm: 0, otros: 0, granel: 18.105, manual: 0,
+      sublotes: 3, teranPresScalar: { tote: 1, granel: 18.105, cubeta: 17, galon: 21, litro: 6 } },
+    'AZUL REY 4.0': { cubeta: 11, galon: 0, litro: 0, tote: 0, atm: 0, otros: 0, granel: 0, manual: 11 },
   },
   total:   {
     'BLANCO OFFWHITE 4.0': { cubeta: 29, galon: 21, litro: 6, tote: 2, atm: 0, otros: 0, granel: 18.105 },
@@ -58,6 +61,9 @@ vi.mock('../services/api', () => {
     getStkAmericano: vi.fn(() => Promise.resolve(null)),
     getPTOcultos: vi.fn(() => Promise.resolve({ ok: true, ocultos: {} })),
     ptConteo: vi.fn(() => Promise.resolve({ ok: true })),
+    setPTUbicacion: vi.fn(() => Promise.resolve({ ok: true })),
+    ajustePT: vi.fn(() => Promise.resolve({ ok: true })),
+    ptMeta: vi.fn(() => Promise.resolve({ ok: true })),
     urlExportInv: () => '', urlPrintInv: () => '', urlImportInvPT: () => '', urlImportInv: () => '', urlImportEnvases: () => '',
   };
   const vacio = vi.fn(() => Promise.resolve({ ok: true, data: [] }));
@@ -95,9 +101,9 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     const c = tarjeta('BLANCO OFFWHITE 4.0');
     expect(within(c).getByText('1 tote lleno')).toBeInTheDocument();
     expect(within(c).getByText('parcial 344 L')).toBeInTheDocument();
-    expect(within(c).getByText('29 cubetas')).toBeInTheDocument();
-    expect(within(c).getByText('21 galones')).toBeInTheDocument();
-    expect(within(c).getByText('6 litros')).toBeInTheDocument();
+    expect(within(c).getByText('29 cub')).toBeInTheDocument();
+    expect(within(c).getByText('21 gal')).toBeInTheDocument();
+    expect(within(c).getByText('6 L')).toBeInTheDocument();
     /* Cada tramo pesa lo que sus litros: el tote lleno es el más ancho (la
        mitad del stock) y la barra completa suma 100. */
     const barra = c.querySelector('[data-id="inventario.pt.composicion"]');
@@ -121,28 +127,101 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     expect(within(c).getByText('Terán').parentElement.textContent).toContain('752.2 L');
   });
 
-  it('cada ubicación se cuenta desde su propio botón', async () => {
+  it('"Envasar" abre el mismo modal de siempre cuando hay tote o granel', async () => {
     await abrirPT();
     const c = tarjeta('BLANCO OFFWHITE 4.0');
-    await act(async () => { fireEvent.click(within(c).getByRole('button', { name: 'Contar Terán' })); });
-    expect(screen.getByRole('button', { name: /Guardar conteo de Terán/ })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Terán · 752.2 L/ })).toHaveAttribute('aria-selected', 'true');
-    expect(document.querySelector('[data-id="inventario.contar.cubeta"]').value).toBe('17');
+    await act(async () => { fireEvent.click(within(c).getByRole('button', { name: 'Envasar' })); });
+    expect(screen.getByText('Envasar en Terán')).toBeInTheDocument();
+  });
 
-    await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Cancelar' })); });
-    await act(async () => { fireEvent.click(within(c).getByRole('button', { name: 'Contar Fábrica' })); });
-    expect(screen.getByRole('button', { name: /Guardar conteo de Fábrica/ })).toBeInTheDocument();
+  it('"→ Terán" sigue ahí, y solo donde hay stock en Fábrica', async () => {
+    await abrirPT();
+    /* Es el mismo flujo de orden de transferencia de la pestaña Fábrica. */
+    expect(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: '→ Terán' })).toBeInTheDocument();
+    /* AZUL REY no tiene nada en Fábrica: no hay qué transferir. */
+    expect(within(tarjeta('AZUL REY 4.0')).queryByRole('button', { name: '→ Terán' })).toBeNull();
+  });
+
+  it('"Ver detalle" trae los lotes, el granel y lo cargado a mano', async () => {
+    await abrirPT();
+    const c = tarjeta('BLANCO OFFWHITE 4.0');
+    await act(async () => { fireEvent.click(within(c).getByRole('button', { name: /Ver detalle/ })); });
+    expect(within(c).getByText('LP-2026-010')).toBeInTheDocument();
+    expect(within(c).getByText(/Granel: 18.1 cub-eq/)).toBeInTheDocument();
+    expect(within(c).getByText(/Sublotes:/)).toBeInTheDocument();
+  });
+
+  it('el registro manual de Terán se puede quitar desde el detalle', async () => {
+    await abrirPT();
+    const c = tarjeta('AZUL REY 4.0');
+    await act(async () => { fireEvent.click(within(c).getByRole('button', { name: /Ver detalle/ })); });
+    expect(within(c).getByText(/Manual en Terán: 11 cub/)).toBeInTheDocument();
+    expect(within(c).getByRole('button', { name: 'Eliminar registro manual' })).toBeInTheDocument();
+  });
+
+  it('sin nada en ninguna ubicación no ofrece envasar', async () => {
+    await abrirPT();
+    /* ROJO ÓXIDO está en cero: no tiene desglose en ninguna ubicación. */
+    expect(within(tarjeta('ROJO ÓXIDO 4.0')).queryByRole('button', { name: 'Envasar' })).toBeNull();
+    expect(within(tarjeta('ROJO ÓXIDO 4.0')).getByRole('button', { name: 'Ajustar' })).toBeInTheDocument();
+  });
+
+  it('la ficha de ajuste sigue a un clic: "Ajustar", y abre en Fábrica', async () => {
+    await abrirPT();
+    await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Ajustar' })); });
+    expect(screen.getByText('Ajustar existencia')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Fábrica · 64 cub/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /Terán · 39.6 cub/ })).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByText(/Existencia actual en Fábrica/)).toBeInTheDocument();
+  });
+
+  it('la pestaña Terán ajusta el pool del almacén, sin tocar Fábrica', async () => {
+    await abrirPT();
+    await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Ajustar' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Terán · 39.6 cub/ })); });
+    expect(screen.getByText(/Existencia actual en Terán/)).toBeInTheDocument();
+    /* El pool se lleva en cubetas: el campo arranca con lo que hay allá. */
+    const campo = document.querySelector('[data-id="inventario.ajuste.qty-teran"]');
+    expect(campo.value).toBe('39.587');
+
+    await act(async () => { fireEvent.change(campo, { target: { value: '30' } }); });
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Fijar Terán: 30 cub/ })); });
+
+    await waitFor(() => expect(api.setPTUbicacion).toHaveBeenCalledTimes(1));
+    const [producto, ubicacion, qty, modo] = api.setPTUbicacion.mock.calls[0];
+    expect(producto).toBe('BLANCO OFFWHITE 4.0');
+    expect(ubicacion).toBe('teran');
+    expect(qty).toBe(30);
+    expect(modo).toBe('fijar');
+    expect(api.ajustePT).not.toHaveBeenCalled(); /* Fábrica intacta */
+  });
+
+  it('la ficha cuenta POR PIEZAS la ubicación elegida, y el tote abierto va una vez', async () => {
+    await abrirPT();
+    await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Ajustar' })); });
+    /* Fábrica: 1 tote lleno + 12 cubetas. */
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Por piezas' })); });
+    expect(document.querySelector('[data-id="inventario.contar.tote"]').value).toBe('1');
     expect(document.querySelector('[data-id="inventario.contar.cubeta"]').value).toBe('12');
+
+    /* Terán: el tote está ABIERTO, así que son 344 L, no un tote lleno además. */
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Terán · 39.6 cub/ })); });
+    expect(document.querySelector('[data-id="inventario.contar.tote"]').value).toBe('0');
+    expect(document.querySelector('[data-id="inventario.contar.granelL"]').value).toBe('344');
+    expect(document.querySelector('[data-id="inventario.contar.cubeta"]').value).toBe('17');
   });
 
   it('el conteo llega al backend con su ubicación y en piezas', async () => {
     await abrirPT();
-    await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Contar Terán' })); });
+    await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Ajustar' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: 'Por piezas' })); });
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Terán · 39.6 cub/ })); });
     await act(async () => {
       fireEvent.change(document.querySelector('[data-id="inventario.contar.galon"]'), { target: { value: '19' } });
     });
+    expect(document.querySelector('[data-id="inventario.contar.preview"]').textContent).toContain('39.2');
     await act(async () => {
-      fireEvent.change(document.querySelector('[data-id="inventario.contar.motivo"]'), { target: { value: 'Conteo físico' } });
+      fireEvent.change(screen.getByPlaceholderText(/Conteo físico/), { target: { value: 'Conteo físico' } });
     });
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Guardar conteo de Terán/ })); });
 
@@ -152,14 +231,16 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     expect(ubicacion).toBe('teran');
     expect(piezas).toEqual({ tote: 0, granelL: 344, cubeta: 17, galon: 19, litro: 6, atomizador750: 0 });
     expect(nota).toBe('Conteo físico');
+    expect(api.setPTUbicacion).not.toHaveBeenCalled(); /* no pasa por el ajuste del pool */
   });
 
-  it('la ficha de ajuste sigue a un clic: "Ajustar"', async () => {
+  it('por total, Terán no captura por medida: la medida es de Fábrica', async () => {
     await abrirPT();
     await act(async () => { fireEvent.click(within(tarjeta('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Ajustar' })); });
-    expect(screen.getByText('Ajustar existencia')).toBeInTheDocument();
-    /* Esa ficha escribe el escalar de FÁBRICA: lo dice en el subtítulo. */
-    expect(screen.getByText(/BLANCO OFFWHITE 4.0 · Fábrica/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tote' })).toBeInTheDocument();
+    await act(async () => { fireEvent.click(screen.getByRole('tab', { name: /Terán/ })); });
+    expect(screen.queryByRole('button', { name: 'Tote' })).toBeNull();
+    expect(screen.getByText(/Solo cambia el pool de/)).toBeInTheDocument();
   });
 
   it('"+ Pedir" está donde hace falta: en el producto bajo, no en el que va bien', async () => {
@@ -216,11 +297,12 @@ describe('Stock ▸ Total del PT · la tabla sigue disponible', () => {
     expect(within(f).getByText(/≈ 1,968.2 L/)).toBeInTheDocument();
   });
 
-  it('desde la tabla, "Contar" abre la misma ficha por ubicación', async () => {
+  it('desde la tabla, "Ajustar" abre la misma ficha con sus dos ubicaciones', async () => {
     await abrirPT();
     await verTabla();
-    await act(async () => { fireEvent.click(within(fila('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Contar' })); });
-    expect(screen.getByText('Contar existencia')).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /Fábrica · 1,216 L/ })).toHaveAttribute('aria-selected', 'true');
+    await act(async () => { fireEvent.click(within(fila('BLANCO OFFWHITE 4.0')).getByRole('button', { name: 'Ajustar' })); });
+    expect(screen.getByText('Ajustar existencia')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /Fábrica · 64 cub/ })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Por piezas' })).toBeInTheDocument();
   });
 });

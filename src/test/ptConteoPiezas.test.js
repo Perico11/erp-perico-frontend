@@ -172,7 +172,7 @@ describe('segmentosComposicion (la barra de la tarjeta)', () => {
   it('un tramo por presentación, en proporción a sus litros', () => {
     const segs = segmentosComposicion(resumenPiezasTotal(TOTAL, PARCIALES), 1968.2);
     expect(segs.map(s => s.key)).toEqual(['tote', 'granel', 'cubeta', 'galon', 'litro']);
-    expect(segs.map(s => s.texto)).toEqual(['1 tote lleno', 'parcial 344 L', '29 cubetas', '21 galones', '6 litros']);
+    expect(segs.map(s => s.texto)).toEqual(['1 tote lleno', 'parcial 344 L', '29 cub', '21 gal', '6 L']);
     expect(segs[0].litros).toBe(988);
     expect(segs.reduce((a, s) => a + s.pct, 0)).toBeCloseTo(100, 1);
   });

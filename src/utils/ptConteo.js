@@ -22,10 +22,10 @@ export const LITROS_POR_PIEZA = { tote: LITROS_TOTE, cubeta: 19, galon: 3.785, l
 
 /* Piezas cerradas que se cuentan por unidad (orden de la ficha). */
 export const PIEZAS_CERRADAS = [
-  { key: 'cubeta',        label: 'Cubetas',      sing: 'cubeta',     plur: 'cubetas',      litros: 19 },
-  { key: 'galon',         label: 'Galones',      sing: 'galón',      plur: 'galones',      litros: 3.785 },
-  { key: 'litro',         label: 'Litros',       sing: 'litro',      plur: 'litros',       litros: 0.946 },
-  { key: 'atomizador750', label: 'Atomizadores', sing: 'atomizador', plur: 'atomizadores', litros: 0.75 },
+  { key: 'cubeta',        label: 'Cubetas',      sing: 'cubeta',     plur: 'cubetas',      abrev: 'cub', litros: 19 },
+  { key: 'galon',         label: 'Galones',      sing: 'galón',      plur: 'galones',      abrev: 'gal', litros: 3.785 },
+  { key: 'litro',         label: 'Litros',       sing: 'litro',      plur: 'litros',       abrev: 'L',   litros: 0.946 },
+  { key: 'atomizador750', label: 'Atomizadores', sing: 'atomizador', plur: 'atomizadores', abrev: 'atm', litros: 0.75 },
 ];
 /* Claves del payload de POST /api/inventario/pt/conteo. */
 export const PIEZAS_KEYS = ['tote', 'granelL', 'cubeta', 'galon', 'litro', 'atomizador750'];
@@ -192,13 +192,15 @@ export function segmentosComposicion(piezas, litrosTotales) {
   add('granel', abiertos, nParc > 0
     ? `${nParc === 1 ? 'parcial' : `${nParc} parciales`} ${fmtL(abiertos)} L`
     : `a granel ${fmtL(abiertos)} L`);
+  /* La leyenda va abreviada (cub · gal · L · atm) como en el diseño: si no,
+     con cinco presentaciones se come dos renglones de la tarjeta. */
   PIEZAS_CERRADAS.forEach(d => {
     const n = Number(piezas[d.key]) || 0;
-    add(d.key, n * d.litros, `${fmtCub(n)} ${n === 1 ? d.sing : d.plur}`);
+    add(d.key, n * d.litros, `${fmtCub(n)} ${d.abrev}`);
   });
   if ((piezas.otros || 0) > 0) {
     const resto = (Number(litrosTotales) || 0) - segs.reduce((s, x) => s + x.litros, 0);
-    add('otros', resto, `${fmtCub(piezas.otros)} ${piezas.otros === 1 ? 'otra pieza' : 'otras piezas'}`);
+    add('otros', resto, `${fmtCub(piezas.otros)} ${piezas.otros === 1 ? 'otra' : 'otras'}`);
   }
   const total = segs.reduce((s, x) => s + x.litros, 0);
   if (!(total > 0)) return [];
