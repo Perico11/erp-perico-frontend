@@ -1447,7 +1447,11 @@ function PTCard({ item, scope = 'total', unidadVista, query, canEdit, canPedir, 
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-        {bajo && canPedir && btn('+ Pedir', () => onPedir(nombre), { acento: true, ancho: true, dataId: 'inventario.btn.pedir-pt' })}
+        {/* Pedir SIEMPRE, no sólo cuando está bajo (17-sep-2026, pedido dueño:
+            "por si quieren hacer mayor stock puedan ordenarlo"). Se acentúa
+            sólo cuando urge: si todos los botones gritan, el aviso de bajo
+            deja de significar algo. */}
+        {canPedir && btn('+ Pedir', () => onPedir(nombre), { acento: bajo, ancho: true, dataId: 'inventario.btn.pedir-pt' })}
         {/* Envasar: convertir tote/granel en cubetas o galones (Terán) o
             declarar el cambio de presentación de lo que hay en Fábrica. */}
         {puedeEnvasar && btn('Envasar', () => onEnvasar(item, scope), { acento: true, ancho: true, dataId: 'inventario.btn.envasar-pt' })}
@@ -1617,10 +1621,17 @@ function InvTable({ items, tipo, unidad, canEdit, canDelete, canContar, mpsDispo
                 <td style={S.td}><EstadoBadge qty={qty} pct={it.pct} /></td>
                 {showActionCol && (
                 <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                  {lowPT && canPedir && (
+                  {/* Pedir en TODO producto terminado, no sólo en el bajo: la
+                      tarjeta ya lo ofrece siempre y el mismo producto no puede
+                      ofrecerlo en tarjeta y esconderlo en tabla. Acentuado sólo
+                      cuando urge. La materia prima no entra: su reposición va
+                      por otro camino. */}
+                  {tipo === 'pt' && canPedir && (
                     <button type="button" data-id="inventario.btn.pedir-pt" data-rol="admin,almacen,tecnico"
                       onClick={() => onPedir(nombre)}
-                      style={{ ...S.btnGhost, marginRight: 8, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' }}>
+                      style={{ ...S.btnGhost, marginRight: 8,
+                        color: lowPT ? 'var(--lp-brand-700)' : 'var(--lp-text-secondary)',
+                        borderColor: lowPT ? 'color-mix(in srgb, var(--lp-brand-600) 40%, transparent)' : 'var(--lp-border-subtle)' }}>
                       + Pedir
                     </button>
                   )}
