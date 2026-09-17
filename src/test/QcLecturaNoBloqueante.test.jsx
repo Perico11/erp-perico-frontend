@@ -41,17 +41,29 @@ vi.mock('../services/api', () => ({
 import api from '../services/api';
 vi.mock('../components/SecureView', () => ({ default: ({ children }) => <div>{children}</div> }));
 
-/* El checkpoint post-molienda tal como lo manda el servidor: la finura traba,
-   el pH no. Un solo paso para que el botón visible sea el de terminar. */
+/* El checkpoint post-molienda tal como lo manda el servidor: las DOS lecturas
+   llevan la marca. Un solo paso para que el botón visible sea el de terminar. */
 const STEPS = [{
   type: 'qc', titulo: 'Control de Calidad: Post-Molienda', qcEtapa: 'molienda',
   desc: 'Verifica la finura de molienda y el pH de la pasta.',
-  accion: 'Anota el pH que marque el aparato.',
+  accion: 'Anota lo que marquen los aparatos.',
   pruebas: [
-    { id: 'finura', lbl: 'Finura de Molienda', unidad: 'Hegman', equipo: 'Grindometro',
-      rango: '4-8', min: 4, max: 8, tipo: 'number', step: 0.5 },
+    { id: 'finura', lbl: 'Finura de Molienda', unidad: 'Hegman', bloquea: false,
+      equipo: 'Grindometro', rango: '6-8', min: 6, max: 8, tipo: 'number', step: 0.5 },
     { id: 'ph', lbl: 'pH', unidad: '', bloquea: false, equipo: 'pH-metro digital',
       rango: '7.5-9.5', min: 7.5, max: 9.5, tipo: 'number', step: 0.1 },
+  ],
+}];
+
+/* Un paso de QC SIN la marca — el QC de pre-envasado sigue siendo así. Existe
+   para fijar que la tranca no desapareció: quitarla de todas partes sería un
+   agujero mucho peor que el que se vino a tapar. */
+const STEPS_TRANCA = [{
+  type: 'qc', titulo: 'Control de Calidad: Pre-Envasado', qcEtapa: 'preenvasado',
+  desc: 'Evaluación del producto terminado.',
+  pruebas: [
+    { id: 'viscosidad', lbl: 'Viscosidad', unidad: 'KU', equipo: 'Stormer',
+      rango: '80-120', min: 80, max: 120, tipo: 'number', step: 1 },
   ],
 }];
 const FORMULA = { 'BLANCO QA': { ingredientes: [{ nombre: 'TIO2', kg19: 1 }] } };
@@ -121,17 +133,34 @@ describe('el pH se puede anotar aunque salga fuera de rango', () => {
   });
 });
 
-describe('la finura sigue trabando, que para eso está', () => {
-  it('con la finura por debajo de 4 Hegman el botón NO deja avanzar', async () => {
+describe('la finura se trata igual que el pH', () => {
+  it('con la finura por debajo de 6 Hegman el botón SIGUE VIVO', async () => {
     montar();
-    await capturar({ finura: 2, ph: 8.2 });
+    await capturar({ finura: 4.5, ph: 8.2 });
     const btn = await botonTerminar();
-    expect(btn.disabled).toBe(true);
+    expect(btn.disabled).toBe(false);
   });
 
-  it('y lo dice: la mezcla se regresa al molino, no se anota y se sigue', async () => {
+  it('y se avisa, nombrando la lectura', async () => {
     montar();
-    await capturar({ finura: 2, ph: 8.2 });
+    await capturar({ finura: 4.5, ph: 8.2 });
+    const caja = await screen.findByText(/fuera de rango/i);
+    expect(caja.textContent).toMatch(/4\.5/);
+  });
+});
+
+describe('pero la tranca NO desapareció del sistema', () => {
+  it('una lectura SIN la marca sigue sin dejar avanzar', async () => {
+    api.getProduccionSteps.mockResolvedValue({ ok: true, steps: STEPS_TRANCA });
+    montar();
+    const input = await waitFor(() => {
+      const n = document.querySelector('input[type="number"]');
+      if (!n) throw new Error('sin input de QC');
+      return n;
+    });
+    fireEvent.change(input, { target: { value: '200' } });
+    const btn = await botonTerminar();
+    expect(btn.disabled).toBe(true);
     expect(await screen.findByText(/completa todas las mediciones dentro de rango/i)).toBeDefined();
   });
 });
