@@ -6,6 +6,7 @@ import api from '../../services/api';
 import { useApiData, useSearch } from '../../hooks/useApi';
 import { useRealtimeSync } from '../../hooks/useRealtimeSync';
 import CompararFormulasModal from './CompararFormulasModal';
+import SustituirMPModal from './SustituirMPModal';
 import HelpHint from '../../components/HelpHint';
 import SecureView from '../../components/SecureView';
 import NDAModal, { ndaYaAceptado } from '../../components/NDAModal';
@@ -1168,6 +1169,7 @@ export default function FormulasPage({ embedded = false }) {
   const [toastMsg, setToastMsg] = useState('');
   const [comparar, setComparar] = useState(false);
   const [importar, setImportar] = useState(false);
+  const [sustituirMP, setSustituirMP] = useState(false);
 
   /* Realtime (T3 jul 2026): canal 'formulas' — cambios de fórmula / precio MP
      hechos en otra sesión refrescan el summary (badge de recálculo en vivo,
@@ -1316,6 +1318,27 @@ export default function FormulasPage({ embedded = false }) {
               Importar Sheet (.xlsx)
             </button>
           )}
+          {/* 17-sep-2026, pedido dueño: cambiar una MP por otra en TODAS las
+              fórmulas de un jalón. Existía escondido en Inventarios ▸ MP ▸
+              Maestro ▸ ⋯, y allá además da de baja la original; aquí sólo
+              cambian las recetas. Va donde se piensa el problema. */}
+          {isAdmin && (
+            <button
+              onClick={() => setSustituirMP(true)}
+              data-id="formulas.btn.sustituir-mp"
+              title="Cambiar una materia prima por otra en todas las fórmulas que la usan"
+              style={{
+                padding: '10px 16px', fontSize: 12, fontWeight: 700,
+                borderRadius: 'var(--lp-radius-sm)',
+                border: '1.5px solid var(--lp-border-subtle)',
+                background: 'var(--lp-bg-raised)',
+                color: 'var(--lp-text-primary)',
+                cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap',
+              }}
+            >
+              Sustituir materia prima
+            </button>
+          )}
           {isAdmin && numOcultas > 0 && (
             <button
               onClick={() => setVerOcultas(v => !v)}
@@ -1394,6 +1417,14 @@ export default function FormulasPage({ embedded = false }) {
       )}
 
       {/* La Sheet de fórmulas entra al ERP (plan → APLICAR) */}
+      {sustituirMP && (
+        <SustituirMPModal
+          S={S}
+          formulas={formulas}
+          onClose={() => setSustituirMP(false)}
+          onDone={(msg) => { showToast(msg); reload(); }}
+        />
+      )}
       {importar && (
         <ImportarSheetModal
           onClose={() => setImportar(false)}

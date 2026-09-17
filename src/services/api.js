@@ -665,6 +665,11 @@ const api = {
     request('POST', '/api/mp/eliminar', { mp, forzar }),
   sustituirMP: (mpOriginal, mpSustituta) =>
     request('POST', '/api/mp/sustituir', { mpOriginal, mpSustituta }),
+  /* Cambiar una MP por otra SÓLO en las fórmulas (17-sep-2026). A diferencia de
+     sustituirMP, la original NO se da de baja ni pierde su stock: se queda viva
+     en el inventario. Sin `aplicar` responde la vista previa y no escribe nada. */
+  sustituirMpEnFormulas: (mpOriginal, mpSustituta, aplicar = false) =>
+    request('POST', '/api/formulas/sustituir-mp', { mpOriginal, mpSustituta, aplicar }),
   checkMPFormulas: (mp) =>
     request('GET', '/api/mp/check-formulas/' + encodeURIComponent(mp)),
 
