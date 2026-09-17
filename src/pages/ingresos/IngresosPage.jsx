@@ -1537,7 +1537,19 @@ const S = {
   overlay: { position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 1100, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' },
   sheet: { background: 'var(--lp-bg-raised,#fff)', width: '100%', maxWidth: 560, maxHeight: '92vh', borderRadius: '24px 24px 0 0', display: 'flex', flexDirection: 'column' },
   sheetHead: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 18px', borderBottom: '1px solid var(--lp-border-subtle,rgba(0,0,0,.08))' },
-  sheetBody: { padding: '14px 18px', overflowY: 'auto', display: 'flex', flexDirection: 'column' },
+  /* 17-sep-2026 — reporte del dueño: "la nota no se alcanza a ver". El cuerpo
+     era `display:flex; flexDirection:column`, y en flex los hijos nacen con
+     `flex-shrink:1`. Al topar la hoja con su maxHeight el navegador NO
+     desbordaba para hacer scroll: APLASTABA a los hijos. El textarea de Nota es
+     el que más cede —no tiene altura mínima propia, a diferencia de los
+     inputs— así que quedaba cortado Y el scroll ya no bajaba más, porque
+     después de encoger todo "cabía". Medido sobre esta misma hoja: el textarea
+     pedía 60px y el navegador se lo dejaba en 24.
+     En bloque cada hijo conserva su altura y lo que sobra desborda, que es lo
+     que `overflowY:'auto'` estaba esperando desde el principio. El flex aquí no
+     aportaba nada: los hijos se apilan igual (el renglón de # Factura/Monto
+     trae su propio display:flex y no depende de éste). */
+  sheetBody: { padding: '14px 18px', overflowY: 'auto' },
   sheetFoot: { display: 'flex', gap: 10, justifyContent: 'flex-end', padding: '12px 18px', borderTop: '1px solid var(--lp-border-subtle,rgba(0,0,0,.08))' },
   x: { border: 'none', background: 'transparent', fontSize: 18, cursor: 'pointer', color: 'var(--lp-text-secondary,#5a6b63)' },
   lbl: { fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-secondary,#5a6b63)', margin: '12px 0 5px' },
