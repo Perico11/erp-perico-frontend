@@ -1043,9 +1043,16 @@ function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
   );
 }
 
-/* ─── Menú "⋯" de acciones de la tarjeta (admin): Ver factura · Editar · Eliminar
-   ── Reemplaza los botones sueltos por un kebab que agrupa las 3 acciones. */
-function AccionesMenu({ ing, onEditar, onEliminar, eliminando, isDesktop }) {
+/* ─── Menú "⋯" de acciones de la tarjeta: Ver factura · Editar · Eliminar
+   ── Reemplaza los botones sueltos por un kebab que agrupa las acciones.
+
+   `puedeEliminar` (17-sep-2026): el menú ya no es sólo del admin. Quien capturó
+   el ingreso lo ve para poder CORREGIR el suyo — antes su tarjeta traía sólo
+   "Ver factura", y un color o un proveedor equivocado no había forma de
+   arreglarlo aunque el alta ya hubiera sumado al inventario. Borrar no: eso
+   sigue siendo del admin y el backend lo rechaza con 403, así que no se ofrece
+   — un botón que siempre falla es peor que ninguno. */
+function AccionesMenu({ ing, onEditar, onEliminar, eliminando, isDesktop, puedeEliminar = true }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -1080,10 +1087,12 @@ function AccionesMenu({ ing, onEditar, onEliminar, eliminando, isDesktop }) {
               <button role="menuitem" style={S.menuItem} onClick={() => { setOpen(false); onEditar(); }}>
                 <IconEdit /> Editar
               </button>
-              <button role="menuitem" disabled={eliminando} style={{ ...S.menuItem, color: '#B91C1C', opacity: eliminando ? 0.6 : 1 }}
-                onClick={() => { setOpen(false); onEliminar(); }}>
-                <IconTrash /> {eliminando ? 'Eliminando…' : 'Eliminar'}
-              </button>
+              {puedeEliminar && (
+                <button role="menuitem" disabled={eliminando} style={{ ...S.menuItem, color: '#B91C1C', opacity: eliminando ? 0.6 : 1 }}
+                  onClick={() => { setOpen(false); onEliminar(); }}>
+                  <IconTrash /> {eliminando ? 'Eliminando…' : 'Eliminar'}
+                </button>
+              )}
             </>
           )}
         </div>
@@ -1111,7 +1120,7 @@ export default function IngresosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillOC]);
   const [revisar, setRevisar] = useState(null);
-  const [editar, setEditar] = useState(null); /* ingreso en edición (admin) */
+  const [editar, setEditar] = useState(null); /* ingreso en edición (admin: cualquiera; el resto, el suyo) */
   const [eliminando, setEliminando] = useState(null); /* id del ingreso que se está borrando */
   const [toast, setToast] = useState(null);
   const [catalogs, setCatalogs] = useState({ mpNames: [], mpInfo: {}, envaseOpts: [], tapaOpts: [], ptaCat: { '1': [], '2': [] } });
@@ -1444,23 +1453,22 @@ export default function IngresosPage() {
                   <div style={{ fontSize: 12.5, color: '#B91C1C', marginTop: 9 }}>Rechazado{ing.notaRevision ? `: ${ing.notaRevision}` : ''}</div>
                 )}
 
-                {/* Acciones. Admin: la principal (Revisar, si aplica) queda visible y
-                    Ver factura · Editar · Eliminar se agrupan en el menú "⋯".
-                    No-admin (ve solo lo suyo): la liga simple a la factura. */}
+                {/* Acciones. Todos llevan el menú "⋯": el admin con Eliminar, los
+                    demás sin él (la bandeja ya sólo les muestra lo suyo, así que
+                    su "⋯" sólo puede tocar lo suyo — el backend lo revalida).
+
+                    17-sep-2026, pedido dueño: antes esta rama era `isAdmin ? menú
+                    : <a>Ver factura</a>`, y el que capturaba se quedaba mirando
+                    un error de color o de proveedor sin poder corregirlo. "Revisar"
+                    sigue saliendo sólo para las propuestas viejas que quedaron en
+                    'por_revisar'; desde el 19-ago los ingresos nuevos entran al
+                    stock al guardarse y no hay nada que autorizar. */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 10, marginTop: 11 }}>
-                  {isAdmin ? (
-                    <>
-                      {ing.estado === 'por_revisar' && (
-                        <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
-                      )}
-                      <AccionesMenu ing={ing} isDesktop={isDesktop} eliminando={eliminando === ing.id}
-                        onEditar={() => setEditar(ing)} onEliminar={() => eliminarIngreso(ing)} />
-                    </>
-                  ) : (
-                    <a href={api.ingresoFacturaUrl(ing.id)} target="_blank" rel="noreferrer" style={S.verFacturaBtn}>
-                      <IconDoc /> Ver factura
-                    </a>
+                  {isAdmin && ing.estado === 'por_revisar' && (
+                    <button onClick={() => setRevisar(ing)} style={{ ...S.btnPrimary, ...(isDesktop ? {} : { minHeight: 44, padding: '10px 20px' }) }}>Revisar</button>
                   )}
+                  <AccionesMenu ing={ing} isDesktop={isDesktop} eliminando={eliminando === ing.id} puedeEliminar={isAdmin}
+                    onEditar={() => setEditar(ing)} onEliminar={() => eliminarIngreso(ing)} />
                 </div>
               </div>
             );
@@ -1520,7 +1528,6 @@ const S = {
   monto: { fontFamily: MONO, fontSize: 14, fontWeight: 600, color: 'var(--lp-text-primary,#16201c)', whiteSpace: 'nowrap' },
   meta: { fontSize: 13, color: 'var(--lp-text-secondary,#5a6b63)', marginTop: 8, lineHeight: 1.45 },
   /* "Ver factura" con área táctil real (antes era una liga de 12px) */
-  verFacturaBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: BRAND, padding: '9px 14px', minHeight: 40, borderRadius: 9, border: '1px solid rgba(15,122,90,.28)', background: 'rgba(15,122,90,.06)', textDecoration: 'none', whiteSpace: 'nowrap', boxSizing: 'border-box' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', color: 'var(--lp-text-secondary,#5a6b63)', padding: '52px 16px', fontSize: 14 },
   tab: { fontSize: 13, fontWeight: 500, padding: '6px 14px', borderRadius: 20, border: '1px solid var(--lp-border-subtle,rgba(0,0,0,.12))', background: 'transparent', color: 'var(--lp-text-secondary,#5a6b63)', cursor: 'pointer' },
   tabActive: { background: BRAND, color: '#fff', borderColor: BRAND },
