@@ -220,6 +220,14 @@ function _sugerirLineaDesdeNota(nota, mpNames) {
    OC, el formulario de "agregar otra" se esconde tras un botón — sus campos
    vacíos parecían pendientes de llenar cuando ya no falta nada. */
 function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts, ptaCat, readOnly, onMPSeleccionada, agregarColapsado = false }) {
+  /* El precio de compra es de Compras (pedido del dueño, 17-sep-2026: "ningún
+     lado debe ver precios de materias primas"). El servidor ya no se los manda
+     a los demás roles —ahí está el candado de verdad—; esto es que la pantalla
+     no le pida a Enrique un dato que no puede ver ni consultar.
+     No se pierde nada: al registrar el ingreso el SERVIDOR toma el costo de la
+     orden de compra vinculada, donde Arely ya lo capturó. */
+  const { user: _u } = useAuth();
+  const veCostos = _u?.rol === 'admin' || _u?.rol === 'compras';
   const [tipo, setTipo] = useState('mp');
   const [editorAbierto, setEditorAbierto] = useState(!agregarColapsado);
   useEffect(() => { setEditorAbierto(!agregarColapsado); }, [agregarColapsado]);
@@ -432,11 +440,12 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
             </>
           )}
           {/* Lote + costo/kg OPCIONALES de la MP (jul 2026, pedido dueño). Solo MP.
-              El costo/kg alimenta el promedio ponderado del costo del sistema. */}
+              El costo/kg alimenta el promedio ponderado del costo del sistema, y
+              solo lo ve quien puede ver precios (sep 2026). */}
           {tipo === 'mp' && (
             <input value={d.lote || ''} onChange={e => setD({ lote: e.target.value })} placeholder="Lote de la MP (opcional)" style={{ ...S.input, marginTop: 6 }} />
           )}
-          {tipo === 'mp' && (
+          {tipo === 'mp' && veCostos && (
             <input type="number" inputMode="decimal" min="0" value={d.costoKg || ''} onChange={e => setD({ costoKg: e.target.value, __auto: null })} placeholder="Costo por kg de esta factura (opcional)" style={{ ...S.input, marginTop: 6 }} />
           )}
           {/* Presentación (jul 2026): en qué empaque llegó — los bultos se
@@ -453,7 +462,7 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
               = {presEnvases(d.presentacion, Number(d.cant))}
             </div>
           )}
-          {tipo === 'mp' && d.__auto && (
+          {tipo === 'mp' && veCostos && d.__auto && (
             <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary,#8a948f)', marginTop: 4, lineHeight: 1.4 }}>
               Precio prellenado del ERP (${d.__auto.costoKg}/kg{d.__auto.proveedor ? ` · ${d.__auto.proveedor}` : ''}) — corrígelo si la factura trae otro.
             </div>
@@ -477,6 +486,8 @@ function LineasEditor({ lineas, setLineas, mpNames, mpInfo, envaseOpts, tapaOpts
 function CrearSheet({ catalogs, onClose, onSaved, isDesktop, prefillOC }) {
   const [proveedor, setProveedor] = useState('');
   const [numFactura, setNumFactura] = useState('');
+  const { user: _uM } = useAuth();
+  const veCostos = _uM?.rol === 'admin' || _uM?.rol === 'compras';
   const [monto, setMonto] = useState('');
   const [nota, setNota] = useState('');
   const [facturaData, setFacturaData] = useState(null);
@@ -741,10 +752,12 @@ function CrearSheet({ catalogs, onClose, onSaved, isDesktop, prefillOC }) {
               <label style={S.lbl}># Factura</label>
               <input value={numFactura} onChange={e => setNumFactura(e.target.value)} placeholder="Opcional" style={S.input} />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={S.lbl}>Monto</label>
-              <input type="number" inputMode="decimal" min="0" value={monto} onChange={e => setMonto(e.target.value)} placeholder="Opcional" style={S.input} />
-            </div>
+            {veCostos && (
+              <div style={{ flex: 1 }}>
+                <label style={S.lbl}>Monto</label>
+                <input type="number" inputMode="decimal" min="0" value={monto} onChange={e => setMonto(e.target.value)} placeholder="Opcional" style={S.input} />
+              </div>
+            )}
           </div>
 
           <label style={S.lbl}>Foto de la factura {facturaDeOC ? '(opcional)' : '*'}</label>
@@ -922,6 +935,8 @@ function RevisarSheet({ ing, catalogs, onClose, onDone, isDesktop }) {
 function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
   const [proveedor, setProveedor] = useState(ing.proveedor || '');
   const [numFactura, setNumFactura] = useState(ing.numFactura || '');
+  const { user: _uM } = useAuth();
+  const veCostos = _uM?.rol === 'admin' || _uM?.rol === 'compras';
   const [monto, setMonto] = useState(ing.monto != null ? String(ing.monto) : '');
   const [nota, setNota] = useState(ing.nota || '');
   const [facturaData, setFacturaData] = useState(null);   /* solo si SE CAMBIA */
@@ -1004,10 +1019,12 @@ function EditSheet({ ing, catalogs, onClose, onSaved, isDesktop }) {
               <label style={S.lbl}># Factura</label>
               <input value={numFactura} onChange={e => setNumFactura(e.target.value)} placeholder="Opcional" style={S.input} />
             </div>
-            <div style={{ flex: 1 }}>
-              <label style={S.lbl}>Monto</label>
-              <input type="number" inputMode="decimal" min="0" value={monto} onChange={e => setMonto(e.target.value)} placeholder="Opcional" style={S.input} />
-            </div>
+            {veCostos && (
+              <div style={{ flex: 1 }}>
+                <label style={S.lbl}>Monto</label>
+                <input type="number" inputMode="decimal" min="0" value={monto} onChange={e => setMonto(e.target.value)} placeholder="Opcional" style={S.input} />
+              </div>
+            )}
           </div>
 
           <label style={S.lbl}>Foto de la factura</label>
