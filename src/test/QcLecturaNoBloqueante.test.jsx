@@ -49,7 +49,7 @@ const STEPS = [{
   accion: 'Anota lo que marquen los aparatos.',
   pruebas: [
     { id: 'finura', lbl: 'Finura de Molienda', unidad: 'Hegman', bloquea: false,
-      equipo: 'Grindometro', rango: '6-8', min: 6, max: 8, tipo: 'number', step: 0.5 },
+      equipo: 'Grindometro', rango: '4-8', min: 4, max: 8, tipo: 'number', step: 0.5 },
     { id: 'ph', lbl: 'pH', unidad: '', bloquea: false, equipo: 'pH-metro digital',
       rango: '7.5-9.5', min: 7.5, max: 9.5, tipo: 'number', step: 0.1 },
   ],
@@ -134,18 +134,18 @@ describe('el pH se puede anotar aunque salga fuera de rango', () => {
 });
 
 describe('la finura se trata igual que el pH', () => {
-  it('con la finura por debajo de 6 Hegman el botón SIGUE VIVO', async () => {
+  it('con la finura por debajo de 4 Hegman el botón SIGUE VIVO', async () => {
     montar();
-    await capturar({ finura: 4.5, ph: 8.2 });
+    await capturar({ finura: 3, ph: 8.2 });
     const btn = await botonTerminar();
     expect(btn.disabled).toBe(false);
   });
 
   it('y se avisa, nombrando la lectura', async () => {
     montar();
-    await capturar({ finura: 4.5, ph: 8.2 });
+    await capturar({ finura: 3, ph: 8.2 });
     const caja = await screen.findByText(/fuera de rango/i);
-    expect(caja.textContent).toMatch(/4\.5/);
+    expect(caja.textContent).toMatch(/Finura[^·]*3/);
   });
 });
 
