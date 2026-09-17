@@ -75,5 +75,14 @@ export function useSearch(delay = 200) {
     timerRef.current = setTimeout(() => setDebouncedQuery(val), delay);
   }, [delay]);
 
+  /* El debounce muere con el componente. Si la pantalla se cierra dentro de
+     los `delay` ms del último tecleo, el temporizador seguía vivo y llamaba
+     setState sobre algo que ya no existe: en la app es una fuga silenciosa,
+     y en las pruebas tumbaba la corrida entera ("window is not defined" al
+     dispararse después de desmontar el entorno). */
+  useEffect(() => () => {
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+  }, []);
+
   return { query, debouncedQuery, setQuery: onChange };
 }
