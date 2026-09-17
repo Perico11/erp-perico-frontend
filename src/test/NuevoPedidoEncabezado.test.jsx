@@ -69,3 +69,26 @@ describe('Nuevo pedido · el encabezado del sheet', () => {
     expect(cab.querySelector('button[aria-label="Cerrar"]')).toBeTruthy();
   });
 });
+
+/* Y el pie: 17-sep, segundo reporte del dueño —"la parte de abajo donde está
+   cancelar y crear pedidos queda sin padding abajo"—. Medido en un navegador
+   real el pie SÍ tenía padding (12px 22px 14px), pero 14 abajo contra 16
+   arriba se lee apretado, más con la esquina redondeada de 18 px. Ahora el
+   aire de abajo iguala al de arriba.
+
+   Ojo al leerlo: jsdom no sabe serializar env(), así que devuelve el valor
+   corrupto ("env(0px * , * safe-area-inset-bottom)") y el navegador tiraría
+   la declaración entera EN EL VOLCADO. Por eso aquí se mira el texto del
+   estilo y no el valor calculado. */
+describe('Nuevo pedido · el pie del sheet', () => {
+  it('el aire de abajo iguala al del encabezado, y conserva el safe-area del teléfono', async () => {
+    const { cab } = await abrir();
+    const pie = document.querySelector('[data-id="pedidos.nuevo.pie"]');
+    expect(pie).toBeTruthy();
+    const estilo = pie.getAttribute('style') || '';
+    expect(estilo).toMatch(/calc\(16px/);                       /* = los 16 del encabezado */
+    expect(cab.style.paddingTop).toBe('16px');
+    expect(estilo).toMatch(/safe-area-inset-bottom/);           /* el teléfono suma su barra */
+    expect(estilo).toMatch(/22px/);                             /* alineado con cuerpo y cabecera */
+  });
+});

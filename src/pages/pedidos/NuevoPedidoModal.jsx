@@ -73,7 +73,11 @@ const S = {
      column con overflow oculto; solo este body scrollea, los botones quedan
      fijos abajo del fold en móvil. */
   sheetBody: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '20px 22px 12px' },
-  sheetFooter: { flexShrink: 0, padding: '12px 22px calc(14px + env(safe-area-inset-bottom, 0px))', display: 'flex', gap: 10, borderTop: '1px solid var(--lp-border-subtle)' },
+  /* El aire de abajo iguala al de arriba (16 px, el del encabezado): con 14 se
+     leía más apretado que el título, y la esquina redondeada de 18 px lo
+     empeora porque los botones son pastillas a todo lo ancho. El env() se
+     conserva: en teléfono suma el home-indicator encima de esos 16. */
+  sheetFooter: { flexShrink: 0, padding: '12px 22px calc(16px + env(safe-area-inset-bottom, 0px))', display: 'flex', gap: 10, borderTop: '1px solid var(--lp-border-subtle)' },
   /* El encabezado NO tenía padding (17-sep-2026, reporte dueño: "arregla la
      estética de esta card"). El cuerpo y el pie sí lo traían, así que el
      título y la X quedaban pegados al borde del panel, sin aire y sin nada que
@@ -531,7 +535,7 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         </div>{/* /sheetBody */}
 
         {/* Footer pegajoso — botones fijos abajo (no scrollean). */}
-        <div style={S.sheetFooter}>
+        <div style={S.sheetFooter} data-id="pedidos.nuevo.pie">
           <button style={S.btn(false)} onClick={onClose} disabled={saving}>Cancelar</button>
           <button style={S.btn(true)} onClick={handleSave} disabled={saving}>
             {saving ? 'Guardando…' : numFinales > 1 ? `Crear ${numFinales} pedidos` : 'Crear pedido'}
