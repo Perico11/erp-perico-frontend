@@ -550,12 +550,25 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
     });
   }, [logEvent]);
 
-  /* QC validation: todos los campos obligatorios deben estar dentro de rango */
+  /* QC validation: todos los campos obligatorios deben estar dentro de rango.
+
+     Salvo los que el servidor marca `bloquea:false` (hoy el pH de molienda): su
+     lectura SIGUE SIENDO OBLIGATORIA —vacío traba igual— pero su rango no decide
+     si se puede avanzar. El motivo es que una tranca sobre una medición que
+     legítimamente varía no produce datos buenos, produce datos falsos: con el
+     botón muerto y prisa en el piso, la salida fácil es teclear un número dentro
+     de rango, y entonces lo que queda guardado es mentira.
+
+     Fuera de rango no se ignora, se señala en otro lado: `todosEnRango` (al
+     cerrar el wizard) sí mira estos campos y manda el lote a qc_hold en vez de
+     qc_aprobado. Esa evaluación es independiente de ésta a propósito — una
+     decide si el botón vive, la otra si el lote sale aprobado o retenido. */
   const qcEnRango = useMemo(() => {
     if (!step || step.type !== 'qc') return true;
     const evalReadings = (readings) => (step.pruebas || []).every(p => {
       const v = readings[p.id];
       if (v == null || v === '') return false;
+      if (p.bloquea === false) return true;
       if (p.tipo === 'select') return (p.aprobados || []).includes(v);
       const num = parseFloat(v);
       if (isNaN(num)) return false;
@@ -569,6 +582,29 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
       if (!evalReadings(readings)) return false;
     }
     return true;
+  }, [step, qcReadings, qcExtraBachas, numBachas, curStep]);
+
+  /* Lecturas fuera de rango que NO traban (bloquea:false). Sin esto el operario
+     anota un pH corrido, avanza sin fricción, y el lote le sale RETENIDO más
+     tarde sin que nada se lo hubiera advertido. El aviso es la contraparte
+     honesta de quitar la tranca: puedes seguir, pero esto es lo que va a pasar. */
+  const qcFueraSinTrabar = useMemo(() => {
+    if (!step || step.type !== 'qc') return [];
+    const fuera = [];
+    for (const p of (step.pruebas || [])) {
+      if (p.bloquea !== false) continue;
+      for (let b = 1; b <= numBachas; b++) {
+        const readings = (b === 1 ? qcReadings : (qcExtraBachas[b] || {}))[curStep] || {};
+        const v = readings[p.id];
+        if (v == null || v === '') continue;
+        const num = parseFloat(v);
+        if (isNaN(num)) continue;
+        if ((p.min != null && num < p.min) || (p.max != null && num > p.max)) {
+          fuera.push(numBachas > 1 ? `${p.lbl} ${v} (bacha ${b})` : `${p.lbl} ${v}`);
+        }
+      }
+    }
+    return fuera;
   }, [step, qcReadings, qcExtraBachas, numBachas, curStep]);
 
   /* Finalizar producción: descuenta MP, suma PT, crea lote, actualiza pedido/orden */
@@ -1352,6 +1388,19 @@ export default function ProduccionFlow({ item, userName, onClose, onSuccess }) {
                 </div>
               );
             })}
+            {qcFueraSinTrabar.length > 0 && (
+              <div role="status" data-id="qc-fuera-sin-trabar" style={{
+                display: 'flex', gap: 8, padding: '10px 12px', marginBottom: 10, borderRadius: 10,
+                background: 'var(--lp-warning-50)', border: '1px solid var(--lp-warning-300)',
+                color: 'var(--lp-warning-800)', fontSize: 12, lineHeight: 1.5 }}>
+                <span style={{ display: 'inline-flex', flexShrink: 0, color: 'var(--lp-warning-600)' }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+                <span>
+                  <b>Fuera de rango: {qcFueraSinTrabar.join(' · ')}.</b>{' '}
+                  Puedes continuar y la lectura queda guardada tal cual — es la que sirve.
+                  El lote saldrá <b>retenido</b> para que calidad lo revise.
+                </span>
+              </div>
+            )}
             {!qcEnRango && (
               <div style={S.alerta}>
                 <span style={{ display: 'inline-flex', flexShrink: 0 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
