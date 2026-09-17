@@ -74,7 +74,17 @@ const S = {
      fijos abajo del fold en móvil. */
   sheetBody: { flex: '1 1 auto', minHeight: 0, overflowY: 'auto', overscrollBehavior: 'contain', WebkitOverflowScrolling: 'touch', padding: '20px 22px 12px' },
   sheetFooter: { flexShrink: 0, padding: '12px 22px calc(14px + env(safe-area-inset-bottom, 0px))', display: 'flex', gap: 10, borderTop: '1px solid var(--lp-border-subtle)' },
-  head: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  /* El encabezado NO tenía padding (17-sep-2026, reporte dueño: "arregla la
+     estética de esta card"). El cuerpo y el pie sí lo traían, así que el
+     título y la X quedaban pegados al borde del panel, sin aire y sin nada que
+     los separara del formulario. Mismo patrón que el resto de los modales de
+     la casa (OrdenesPage.modalHeader): padding + regla abajo, que además hace
+     juego con el borderTop que el pie ya tenía. El horizontal es 22 px, el del
+     cuerpo y el pie de ESTE sheet, para que las tres zonas alineen. */
+  head: {
+    display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12,
+    padding: '16px 22px', borderBottom: '1px solid var(--lp-border-subtle)', flexShrink: 0,
+  },
   title: { fontSize: 18, fontWeight: 600, color: 'var(--lp-text-primary)', letterSpacing: '-.01em' },
   sub: { fontSize: 12.5, color: 'var(--lp-text-secondary)', marginTop: 3 },
   closeBtn: {
@@ -359,7 +369,7 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         {/* Encabezado del sheet (modal-h + modal-s del mockup). La X no viene
             en el mockup pero se conserva (cierre accesible además del overlay).
             flexShrink:0 → header fijo, no scrollea (footer pegajoso v4). */}
-        <div style={{ ...S.head, flexShrink: 0 }}>
+        <div style={S.head} data-id="pedidos.nuevo.encabezado">
           <div>
             <div style={S.title}>Nuevo pedido</div>
             <div style={S.sub}>Captura un producto, agrégalo a la lista y sigue con el siguiente.</div>
@@ -370,7 +380,7 @@ export default function NuevoPedidoModal({ onClose, onCreated, prefillProducto =
         </div>
 
         {/* Cuerpo scrolleable — único elemento con overflow. */}
-        <div style={S.sheetBody}>
+        <div style={S.sheetBody} data-id="pedidos.nuevo.cuerpo">
 
         {/* Renglones ya guardados (patrón carrito): compactos, tap para editar. */}
         {guardados.length > 0 && (
