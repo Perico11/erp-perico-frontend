@@ -243,10 +243,33 @@ describe('Stock ▸ Total del PT · tarjetas (propuesta D)', () => {
     expect(screen.getByText(/Solo cambia el pool de/)).toBeInTheDocument();
   });
 
-  it('"+ Pedir" está donde hace falta: en el producto bajo, no en el que va bien', async () => {
+  /* Regla NUEVA (17-sep-2026, pedido dueño): "agrégale a todos el botón de
+     pedir, por si quieren hacer mayor stock puedan ordenarlo". Antes sólo
+     aparecía en el producto bajo — y quien quería adelantarse no tenía por
+     dónde. Lo que se conserva es la JERARQUÍA: acentuado cuando urge,
+     apagado cuando sólo es una opción, para que "Bajo" siga significando algo. */
+  it('"+ Pedir" está en TODAS las tarjetas, también en la que va bien', async () => {
     await abrirPT();
-    expect(within(tarjeta('AZUL REY 4.0')).getByRole('button', { name: '+ Pedir' })).toBeInTheDocument();
-    expect(within(tarjeta('BLANCO OFFWHITE 4.0')).queryByRole('button', { name: '+ Pedir' })).toBeNull();
+    for (const n of ['AZUL REY 4.0', 'BLANCO OFFWHITE 4.0', 'ROJO ÓXIDO 4.0']) {
+      expect(within(tarjeta(n)).getByRole('button', { name: '+ Pedir' })).toBeInTheDocument();
+    }
+  });
+
+  it('pero acentuado sólo cuando urge: el que va bien lo trae apagado', async () => {
+    await abrirPT();
+    const pedir = (n) => within(tarjeta(n)).getByRole('button', { name: '+ Pedir' });
+    /* AZUL REY está bajo (11 cub contra un mínimo de 20) → color de marca. */
+    expect(pedir('AZUL REY 4.0').style.color).toMatch(/brand/);
+    /* BLANCO OFFWHITE va bien (103 cub contra 30) → neutro. */
+    expect(pedir('BLANCO OFFWHITE 4.0').style.color).not.toMatch(/brand/);
+  });
+
+  it('y en la TABLA igual: el mismo producto no lo ofrece en tarjeta y lo esconde en tabla', async () => {
+    await abrirPT();
+    await verTabla();
+    for (const n of ['AZUL REY 4.0', 'BLANCO OFFWHITE 4.0']) {
+      expect(within(fila(n)).getByRole('button', { name: '+ Pedir' })).toBeInTheDocument();
+    }
   });
 
   it('sin el desglose por ubicación no ofrece contar: queda la ficha de ajuste', async () => {

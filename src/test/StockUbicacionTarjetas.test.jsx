@@ -192,4 +192,19 @@ describe('PT ▸ Fábrica y Terán con la tarjeta de Total', () => {
     expect(c.textContent).not.toMatch(/AGOTADO/i);
     expect(boton(c, '+ Pedir')).toBeTruthy();
   });
+
+  /* 17-sep-2026, pedido dueño: "agrégale a todos el botón de pedir, por si
+     quieren hacer mayor stock puedan ordenarlo". También en las bodegas. */
+  it('"+ Pedir" también está en el producto que va BIEN, en las dos pestañas', async () => {
+    await abrir('fabrica');
+    /* BLANCO OFFWHITE va sobrado (103 cub contra un mínimo de 30) y lo trae. */
+    const cF = tarjeta('fabrica', 'BLANCO OFFWHITE');
+    expect(boton(cF, '+ Pedir')).toBeTruthy();
+    expect(boton(cF, '+ Pedir').style.color).not.toMatch(/brand/);   /* apagado: no urge */
+    await act(async () => { fireEvent.click(document.querySelector('[data-id="inventario.ptview.teran"]')); });
+    const cT = tarjeta('teran', 'BLANCO OFFWHITE');
+    expect(boton(cT, '+ Pedir')).toBeTruthy();
+    /* y el que sí urge sigue acentuado */
+    expect(boton(tarjeta('teran', 'AZUL REY'), '+ Pedir').style.color).toMatch(/brand/);
+  });
 });
