@@ -1289,42 +1289,76 @@ const COLOR_SEG = {
   otros: 'var(--lp-text-tertiary)',
 };
 
-function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onEnvasar, onAjustar, onTransferir, onEliminarTeran, onOcultar, canContar, onContar, lotes, esAdmin }) {
+/* ── UNA tarjeta para las tres pestañas del PT (17-sep-2026, pedido dueño:
+   "ese mismo diseño lo tenga en PT > Fábrica y Terán, no solo la de Total").
+   `scope` dice de qué habla: 'total' suma las dos ubicaciones; 'fabrica' y
+   'teran' hablan SOLO de la suya —su composición, sus totes, sus lotes— y
+   traen los botones que aplican ahí, que es la "propia necesidad" de cada
+   una: en Fábrica se transfiere y se declara el cambio de presentación; en
+   Terán se envasa del pool y se quita el registro manual. ── */
+function PTCard({ item, scope = 'total', unidadVista, query, canEdit, canPedir, onPedir, onEnvasar, onAjustar, onTransferir, onEliminarTeran, onOcultar, canContar, onContar, lotes, esAdmin }) {
   const [detalle, setDetalle] = useState(false);
-  const { nombre, inv, pct, piezas } = item;
-  const qty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
+  const { nombre, inv, pct } = item;
+  const esTotal = scope === 'total';
+  const esFabricaScope = scope === 'fabrica';
+  const bTeranB = item.buckets?.teran, bFabB = item.buckets?.fabrica;
+  const bucket = esTotal ? null : (esFabricaScope ? bFabB : bTeranB);
+  /* Las piezas de la ubicación salen del MISMO resumen que la pestaña Total
+     —`resumenPiezasTotal` resume CUALQUIER bucket, no sólo el total— y eso
+     importa por dos razones: netea el tote abierto (que el backend reporta dos
+     veces: la etiqueta en `tote` y sus litros en `granel`, así que Terán
+     leería 1,740 L donde hay 752), y devuelve la forma que la barra de
+     composición sabe leer (`llenos`/`parciales`). Con la forma cruda el tote
+     desaparecía de la barra y las cubetas se llevaban el 100 %. */
+  const piezas = esTotal
+    ? item.piezas
+    : (bucket ? resumenPiezasTotal(bucket, (item.parciales || []).filter(t => t.ubic === scope)) : null);
+  const totalQty = item.displayQty != null ? item.displayQty : (inv.qty || 0);
+  const qty = esTotal ? totalQty : (esFabricaScope ? (Number(item.fabQty) || 0) : (Number(item.teranQty) || 0));
   const enL = unidadVista === 'L';
   const litros = cubALitros(qty);
-  const sev = sevOf(qty, pct);
+  const sev = sevOf(totalQty, pct);
   const segs = piezas ? segmentosComposicion(piezas, litros) : [];
   const min = inv.min || 0;
-  const bajo = qty <= 0 || pct <= 100;
+  /* El mínimo es del PRODUCTO, no de una bodega: "bajo" y el botón Pedir se
+     deciden siempre con el total, se esté viendo la pestaña que se esté. */
+  const bajo = totalQty <= 0 || pct <= 100;
   const f = (cub) => (enL ? `${fmtL(cubALitros(cub))} L` : `${fmtCub(cub)} cub`);
   /* ¿Hay algo que envasar? En Terán, tote o granel del pool; en Fábrica,
      piezas cerradas cuyo envase se quiera declarar (caso ASTRA-LAST). */
-  const bTeran = item.buckets?.teran, bFab = item.buckets?.fabrica;
+  const bTeran = bTeranB, bFab = bFabB;
   const envasableTeran = !!bTeran?.teranPresScalar
     && Object.entries(bTeran.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
   const envasableFab = !!bFab
     && ((Number(bFab.cubeta) || 0) + (Number(bFab.galon) || 0) + (Number(bFab.litro) || 0) + (Number(bFab.atm) || 0) + (Number(bFab.otros) || 0)) > 0;
-  const puedeEnvasar = !!onEnvasar && (envasableTeran || envasableFab);
-  /* Lo que también enseñan (y dejan hacer) las pestañas Fábrica y Terán. */
-  const totesDetalle = [
-    ...((bFab?.totesFisicos?.detalle || []).map(t => ({ ...t, ubic: 'fabrica' }))),
-    ...((bTeran?.totesFisicos?.detalle || []).map(t => ({ ...t, ubic: 'teran' }))),
-  ].filter(t => (Number(t.litrosRestante) || 0) > 0.01);
+  /* Qué significa "Envasar" aquí: en Terán, volcar el tote/granel del pool a
+     cubetas o galones; en Fábrica, declarar el cambio de presentación de lo
+     que ya está envasado (caso ASTRA-LAST). En Total, lo que haya. */
+  const puedeEnvasar = !!onEnvasar && (esTotal ? (envasableTeran || envasableFab) : (esFabricaScope ? envasableFab : envasableTeran));
+  /* El detalle habla sólo de la ubicación que se está viendo. */
+  const totesDetalle = (esTotal
+    ? [
+      ...((bFab?.totesFisicos?.detalle || []).map(t => ({ ...t, ubic: 'fabrica' }))),
+      ...((bTeran?.totesFisicos?.detalle || []).map(t => ({ ...t, ubic: 'teran' }))),
+    ]
+    : ((bucket?.totesFisicos?.detalle || []).map(t => ({ ...t, ubic: scope })))
+  ).filter(t => (Number(t.litrosRestante) || 0) > 0.01);
   const lotesProd = lotes?.[String(nombre).toUpperCase()] || null;
-  const lotesTodos = [...(lotesProd?.fabrica || []), ...(lotesProd?.teran || [])];
-  const granelCub = (Number(bFab?.granel) || 0) + (Number(bTeran?.granel) || 0);
-  const residual = Number(bFab?.residual) || 0;
-  const manual = Number(bTeran?.manual) || 0;
-  const sublotes = (Number(bFab?.sublotes) || 0) + (Number(bTeran?.sublotes) || 0);
-  const avisoDescuadre = !!esAdmin && (Number(bFab?.descuadre) || 0) > 0.5;
+  const lotesTodos = esTotal
+    ? [...(lotesProd?.fabrica || []), ...(lotesProd?.teran || [])]
+    : (lotesProd?.[scope] || []);
+  const granelCub = esTotal ? (Number(bFab?.granel) || 0) + (Number(bTeran?.granel) || 0) : (Number(bucket?.granel) || 0);
+  const residual = esTotal || esFabricaScope ? (Number(bFab?.residual) || 0) : 0;
+  const manual = esTotal || !esFabricaScope ? (Number(bTeran?.manual) || 0) : 0;
+  const sublotes = esTotal ? (Number(bFab?.sublotes) || 0) + (Number(bTeran?.sublotes) || 0) : (Number(bucket?.sublotes) || 0);
+  /* El descuadre es un asunto de FÁBRICA: compara las piezas rastreadas contra
+     el escalar contable que la OT puede mover. No aplica en Terán. */
+  const avisoDescuadre = !!esAdmin && !((!esTotal) && !esFabricaScope) && (Number(bFab?.descuadre) || 0) > 0.5;
   const hayDetalle = totesDetalle.length > 0 || lotesTodos.length > 0 || granelCub > 0 || residual > 0 || manual > 0 || sublotes > 0;
   const ubics = [
-    ['Fábrica', item.fabQty],
-    ['Terán', item.teranQty],
-    ...((Number(item.transito) || 0) > 0 ? [['En camino', item.transito]] : []),
+    ['Fábrica', item.fabQty, 'fabrica'],
+    ['Terán', item.teranQty, 'teran'],
+    ...((Number(item.transito) || 0) > 0 ? [['En camino', item.transito, 'transito']] : []),
   ];
   const btn = (texto, onClick, { acento, dataId, apagado, ancho } = {}) => (
     <button key={texto} type="button" data-id={dataId} onClick={onClick}
@@ -1336,14 +1370,16 @@ function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onE
   );
 
   return (
-    <div data-id="inventario.pt.card" data-rol="admin,tecnico,compras,almacen,inventario"
+    <div data-id="inventario.pt.card" data-scope={scope} data-rol="admin,tecnico,compras,almacen,inventario"
       style={{ background: 'var(--lp-bg-raised)', border: '1px solid var(--lp-border-subtle)', borderRadius: 14, padding: '13px 15px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 2 }}>
         <span style={{ flex: 1, fontSize: 14.5, fontWeight: 600, color: 'var(--lp-text-primary)', minWidth: 0 }}>{resaltar(nombre, query)}</span>
         {item.oculto && (
           <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: .5, padding: '2px 7px', borderRadius: 10, background: 'var(--lp-warning-100)', color: 'var(--lp-warning-700)' }}>OCULTO</span>
         )}
-        <EstadoBadge qty={qty} pct={pct} />
+        {/* El semáforo es del producto (mínimo incluido), no de la bodega que se
+            está viendo: 0 en Fábrica con 40 cub en Terán no es "agotado". */}
+        <EstadoBadge qty={totalQty} pct={pct} />
         {onOcultar && (
           <span style={{ display: 'inline-flex' }}>
             <MPActionsMenu mp={nombre} canEdit={true} extraItems={[{
@@ -1378,7 +1414,9 @@ function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onE
         </>
       ) : (
         <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
-          {piezas ? 'Sin existencia registrada.' : 'Cargando el desglose por ubicación…'}
+          {piezas
+            ? (esTotal ? 'Sin existencia registrada.' : `Sin piezas registradas en ${esFabricaScope ? 'Fábrica' : 'Terán'}.`)
+            : 'Cargando el desglose por ubicación…'}
         </div>
       )}
 
@@ -1389,21 +1427,34 @@ function PTCardTotal({ item, unidadVista, query, canEdit, canPedir, onPedir, onE
             ≈ {enL ? `${fmtCub(qty)} cub` : `${fmtL(litros)} L`}
           </span>
         </span>
-        <span style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}>mín {enL ? `${fmtL(cubALitros(min))} L` : `${fmtCub(min)} cub`}</span>
+        {/* En una ubicación, el número de al lado NO es el mínimo —compararlo
+            con lo que hay en una sola bodega induce al error—: es cuánto tiene
+            el producto entre las dos, para saber qué parte se está viendo. */}
+        <span style={{ fontFamily: 'var(--lp-font-mono)', color: 'var(--lp-text-tertiary)' }}
+          title={esTotal ? 'Mínimo del producto' : 'Existencia del producto entre Fábrica y Terán'}>
+          {esTotal ? `mín ${enL ? `${fmtL(cubALitros(min))} L` : `${fmtCub(min)} cub`}` : `de ${f(totalQty)} en total`}
+        </span>
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: '2px 14px', marginTop: 4, fontSize: 11.5, color: 'var(--lp-text-tertiary)' }}>
-        {ubics.map(([l, v]) => (
-          <span key={l}>{l} <b style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: (Number(v) || 0) > 0 ? 'var(--lp-text-secondary)' : 'var(--lp-text-tertiary)' }}>{(Number(v) || 0) > 0 ? f(v) : '—'}</b></span>
-        ))}
+        {ubics.map(([l, v, k]) => {
+          const aqui = k === scope;
+          return (
+            <span key={l} style={aqui ? { color: 'var(--lp-text-secondary)', fontWeight: 600 } : undefined}>
+              {aqui ? `▸ ${l}` : l} <b style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 700, color: (Number(v) || 0) > 0 ? 'var(--lp-text-secondary)' : 'var(--lp-text-tertiary)' }}>{(Number(v) || 0) > 0 ? f(v) : '—'}</b>
+            </span>
+          );
+        })}
       </div>
 
       <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
         {bajo && canPedir && btn('+ Pedir', () => onPedir(nombre), { acento: true, ancho: true, dataId: 'inventario.btn.pedir-pt' })}
         {/* Envasar: convertir tote/granel en cubetas o galones (Terán) o
             declarar el cambio de presentación de lo que hay en Fábrica. */}
-        {puedeEnvasar && btn('Envasar', () => onEnvasar(item), { acento: true, ancho: true, dataId: 'inventario.btn.envasar-pt' })}
-        {!!onTransferir && (Number(item.fabQty) || 0) > 0 && btn('→ Terán', () => onTransferir(nombre), { acento: true, ancho: true, dataId: 'inventario.btn.transferir-pt' })}
-        {canEdit && onAjustar && btn('Ajustar', () => onAjustar(item), { acento: true, ancho: true, dataId: 'inventario.btn.ajustar' })}
+        {puedeEnvasar && btn('Envasar', () => onEnvasar(item, scope), { acento: true, ancho: true, dataId: 'inventario.btn.envasar-pt' })}
+        {/* "→ Terán" no existe ESTANDO en Terán. */}
+        {scope !== 'teran' && !!onTransferir && (Number(item.fabQty) || 0) > 0 && btn('→ Terán', () => onTransferir(nombre), { acento: true, ancho: true, dataId: 'inventario.btn.transferir-pt' })}
+        {/* Ajustar abre la ficha YA en la ubicación que se está viendo. */}
+        {canEdit && onAjustar && btn('Ajustar', () => onAjustar(item, esTotal ? undefined : scope), { acento: true, ancho: true, dataId: 'inventario.btn.ajustar' })}
         {canContar && !canEdit && btn('Contar →', () => onContar && onContar(), { acento: true, ancho: true, dataId: 'inventario.btn.contar' })}
       </div>
       {/* Detalle plegado: lo mismo que enseñan las pestañas Fábrica y Terán —
@@ -2706,16 +2757,22 @@ export default function InventarioPage({ embedded = false }) {
       parciales: item.parciales || [],
     });
   }, []);
-  /* Envasar desde la tarjeta de Total: el pool de Terán manda (tote o granel
-     → cubetas/galones); si allá no hay nada que envasar, se declara el
-     envasado de lo que está en Fábrica (caso ASTRA-LAST). Son los MISMOS
-     modales de las pestañas Fábrica y Terán. */
-  const handleEnvasarDesdeTarjeta = useCallback((item) => {
+  /* Envasar desde la tarjeta. En la pestaña de una UBICACIÓN abre el modal de
+     esa ubicación y sólo ese: en Terán, volcar el tote/granel del pool a
+     cubetas o galones; en Fábrica, declarar el cambio de presentación de lo
+     que ya está envasado (caso ASTRA-LAST). En Total no hay pestaña que lo
+     diga, así que manda el pool de Terán y, si allá no hay nada, Fábrica.
+     Son los MISMOS modales de siempre. */
+  const handleEnvasarDesdeTarjeta = useCallback((item, scope) => {
     const bTeran = item.buckets?.teran, bFab = item.buckets?.fabrica;
     const enTeran = bTeran?.teranPresScalar
       && Object.entries(bTeran.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
-    if (enTeran) setReenvasarTeran({ producto: item.nombre, scalar: bTeran.teranPresScalar, totes: bTeran.totesFisicos });
-    else if (bFab) setReenvasarFabrica({ producto: item.nombre, desglose: bFab });
+    const aTeran = () => setReenvasarTeran({ producto: item.nombre, scalar: bTeran.teranPresScalar, totes: bTeran.totesFisicos });
+    const aFabrica = () => setReenvasarFabrica({ producto: item.nombre, desglose: bFab });
+    if (scope === 'teran') { if (enTeran) aTeran(); return; }
+    if (scope === 'fabrica') { if (bFab) aFabrica(); return; }
+    if (enTeran) aTeran();
+    else if (bFab) aFabrica();
   }, []);
 
   /* El conteo por piezas se guarda con el MISMO candado que el ajuste
@@ -3159,9 +3216,11 @@ export default function InventarioPage({ embedded = false }) {
                     style={S.chip(p.id === ptSubtab)} onClick={() => setPtSubtab(p.id)}>{p.label}</button>
                 ))}
               </div>
-              {ptSubtab === 'total' && (
+              {(
                 <div style={S.actionsCluster(isDesktop)}>
-                  {/* Propuesta D: tarjetas (por omisión) o la tabla de siempre. */}
+                  {/* Propuesta D: tarjetas (por omisión) o la tabla de siempre.
+                      La tabla sólo existe en Total; Fábrica y Terán son tarjetas. */}
+                  {ptSubtab === 'total' && (
                   <div style={S.segWrap} role="tablist" aria-label="Forma de la lista">
                     {[['tarjetas', 'Tarjetas'], ['tabla', 'Tabla']].map(([k, l]) => (
                       <button key={k} type="button" role="tab" aria-selected={ptVista === k}
@@ -3169,7 +3228,8 @@ export default function InventarioPage({ embedded = false }) {
                         style={S.segBtn(ptVista === k)} onClick={() => setPtVista(k)}>{l}</button>
                     ))}
                   </div>
-                  {/* Unidad de lectura (litros | cubetas). */}
+                  )}
+                  {/* Unidad de lectura (litros | cubetas) — vale en las tres. */}
                   <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>Ver en</span>
                   <div style={S.segWrap} role="tablist" aria-label="Unidad de existencia">
                     {[['L', 'Litros'], ['cub', 'Cubetas']].map(([k, l]) => (
@@ -3178,11 +3238,13 @@ export default function InventarioPage({ embedded = false }) {
                         style={S.segBtn(ptUnidad === k)} onClick={() => setPtUnidad(k)}>{l}</button>
                     ))}
                   </div>
+                  {/* Alta y export/import siguen siendo del catálogo completo —
+                      viven en Total, no en una bodega. */}
                   {/* Paquete MOCKUP 8: en móvil esta acción vive en el FAB → hoja Acciones */}
-                  {canEditMP && isDesktop && (
+                  {ptSubtab === 'total' && canEditMP && isDesktop && (
                     <button style={S.btnAdd} onClick={() => setShowAgregarPT(true)} title="Agregar inventario inicial de producto terminado">+ Agregar PT</button>
                   )}
-                  {isDesktop && <ImportExportPrint
+                  {ptSubtab === 'total' && isDesktop && <ImportExportPrint
                     exportUrl={() => api.urlExportInv('pt', activeFilter)}
                     printUrl={() => api.urlPrintInv('pt', activeFilter)}
                     importEndpoint={canEditMP ? api.urlImportInvPT() : null}
@@ -3220,7 +3282,7 @@ export default function InventarioPage({ embedded = false }) {
                   {ptVista === 'tarjetas' ? (
                     <div data-id="inventario.pt.cards" style={{ display: 'grid', gridTemplateColumns: isDesktop ? '1fr 1fr' : '1fr', gap: 10 }}>
                       {filteredPT.map(item => (
-                        <PTCardTotal key={item.nombre} item={item} unidadVista={ptUnidad} query={debouncedQuery}
+                        <PTCard key={item.nombre} item={item} scope="total" unidadVista={ptUnidad} query={debouncedQuery}
                           canEdit={canEditMP} canPedir={canPedirPT} onPedir={handlePedirPT}
                           canContar={canContar} onContar={handleContar}
                           onEnvasar={canReenvasar ? handleEnvasarDesdeTarjeta : null}
@@ -3255,19 +3317,22 @@ export default function InventarioPage({ embedded = false }) {
               <PTUbicacionView
                 ubicacion={ptSubtab}
                 data={ptUbiData?.data || ptUbiData}
+                items={ptItems}
+                unidadVista={ptUnidad}
+                isDesktop={isDesktop}
                 lotes={lotesPorProductoUbic}
-                invPT={inventory?.pt || {}}
                 esAdmin={esAdmin}
-                query={query}
-                onQuery={setQuery}
+                query={debouncedQuery}
                 canPedir={canPedirPT}
                 onPedir={handlePedirPT}
                 canEdit={canEditMP}
                 onAgregar={(ubic) => setAgregarPtUbic({ ubicacion: ubic })}
-                onEliminarTeran={handleEliminarPTTeran}
-                onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : undefined}
-                onReenvasar={canReenvasar ? (producto, scalar, totes) => setReenvasarTeran({ producto, scalar, totes }) : undefined}
-                onEnvasarFabrica={canReenvasar ? (producto, desglose) => setReenvasarFabrica({ producto, desglose }) : undefined}
+                onEliminarTeran={canEditMP ? handleEliminarPTTeran : null}
+                onAjustar={handleAdjustPT}
+                onEnvasar={canReenvasar ? handleEnvasarDesdeTarjeta : null}
+                onTransferir={canTransferirPT ? (producto) => irASolicitudOT(otLineaDePT(producto)) : null}
+                onOcultar={handleOcultarPT}
+                esAdminOcultar={user?.rol === 'admin'}
               />
             )}
           </>
@@ -4124,166 +4189,14 @@ export function ReenvasarFabricaModal({ producto, desglose, envData, isDesktop, 
    galones como chips grandes, cada tote como renglón físico con su folio y una
    barra de litros, y la contabilidad (lotes, granel cub-equiv, residual/manual)
    plegada en "Ver detalle". El descuadre contable-vs-piezas solo lo ve admin. */
-function PTPiezasCard({ nombre, d, ubicacion, esFabrica, acentColor, lotes, invPT, esAdmin, canPedir, onPedir, onTransferir, puedeReenvasar, onReenvasar, onEnvasarFabrica, canEdit, onEliminarTeran }) {
-  const [detalle, setDetalle] = useState(false);
-  const fmtN = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
-  const tf = d.totesFisicos;
-  const chips = [
-    { n: d.cubeta, sing: 'cubeta', plur: 'cubetas' },
-    { n: d.galon, sing: 'galón', plur: 'galones' },
-    { n: d.litro, sing: 'litro', plur: 'litros' },
-    { n: d.atm, sing: 'atomizador', plur: 'atomizadores' },
-    { n: d.otros, sing: 'otra pieza', plur: 'otras piezas' },
-    /* tote como chip SOLO si no hay detalle físico (p.ej. residual capturado en
-       medida tote, sin sublote) — con detalle, cada tote es su propio renglón. */
-    ...(!(tf && tf.total > 0) && (Number(d.tote) || 0) > 0 ? [{ n: d.tote, sing: 'tote', plur: 'totes' }] : []),
-  ].filter(c => (Number(c.n) || 0) > 0);
-  const eq = Number(esFabrica ? invPT?.[nombre]?.qty : invPT?.[nombre]?.teran);
-  const granelSinTote = !(tf && tf.parciales > 0) && (Number(d.granel) || 0) > 0.5;
-  const lotesUbic = lotes?.[nombre.toUpperCase()]?.[ubicacion] || [];
-  const manual = Number(d.manual) || 0;
-  const residual = Number(d.residual) || 0;
-  const sinPiezas = chips.length === 0 && !(tf && tf.total > 0) && !granelSinTote;
-
-  return (
-    <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--lp-border-subtle)' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap' }}>
-        <div style={{ flex: 1, minWidth: 170 }}>
-          <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--lp-text-primary)' }}>{nombre}</div>
-          {Number.isFinite(eq) && (
-            <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>≈ {fmtN(eq)} cubetas en total</div>
-          )}
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-          {canPedir && (
-            <button onClick={() => onPedir(nombre)}
-              title={esFabrica ? 'Pedir producción para reponer en fábrica' : 'Pedir reposición a fábrica'}
-              style={{ ...S.btnGhost, minWidth: 92, color: acentColor, borderColor: `color-mix(in srgb, ${acentColor} 45%, transparent)` }}>Pedir</button>
-          )}
-          {/* Parte B (jun 2026): Josué transfiere PT de Fábrica → Terán (mueve inv.pt qty→teran). */}
-          {esFabrica && onTransferir && (
-            <button onClick={() => onTransferir(nombre)}
-              title="Transferir cubetas de este PT del stock de Fábrica al de Terán"
-              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>→ Terán</button>
-          )}
-          {/* Envasar en Terán: tote/granel → cubetas/galones (descuenta envases de Terán)
-              + imprime el QR de la tanda (paridad Americano 1/2, jul 2026). */}
-          {puedeReenvasar && (
-            <button type="button" data-id="inventario.btn.reenvasar-teran" data-rol="admin,tecnico,almacen"
-              onClick={() => onReenvasar(nombre, d.teranPresScalar, d.totesFisicos)}
-              title="Envasar: convertir tote/granel en cubetas o galones (consume envases de Terán) e imprimir etiqueta QR"
-              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-brand-700)', borderColor: 'color-mix(in srgb, var(--lp-brand-600) 45%, transparent)' }}>Envasar</button>
-          )}
-          {/* Envasar en FÁBRICA (2-sep-2026, caso ASTRA-LAST): declarar la
-              transformación de presentación del stock en piso — "aparece como
-              7 cubetas pero ya está transformado a envase de .750". Sólo si
-              hay PIEZAS finales rastreadas (los totes tienen su propio flujo). */}
-          {esFabrica && onEnvasarFabrica
-            && ((Number(d.cubeta) || 0) + (Number(d.galon) || 0) + (Number(d.litro) || 0) + (Number(d.atm) || 0) + (Number(d.otros) || 0)) > 0 && (
-            <button type="button" data-id="inventario.btn.envasar-fabrica" data-rol="admin,tecnico,almacen"
-              onClick={() => onEnvasarFabrica(nombre, d)}
-              title="Envasar: declarar el cambio de presentación del stock de Fábrica (consume envases vacíos de Fábrica) e imprimir etiqueta QR"
-              style={{ ...S.btnGhost, minWidth: 92, color: 'var(--lp-warning-600)', borderColor: 'color-mix(in srgb, var(--lp-warning-600) 45%, transparent)' }}>Envasar</button>
-          )}
-        </div>
-      </div>
-
-      {chips.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
-          {chips.map(c => (
-            <span key={c.plur} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 6, background: 'var(--lp-bg-sunken)', borderRadius: 10, padding: '7px 12px' }}>
-              <span style={{ fontFamily: 'var(--lp-font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: 17, fontWeight: 700, color: 'var(--lp-text-primary)' }}>{fmtN(c.n)}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{Number(c.n) === 1 ? c.sing : c.plur}</span>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {/* Cada tote físico: folio + barra de litros. Lo que Josué/Enrique pueden tocar. */}
-      {(tf?.detalle || []).map(t => {
-        const rest = Number(t.litrosRestante) || 0;
-        const lleno = rest >= 982;
-        const pct = Math.min(100, Math.round((rest / 988) * 100));
-        return (
-          <div key={t.cod} style={{ marginTop: 8, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-brand-600) 7%, transparent)', display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--lp-text-primary)', whiteSpace: 'nowrap' }}>
-              Tote <span style={{ fontFamily: 'var(--lp-font-mono)', fontWeight: 600, fontSize: 10.5, color: 'var(--lp-text-tertiary)' }}>{t.toteCod || t.codigoLote || t.cod}</span>
-            </span>
-            <span style={{ flex: 1, minWidth: 90, height: 8, borderRadius: 999, background: 'color-mix(in srgb, var(--lp-text-tertiary) 22%, transparent)', overflow: 'hidden' }}>
-              <span style={{ display: 'block', height: '100%', width: `${pct}%`, borderRadius: 999, background: 'var(--lp-brand-600)' }} />
-            </span>
-            <span style={{ fontFamily: 'var(--lp-font-mono)', fontVariantNumeric: 'tabular-nums', fontSize: 12, fontWeight: 700, color: 'var(--lp-brand-700)', whiteSpace: 'nowrap' }}>
-              {fmtN(rest)} L · {lleno ? 'lleno' : `al ${pct}%`}
-            </span>
-          </div>
-        );
-      })}
-
-      {granelSinTote && (
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--lp-warning-700)' }}>
-          Granel sin tote censado: ~{fmtN(d.granel)} cub-equivalente.
-        </div>
-      )}
-      {sinPiezas && (
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--lp-text-tertiary)' }}>Sin piezas registradas.</div>
-      )}
-
-      {/* Descuadre contable vs piezas (solo admin — el personal nunca ve dos números peleados) */}
-      {esAdmin && (Number(d.deficit) || 0) > 0.5 && (
-        <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-warning-600) 12%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-warning-600) 30%, transparent)', fontSize: 12, color: 'var(--lp-warning-700)' }}>
-          Descuadre: las piezas rastreadas suman <strong>{fmtN(d.cubEqTrack)}</strong> cub pero el contable dice <strong>{fmtN(d.cubEqContable)}</strong>. Hay que censar este producto.
-        </div>
-      )}
-
-      <button type="button" onClick={() => setDetalle(v => !v)}
-        style={{ marginTop: 10, border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', fontSize: 11.5, fontWeight: 600, color: 'var(--lp-text-tertiary)' }}>
-        {detalle ? 'Ocultar detalle ▴' : 'Ver detalle ▾'}
-      </button>
-      {detalle && (
-        <div style={{ marginTop: 8, padding: '10px 12px', borderRadius: 10, background: 'var(--lp-bg-sunken)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {lotesUbic.length > 0 && (
-            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase', letterSpacing: '.04em' }}>Lotes</span>
-              {lotesUbic.map((l, i) => (
-                <span key={(l.codigoLote || '') + i} title={'Lote ' + (l.codigoLote || '') + (l.estado ? ' · ' + l.estado : '')}
-                  style={{ fontSize: 10, fontFamily: 'var(--lp-font-mono)', fontWeight: 600, color: 'var(--lp-brand-700)', background: 'color-mix(in srgb, var(--lp-brand-600) 10%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-brand-600) 28%, transparent)', borderRadius: 5, padding: '1px 5px' }}>
-                  {l.codigoLote}
-                </span>
-              ))}
-            </div>
-          )}
-          <div style={{ fontSize: 11.5, color: 'var(--lp-text-secondary)', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            {(Number(d.granel) || 0) > 0 && <span title="Contenido restante dentro de totes a medias, en cubetas-equivalente">Granel: {fmtN(d.granel)} cub-eq</span>}
-            {residual > 0 && <span title="Stock cargado manual o de producciones previas a la trazabilidad — no se puede mover a Terán por el flujo de sublotes/QR">Sin lote: {fmtN(residual)} cub</span>}
-            {manual > 0 && <span title="Registrado a mano en Terán">Manual: {fmtN(manual)} cub</span>}
-            <span>Sublotes: {d.sublotes || 0}</span>
-          </div>
-          {/* Sprint X: eliminar el registro MANUAL de Terán (no toca lotes rastreados) */}
-          {!esFabrica && canEdit && onEliminarTeran && manual > 0 && (
-            <button onClick={() => onEliminarTeran(nombre)}
-              title={`Quitar de Terán (${Math.round(manual)} cub manual). No afecta lotes rastreados ni el stock total.`}
-              style={{ ...S.btnGhost, alignSelf: 'flex-start', minWidth: 92, color: 'var(--lp-danger-600)', borderColor: 'color-mix(in srgb, var(--lp-danger-600) 45%, transparent)' }}>
-              Eliminar registro manual
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onTransferir, onReenvasar, onEnvasarFabrica, invPT, esAdmin }) {
+function PTUbicacionView({ ubicacion, data, items, unidadVista, isDesktop, lotes, query, canPedir, onPedir, canEdit, onAgregar, onEliminarTeran, onAjustar, onTransferir, onEnvasar, esAdmin, onOcultar, esAdminOcultar }) {
   const bucket = data?.[ubicacion] || {};
-  const productos = Object.entries(bucket)
-    .filter(([nombre]) => {
-      if (!query) return true;
-      return nombre.toLowerCase().includes(query.toLowerCase());
-    })
-    .sort((a, b) => a[0].localeCompare(b[0]));
+  const esFabrica = ubicacion === 'fabrica';
+  const lugar = esFabrica ? 'Fábrica' : 'Terán';
 
   /* Totales agregados — TOTEs cuenta PIEZAS físicas (llenos + a medias) cuando
      el backend trae el detalle (Fase 3: ya viene para ambas ubicaciones). */
-  const totales = productos.reduce((acc, [, d]) => {
+  const totales = Object.values(bucket).reduce((acc, d) => {
     acc.tote   += (d.totesFisicos?.total > 0) ? d.totesFisicos.total : (d.tote || 0);
     acc.cubeta += d.cubeta || 0;
     acc.galon  += d.galon  || 0;
@@ -4293,10 +4206,20 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
     return acc;
   }, { tote: 0, cubeta: 0, galon: 0, litro: 0, atm: 0, granel: 0 });
 
-  const esFabrica = ubicacion === 'fabrica';
-  /* ¿Hay algo reenvasable en el pool ESCALAR de este renglón? (tote/granel/…) */
-  const reenvasable = (d) => !esFabrica && !!onReenvasar && d.teranPresScalar
-    && Object.entries(d.teranPresScalar).some(([p, n]) => (Number(n) || 0) > 0 && p !== 'litro' && p !== 'atomizador750');
+  /* Qué productos SE VEN aquí: los que tienen algo en esta bodega, por piezas
+     o por el escalar contable. La lista completa del catálogo es cosa de la
+     pestaña Total; aquí llenarla de ceros sería ruido para el piso. */
+  const hayAlgo = (it) => {
+    const b = it.buckets?.[ubicacion];
+    if ((Number(esFabrica ? it.fabQty : it.teranQty) || 0) > 0) return true;
+    if (!b) return false;
+    return ['cubeta', 'galon', 'litro', 'tote', 'atm', 'otros', 'granel', 'manual', 'residual']
+      .some(k => (Number(b[k]) || 0) > 0);
+  };
+  const q = String(query || '').trim().toLowerCase();
+  const productos = (items || []).filter(it => hayAlgo(it)
+    && (!q || it.nombre.toLowerCase().includes(q) || String(it.inv?.sku || '').toLowerCase().includes(q)));
+
   const acentColor = esFabrica ? 'var(--lp-warning-600)' : 'var(--lp-brand-600)';
   const acentBg    = esFabrica ? 'var(--lp-warning-100)' : 'var(--lp-brand-100)';
 
@@ -4346,63 +4269,42 @@ function PTUbicacionView({ ubicacion, data, lotes, query, onQuery, canPedir, onP
           : 'Stock físicamente en almacén Terán — sublotes que ya fueron entregados por Luis y recibidos por Josué.'}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          placeholder={`Buscar en ${esFabrica ? 'fábrica' : 'Terán'}…`}
-          value={query}
-          onChange={e => onQuery(e.target.value)}
-          style={{
-            flex: 1, minWidth: 180, padding: '10px 14px', borderRadius: 10,
-            border: '1.5px solid var(--lp-border-subtle)', fontSize: 13,
-            fontFamily: 'var(--lp-font-sans)', background: 'var(--lp-bg-raised)', outline: 'none',
-          }}
-        />
-        {canEdit && onAgregar && (
+      {/* La búsqueda es la de la barra de arriba, la misma en todas las
+          pestañas (16-sep-2026). Esta vista tenía su PROPIO buscador debajo:
+          dos cajas para lo mismo, justo lo que se quitó en Americano. */}
+      {canEdit && onAgregar && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <button onClick={() => onAgregar(ubicacion)} style={{ padding: '10px 16px', borderRadius: 10, border: `1.5px solid ${acentColor}`, background: acentBg, color: acentColor, fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--lp-font-sans)', whiteSpace: 'nowrap', minWidth: 'max-content' }}>
-            + Agregar a {esFabrica ? 'Fábrica' : 'Terán'}
+            + Agregar a {lugar}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {productos.length === 0 ? (
         <div style={{
           padding: '40px 20px', textAlign: 'center',
           color: 'var(--lp-text-tertiary)', fontSize: 14,
         }}>
-          {query
+          {q
             ? `Sin resultados en ${esFabrica ? 'fábrica' : 'Terán'} para "${query}"`
             : `Sin producto terminado en ${esFabrica ? 'fábrica' : 'Terán'}.`}
         </div>
       ) : (
-        <div style={{
-          background: 'var(--lp-bg-raised)',
-          border: '1.5px solid var(--lp-border-subtle)',
-          borderRadius: 'var(--lp-radius-md)', overflow: 'hidden',
-        }}>
-          {/* Tarjetas de piezas (Fase 3) — una por producto */}
-          {productos.map(([nombre, d]) => (
-            <PTPiezasCard
-              key={nombre}
-              nombre={nombre}
-              d={d}
-              ubicacion={ubicacion}
-              esFabrica={esFabrica}
-              acentColor={acentColor}
-              lotes={lotes}
-              invPT={invPT}
-              esAdmin={esAdmin}
-              canPedir={canPedir}
-              onPedir={onPedir}
-              onTransferir={onTransferir}
-              puedeReenvasar={reenvasable(d)}
-              onReenvasar={onReenvasar}
-              onEnvasarFabrica={onEnvasarFabrica}
-              canEdit={canEdit}
-              onEliminarTeran={onEliminarTeran}
-            />
-          ))}
-        </div>
+        <>
+          <div style={S.countLbl}>{productos.length} {productos.length === 1 ? 'producto' : 'productos'} en {lugar}</div>
+          {/* La MISMA tarjeta de la pestaña Total, hablando sólo de esta bodega. */}
+          <div data-id={`inventario.pt.cards.${ubicacion}`} style={{ display: 'grid', gridTemplateColumns: isDesktop ? '1fr 1fr' : '1fr', gap: 10 }}>
+            {productos.map(item => (
+              <PTCard key={`${ubicacion}:${item.nombre}`} item={item} scope={ubicacion} unidadVista={unidadVista} query={query}
+                canEdit={canEdit} canPedir={canPedir} onPedir={onPedir}
+                onEnvasar={onEnvasar} onAjustar={onAjustar}
+                onTransferir={esFabrica ? onTransferir : null}
+                onEliminarTeran={esFabrica ? null : onEliminarTeran}
+                onOcultar={esAdminOcultar ? onOcultar : null}
+                lotes={lotes} esAdmin={esAdmin} />
+            ))}
+          </div>
+        </>
       )}
 
       {data?.timestamp && (
