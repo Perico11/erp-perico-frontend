@@ -33,7 +33,10 @@ export default function useQrSrc(texto) {
   const [entrega, setEntrega] = useState(null);
 
   useEffect(() => {
-    if (CACHE.has(clave)) { return undefined; }
+    /* Sin texto no hay nada que dibujar. Pasa mientras el modal está cerrado:
+       el hook se llama igual —tiene que llamarse SIEMPRE, es la regla de los
+       hooks— pero no se le pide nada al servidor. */
+    if (!clave || CACHE.has(clave)) return undefined;
     let vivo = true;
     (async () => {
       try {
@@ -50,7 +53,10 @@ export default function useQrSrc(texto) {
   }, [clave]);
 
   /* El local se calcula una vez por texto y sirve de respaldo permanente. */
-  const respaldo = useMemo(() => qrDataUrl(clave, { scale: 8, margin: 4, ecLevel: 'M' }), [clave]);
+  const respaldo = useMemo(
+    () => (clave ? qrDataUrl(clave, { scale: 8, margin: 4, ecLevel: 'M' }) : ''),
+    [clave],
+  );
 
   const delBackend = (entrega && entrega.clave === clave) ? entrega.src : CACHE.get(clave);
   return delBackend || respaldo;

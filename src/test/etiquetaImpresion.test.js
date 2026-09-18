@@ -104,3 +104,57 @@ describe('el documento es HTML completo y escapa el título', () => {
     expect(html.trim().endsWith('</html>')).toBe(true);
   });
 });
+
+/* ════════════════════════════════════════════════════════════════════════════
+   EL CATÁLOGO DE FORMATOS, UNO SOLO (18-sep-2026)
+
+   Reporte: "a veces imprime y a veces no… sale todo bien, pero como que no
+   manda comunicación a la impresora, sólo desde el usuario de Josué".
+
+   Había tres catálogos leyendo la MISMA preferencia del navegador y sólo uno
+   conocía el 52×25 oficial; los otros caían en silencio a 50×25. El rollo mide
+   52 y el trabajo salía de 50.
+   ════════════════════════════════════════════════════════════════════════════ */
+import {
+  FORMATOS_ETIQUETA, FORMATO_OFICIAL, resolverFormato,
+} from '../lib/etiquetaLote';
+
+describe('el catálogo de formatos', () => {
+  it('el 52×25 oficial existe y es el primero', () => {
+    expect(FORMATO_OFICIAL).toBe('52x25');
+    expect(FORMATOS_ETIQUETA[0].v).toBe('52x25');
+    expect(FORMATOS_ETIQUETA[0]).toMatchObject({ wMm: 52, hMm: 25 });
+  });
+
+  it('lo que no se reconoce cae al OFICIAL, nunca a otra medida', () => {
+    /* Ésta es la línea del fallo: antes caía al primero de SU lista (50×25) y
+       se imprimía en un tamaño que nadie pidió, sin avisar. */
+    expect(resolverFormato('52x25').v).toBe('52x25');
+    expect(resolverFormato('una-medida-vieja').v).toBe(FORMATO_OFICIAL);
+    expect(resolverFormato(undefined).v).toBe(FORMATO_OFICIAL);
+    expect(resolverFormato(null).v).toBe(FORMATO_OFICIAL);
+  });
+
+  it('siguen estando las medidas que el piso ya usaba', () => {
+    const hay = (v) => FORMATOS_ETIQUETA.some((f) => f.v === v);
+    for (const v of ['50x25', '50x40', '60x40', '80x50', '100x70', 'A4-21', 'A4-24']) {
+      expect(hay(v), v).toBe(true);
+    }
+  });
+});
+
+describe('la ventana de impresión dice con qué va a imprimir', () => {
+  it('muestra papel, cuántas y el botón — y nada de eso se imprime', () => {
+    const html = documentoImprimible({ titulo: 't', etiquetas: tres, fmt: OFICIAL });
+    expect(html).toContain('Papel <b>52×25 mm</b>');
+    expect(html).toContain('<b>3</b> etiquetas');
+    expect(html).toContain('id="btnImprimir"');
+    /* Sólo en pantalla: en la etiqueta no puede salir. */
+    expect(html).toContain('@media print { .barra { display: none !important; } }');
+  });
+
+  it('avisa del giro cuando la etiqueta va rotada', () => {
+    const html = documentoImprimible({ titulo: 't', etiquetas: tres, fmt: OFICIAL, rotacion: 90 });
+    expect(html).toContain('girado <b>90°</b>');
+  });
+});
