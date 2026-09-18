@@ -125,7 +125,12 @@ export default function MezclasView({ colores1 = [], colores2 = [], reload1, rel
           onSaved={(r) => {
             const lote = (r && r.lote) || '';
             const nom = (r && r.color && r.color.nombre) || '';
-            showToast(`Mezcla lista${nom ? `: ${nom}` : ''}${lote ? ` · lote ${lote}` : ''}`);
+            /* Si juntaste restos de UN color del MISMO embarque, el tote nuevo
+               conserva el lote del fabricante y el servidor lo dice. Se repite
+               aquí porque es lo que va impreso en la etiqueta, y quien acaba de
+               apretar el botón debe saber con qué se queda. */
+            const prov = (r && r.loteProveedor) || '';
+            showToast(`Mezcla lista${nom ? `: ${nom}` : ''}${lote ? ` · lote ${lote}` : ''}${prov ? ` · conserva el lote del fabricante ${prov}` : ''}`);
             setAbierto(false);
             cargar();
             const reload = almacenMezcla === '2' ? reload2 : reload1;
