@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
-import { qrDataUrl } from '../lib/qrGenerator';
 import { qrPublicUrl } from '../lib/qrPublicUrl';
-import { etiquetaCss, etiquetaHtml, presentacionDeLote, envasadorDeLote, selloFechaHora } from '../lib/etiquetaLote';
+import { documentoImprimible, etiquetaHtml, presentacionDeLote, envasadorDeLote, selloFechaHora } from '../lib/etiquetaLote';
+import useQrSrc from '../hooks/useQrSrc';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
 const S = {
@@ -190,10 +190,10 @@ export default function QRModal({ lote, onClose }) {
      los JSON de etiquetas viejas (rama JSON.parse en handleResult) y el
      backend extrae el código de la URL en /api/sublotes/scan(-bulk). */
   const payload = qrPublicUrl(codigo);
-  /* QR generado LOCAL (sin quickchart.io). Funciona offline, sin latencia,
-     sin riesgo de CSP/bloqueo. */
-  const qrUrlPreview = qrDataUrl(payload, { scale: 8, margin: 2, ecLevel: 'M' });
-  const qrUrlPrint = qrDataUrl(payload, { scale: 10, margin: 2, ecLevel: 'M' });
+  /* EL QR LO DIBUJA EL BACKEND (18-sep-2026): un solo generador para todo el
+     ERP. Mientras llega —y si el servidor no contesta— se usa el local, que
+     codifica exactamente el mismo texto. Ver hooks/useQrSrc. */
+  const qrSrc = useQrSrc(payload);
 
   const imprimir = () => {
     const w = window.open('', '_blank', 'width=800,height=900');
@@ -207,85 +207,18 @@ export default function QRModal({ lote, onClose }) {
     const envasador = envasadorDeLote(lote);
     const metaBase = selloFechaHora(lote.fecha);
     const etiqueta = (i) => etiquetaHtml({
-      qrSrc: qrUrlPrint, producto, pres, codigo, envasador, fmt,
+      qrSrc, producto, pres, codigo, envasador, fmt,
       meta: n > 1 ? `${metaBase}${metaBase ? ' · ' : ''}${i + 1}/${n}` : metaBase,
     });
 
-    /* Generar HTML según formato */
-    let html;
-    if (fmt.isSheet) {
-      /* Hoja A4 con grid */
-      const total = fmt.cols * fmt.rows;
-      let labels = '';
-      for (let i = 0; i < n; i++) {
-        labels += `<div class="cell">${etiqueta(i)}</div>`;
-        /* Filler para que el grid termine la página */
-        if ((i + 1) % total === 0 && i + 1 < n) {
-          labels += '<div class="page-break"></div>';
-        }
-      }
-      html = `<!DOCTYPE html><html><head><title>QR ${codigo} (${n})</title>
-        <style>
-          @page { size: A4; margin: 5mm; }
-          body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-          .grid {
-            display: grid;
-            grid-template-columns: repeat(${fmt.cols}, 1fr);
-            gap: 0;
-          }
-          .cell {
-            width: ${fmt.wMm}mm; height: ${fmt.hMm}mm;
-            border: 0.3mm dashed #ccc;
-            box-sizing: border-box;
-            page-break-inside: avoid;
-          }
-          ${etiquetaCss(fmt, '.cell')}
-          .page-break { break-after: page; flex-basis: 100%; }
-          @media print { .cell { border: none; } }
-        </style></head><body>
-        <div class="grid">${labels}</div>
-        <script>setTimeout(() => window.print(), 400);</script>
-        </body></html>`;
-    } else {
-      /* Etiqueta individual (rollo térmico). `rotacion` (0/90/180/270°) gira el
-         contenido dentro de la etiqueta. En 90/270 la PÁGINA usa las medidas
-         intercambiadas (hMm×wMm) para que el driver NO reescale; el contenido
-         —caja fija wMm×hMm— se rota con transform y cae EXACTO en la hoja
-         (transform-origin 0,0 + translate por ángulo). Cubrir las 4 rotaciones deja
-         que el usuario elija la que sale acostada aunque su driver rote por su cuenta. */
-      const ang = ROTACIONES.includes(rotacion) ? rotacion : 0;
-      const portrait = ang === 90 || ang === 270;
-      const pageW = portrait ? fmt.hMm : fmt.wMm;
-      const pageH = portrait ? fmt.wMm : fmt.hMm;
-      const tf = ang === 90  ? `translateX(${fmt.hMm}mm) rotate(90deg)`
-               : ang === 180 ? `translate(${fmt.wMm}mm, ${fmt.hMm}mm) rotate(180deg)`
-               : ang === 270 ? `translateY(${fmt.wMm}mm) rotate(270deg)`
-               : 'none';
-      let labels = '';
-      for (let i = 0; i < n; i++) {
-        labels += `<div class="page"><div class="label">${etiqueta(i)}</div></div>`;
-      }
-      /* La página tiene el tamaño de la hoja; la etiqueta (caja wMm×hMm) va absoluta
-         y se rota para llenarla exacto. ang=0 → transform:none → la caja == la página. */
-      const cajaCss = `.page { width: ${pageW}mm; height: ${pageH}mm; position: relative; overflow: hidden; page-break-after: always; }
-          .page:last-child { page-break-after: auto; }
-          .label {
-            position: absolute; top: 0; left: 0;
-            width: ${fmt.wMm}mm; height: ${fmt.hMm}mm;
-            box-sizing: border-box;
-            transform-origin: 0 0; transform: ${tf};
-          }`;
-      html = `<!DOCTYPE html><html><head><title>QR ${codigo} (${n} ticket${n > 1 ? 's' : ''})</title>
-        <style>
-          @page { size: ${pageW}mm ${pageH}mm; margin: 0; }
-          body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-          ${cajaCss}
-          ${etiquetaCss(fmt, '.label')}
-        </style></head><body>
-        ${labels}
-        <script>setTimeout(() => window.print(), 400);</script>
-        </body></html>`;
-    }
+    /* El documento lo arma lib/etiquetaLote: es el MISMO para esta pantalla y
+       para la de Stock Fábrica, que antes lo tenían copiado —y por eso tenían
+       los mismos tres defectos de impresión. */
+    const html = documentoImprimible({
+      titulo: `QR ${codigo} (${n} ticket${n > 1 ? 's' : ''})`,
+      etiquetas: Array.from({ length: n }, (_, i) => etiqueta(i)),
+      fmt, rotacion,
+    });
     w.document.write(html);
     w.document.close();
   };
@@ -311,7 +244,7 @@ export default function QRModal({ lote, onClose }) {
                 <span style={S.papelProd}>{lote.producto || lote.nombre}</span>
               </div>
               <div style={S.papelCuerpo}>
-                <img src={qrUrlPreview} alt={`QR ${codigo}`} style={S.papelQr} />
+                <img src={qrSrc} alt={`QR ${codigo}`} style={S.papelQr} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={S.papelCod}>{codigo}</div>
                   {envasadorPreview && <div style={S.papelEnv}>Envasó: <b>{envasadorPreview}</b></div>}

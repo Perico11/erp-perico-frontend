@@ -24,14 +24,14 @@ import {
   ESTADO_LOTE_TRANSFERIDO_O_ENTREGADO,
 } from '../../lib/estados';
 import PruebaBadge from '../../components/ui/PruebaBadge';
-import { qrDataUrl } from '../../lib/qrGenerator';
 /* URL pública impresa en el QR — dominio principal (29-jul-2026). Antes se
    armaba con window.location.origin: imprimir desde dev grababa localhost. */
 import { qrPublicUrl } from '../../lib/qrPublicUrl';
 /* DISEÑO ÚNICO de la etiqueta impresa (5-ago-2026). La etiqueta del SUBLOTE
    —la que más se imprime, una por cubeta— se había quedado fuera de la
    unificación y seguía saliendo con el layout viejo. */
-import { etiquetaCss, etiquetaHtml, abreviaPresentacion } from '../../lib/etiquetaLote';
+import { documentoImprimible, etiquetaHtml, abreviaPresentacion } from '../../lib/etiquetaLote';
+import useQrSrc from '../../hooks/useQrSrc';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
 /* ── Iconos line SVG (sin emojis — DS verde) ───────────────────────── */
@@ -1292,10 +1292,10 @@ export function SubloteQRPrintModal({ payload, onClose }) {
      grabada la URL del subdominio — reimprimir debe salir ya con el dominio
      principal. El escaneo no cambia: el backend extrae el código por path. */
   const qrUrl = buildQrUrl(sublote.cod);
-  /* QR generado LOCAL — sin depender de quickchart.io u otro servicio externo.
-     Esto resuelve el bug de "QR no carga" y permite imprimir offline. */
-  const qrUrlPreview = qrDataUrl(qrUrl, { scale: 8, margin: 2, ecLevel: 'M' });
-  const qrUrlPrint = qrDataUrl(qrUrl, { scale: 10, margin: 2, ecLevel: 'M' });
+  /* EL QR LO DIBUJA EL BACKEND (18-sep-2026): un solo generador para todo el
+     ERP. Mientras llega —y si el servidor no contesta— se usa el local, que
+     codifica exactamente el mismo texto. Ver hooks/useQrSrc. */
+  const qrSrc = useQrSrc(qrUrl);
 
   const producto = (lote?.producto || lote?.nombre || '').slice(0, 40);
   const fecha = new Date().toISOString().slice(0, 10);
@@ -1318,68 +1318,20 @@ export function SubloteQRPrintModal({ payload, onClose }) {
     /* DISEÑO ÚNICO (5-ago): banda con presentación + folio grande + envasador.
        Vive en lib/etiquetaLote — aquí solo se arma el contexto de cada copia. */
     const etiqueta = (i) => etiquetaHtml({
-      qrSrc: qrUrlPrint, producto, pres: presEtiq, codigo: sublote.cod,
+      qrSrc, producto, pres: presEtiq, codigo: sublote.cod,
       envasador: envasadorEtiq, fmt,
       meta: n > 1 ? `${metaBase}${metaBase ? ' · ' : ''}${i + 1}/${n}` : metaBase,
     });
 
-    let html;
-    if (fmt.isSheet) {
-      const total = fmt.cols * fmt.rows;
-      let labels = '';
-      for (let i = 0; i < n; i++) {
-        labels += `<div class="cell">${etiqueta(i)}</div>`;
-        if ((i + 1) % total === 0 && i + 1 < n) labels += '<div class="page-break"></div>';
-      }
-      html = `<!DOCTYPE html><html><head><title>QR ${sublote.cod} (${n})</title>
-        <style>
-          @page { size: A4; margin: 5mm; }
-          body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-          .grid { display: grid; grid-template-columns: repeat(${fmt.cols}, 1fr); gap: 0; }
-          .cell { width: ${fmt.wMm}mm; height: ${fmt.hMm}mm; border: 0.3mm dashed #ccc;
-                  box-sizing: border-box; page-break-inside: avoid; }
-          ${etiquetaCss(fmt, '.cell')}
-          .page-break { break-after: page; flex-basis: 100%; }
-          @media print { .cell { border: none; } }
-        </style></head><body>
-        <div class="grid">${labels}</div>
-        <script>setTimeout(() => window.print(), 400);</script>
-        </body></html>`;
-    } else {
-      let labels = '';
-      for (let i = 0; i < n; i++) {
-        labels += `<div class="ticket"><div class="inner">${etiqueta(i)}</div></div>`;
-      }
-      /* RT-420ME/RT-420MME: `rotacion` (0/90/180/270°) gira el contenido dentro de
-         la etiqueta. En 90/270 la PÁGINA usa las medidas intercambiadas (hMm×wMm)
-         para que el driver no reescale; el contenido (caja fija wMm×hMm) se rota
-         con transform y cae EXACTO en la hoja. El operador prueba las 4 y se queda
-         con la que salga acostada — queda memorizada (pp_qr_rot). */
-      const ang = [0, 90, 180, 270].includes(rotacion) ? rotacion : 0;
-      const portrait = ang === 90 || ang === 270;
-      const pageW = portrait ? fmt.hMm : fmt.wMm;
-      const pageH = portrait ? fmt.wMm : fmt.hMm;
-      const tf = ang === 90  ? `translateX(${fmt.hMm}mm) rotate(90deg)`
-               : ang === 180 ? `translate(${fmt.wMm}mm, ${fmt.hMm}mm) rotate(180deg)`
-               : ang === 270 ? `translateY(${fmt.wMm}mm) rotate(270deg)`
-               : '';
-      const innerRot = tf ? `transform: ${tf}; transform-origin: 0 0;` : '';
-      html = `<!DOCTYPE html><html><head><title>QR ${sublote.cod} (${n})</title>
-        <style>
-          @page { size: ${pageW}mm ${pageH}mm; margin: 0; }
-          body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
-          .ticket { width: ${pageW}mm; height: ${pageH}mm; position: relative;
-                    overflow: hidden; page-break-after: always; }
-          .ticket:last-child { page-break-after: auto; }
-          .inner { position: absolute; top: 0; left: 0;
-                   width: ${fmt.wMm}mm; height: ${fmt.hMm}mm; box-sizing: border-box;
-                   ${innerRot} }
-          ${etiquetaCss(fmt, '.inner')}
-        </style></head><body>
-        ${labels}
-        <script>setTimeout(() => window.print(), 400);</script>
-        </body></html>`;
-    }
+    /* El documento lo arma lib/etiquetaLote: es el MISMO para esta pantalla y
+       para QRModal, que antes lo tenían copiado —y por eso arrastraban los
+       mismos tres defectos de impresión (caja del tamaño exacto de la hoja,
+       hoja en blanco de más al final, e imprimir sin esperar al dibujo). */
+    const html = documentoImprimible({
+      titulo: `QR ${sublote.cod} (${n})`,
+      etiquetas: Array.from({ length: n }, (_, i) => etiqueta(i)),
+      fmt, rotacion,
+    });
     w.document.write(html);
     w.document.close();
   };
@@ -1423,7 +1375,7 @@ export function SubloteQRPrintModal({ payload, onClose }) {
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 6px' }}>
-                <img src={qrUrlPreview} alt={`QR ${sublote.cod}`}
+                <img src={qrSrc} alt={`QR ${sublote.cod}`}
                   style={{ width: 76, height: 76, flexShrink: 0, imageRendering: 'pixelated' }} />
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div style={{ fontFamily: 'ui-monospace, monospace', fontSize: 20, fontWeight: 700, letterSpacing: '-.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
