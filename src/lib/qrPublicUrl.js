@@ -12,8 +12,17 @@
    cadena tal cual y el backend extrae el código por PATH (case-insensitive),
    así que etiquetas viejas (subdominio o JSON) siguen funcionando.
 
-   Espejo frontend de _generarQRPayload (server.js) — cambiar uno = cambiar
-   el otro.
+   VUELVE A SER ESPEJO DEL BACKEND (18-sep-2026, pedido del dueño: "deja la del
+   dominio principal en las dos"). Había dejado de serlo: el backend imprimía
+   `sistema.pinturaselperico.com/qr/<cod>` y esto el dominio principal, así que
+   el mismo bote acababa con dos códigos distintos según quién lo imprimiera.
+   Hoy la dirección canónica vive en `lib/qrPublico.js` del backend y es ésta —
+   cambiar una es cambiar la otra.
+
+   Y OJO CON LA MAYÚSCULA: la ruta va en `/QR/`. Los lectores del backend
+   buscaban `/qr/` en minúsculas, y por eso las etiquetas impresas desde aquí no
+   resolvían al escanearlas en el flujo interno (recoger, recibir en Terán,
+   entregar). Se arregló allá con un único lector que no distingue mayúsculas.
    ════════════════════════════════════════════════════════════════════════ */
 export const QR_PUBLIC_BASE = 'https://pinturaselperico.com/QR';
 
