@@ -225,6 +225,70 @@ export function etiquetaHtml({ qrSrc, producto, pres, codigo, envasador, meta, f
 }
 
 /* ════════════════════════════════════════════════════════════════════════════
+   EL CATÁLOGO DE FORMATOS, UNO SOLO (18-sep-2026)
+
+   Reporte del dueño, tras publicar los arreglos de impresión: "a veces imprime
+   y a veces no… sale todo bien, pero como que no manda comunicación a la
+   impresora, sólo desde el usuario de Josué", en la pantalla de almacén.
+
+   Había TRES catálogos de formatos —este QRModal, el modal de sublote de Stock
+   Fábrica e imprimirEtiquetasTotes— y los tres leían y escribían la MISMA
+   preferencia del navegador (`pp_qr_formato`). Sólo el primero conocía el
+   52×25, que es el formato OFICIAL y el que ese modal deja guardado por
+   defecto. Los otros dos no lo encontraban en su lista y caían EN SILENCIO a
+   otra medida:
+
+       StockFabricaPage:        FMT.find(...) || FMT[0]   → 50×25
+       imprimirEtiquetasTotes:  FORMATOS[f] || '50x25'    → 50×25
+
+   O sea: el rollo puesto en la impresora mide 52×25 y el trabajo salía armado
+   de 50×25. Dos milímetros que en pantalla no se ven, y que un driver térmico
+   que espera 52 mm puede rechazar sin decir nada — "sale todo bien pero no
+   manda comunicación a la impresora". Y era POR USUARIO porque la preferencia
+   vive en el navegador de cada quien: a Josué, que usa las pantallas de
+   etiquetas, se le había guardado el 52×25.
+
+   Ahora hay UN catálogo. Y lo que no se reconozca cae al OFICIAL, no a otra
+   medida cualquiera: si algún día queda guardado un valor viejo, se imprime en
+   el rollo que de verdad está puesto.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+export const FORMATO_OFICIAL = '52x25';
+export const LS_FORMATO = 'pp_qr_formato';
+export const LS_ROTACION = 'pp_qr_rot';
+export const ROTACIONES = [0, 90, 180, 270];
+
+export const FORMATOS_ETIQUETA = [
+  { v: '52x25', label: '52×25 mm (oficial)', wMm: 52, hMm: 25, qrMm: 20 },
+  { v: '50x25', label: '50×25 mm (RT-420ME · etiqueta fábrica)', wMm: 50, hMm: 25, qrMm: 21 },
+  { v: '50x40', label: '50×40 mm (rollo térmico)', wMm: 50, hMm: 40, qrMm: 22 },
+  { v: '60x40', label: '60×40 mm (rollo térmico)', wMm: 60, hMm: 40, qrMm: 24 },
+  { v: '80x50', label: '80×50 mm (rollo térmico)', wMm: 80, hMm: 50, qrMm: 30 },
+  { v: '100x70', label: '100×70 mm (rollo grande)', wMm: 100, hMm: 70, qrMm: 40 },
+  { v: 'A4-21', label: 'Hoja A4 · 21 etiquetas (3×7)', wMm: 70, hMm: 42.3, qrMm: 22, isSheet: true, cols: 3, rows: 7 },
+  { v: 'A4-24', label: 'Hoja A4 · 24 etiquetas (3×8)', wMm: 70, hMm: 37, qrMm: 20, isSheet: true, cols: 3, rows: 8 },
+];
+
+/* El formato de una preferencia guardada. Lo que no se reconoce cae al OFICIAL
+   —nunca a otra medida— para no volver a imprimir en un tamaño que nadie pidió. */
+export function resolverFormato(v) {
+  return FORMATOS_ETIQUETA.find((f) => f.v === v)
+    || FORMATOS_ETIQUETA.find((f) => f.v === FORMATO_OFICIAL);
+}
+
+/* Lo que quedó memorizado de la impresora de quien imprime (vive en SU
+   navegador: por eso un mismo ERP imprime distinto en dos máquinas). */
+export function formatoGuardado() {
+  try { return localStorage.getItem(LS_FORMATO) || FORMATO_OFICIAL; } catch { return FORMATO_OFICIAL; }
+}
+export function rotacionGuardada() {
+  try {
+    const r = parseInt(localStorage.getItem(LS_ROTACION), 10);
+    return ROTACIONES.includes(r) ? r : 0;
+  } catch { return 0; }
+}
+
+/* ════════════════════════════════════════════════════════════════════════════
    EL DOCUMENTO QUE SE MANDA A LA IMPRESORA (18-sep-2026)
 
    Reporte del dueño: "le doy imprimir y aunque ponga 1 salen muchas en blanco,
@@ -274,6 +338,8 @@ const GUION_IMPRIMIR = [
   '  var lanzado = false;',
   '  function imprimir(){ if (lanzado) return; lanzado = true;',
   '    setTimeout(function(){ window.print(); }, 80); }',
+  '  var btn = document.getElementById("btnImprimir");',
+  '  if (btn) btn.onclick = function(){ lanzado = false; imprimir(); };',
   '  var faltan = 0;',
   '  Array.prototype.forEach.call(document.images, function(im){',
   '    if (im.complete && im.naturalWidth > 0) return;',
@@ -290,15 +356,41 @@ const GUION_IMPRIMIR = [
 /* Documento completo para la ventana de impresión.
      titulo     → el <title> (sale en el encabezado del diálogo)
      etiquetas  → arreglo con el HTML de cada copia (etiquetaHtml)
-     fmt        → una entrada del catálogo de formatos ({wMm,hMm,isSheet,…})
-     rotacion   → 0/90/180/270, para los drivers que imprimen "parado" */
-export function documentoImprimible({ titulo, etiquetas, fmt, rotacion = 0 }) {
+     fmt        → una entrada de FORMATOS_ETIQUETA ({wMm,hMm,isSheet,…})
+     rotacion   → 0/90/180/270, para los drivers que imprimen "parado"
+     css        → qué hoja de estilo lleva la etiqueta: la de producto (con QR,
+                  por defecto) o la del tote americano (etiquetaToteCss) */
+export function documentoImprimible({ titulo, etiquetas, fmt, rotacion = 0, css = etiquetaCss }) {
   const copias = Array.isArray(etiquetas) ? etiquetas : [];
+
+  /* LA VENTANA DICE CON QUÉ VA A IMPRIMIR (18-sep-2026). Sólo en pantalla:
+     nunca sale en la etiqueta. Nace del reporte "sale todo bien pero como que
+     no manda comunicación a la impresora": el formato lo elige un selector que
+     está en OTRA pantalla y se guarda en el navegador, así que el operador no
+     tenía forma de ver con qué medida se armó el trabajo — y una medida que no
+     coincide con el rollo puesto es justo lo que un driver térmico tira sin
+     avisar. Ahora se lee aquí, y hay botón por si el diálogo no abre solo. */
+  const papel = fmt.isSheet ? 'A4' : `${fmt.wMm}×${fmt.hMm} mm`;
+  const barra = `<div class="barra">
+      <span>Papel <b>${escHtml(papel)}</b> · <b>${copias.length}</b> etiqueta${copias.length === 1 ? '' : 's'}${
+        rotacion ? ` · girado <b>${rotacion}°</b>` : ''}</span>
+      <span>En el diálogo: escala <b>100%</b> y márgenes <b>Ninguno</b></span>
+      <button type="button" id="btnImprimir">Imprimir</button>
+    </div>`;
+  const cssBarra = `.barra { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+        justify-content: center; font: 12px/1.4 system-ui, sans-serif; color: #3d3a34;
+        background: #fff; border: 1.5px solid #E8E6DE; border-radius: 10px;
+        padding: 8px 12px; margin: 6px auto; max-width: 150mm; }
+      .barra button { background: #2F7D5D; color: #fff; border: 0; padding: 7px 14px;
+        border-radius: 7px; font-weight: 700; font-size: 13px; cursor: pointer; }
+      @media print { .barra { display: none !important; } }`;
+
   const cabeza = (estilo) => `<!DOCTYPE html><html lang="es-MX"><head><meta charset="utf-8">
       <title>${escHtml(titulo || 'Etiquetas')}</title><style>
       body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+      ${cssBarra}
       ${estilo}
-      </style></head><body>`;
+      </style></head><body>${barra}`;
 
   if (fmt.isSheet) {
     /* HOJA A4 con rejilla. Las columnas miden lo que mide la celda: con
@@ -312,7 +404,7 @@ export function documentoImprimible({ titulo, etiquetas, fmt, rotacion = 0 }) {
       .rejilla { display: grid; grid-template-columns: repeat(${fmt.cols}, ${fmt.wMm}mm); gap: 0; }
       .celda { width: ${fmt.wMm}mm; height: ${fmt.hMm}mm; box-sizing: border-box;
                border: 0.3mm dashed #ccc; break-inside: avoid; page-break-inside: avoid; }
-      ${etiquetaCss(fmt, '.celda')}
+      ${css(fmt, '.celda')}
       @media print { .celda { border: none; } }`;
     return `${cabeza(estilo)}<div class="rejilla">${celdas}</div>${GUION_IMPRIMIR}</body></html>`;
   }
@@ -340,6 +432,6 @@ export function documentoImprimible({ titulo, etiquetas, fmt, rotacion = 0 }) {
       .etq { position: absolute; top: 0; left: 0;
              width: ${cajaW}mm; height: ${cajaH}mm; box-sizing: border-box;
              ${giro ? `transform-origin: 0 0; transform: ${giro};` : ''} }
-      ${etiquetaCss(fmt, '.etq')}`;
+      ${css(fmt, '.etq')}`;
   return `${cabeza(estilo)}${paginas}${GUION_IMPRIMIR}</body></html>`;
 }

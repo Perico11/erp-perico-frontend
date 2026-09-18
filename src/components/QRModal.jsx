@@ -1,6 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import { qrPublicUrl } from '../lib/qrPublicUrl';
-import { documentoImprimible, etiquetaHtml, presentacionDeLote, envasadorDeLote, selloFechaHora } from '../lib/etiquetaLote';
+import {
+  documentoImprimible, etiquetaHtml, presentacionDeLote, envasadorDeLote, selloFechaHora,
+  FORMATOS_ETIQUETA, LS_FORMATO, LS_ROTACION, ROTACIONES,
+  resolverFormato, formatoGuardado, rotacionGuardada,
+} from '../lib/etiquetaLote';
 import useQrSrc from '../hooks/useQrSrc';
 import useBodyScrollLock from '../hooks/useBodyScrollLock';
 
@@ -139,33 +143,23 @@ const S = {
    se pega en la cubeta. El 50×40 seguía saliendo por defecto de cuando este
    modal se escribió, y por eso la reimpresión desde Americano no se parecía a
    la etiqueta oficial. */
-const FORMATOS = [
-  { v: '52x25', label: '52×25 mm (oficial)', wMm: 52, hMm: 25, qrMm: 20 },
-  { v: '50x25', label: '50×25 mm (etiqueta chica)', wMm: 50, hMm: 25, qrMm: 21 },
-  { v: '50x40', label: '50×40 mm', wMm: 50, hMm: 40, qrMm: 22 },
-  { v: '60x40', label: '60×40 mm', wMm: 60, hMm: 40, qrMm: 24 },
-  { v: '80x50', label: '80×50 mm', wMm: 80, hMm: 50, qrMm: 30 },
-  { v: '100x70', label: '100×70 mm', wMm: 100, hMm: 70, qrMm: 40 },
-  { v: 'A4-21', label: 'Hoja A4 · 21 etiquetas (3×7)', wMm: 70, hMm: 42.3, qrMm: 22, isSheet: true, cols: 3, rows: 7 },
-  { v: 'A4-24', label: 'Hoja A4 · 24 etiquetas (3×8)', wMm: 70, hMm: 37, qrMm: 20, isSheet: true, cols: 3, rows: 8 },
-];
-
-/* La impresora/etiqueta del usuario se queda memorizada (formato + rotación). */
-const FORMATO_OFICIAL = '52x25';
-const LS_FORMATO = 'pp_qr_formato';
-const LS_ROT = 'pp_qr_rot';
-const ROTACIONES = [0, 90, 180, 270];
+/* El catálogo vive en lib/etiquetaLote y es el MISMO para las tres pantallas
+   que imprimen etiquetas. Tenerlo por duplicado fue justo lo que hizo que la
+   preferencia guardada aquí (52×25) no existiera allá y se imprimiera en otra
+   medida sin avisar — ver el comentario del catálogo. */
+const FORMATOS = FORMATOS_ETIQUETA;
+const LS_ROT = LS_ROTACION;
 
 export default function QRModal({ lote, onClose }) {
   /* BUG FIX React #310: los useState DEBEN llamarse antes de cualquier early return.
      Si lote pasaba de null→objeto, React veía hooks nuevos → crash. */
   const cantidadDefault = Number(lote?.cantidad) || 1;
   const [copias, setCopias] = useState(cantidadDefault);
-  const [formato, setFormato] = useState(() => { try { return localStorage.getItem(LS_FORMATO) || FORMATO_OFICIAL; } catch { return FORMATO_OFICIAL; } });
+  const [formato, setFormato] = useState(formatoGuardado);
   /* `rotacion` gira el contenido 0/90/180/270° dentro de la etiqueta. Cubre TODAS
      las orientaciones: si el driver de la impresora rota solo (imprime "parada"),
      el usuario prueba las 4 y una sale acostada llenando la etiqueta. */
-  const [rotacion, setRotacion] = useState(() => { try { const v = parseInt(localStorage.getItem(LS_ROT), 10); return ROTACIONES.includes(v) ? v : 0; } catch { return 0; } });
+  const [rotacion, setRotacion] = useState(rotacionGuardada);
   /* Memoriza formato + rotación (la config de la impresora del usuario se queda). */
   useEffect(() => { try { localStorage.setItem(LS_FORMATO, formato); } catch {} }, [formato]);
   useEffect(() => { try { localStorage.setItem(LS_ROT, String(rotacion)); } catch {} }, [rotacion]);
@@ -173,15 +167,6 @@ export default function QRModal({ lote, onClose }) {
      abierto (= hay lote). Llamado ANTES del early-return para respetar las reglas
      de hooks. */
   useBodyScrollLock(!!lote);
-  if (!lote) return null;
-  const codigo = lote.codigo || lote.codigoLote || lote.id;
-  /* Banda de la etiqueta (diseño único 5-ago): presentación abreviada + quién
-     envasó. Ambos degradan a vacío si el lote no los trae. */
-  const presPreview = presentacionDeLote(lote);
-  const envasadorPreview = envasadorDeLote(lote);
-
-  const fmt = FORMATOS.find(f => f.v === formato) || FORMATOS[0];
-
   /* 28-jul-2026 (pedido dueño): el QR llevaba los DATOS adentro (JSON con
      producto/cantidad/fecha) — cualquier lector genérico los mostraba a quien
      tuviera la cubeta, cliente final incluido. Ahora codifica solo la URL del
@@ -189,11 +174,24 @@ export default function QRModal({ lote, onClose }) {
      clave de planta antes de enseñar nada. El escáner interno sigue leyendo
      los JSON de etiquetas viejas (rama JSON.parse en handleResult) y el
      backend extrae el código de la URL en /api/sublotes/scan(-bulk). */
-  const payload = qrPublicUrl(codigo);
+  const codigo = lote ? (lote.codigo || lote.codigoLote || lote.id) : '';
+  const payload = codigo ? qrPublicUrl(codigo) : '';
   /* EL QR LO DIBUJA EL BACKEND (18-sep-2026): un solo generador para todo el
      ERP. Mientras llega —y si el servidor no contesta— se usa el local, que
-     codifica exactamente el mismo texto. Ver hooks/useQrSrc. */
+     codifica exactamente el mismo texto. Ver hooks/useQrSrc.
+     VA ANTES DEL EARLY RETURN, como los useState de arriba y por el mismo
+     motivo (BUG FIX React #310): useQrSrc es un hook, y si se llamaba después
+     del `if (!lote) return null` React veía un hook de más en cuanto el modal
+     se abría y reventaba el render. Con el modal cerrado el texto va vacío y
+     el hook no le pide nada a nadie. */
   const qrSrc = useQrSrc(payload);
+  if (!lote) return null;
+  /* Banda de la etiqueta (diseño único 5-ago): presentación abreviada + quién
+     envasó. Ambos degradan a vacío si el lote no los trae. */
+  const presPreview = presentacionDeLote(lote);
+  const envasadorPreview = envasadorDeLote(lote);
+
+  const fmt = resolverFormato(formato);
 
   const imprimir = () => {
     const w = window.open('', '_blank', 'width=800,height=900');

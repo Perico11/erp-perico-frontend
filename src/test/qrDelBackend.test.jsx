@@ -90,3 +90,43 @@ describe('la etiqueta que se imprime lleva ese QR', () => {
     expect(html).not.toMatch(/:last-child/);
   });
 });
+
+/* ════════════════════════════════════════════════════════════════════════════
+   LA REGLA DE LOS HOOKS — el modal se abre sin reventar (18-sep-2026).
+
+   Al pasar el QR al backend, `useQrSrc` quedó DESPUÉS del `if (!lote) return
+   null` de los dos modales. Un hook llamado después de un return temprano se
+   llama unas veces sí y otras no: mientras el modal está cerrado React cuenta
+   N hooks, y en cuanto se abre cuenta N+1 → revienta el render. El archivo ya
+   traía escrito ese aviso ("BUG FIX React #310") de una vez anterior.
+
+   Es la explicación de "a veces imprime y a veces no": según cómo se monte el
+   modal, se abre o se cae. Esta prueba hace justo esa transición.
+   ════════════════════════════════════════════════════════════════════════════ */
+import QRModal from '../components/QRModal';
+import { SubloteQRPrintModal as ModalSublote } from '../pages/stock-fabrica/StockFabricaPage';
+
+describe('abrir el modal no rompe el orden de los hooks', () => {
+  beforeEach(() => { qrImagen.mockReset(); qrImagen.mockResolvedValue({ ok: true, dataUri: DEL_BACKEND }); });
+
+  it('QRModal: de cerrado (lote null) a abierto', () => {
+    const { rerender } = render(<QRModal lote={null} onClose={() => {}} />);
+    /* Si el hook estuviera después del early return, esto lanzaría
+       "Rendered more hooks than during the previous render". */
+    expect(() => rerender(
+      <QRModal lote={{ codigo: 'LP-20260630-001', producto: 'BLANCO SGLOSS V3', cantidad: 2 }} onClose={() => {}} />,
+    )).not.toThrow();
+    expect(screen.getByText('LP-20260630-001')).toBeInTheDocument();
+  });
+
+  it('el modal de sublote: de cerrado (payload null) a abierto', () => {
+    const { rerender } = render(<ModalSublote payload={null} onClose={() => {}} />);
+    expect(() => rerender(
+      <ModalSublote payload={{
+        sublotes: [{ cod: 'LP-20260630-001-A-hZ', tipo: 'cubeta', qty: 3, lit: 57 }],
+        lote: { producto: 'BLANCO SGLOSS V3' }, isTote: false, q: 3, tipo: 'cubeta', litTotal: 57,
+      }} onClose={() => {}} />,
+    )).not.toThrow();
+    expect(screen.getByText('LP-20260630-001-A-hZ')).toBeInTheDocument();
+  });
+});

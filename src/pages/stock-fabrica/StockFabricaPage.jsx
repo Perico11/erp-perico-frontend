@@ -30,7 +30,10 @@ import { qrPublicUrl } from '../../lib/qrPublicUrl';
 /* DISEÑO ÚNICO de la etiqueta impresa (5-ago-2026). La etiqueta del SUBLOTE
    —la que más se imprime, una por cubeta— se había quedado fuera de la
    unificación y seguía saliendo con el layout viejo. */
-import { documentoImprimible, etiquetaHtml, abreviaPresentacion } from '../../lib/etiquetaLote';
+import {
+  documentoImprimible, etiquetaHtml, abreviaPresentacion,
+  FORMATOS_ETIQUETA, FORMATO_OFICIAL, resolverFormato,
+} from '../../lib/etiquetaLote';
 import useQrSrc from '../../hooks/useQrSrc';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 
@@ -1260,7 +1263,10 @@ export function SubloteQRPrintModal({ payload, onClose }) {
   const sublote = sublotes[0];
   const cantidadDefault = sublote ? (isTote ? 1 : Number(sublote.qty) || 1) : 1;
   const [copias, setCopias] = useState(cantidadDefault);
-  const [formato, setFormato] = useState(isTote ? '80x50' : '50x25');
+  /* Arranca en el formato OFICIAL, no en el 50×25: es el rollo que de verdad
+     está puesto (la foto del dueño, 20-ago). Los totes siguen en 80×50, que es
+     su etiqueta grande. Se puede cambiar en el selector de abajo. */
+  const [formato, setFormato] = useState(isTote ? '80x50' : FORMATO_OFICIAL);
   /* RT-420ME/RT-420MME (jul 2026): rotación 0/90/180/270° del contenido dentro de
      la etiqueta — cubre TODAS las orientaciones aunque el driver rote por su
      cuenta. Clave `pp_qr_rot` COMPARTIDA con el QRModal (Americano): la impresora
@@ -1274,28 +1280,26 @@ export function SubloteQRPrintModal({ payload, onClose }) {
   });
   const setRot = (a) => { setRotacion(a); try { localStorage.setItem('pp_qr_rot', String(a)); } catch {} };
 
-  if (!sublote) return null;
-
-  const FMT = [
-    /* 50×25 = etiqueta REAL de la RT-420ME de fábrica (jul 2026) — layout compacto */
-    { v: '50x25', label: '50×25 mm (RT-420ME · etiqueta fábrica)', wMm: 50, hMm: 25, qrMm: 20, compact: true },
-    { v: '50x40', label: '50×40 mm (rollo térmico)', wMm: 50, hMm: 40, qrMm: 22 },
-    { v: '60x40', label: '60×40 mm (rollo térmico)', wMm: 60, hMm: 40, qrMm: 24 },
-    { v: '80x50', label: '80×50 mm (rollo térmico)', wMm: 80, hMm: 50, qrMm: 32 },
-    { v: '100x70', label: '100×70 mm (rollo grande)', wMm: 100, hMm: 70, qrMm: 42 },
-    { v: 'A4-21', label: 'A4 · 21 etiquetas (3×7)', wMm: 70, hMm: 42.3, qrMm: 24, isSheet: true, cols: 3, rows: 7 },
-    { v: 'A4-24', label: 'A4 · 24 etiquetas (3×8)', wMm: 70, hMm: 37, qrMm: 22, isSheet: true, cols: 3, rows: 8 },
-  ];
-  const fmt = FMT.find(f => f.v === formato) || FMT[0];
-
   /* SIEMPRE la URL nueva (no el qrPayload guardado): los sublotes viejos traen
      grabada la URL del subdominio — reimprimir debe salir ya con el dominio
      principal. El escaneo no cambia: el backend extrae el código por path. */
-  const qrUrl = buildQrUrl(sublote.cod);
+  const qrUrl = sublote ? buildQrUrl(sublote.cod) : '';
   /* EL QR LO DIBUJA EL BACKEND (18-sep-2026): un solo generador para todo el
      ERP. Mientras llega —y si el servidor no contesta— se usa el local, que
-     codifica exactamente el mismo texto. Ver hooks/useQrSrc. */
+     codifica exactamente el mismo texto. Ver hooks/useQrSrc.
+     VA ANTES DEL EARLY RETURN, como los useState de arriba: useQrSrc es un
+     hook, y llamándolo después del `if (!sublote) return null` React veía un
+     hook de más en cuanto el modal se abría y reventaba el render. */
   const qrSrc = useQrSrc(qrUrl);
+
+  if (!sublote) return null;
+
+  /* EL MISMO catálogo que las demás pantallas (lib/etiquetaLote). Esta lista no
+     incluía el 52×25 —el formato OFICIAL de la etiqueta— así que desde aquí,
+     que es la etiqueta que más se imprime, no se podía ni elegir: salía siempre
+     en 50×25. */
+  const FMT = FORMATOS_ETIQUETA;
+  const fmt = resolverFormato(formato);
 
   const producto = (lote?.producto || lote?.nombre || '').slice(0, 40);
   const fecha = new Date().toISOString().slice(0, 10);
