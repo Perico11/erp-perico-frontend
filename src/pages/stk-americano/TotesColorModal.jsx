@@ -24,7 +24,17 @@ const S = {
   body: { padding: '14px 20px 18px', overflowY: 'auto', flex: 1 },
   intro: { padding: '10px 14px', borderRadius: 8, background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)', fontSize: 12.5, color: 'var(--lp-text-secondary)', lineHeight: 1.5, marginBottom: 12 },
   row: { border: '1px solid var(--lp-border-subtle)', borderRadius: 10, padding: '10px 12px', marginBottom: 8, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  folio: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 14.5 },
+  /* El folio y el nivel llevan ANCHO FIJO para que las barras queden todas del
+     mismo largo y una debajo de otra: comparar de reojo es justamente para lo
+     que están, y dos barras de distinto largo no se comparan. */
+  folio: { fontFamily: 'var(--lp-font-mono)', fontWeight: 700, fontSize: 14.5, flex: '0 0 auto', minWidth: 132 },
+  nivel: { display: 'flex', flexDirection: 'column', gap: 4, flex: '0 0 auto', width: 124 },
+  litros: { fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-secondary)' },
+  barra: { height: 5, borderRadius: 3, background: 'var(--lp-bg-sunken)', border: '1px solid var(--lp-border-subtle)', overflow: 'hidden' },
+  /* Un mínimo visible: un tote con 8 L no es lo mismo que uno vacío, y a esa
+     escala el porcentaje solo no pinta ni un píxel. */
+  barraLleno: (pct) => ({ height: '100%', width: pct > 0 ? `max(3px, ${pct}%)` : 0, background: 'var(--lp-brand-600)', borderRadius: 2 }),
+  sinAbrir: { fontSize: 10.5, fontWeight: 700, letterSpacing: .3, color: 'var(--lp-text-tertiary)', textTransform: 'uppercase' },
   meta: { fontSize: 11.5, color: 'var(--lp-text-tertiary)', width: '100%' },
   acts: { display: 'flex', gap: 6, flexWrap: 'wrap', marginLeft: 'auto' },
   btn: (color, border) => ({ padding: '7px 11px', minHeight: 36, fontSize: 12, fontWeight: 700, borderRadius: 7, cursor: 'pointer', fontFamily: 'inherit', border: `1.5px solid ${border || 'var(--lp-border-subtle)'}`, background: 'var(--lp-bg-raised)', color }),
@@ -35,6 +45,39 @@ const S = {
 
 const nf = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 2 });
 const fFecha = (iso) => { try { return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short' }); } catch { return (iso || '').slice(0, 10); } };
+
+/* ── Cuánto le queda al tote, de lo que traía ──
+   Pedido del dueño (18-sep-2026): "si un tote está a menos capacidad de otro
+   deberíamos encontrar la forma de distinguirlo". El dato ya existía —cada tote
+   guarda sus litros de ahora y los que traía al entrar— pero el "original"
+   estaba en la línea chica de abajo: había que leer dos veces para saber cuál
+   está empezado. Aquí van juntos, con la barra para compararlos de reojo.
+
+   Sin `litrosOriginal` NO se dibuja barra ni denominador: los totes anteriores
+   al registro con lote (18-jul) no lo traen, e inventarles un 1000 sería
+   pintar una mentira con precisión de dos decimales. */
+function Nivel({ litros, original }) {
+  const queda = Number(litros) || 0;
+  const traia = Number(original) || 0;
+  if (!(traia > 0)) {
+    return (
+      <div style={S.nivel}>
+        <span style={S.litros} data-id="stkAmericano.tote.litros">{nf(queda)} L</span>
+      </div>
+    );
+  }
+  const pct = Math.max(0, Math.min(100, (queda / traia) * 100));
+  const intacto = queda >= traia;
+  return (
+    <div style={S.nivel} data-id="stkAmericano.tote.nivel">
+      <span style={S.litros} data-id="stkAmericano.tote.litros">{nf(queda)} / {nf(traia)} L</span>
+      <div style={S.barra} role="img" aria-label={`${Math.round(pct)}% del tote`}>
+        <div style={S.barraLleno(pct)} />
+      </div>
+      {intacto && <span style={S.sinAbrir}>sin abrir</span>}
+    </div>
+  );
+}
 
 export default function TotesColorModal({ color, almacen = '1', onClose, onChanged }) {
   useBodyScrollLock(true);
@@ -94,7 +137,7 @@ export default function TotesColorModal({ color, almacen = '1', onClose, onChang
           {totes.map(t => (
             <div key={t.codigoLote} style={S.row} data-id="stkAmericano.tote.row">
               <span style={S.folio}>{t.codigoLote}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--lp-text-secondary)' }}>{nf(t.litros)} L</span>
+              <Nivel litros={t.litros} original={t.litrosOriginal} />
               <div style={S.acts}>
                 <button style={S.btn('var(--lp-brand-700)', 'var(--lp-brand-600)')} disabled={!!busy}
                   onClick={() => imprimirEtiquetasTotes([{ cod: t.codigoLote, producto: color.nombre }])}
@@ -113,7 +156,7 @@ export default function TotesColorModal({ color, almacen = '1', onClose, onChang
                 </button>
               </div>
               <div style={S.meta}>
-                Ingresó {fFecha(t.fecha)}{t.litrosOriginal ? ` · original ${nf(t.litrosOriginal)} L` : ''}
+                Ingresó {fFecha(t.fecha)}
                 {t.loteProveedor ? ` · lote fabricante ${t.loteProveedor}` : ''}
                 {Number(t.tandas) > 0 ? ` · ${t.tandas} tanda${t.tandas === 1 ? '' : 's'} envasada${t.tandas === 1 ? '' : 's'} (la próxima es -${String(t.tandas + 1).padStart(2, '0')})` : ''}
               </div>

@@ -70,6 +70,38 @@ describe('TotesColorModal', () => {
     expect(screen.getAllByRole('button', { name: 'Reimprimir etiqueta' })).toHaveLength(2);
   });
 
+  /* ── Cuánto le queda al tote, de lo que traía (18-sep-2026) ──
+     "Si un tote está a menos capacidad de otro deberíamos encontrar la forma de
+     distinguirlo" (dueño). El dato existía desde el 18-jul, pero el original
+     vivía en la línea chica: había que leer dos veces para saber cuál está
+     empezado. */
+  it('el empezado dice cuánto le queda DE lo que traía, y la barra lo pinta', () => {
+    render(<TotesColorModal color={COLOR} almacen="2" onClose={() => {}} onChanged={() => {}} />);
+    expect(screen.getByText(/411\.45\s*\/\s*1[,.]?000\s*L/)).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '41% del tote' })).toBeInTheDocument();
+  });
+
+  it('el que nadie ha tocado se marca "sin abrir" — es el que conviene no empezar', () => {
+    render(<TotesColorModal color={COLOR} almacen="2" onClose={() => {}} onChanged={() => {}} />);
+    expect(screen.getAllByText('sin abrir')).toHaveLength(1);
+    expect(screen.getByRole('img', { name: '100% del tote' })).toBeInTheDocument();
+  });
+
+  it('sin litrosOriginal NO se inventa el denominador ni la barra', () => {
+    /* Los totes anteriores al registro con lote no lo traen: pintarles un 1000
+       sería una mentira con dos decimales de precisión. */
+    const viejo = { key: 'X', nombre: 'Viejo', totes: [{ codigoLote: 'USA-0009-01', litros: 640, fecha: '2026-06-01T10:00:00.000Z' }] };
+    render(<TotesColorModal color={viejo} almacen="1" onClose={() => {}} onChanged={() => {}} />);
+    expect(screen.getByText('640 L')).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /del tote/ })).not.toBeInTheDocument();
+  });
+
+  it('un tote con más litros que su original no pasa del 100%', () => {
+    const raro = { key: 'X', nombre: 'Raro', totes: [{ codigoLote: 'USA-0010-01', litros: 1200, litrosOriginal: 1000, fecha: '2026-06-01T10:00:00.000Z' }] };
+    render(<TotesColorModal color={raro} almacen="1" onClose={() => {}} onChanged={() => {}} />);
+    expect(screen.getByRole('img', { name: '100% del tote' })).toBeInTheDocument();
+  });
+
   it('en Almacén 2 la transferencia ofrece Americano 1, y manda EL tote elegido', async () => {
     const onChanged = vi.fn();
     render(<TotesColorModal color={COLOR} almacen="2" onClose={() => {}} onChanged={onChanged} />);
