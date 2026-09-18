@@ -223,3 +223,123 @@ export function etiquetaHtml({ qrSrc, producto, pres, codigo, envasador, meta, f
       </div>
     </div>`;
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   EL DOCUMENTO QUE SE MANDA A LA IMPRESORA (18-sep-2026)
+
+   Reporte del dueño: "le doy imprimir y aunque ponga 1 salen muchas en blanco,
+   y también salen entrecortadas". El mismo fallo estaba en el backend y se
+   arregló allá; aquí vivía DUPLICADO en dos pantallas —QRModal y el modal de
+   sublote de Stock Fábrica— con el mismo código copiado y los mismos tres
+   defectos. Por eso ahora el documento se arma en UN solo sitio.
+
+   1. LA CAJA MEDÍA EXACTAMENTE LO QUE LA HOJA (`.ticket{width:52mm}` sobre
+      `@page{size:52mm 25mm}`). Suena correcto y es justo el origen de las dos
+      fallas: el driver redondea la hoja al imprimir —una de 52×25 mm sale de
+      51.9×25.1, medido imprimiendo a PDF con Chromium— y en cuanto redondea
+      hacia abajo la caja ya no cabe. El navegador hace lo único que sabe hacer
+      con lo que no cabe: lo pasa a la hoja siguiente. Sale la etiqueta partida
+      y el sobrante solo, en una hoja casi vacía. Comprobado: con la caja 0.1 mm
+      más alta que la hoja, 3 etiquetas salen en 6 páginas. Como el redondeo
+      depende del driver y de los puntos por pulgada, a un operador le salían
+      bien y a otro mal con el mismo ERP.
+      → La caja se queda SANGRIA_MM por dentro. 0.4 mm no se ven en térmica.
+
+   2. UN SALTO DE PÁGINA QUE SOBRABA AL FINAL. Iba después de cada etiqueta y se
+      le quitaba a la última con `.ticket:last-child`, una regla que NUNCA se
+      cumple: el último hijo de <body> no es una etiqueta, es el <script> que
+      lanza la impresión. Así que la última se quedaba con un salto de más, y qué
+      hace el navegador con él no está definido: Chromium lo descarta (medido
+      imprimiendo a PDF), otros motores sacan la hoja en blanco.
+      → El salto va ANTES de cada etiqueta menos la primera: no queda ninguno al
+        final y deja de depender de con qué navegador imprima cada quien.
+
+   3. SE IMPRIMÍA A CIEGAS a los 400 ms de abrir la ventana, cargara o no el
+      dibujo. → Se espera a que las imágenes estén listas, con 6 s de tope.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* Lo que la caja se mete hacia dentro de la hoja para que ningún redondeo del
+   driver la deje fuera y obligue a paginar. */
+export const SANGRIA_MM = 0.4;
+
+const menos = (mm) => +(mm - SANGRIA_MM).toFixed(2);
+
+/* El <script> de la ventana de impresión: espera a que las imágenes estén
+   listas y recién entonces abre el diálogo. Con el QR incrustado (data: URI)
+   están listas de inmediato; el tope de 6 s es para que nada deje la ventana
+   colgada si algún día el dibujo viene de fuera. */
+const GUION_IMPRIMIR = [
+  '<scr' + 'ipt>',
+  '(function(){',
+  '  var lanzado = false;',
+  '  function imprimir(){ if (lanzado) return; lanzado = true;',
+  '    setTimeout(function(){ window.print(); }, 80); }',
+  '  var faltan = 0;',
+  '  Array.prototype.forEach.call(document.images, function(im){',
+  '    if (im.complete && im.naturalWidth > 0) return;',
+  '    faltan++;',
+  '    var menos = function(){ if (--faltan <= 0) imprimir(); };',
+  '    im.addEventListener("load", menos);',
+  '    im.addEventListener("error", menos);',
+  '  });',
+  '  if (!faltan) imprimir(); else setTimeout(imprimir, 6000);',
+  '})();',
+  '</scr' + 'ipt>',
+].join('\n');
+
+/* Documento completo para la ventana de impresión.
+     titulo     → el <title> (sale en el encabezado del diálogo)
+     etiquetas  → arreglo con el HTML de cada copia (etiquetaHtml)
+     fmt        → una entrada del catálogo de formatos ({wMm,hMm,isSheet,…})
+     rotacion   → 0/90/180/270, para los drivers que imprimen "parado" */
+export function documentoImprimible({ titulo, etiquetas, fmt, rotacion = 0 }) {
+  const copias = Array.isArray(etiquetas) ? etiquetas : [];
+  const cabeza = (estilo) => `<!DOCTYPE html><html lang="es-MX"><head><meta charset="utf-8">
+      <title>${escHtml(titulo || 'Etiquetas')}</title><style>
+      body { font-family: system-ui, sans-serif; margin: 0; padding: 0; }
+      ${estilo}
+      </style></head><body>`;
+
+  if (fmt.isSheet) {
+    /* HOJA A4 con rejilla. Las columnas miden lo que mide la celda: con
+       `1fr` cada columna se encogía al ancho disponible mientras la celda
+       seguía midiendo wMm, así que las celdas se salían de su propia columna y
+       la tercera acababa cortada. Y el margen de 5 mm dejaba 200 mm útiles para
+       210 mm de etiquetas: no cabían por definición. La hoja de etiquetas va a
+       sangre —así están troqueladas— y el corte lo marca el punteado. */
+    const celdas = copias.map((e) => `<div class="celda">${e}</div>`).join('');
+    const estilo = `@page { size: A4; margin: 0; }
+      .rejilla { display: grid; grid-template-columns: repeat(${fmt.cols}, ${fmt.wMm}mm); gap: 0; }
+      .celda { width: ${fmt.wMm}mm; height: ${fmt.hMm}mm; box-sizing: border-box;
+               border: 0.3mm dashed #ccc; break-inside: avoid; page-break-inside: avoid; }
+      ${etiquetaCss(fmt, '.celda')}
+      @media print { .celda { border: none; } }`;
+    return `${cabeza(estilo)}<div class="rejilla">${celdas}</div>${GUION_IMPRIMIR}</body></html>`;
+  }
+
+  /* ROLLO TÉRMICO: una etiqueta por hoja. `rotacion` gira el contenido dentro
+     de la etiqueta; en 90/270 la HOJA usa las medidas intercambiadas para que el
+     driver no reescale, y el contenido se rota con transform. */
+  const ang = [0, 90, 180, 270].includes(rotacion) ? rotacion : 0;
+  const parado = ang === 90 || ang === 270;
+  /* La HOJA mide la etiqueta física; la CAJA, eso menos la sangría. */
+  const hojaW = parado ? fmt.hMm : fmt.wMm;
+  const hojaH = parado ? fmt.wMm : fmt.hMm;
+  const cajaW = menos(fmt.wMm);
+  const cajaH = menos(fmt.hMm);
+  const giro = ang === 90 ? `translateX(${cajaH}mm) rotate(90deg)`
+             : ang === 180 ? `translate(${cajaW}mm, ${cajaH}mm) rotate(180deg)`
+             : ang === 270 ? `translateY(${cajaW}mm) rotate(270deg)`
+             : '';
+  const paginas = copias.map((e) => `<div class="pag"><div class="etq">${e}</div></div>`).join('');
+  const estilo = `@page { size: ${hojaW}mm ${hojaH}mm; margin: 0; }
+      .pag { width: ${parado ? cajaH : cajaW}mm; height: ${parado ? cajaW : cajaH}mm;
+             position: relative; overflow: hidden;
+             break-inside: avoid; page-break-inside: avoid; }
+      .pag + .pag { break-before: page; page-break-before: always; }
+      .etq { position: absolute; top: 0; left: 0;
+             width: ${cajaW}mm; height: ${cajaH}mm; box-sizing: border-box;
+             ${giro ? `transform-origin: 0 0; transform: ${giro};` : ''} }
+      ${etiquetaCss(fmt, '.etq')}`;
+  return `${cabeza(estilo)}${paginas}${GUION_IMPRIMIR}</body></html>`;
+}

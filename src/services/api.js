@@ -758,6 +758,15 @@ const api = {
      @media print con QR del backend (routes/etiquetas.js). Lleva ?token= porque
      se abre con window.open (sin headers). */
   etiquetaToteUrl: (cod) => API_BASE + '/api/etiquetas/tote/' + encodeURIComponent(cod) + '/print' + (_token ? '?token=' + encodeURIComponent(_token) : ''),
+  /* El dibujo del QR, hecho por el backend (18-sep-2026, pedido del dueño: un
+     solo generador para todo el ERP). Devuelve el data: URI ya armado —no una
+     dirección— porque quien lo usa lo INCRUSTA en la ventana de impresión: una
+     imagen incrustada no se queda a medio cargar al abrir el diálogo.
+     El TEXTO lo decide quien llama: la etiqueta física lleva el dominio
+     principal (qrPublicUrl), y el backend dibuja lo que le manden. */
+  qrImagen: (texto, opts = {}) => request('GET', '/api/qr?data=' + encodeURIComponent(texto)
+    + (opts.formato ? '&formato=' + encodeURIComponent(opts.formato) : '')
+    + (opts.nivel ? '&nivel=' + encodeURIComponent(opts.nivel) : '')),
 
   /* ── SAT / CFDI ── */
   satParse: (xmlText) => request('POST', '/api/sat/parse', { xmlText }),
