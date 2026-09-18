@@ -62,7 +62,16 @@ const S = {
 
 const nf = (n) => (Number(n) || 0).toLocaleString('es-MX', { maximumFractionDigits: 1 });
 
+/* El Almacén 2 es RESERVA: sólo totes llenos, y de ahí no se envasa — el tote se
+   transfiere a Terán primero (regla del dueño, 18-sep-2026). No es preferencia:
+   los envases y las tapas salen SIEMPRE del pool de Terán, y ese pool sólo
+   existe en Fábrica y Terán, así que envasar aquí gastaba cubetas de un almacén
+   para pintura de otro. El servidor lo rechaza con 409 ENVASAR_SOLO_EN_TERAN;
+   esto es para que nadie llegue a apretarlo sin saber por qué. */
+const esReservaAlm = (a) => String(a) === '2';
+
 export default function StkAmericanoView({ data, loading, reload, canEdit = false, canDelete = false, embedded = false, almacen = '1', query: queryExterna }) {
+  const esReserva = esReservaAlm(almacen);
   const isDesktop = useIsDesktop();
   /* Cuando la página trae su propio buscador (Inventarios, 16-sep-2026) manda
      ese: uno solo y siempre en el mismo lugar. Suelta, la vista conserva el
@@ -200,6 +209,13 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
           </div>
         )}
       </div>
+      {esReserva && (
+        <div style={S.hint} data-id="stkAmericano.aviso.reserva">
+          <strong>El Almacén 2 es reserva:</strong> totes llenos. Aquí no se envasa —
+          transfiere el tote a Terán (viaja con su folio y su contador de tandas) y
+          envásalo allá, que es donde están las cubetas y las tapas.
+        </div>
+      )}
       {canEdit && (
         <div style={S.hint}>
           <strong>Importar:</strong> Excel con 3 bloques — <strong>Cubetas</strong> (color + nº), <strong>Galones</strong> (color + nº), <strong>Totes</strong> (color + litros, ej. "650 LTS"). Se fusiona por color. Un tote lleno = 1000 L.
@@ -240,7 +256,7 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
                   </td>
                   {canEdit && (
                     <td style={{ ...S.td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      {c.totesLitros > 0 && (
+                      {c.totesLitros > 0 && !esReserva && (
                         <button style={S.btnEnvasarTable} data-id="stkAmericano.btn.envasar" data-rol="admin,almacen" onClick={() => setEnvasarColor(c)}>Envasar</button>
                       )}
                       <button style={{ ...S.btnGhostTable, marginLeft: 8 }} data-id="stkAmericano.btn.editar" data-rol="admin,almacen" onClick={() => setEditColor(c)}>Editar</button>
@@ -269,7 +285,7 @@ export default function StkAmericanoView({ data, loading, reload, canEdit = fals
             </div>
             {canEdit && (
               <div style={S.actions}>
-                {c.totesLitros > 0 && <button style={{ ...S.actBtn, ...S.actBtnPrimary }} onClick={() => setEnvasarColor(c)} data-id="stkAmericano.btn.envasar">Envasar</button>}
+                {c.totesLitros > 0 && !esReserva && <button style={{ ...S.actBtn, ...S.actBtnPrimary }} onClick={() => setEnvasarColor(c)} data-id="stkAmericano.btn.envasar">Envasar</button>}
                 <button style={S.actBtn} onClick={() => setEditColor(c)} data-id="stkAmericano.btn.editar">Editar</button>
                 <span style={{ display: 'inline-flex', alignItems: 'center' }}>
                   <MPActionsMenu mp={c.nombre} canEdit={true} extraItems={menuItems(c)} />
