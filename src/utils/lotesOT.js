@@ -43,6 +43,8 @@ export function desgloseLotesDeOT(ot) {
   const productos = new Set(d.lotes.map(l => String(l.producto || '').trim().toUpperCase()));
   return {
     fuente: rec ? 'recibidos' : 'surtidos',
+    /* 'elegido' = Fábrica marcó los lotes a mano; 'automatico' = sugerencia. */
+    modo: (sur && sur.modo) || null,
     lotes: d.lotes,
     sinLote,
     variosProductos: productos.size > 1,
