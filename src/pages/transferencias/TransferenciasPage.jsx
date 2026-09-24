@@ -14,6 +14,8 @@ import { QRScanner } from '../../components/QRModal';
 import { qrDataUrl } from '../../lib/qrGenerator';
 import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) */
 import { PT_MEDIDAS, ptMedidaDef, medidaACubetas, etiquetaMedida } from '../../utils/ptMedidas';
+import { desgloseLotesDeOT, etiquetaPiezasLote } from '../../utils/lotesOT';
+import LotesDeOT from './LotesDeOT';
 
 /* ════════════════════════════════════════════════════════════════════════════
    TransferenciasPage — ÓRDENES DE TRANSFERENCIA (OT) Fábrica → Terán.
@@ -605,6 +607,9 @@ function OTCard({ ot, rol, busy, onAccion, onPrint, onEditar }) {
           );
         })}
       </div>
+
+      {/* De qué lote viene cada pieza (lo decide el backend al surtir) */}
+      <LotesDeOT ot={ot} />
 
       {/* Meta: quién solicitó / surtió / recibió / canceló */}
       <div style={C.meta}>
@@ -1317,6 +1322,15 @@ function OTQRPrintModal({ ot, onClose }) {
         <div class="c c-uni">${uni}</div>
       </div>`;
     }).join('');
+    /* Lotes (24-sep-2026): si la OT ya se surtió, la hoja lleva de qué lote
+       viene cada pieza — viaja con la mercancía y Terán la tiene en la mano. */
+    const dl = desgloseLotesDeOT(ot);
+    const lotesHtml = dl ? `
+        <div class="lotes">
+          <div class="lbl">Lotes en esta transferencia · ${dl.fuente === 'recibidos' ? 'recibido en Terán' : 'surtido en Fábrica'}</div>
+          ${dl.lotes.map(l => `<div class="lrow"><span class="lcod">${esc(l.codigoLote)}</span>${dl.variosProductos ? `<span class="lprod">${esc(l.producto)}</span>` : ''}<span class="lqty">${esc(etiquetaPiezasLote(l))}</span></div>`).join('')}
+          ${dl.sinLote > 0 ? `<div class="laviso">${esc(dl.sinLote.toLocaleString('es-MX', { maximumFractionDigits: 1 }))} cub sin lote registrado — anotar el lote de la etiqueta física.</div>` : ''}
+        </div>` : '';
     const logo = `${location.origin}/logos/logo-perico-green.svg`;
     const G = '#0f7a5a';
     /* Firmas (pedido dueño 26-jul, mismo criterio que la remisión de tiendas):
@@ -1389,6 +1403,14 @@ function OTQRPrintModal({ ot, onClose }) {
         .trow .c-qty { justify-content:flex-end; font-weight:500; }
         .tag { display:inline-block; margin-left:6px; font-size:9px; font-weight:500; color:${G}; background:rgba(15,122,90,.10); border-radius:4px; padding:1px 6px; vertical-align:middle; }
         .env { display:inline-block; margin-left:6px; padding:1px 7px; border:1.5px solid ${G}; border-radius:4px; font-size:10px; font-weight:500; color:${G}; }
+        .lotes { margin-top:14px; border:1px solid rgba(15,122,90,.25); border-radius:12px; padding:10px 14px; background:rgba(15,122,90,.04); }
+        .lotes .lbl { font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:${G}; font-weight:500; margin-bottom:6px; }
+        .lrow { display:flex; align-items:center; gap:10px; font-size:12px; padding:3px 0; border-top:1px solid rgba(0,0,0,.06); }
+        .lrow:first-of-type { border-top:none; }
+        .lcod { font-family:ui-monospace,Menlo,monospace; font-weight:600; color:${G}; }
+        .lprod { color:#5a6b63; text-transform:uppercase; font-size:11px; }
+        .lqty { margin-left:auto; font-weight:500; }
+        .laviso { font-size:11px; color:#9a6a13; font-style:italic; margin-top:4px; }
         .obs .lbl { font-size:11px; color:#5a6b63; font-weight:500; margin:14px 0 8px; }
         .obsbox { border:1px solid rgba(0,0,0,.10); border-radius:10px; min-height:42px; padding:8px 10px; font-size:12px; }
         .firmas { margin-top:auto; padding-top:12px; }
@@ -1451,6 +1473,7 @@ function OTQRPrintModal({ ot, onClose }) {
           </div>
           ${filas}
         </div>
+${lotesHtml}
 
         <div class="obs">
           <div class="lbl">Observaciones</div>
@@ -1498,6 +1521,7 @@ function OTQRPrintModal({ ot, onClose }) {
               </div>
             ))}
           </div>
+          <div style={{ width: '100%', marginTop: 12 }}><LotesDeOT ot={ot} /></div>
         </div>
         <div style={PM.footer}>
           <button style={{ ...PM.btn, ...PM.btnGhost }} onClick={onClose}>Cerrar</button>
