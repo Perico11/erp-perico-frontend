@@ -12,7 +12,10 @@
    corra donde corra la suite.
    ════════════════════════════════════════════════════════════════════════════ */
 import { describe, it, expect } from 'vitest';
-import { filtrarEntregas, productosDeEntregas, reporteEnvios, fechaLocalYMD } from '../utils/reporteEnvios';
+import {
+  filtrarEntregas, productosDeEntregas, reporteEnvios, fechaLocalYMD,
+  mesLocalYM, etiquetaMes, rangoDeMes, mesesDeEntregas, tiendasDeEntregas, lineasQueCoinciden, resumenFiltro,
+} from '../utils/reporteEnvios';
 
 const ENTREGAS = [
   {
@@ -88,5 +91,51 @@ describe('reporteEnvios — el reporte por producto', () => {
 describe('productosDeEntregas — el datalist del reporte', () => {
   it('únicos y ordenados', () => {
     expect(productosDeEntregas(ENTREGAS)).toEqual(['Best Beige', 'Cubeta 19 L', 'PROCAUCHO 5X1']);
+  });
+});
+
+/* ── Filtro por mes y por tienda (24-sep-2026, pedido del dueño) ─────────────
+   "Buscar productos específicos, a qué tienda fue, cuándo, cantidades y poder
+   filtrar por mes." */
+describe('mes y tienda', () => {
+  it('rangoDeMes cubre el mes completo (último día del calendario, bisiesto incluido)', () => {
+    expect(rangoDeMes('2026-08')).toEqual({ desde: '2026-08-01', hasta: '2026-08-31' });
+    expect(rangoDeMes('2028-02')).toEqual({ desde: '2028-02-01', hasta: '2028-02-29' });
+    expect(rangoDeMes('basura')).toEqual({ desde: '', hasta: '' });
+  });
+
+  it('etiquetaMes en español, sin depender del navegador', () => {
+    expect(etiquetaMes('2026-09')).toBe('septiembre 2026');
+  });
+
+  it('mesesDeEntregas: únicos, del más reciente al más viejo; tiendas únicas ordenadas', () => {
+    expect(mesesDeEntregas(ENTREGAS)).toEqual([mesLocalYM(ENTREGAS[2].fecha), mesLocalYM(ENTREGAS[0].fecha)]);
+    expect(tiendasDeEntregas(ENTREGAS)).toEqual(['PALACO', 'Terán Centro']);
+  });
+
+  it('filtrarEntregas: mes y tienda se suman al texto', () => {
+    const ago = mesLocalYM(ENTREGAS[0].fecha);
+    expect(filtrarEntregas(ENTREGAS, '', { mes: ago }).map(e => e.folio)).toEqual(['ENT-001', 'ENT-002']);
+    expect(filtrarEntregas(ENTREGAS, '', { tienda: 'palaco' }).map(e => e.folio)).toEqual(['ENT-002', 'ENT-003']);
+    expect(filtrarEntregas(ENTREGAS, 'procaucho', { mes: ago, tienda: 'PALACO' }).map(e => e.folio)).toEqual(['ENT-002']);
+    expect(filtrarEntregas(ENTREGAS, 'procaucho', { tienda: 'Terán Centro', mes: mesLocalYM(ENTREGAS[2].fecha) })).toEqual([]);
+  });
+
+  it('lineasQueCoinciden / resumenFiltro: buscar un producto solo suma SUS líneas', () => {
+    expect(lineasQueCoinciden(ENTREGAS[0], 'procaucho').map(l => l.producto)).toEqual(['PROCAUCHO 5X1']);
+    /* si el texto es la tienda o el folio, cuenta la entrega entera */
+    expect(lineasQueCoinciden(ENTREGAS[0], 'teran')).toHaveLength(2);
+    const r = resumenFiltro(filtrarEntregas(ENTREGAS, 'procaucho'), 'procaucho');
+    expect(r).toEqual({ entregas: 2, unidades: 23, porPres: { cubeta: 15, galon: 8 } });
+  });
+
+  it('reporteEnvios: filtro por tienda y desglose por mes', () => {
+    const r = reporteEnvios(ENTREGAS, { tienda: 'palaco' });
+    expect(r.entregas.map(e => e.folio)).toEqual(['ENT-003', 'ENT-002']);
+    expect(r.totalUnidades).toBe(33);
+    expect(r.porMes).toEqual([
+      { mes: mesLocalYM(ENTREGAS[2].fecha), porPres: { pieza: 20 }, unidades: 20, entregas: 1 },
+      { mes: mesLocalYM(ENTREGAS[1].fecha), porPres: { cubeta: 5, galon: 8 }, unidades: 13, entregas: 1 },
+    ]);
   });
 });
