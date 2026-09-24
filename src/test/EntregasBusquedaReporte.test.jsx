@@ -80,14 +80,52 @@ describe('ReporteEnviosSheet', () => {
   });
 });
 
+describe('ReporteEnviosSheet — mes y tienda (24-sep-2026)', () => {
+  it('elegir un mes llena Desde/Hasta con el mes completo; la tienda acota', async () => {
+    await act(async () => {
+      render(<ReporteEnviosSheet isDesktop entregas={ENTREGAS} onClose={() => {}} />);
+    });
+    await act(async () => { setVal('entregas.reporte.mes', '2026-08'); });
+    expect(document.querySelector('[data-id="entregas.reporte.desde"]').value).toBe('2026-08-01');
+    expect(document.querySelector('[data-id="entregas.reporte.hasta"]').value).toBe('2026-08-31');
+
+    await act(async () => {
+      setVal('entregas.reporte.tienda', 'PALACO');
+      setVal('entregas.reporte.producto', 'procaucho');
+    });
+    const filas = [...document.querySelectorAll('[data-id="entregas.reporte.fila-tienda"]')];
+    expect(filas).toHaveLength(1);
+    expect(filas[0].textContent).toContain('PALACO');
+    expect(screen.queryByText('ENT-001')).toBeNull();
+    expect(document.querySelector('[data-id="entregas.reporte.total"]').textContent).toContain('5 cubetas');
+  });
+
+  it('un rango de varios meses muestra el desglose Por mes', async () => {
+    await act(async () => {
+      render(<ReporteEnviosSheet isDesktop entregas={[...ENTREGAS, { id: '9', folio: 'ENT-009', tienda: 'PALACO', fecha: '2026-07-15T12:00:00.000Z', lineas: [{ fuente: 'pt', producto: 'PROCAUCHO 5X1', presentacion: 'cubeta', cantidad: 2 }] }]} onClose={() => {}} />);
+    });
+    await act(async () => {
+      setVal('entregas.reporte.desde', '2026-07-01');
+      setVal('entregas.reporte.hasta', '2026-08-31');
+    });
+    expect(document.querySelectorAll('[data-id="entregas.reporte.fila-mes"]')).toHaveLength(2);
+  });
+});
+
 describe('cableado en la página', () => {
   const PAGE = fs.readFileSync(path.join(process.cwd(), 'src/pages/entregas/EntregasPage.jsx'), 'utf8');
   const API = fs.readFileSync(path.join(process.cwd(), 'src/services/api.js'), 'utf8');
 
   it('la búsqueda existe, filtra con la fuente única y la lista pinta lo filtrado', () => {
     expect(PAGE).toContain('data-id="entregas.input.buscar"');
-    expect(PAGE).toMatch(/filtradas = useMemo\(\(\) => filtrarEntregas\(entregas, busca\)/);
+    expect(PAGE).toMatch(/filtradas = useMemo\(\(\) => filtrarEntregas\(entregas, busca, \{ mes: mesFiltro, tienda: tiendaFiltro \}\)/);
     expect(PAGE).toMatch(/filtradas\.map\(e =>/);
+  });
+
+  it('el historial se filtra por mes y por tienda (24-sep-2026)', () => {
+    expect(PAGE).toContain('data-id="entregas.filtro.mes"');
+    expect(PAGE).toContain('data-id="entregas.filtro.tienda"');
+    expect(PAGE).toContain('data-id="entregas.filtro.resumen"');
   });
 
   it('el fetch trae el historial COMPLETO (todas=1) — sin eso el reporte miente', () => {

@@ -22,7 +22,10 @@ import useIsDesktop from '../../hooks/useIsDesktop';
 import useBodyScrollLock from '../../hooks/useBodyScrollLock';
 import { QRScanner } from '../../components/QRModal';
 import humanizeError from '../../utils/humanizeError';
-import { filtrarEntregas, productosDeEntregas, reporteEnvios, fechaLocalYMD } from '../../utils/reporteEnvios';
+import {
+  filtrarEntregas, productosDeEntregas, reporteEnvios, fechaLocalYMD,
+  mesesDeEntregas, tiendasDeEntregas, etiquetaMes, rangoDeMes, lineasQueCoinciden, resumenFiltro,
+} from '../../utils/reporteEnvios';
 
 const LBL_PRES = { cubeta: 'Cubeta', galon: 'Galón', litro: 'Litro', atomizador750: 'Atomizador', pieza: 'Pieza' };
 /* Quien TRANSPORTA y entrega en la sucursal (rol 'recolector'). Se resuelve del
@@ -109,7 +112,9 @@ const presUnidad = (p, n) => (n === 1
 const presTxt = (porPres) => Object.entries(porPres || {})
   .map(([p, n]) => `${nf(n)} ${presUnidad(p, n)}`)
   .join(' · ');
-const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }); } catch { return (iso || '').slice(0, 16); } };
+/* Con año (24-sep-2026): con el filtro por mes el historial ya cruza años y
+   "10 ago" sin año era ambiguo. */
+const fmtFecha = (iso) => { try { return new Date(iso).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch { return (iso || '').slice(0, 16); } };
 const fechaLarga = (iso) => { try { return new Date(iso || Date.now()).toLocaleDateString('es-MX', { day: '2-digit', month: 'long', year: 'numeric' }); } catch { return (iso || '').slice(0, 10); } };
 
 const S = {
@@ -685,9 +690,19 @@ export function ReporteEnviosSheet({ isDesktop, entregas, onClose }) {
   const [desde, setDesde] = useState(() => fechaLocalYMD(new Date(Date.now() - 30 * 864e5).toISOString()));
   const [hasta, setHasta] = useState(() => fechaLocalYMD(new Date().toISOString()));
   const [imprimir, setImprimir] = useState(false);
+  /* Mes (24-sep-2026, pedido dueño): atajo que llena Desde/Hasta con el mes
+     completo; mover las fechas a mano lo regresa a "rango personalizado". */
+  const [mes, setMes] = useState('');
+  const [tienda, setTienda] = useState('');
 
   const productos = useMemo(() => productosDeEntregas(entregas), [entregas]);
-  const rep = useMemo(() => reporteEnvios(entregas, { q, desde, hasta }), [entregas, q, desde, hasta]);
+  const meses = useMemo(() => mesesDeEntregas(entregas), [entregas]);
+  const tiendasHist = useMemo(() => tiendasDeEntregas(entregas), [entregas]);
+  const rep = useMemo(() => reporteEnvios(entregas, { q, desde, hasta, tienda }), [entregas, q, desde, hasta, tienda]);
+  const elegirMes = (ym) => {
+    setMes(ym);
+    if (ym) { const r = rangoDeMes(ym); setDesde(r.desde); setHasta(r.hasta); }
+  };
   /* ¿el texto matchea un solo producto? → la tabla no repite la columna */
   const productosEnRep = useMemo(() => [...new Set(rep.porTienda.map(r => r.producto))], [rep]);
 
@@ -708,29 +723,64 @@ export function ReporteEnviosSheet({ isDesktop, entregas, onClose }) {
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
+              <label style={S.lbl}>Mes</label>
+              <select style={S.input} value={mes} onChange={e => elegirMes(e.target.value)} data-id="entregas.reporte.mes">
+                <option value="">Rango personalizado</option>
+                {meses.map(m => <option key={m} value={m}>{etiquetaMes(m)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={S.lbl}>Tienda</label>
+              <select style={S.input} value={tienda} onChange={e => setTienda(e.target.value)} data-id="entregas.reporte.tienda">
+                <option value="">Todas las tiendas</option>
+                {tiendasHist.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div>
               <label style={S.lbl}>Desde</label>
               <input style={S.input} type="date" value={desde} max={hasta || undefined}
-                onChange={e => setDesde(e.target.value)} data-id="entregas.reporte.desde" />
+                onChange={e => { setDesde(e.target.value); setMes(''); }} data-id="entregas.reporte.desde" />
             </div>
             <div>
               <label style={S.lbl}>Hasta</label>
               <input style={S.input} type="date" value={hasta} min={desde || undefined}
-                onChange={e => setHasta(e.target.value)} data-id="entregas.reporte.hasta" />
+                onChange={e => { setHasta(e.target.value); setMes(''); }} data-id="entregas.reporte.hasta" />
             </div>
           </div>
 
           {/* Totales del rango */}
           <div style={{ marginTop: 14, padding: '12px 14px', borderRadius: 10, background: 'color-mix(in srgb, var(--lp-brand-600) 7%, transparent)', border: '1px solid color-mix(in srgb, var(--lp-brand-600) 25%, transparent)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--lp-text-tertiary)' }}>
-              Total enviado{q.trim() ? ` · "${q.trim()}"` : ''}
+              Total enviado{q.trim() ? ` · "${q.trim()}"` : ''}{tienda ? ` · ${tienda}` : ''}
             </div>
             <div style={{ fontSize: 17, fontWeight: 700, marginTop: 3 }} data-id="entregas.reporte.total">
               {rep.totalUnidades > 0 ? presTxt(rep.totalPorPres) : 'Nada en este rango'}
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 2 }}>
-              {rep.entregas.length} entrega{rep.entregas.length === 1 ? '' : 's'} · {rep.porTienda.length === 0 ? 'ninguna tienda' : `${[...new Set(rep.porTienda.map(r => r.tienda))].length} tienda(s)`} · del {desde || '—'} al {hasta || '—'}
+              {rep.entregas.length} entrega{rep.entregas.length === 1 ? '' : 's'} · {rep.porTienda.length === 0 ? 'ninguna tienda' : `${[...new Set(rep.porTienda.map(r => r.tienda))].length} tienda(s)`} · {mes ? etiquetaMes(mes) : `del ${desde || '—'} al ${hasta || '—'}`}
             </div>
           </div>
+
+          {/* Por mes: solo si el rango abarca más de uno (con uno repetiría el total). */}
+          {rep.porMes.length > 1 && (
+            <div style={S.cart}>
+              <div style={S.cartHead}>Por mes</div>
+              {rep.porMes.map(r => (
+                <div key={r.mes} style={S.cartRow} data-id="entregas.reporte.fila-mes">
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, textTransform: 'capitalize' }}>{etiquetaMes(r.mes)}</div>
+                    <div style={{ fontSize: 11, color: 'var(--lp-text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.entregas} entrega{r.entregas === 1 ? '' : 's'} · {presTxt(r.porPres)}
+                    </div>
+                  </div>
+                  <strong style={{ fontFamily: 'var(--lp-font-mono)', fontSize: 15, whiteSpace: 'nowrap' }}>{nf(r.unidades)} u.</strong>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Por tienda */}
           {rep.porTienda.length > 0 && (
@@ -779,14 +829,14 @@ export function ReporteEnviosSheet({ isDesktop, entregas, onClose }) {
           </button>
         </div>
       </div>
-      {imprimir && <ReporteImpresion rep={rep} q={q} desde={desde} hasta={hasta} productosEnRep={productosEnRep} onClose={() => setImprimir(false)} />}
+      {imprimir && <ReporteImpresion rep={rep} q={q} tienda={tienda} desde={desde} hasta={hasta} productosEnRep={productosEnRep} onClose={() => setImprimir(false)} />}
     </div>
   );
 }
 
 /* Versión imprimible del reporte — mismo patrón que la remisión (documento
    SIEMPRE claro, aislado en print con el truco de visibility). */
-function ReporteImpresion({ rep, q, desde, hasta, productosEnRep, onClose }) {
+function ReporteImpresion({ rep, q, tienda, desde, hasta, productosEnRep, onClose }) {
   const INK = '#16241F', MUT = '#6b6560', BRAND = '#0F6E56';
   return (
     <div className="lp-repov">
@@ -831,7 +881,25 @@ function ReporteImpresion({ rep, q, desde, hasta, productosEnRep, onClose }) {
           </div>
         </div>
         <div className="lp-rep-row"><span className="k">Producto</span><span className="v">{q.trim() || 'Todos'}</span></div>
+        <div className="lp-rep-row"><span className="k">Tienda</span><span className="v">{tienda || 'Todas'}</span></div>
         <div className="lp-rep-row"><span className="k">Total enviado</span><span className="v">{presTxt(rep.totalPorPres)} ({nf(rep.totalUnidades)} u.)</span></div>
+        {rep.porMes.length > 1 && (
+          <>
+            <div className="lp-rep-sec">Por mes</div>
+            <table className="lp-rep-tbl">
+              <thead><tr><th>Mes</th><th>Cantidades</th><th className="r">Unidades</th></tr></thead>
+              <tbody>
+                {rep.porMes.map(r => (
+                  <tr key={r.mes}>
+                    <td style={{ textTransform: 'capitalize' }}>{etiquetaMes(r.mes)}</td>
+                    <td>{presTxt(r.porPres)}</td>
+                    <td className="r">{nf(r.unidades)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
         <div className="lp-rep-sec">Por tienda</div>
         <table className="lp-rep-tbl">
           <thead><tr><th>Tienda</th>{productosEnRep.length > 1 ? <th>Producto</th> : null}<th>Cantidades</th><th className="r">Unidades</th></tr></thead>
@@ -925,6 +993,10 @@ export default function EntregasPage({ embedded = false }) {
      fechas no puede trabajar sobre una lista recortada a 200. */
   const [busca, setBusca] = useState('');
   const [reporte, setReporte] = useState(false);
+  /* Filtros del historial (24-sep-2026, pedido dueño): "a qué tienda fue,
+     cuándo, cantidades y poder filtrar por mes". */
+  const [mesFiltro, setMesFiltro] = useState('');
+  const [tiendaFiltro, setTiendaFiltro] = useState('');
 
   const { data, reload } = useApiData(() => api.getEntregas(true), null, 60000);
   /* 'entregas' → onEntregas (kebab→camel automático del hook). */
@@ -934,9 +1006,16 @@ export default function EntregasPage({ embedded = false }) {
      búsqueda perdería el sentido (aviso de exhaustive-deps). */
   const entregas = useMemo(() => data?.data?.entregas || [], [data]);
   const tiendas = data?.data?.tiendas || [];
-  const filtradas = useMemo(() => filtrarEntregas(entregas, busca), [entregas, busca]);
-  const hoyStr = new Date().toISOString().slice(0, 10);
-  const deHoy = entregas.filter(e => (e.fecha || '').slice(0, 10) === hoyStr);
+  const filtradas = useMemo(() => filtrarEntregas(entregas, busca, { mes: mesFiltro, tienda: tiendaFiltro }), [entregas, busca, mesFiltro, tiendaFiltro]);
+  const meses = useMemo(() => mesesDeEntregas(entregas), [entregas]);
+  const tiendasHist = useMemo(() => tiendasDeEntregas(entregas), [entregas]);
+  const hayFiltro = !!(busca.trim() || mesFiltro || tiendaFiltro);
+  const resumen = useMemo(() => resumenFiltro(filtradas, busca), [filtradas, busca]);
+  const limpiarFiltros = () => { setBusca(''); setMesFiltro(''); setTiendaFiltro(''); };
+  /* Día LOCAL (24-sep-2026): con el día UTC, después de las 6 pm las
+     entregas de hoy dejaban de contar como "hoy". */
+  const hoyStr = fechaLocalYMD(new Date().toISOString());
+  const deHoy = entregas.filter(e => fechaLocalYMD(e.fecha) === hoyStr);
   const unidadesHoy = deHoy.reduce((a, e) => a + (e.lineas || []).reduce((x, l) => x + (Number(l.cantidad) || 0), 0), 0);
 
   const showToast = (m) => { setToast(m); setTimeout(() => setToast(''), 4000); };
@@ -1002,9 +1081,26 @@ export default function EntregasPage({ embedded = false }) {
                 style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 26, height: 26, borderRadius: 6, border: 'none', background: 'var(--lp-bg-sunken)', color: 'var(--lp-text-secondary)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}
                 data-id="entregas.btn.limpiar-busqueda">×</button>
             )}
-            {busca && (
-              <div style={{ fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
-                {filtradas.length} de {entregas.length} entregas coinciden
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+              <select style={S.input} value={mesFiltro} onChange={e => setMesFiltro(e.target.value)} data-id="entregas.filtro.mes" aria-label="Filtrar por mes">
+                <option value="">Todos los meses</option>
+                {meses.map(m => <option key={m} value={m}>{etiquetaMes(m)}</option>)}
+              </select>
+              <select style={S.input} value={tiendaFiltro} onChange={e => setTiendaFiltro(e.target.value)} data-id="entregas.filtro.tienda" aria-label="Filtrar por tienda">
+                <option value="">Todas las tiendas</option>
+                {tiendasHist.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            {hayFiltro && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap', fontSize: 11.5, color: 'var(--lp-text-tertiary)', marginTop: 6 }}>
+                <span data-id="entregas.filtro.resumen">
+                  {filtradas.length} de {entregas.length} entregas
+                  {resumen.unidades > 0 ? <> · <strong style={{ color: 'var(--lp-text-secondary)' }}>{presTxt(resumen.porPres)}</strong></> : null}
+                </span>
+                <button type="button" onClick={limpiarFiltros} data-id="entregas.btn.limpiar-filtros"
+                  style={{ border: 'none', background: 'transparent', color: 'var(--lp-brand-700)', cursor: 'pointer', fontSize: 11.5, fontWeight: 600, padding: 0 }}>
+                  Quitar filtros
+                </button>
               </div>
             )}
           </div>
@@ -1013,8 +1109,14 @@ export default function EntregasPage({ embedded = false }) {
         {entregas.length === 0 ? (
           <div style={S.empty}>Aún no hay entregas registradas. Con "Nueva entrega" descuentas del inventario lo que se va a cada tienda.</div>
         ) : filtradas.length === 0 ? (
-          <div style={S.empty}>Nada coincide con «{busca}». Prueba con parte del nombre de la tienda, del producto o el folio.</div>
-        ) : filtradas.map(e => (
+          <div style={S.empty}>
+            {busca.trim() ? <>Nada coincide con «{busca}»{mesFiltro || tiendaFiltro ? ' con esos filtros' : ''}. Prueba con parte del nombre de la tienda, del producto o el folio.</> : 'No hay entregas con esos filtros.'}
+          </div>
+        ) : filtradas.map(e => {
+          /* Al buscar un producto se resaltan SUS líneas dentro del folio. */
+          const coinciden = busca.trim() ? new Set(lineasQueCoinciden(e, busca)) : null;
+          const resaltar = coinciden && coinciden.size < (e.lineas || []).length;
+          return (
           <div key={e.id} style={S.card} data-id="entregas.card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
               <div>
@@ -1043,7 +1145,7 @@ export default function EntregasPage({ embedded = false }) {
             </div>
             <div style={S.lineas}>
               {(e.lineas || []).map((l, i) => (
-                <div key={i} style={S.linea}>
+                <div key={i} style={resaltar ? { ...S.linea, ...(coinciden.has(l) ? { fontWeight: 700 } : { opacity: 0.45 }) } : S.linea}>
                   <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.producto}</span>
                   <span style={{ display: 'inline-flex', gap: 6, alignItems: 'center', whiteSpace: 'nowrap' }}>
                     <span style={S.badge(l.fuente === 'americano')}>{l.fuente === 'americano' ? `AM ${l.almacen}` : l.fuente === 'envases' ? 'ENV' : 'PT'}</span>
@@ -1053,7 +1155,8 @@ export default function EntregasPage({ embedded = false }) {
               ))}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
 
       {sheet && (
