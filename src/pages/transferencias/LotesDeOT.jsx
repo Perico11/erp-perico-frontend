@@ -11,7 +11,7 @@ export default function LotesDeOT({ ot }) {
     <div style={C.lotes} data-id="transferencias.lotes">
       <div style={C.lotesHead}>
         <span style={C.lotesTitle}>Lotes en esta OT</span>
-        <span style={C.lotesFuente}>{d.fuente === 'recibidos' ? 'Recibido en Terán' : 'Surtido en Fábrica'}</span>
+        <span style={C.lotesFuente}>{d.fuente === 'recibidos' ? 'Recibido en Terán' : d.modo === 'elegido' ? 'Elegido en Fábrica' : d.modo === 'automatico' ? 'Asignado automático' : 'Surtido en Fábrica'}</span>
       </div>
       {d.lotes.map((l, i) => (
         <div key={`${l.producto}|${l.codigoLote}|${i}`} style={C.loteRow}>

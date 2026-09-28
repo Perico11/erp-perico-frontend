@@ -201,7 +201,16 @@ const api = {
   getOTs: (estado) => request('GET', '/api/transferencias' + (estado ? '?estado=' + encodeURIComponent(estado) : '')),
   /* `parciales` (opcional): [{ idx, cantidad }] en unidades de captura de la línea —
      surtir: lo que SÍ va (0 = no va) · recibir: lo que SÍ llegó (el resto regresa a Fábrica). */
-  escanearOT: (otId, accion, parciales) => request('POST', '/api/transferencias/scan', { otId, accion, ...(parciales && parciales.length ? { parciales } : {}) }),
+  /* `seleccionLotes` (opcional, sólo surtir): [{ cod, unidades }] — los sublotes
+     que Fábrica eligió; el backend marca EXACTAMENTE eso (409 si no cuadra). */
+  escanearOT: (otId, accion, parciales, seleccionLotes) => request('POST', '/api/transferencias/scan', {
+    otId, accion,
+    ...(parciales && parciales.length ? { parciales } : {}),
+    ...(seleccionLotes && seleccionLotes.length ? { seleccionLotes } : {}),
+  }),
+  /* Lo que Fábrica puede surtir por lote para cada producto de la OT + la
+     sugerencia del surtido automático (del más viejo al más nuevo). */
+  getSurtidoLotesOT: (otId) => request('GET', '/api/transferencias/' + encodeURIComponent(otId) + '/surtido-lotes'),
   /* Editar/sustituir las líneas de una OT en 'Solicitada' (admin/almacen/tecnico). */
   editarOT: (otId, lineas, nota) => request('POST', '/api/transferencias/editar', { otId, lineas, nota }),
   /* Ajuste individual de UNA MP (qty + min). Permitido para admin e inventario.

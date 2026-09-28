@@ -16,6 +16,8 @@ import humanizeError from '../../utils/humanizeError'; /* AUDIT UX 16-jul (U4) *
 import { PT_MEDIDAS, ptMedidaDef, medidaACubetas, etiquetaMedida } from '../../utils/ptMedidas';
 import { desgloseLotesDeOT, etiquetaPiezasLote } from '../../utils/lotesOT';
 import LotesDeOT from './LotesDeOT';
+import SeleccionLotesSurtido from './SeleccionLotesSurtido';
+import { valoresDesdeSugerencia, totalesPorProducto, seleccionPosible, seleccionParaEnviar, estadoTotal } from '../../utils/seleccionLotes';
 
 /* ════════════════════════════════════════════════════════════════════════════
    TransferenciasPage — ÓRDENES DE TRANSFERENCIA (OT) Fábrica → Terán.
@@ -276,7 +278,7 @@ export default function TransferenciasPage({ embedded = false }) {
   /* ── Ejecutar una acción sobre una OT (botón de card o confirmación) ──
      `parciales` = [{idx, cantidad}] en unidades de captura (la valida y aplica
      el BACKEND; aquí solo se transporta lo capturado en el sheet). */
-  const ejecutar = useCallback(async (ot, accion, { skipConfirm, parciales } = {}) => {
+  const ejecutar = useCallback(async (ot, accion, { skipConfirm, parciales, seleccionLotes } = {}) => {
     const LABEL = { surtir: 'Surtir', recibir: 'Recibir en Terán', cancelar: 'Cancelar OT' };
     const label = LABEL[accion] || accion;
     if (!skipConfirm) {
@@ -288,9 +290,11 @@ export default function TransferenciasPage({ embedded = false }) {
     }
     setBusy(ot.id);
     try {
-      const r = await api.escanearOT(ot.id, accion, parciales);
+      const r = await api.escanearOT(ot.id, accion, parciales, seleccionLotes);
       reload();
       if (r?.idempotente) showToast(`${ot.folio}: ${r.aviso || 'sin cambios'}`);
+      else if (r?.trazabilidad?.seleccionFallida) showToast(`${ot.folio}: surtida, pero los lotes elegidos ya no estaban disponibles — se registró con la sugerencia automática. Revisa "Lotes en esta OT".`, true);
+      else if (seleccionLotes && seleccionLotes.length) showToast(`${ot.folio}: surtida con los lotes elegidos ✓`);
       else if (parciales && parciales.length) showToast(`${ot.folio}: ${label.toLowerCase()} PARCIAL ✓ (faltantes registrados)`);
       else showToast(`${ot.folio}: ${label.toLowerCase()} ✓`);
     } catch (err) {
@@ -485,8 +489,8 @@ export default function TransferenciasPage({ embedded = false }) {
           ot={parcialCtx.ot}
           accion={parcialCtx.accion}
           onClose={() => setParcialCtx(null)}
-          onConfirm={async (parciales) => {
-            await ejecutar(parcialCtx.ot, parcialCtx.accion, { skipConfirm: true, parciales });
+          onConfirm={async (parciales, seleccionLotes) => {
+            await ejecutar(parcialCtx.ot, parcialCtx.accion, { skipConfirm: true, parciales, seleccionLotes });
             setParcialCtx(null);
           }}
         />
@@ -738,6 +742,21 @@ function ParcialSheet({ isDesktop, ot, accion, onClose, onConfirm }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
+  /* ¿DE QUÉ LOTES SALE? (24-sep-2026): al surtir PT, Fábrica elige los lotes
+     de una lista prellenada con la sugerencia automática — sin escáner. Si no
+     hay etiquetas que cubran lo pedido, o la lista no carga, el surtido va en
+     automático como siempre. */
+  const tienePT = lineas.some(l => l && l.tipo === 'pt' && Number(l.cantidad) > 0);
+  const pideLotes = esSurtir && tienePT;
+  const { data: lotesResp, loading: lotesCargando, error: lotesError } = useApiData(
+    () => (pideLotes ? api.getSurtidoLotesOT(ot.id) : Promise.resolve(null)), [ot.id, pideLotes], 0);
+  const productosLotes = (lotesResp && Array.isArray(lotesResp.productos)) ? lotesResp.productos : [];
+  const usarSeleccion = pideLotes && !lotesCargando && !lotesError && seleccionPosible(productosLotes);
+  /* null = "tal cual la sugerencia"; se materializa al primer cambio. */
+  const [valsLotes, setValsLotes] = useState(null);
+  const valsLotesEf = valsLotes ?? valoresDesdeSugerencia(productosLotes);
+  const setValLote = (cod, v) => setValsLotes(prev => ({ ...(prev ?? valoresDesdeSugerencia(productosLotes)), [cod]: v }));
+
   const setVal = (i, v) => setVals(prev => prev.map((x, j) => (j === i ? v : x)));
   const toggleNoVa = (i) => setVals(prev => prev.map((x, j) => (j === i ? (Number(x) === 0 ? String(topes[i]) : '0') : x)));
 
@@ -756,10 +775,16 @@ function ParcialSheet({ isDesktop, ot, accion, onClose, onConfirm }) {
         : 'Nada marcado como recibido. Si no llegó nada, pide al admin cancelar la OT (regresa todo a Fábrica).');
       return;
     }
+    let seleccion;
+    if (usarSeleccion) {
+      const malo = totalesPorProducto(productosLotes, valsLotesEf).find(t => !t.ok);
+      if (malo) { setErr(`${malo.producto}: ${estadoTotal(malo)}. Ajusta los lotes para que sumen lo solicitado.`); return; }
+      seleccion = seleccionParaEnviar(productosLotes, valsLotesEf);
+    }
     setErr('');
     setSaving(true);
     try {
-      await onConfirm(parciales.length ? parciales : undefined);
+      await onConfirm(parciales.length ? parciales : undefined, seleccion);
     } catch (e) {
       setErr(humanizeError(e));
       setSaving(false);
@@ -775,6 +800,7 @@ function ParcialSheet({ isDesktop, ot, accion, onClose, onConfirm }) {
     ctrl: { display: 'flex', alignItems: 'center', gap: 10 },
     input: (cero) => ({ flex: 1, minWidth: 0, padding: '10px 12px', borderRadius: 10, fontSize: 15, fontFamily: 'var(--lp-font-mono)', border: cero ? '1.5px solid rgba(179,38,30,.45)' : '1px solid var(--lp-border, rgba(0,0,0,.14))', background: cero ? 'rgba(179,38,30,.05)' : 'var(--lp-bg-surface, #fff)', color: cero ? '#b3261e' : 'var(--lp-text-primary)' }),
     unit: { fontSize: 12, color: 'var(--lp-text-tertiary)', whiteSpace: 'nowrap' },
+    fijo: { fontSize: 12.5, color: 'var(--lp-brand-700)', fontWeight: 600 },
     noBtn: (activo) => ({ flexShrink: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12.5, fontWeight: 600, borderRadius: 99, padding: '9px 14px', minHeight: 38, border: activo ? '1px solid rgba(179,38,30,.35)' : '1px solid var(--lp-border, rgba(0,0,0,.14))', color: activo ? '#fff' : '#b3261e', background: activo ? '#b3261e' : 'rgba(179,38,30,.06)', whiteSpace: 'nowrap' }),
   };
 
@@ -804,6 +830,9 @@ function ParcialSheet({ isDesktop, ot, accion, onClose, onConfirm }) {
                   <span style={PZ.name}>{l.nombre || l.producto || '—'}</span>
                   <span style={PZ.pedido}>{esSurtir ? 'Solicitado' : 'En tránsito'}: {etiquetaUnidades(l, topes[i])}{l.envasar ? ' · ENVASAR' : ''}</span>
                 </div>
+                {usarSeleccion && l.tipo === 'pt' ? (
+                  <div style={PZ.fijo}>Va completo · sale de los lotes que elijas abajo</div>
+                ) : (
                 <div style={PZ.ctrl}>
                   <input
                     style={PZ.input(cero)} type="number" inputMode="decimal" min="0" max={topes[i]}
@@ -817,9 +846,27 @@ function ParcialSheet({ isDesktop, ot, accion, onClose, onConfirm }) {
                     {cero ? 'Sí va' : (esSurtir ? 'No va' : 'No llegó')}
                   </button>
                 </div>
+                )}
               </div>
             );
           })}
+
+          {pideLotes && lotesCargando && <div style={{ ...SH.hint, marginTop: 14 }}>Cargando los lotes disponibles en Fábrica…</div>}
+          {pideLotes && !lotesCargando && lotesError && (
+            <div style={{ ...SH.hint, marginTop: 14 }}>No se pudieron cargar los lotes ({lotesError}). Si surtes así, el sistema los asigna solo, del más viejo al más nuevo.</div>
+          )}
+          {pideLotes && !lotesCargando && !lotesError && !usarSeleccion && (
+            <div style={{ ...SH.hint, marginTop: 14 }}>Fábrica no tiene lotes registrados que cubran lo solicitado: el sistema asigna lo que haya y el resto viaja sin lote.</div>
+          )}
+          {usarSeleccion && (
+            <SeleccionLotesSurtido
+              productos={productosLotes}
+              vals={valsLotesEf}
+              onChange={setValLote}
+              onUsarSugerencia={() => setValsLotes(null)}
+              disabled={saving}
+            />
+          )}
 
           <div style={{ ...SH.hint, marginTop: 14 }}>
             {faltas === 0
@@ -833,7 +880,7 @@ function ParcialSheet({ isDesktop, ot, accion, onClose, onConfirm }) {
         <div style={SH.footer}>
           <div style={SH.acts}>
             <button style={{ ...SH.btn, ...SH.btnGhost }} onClick={onClose} disabled={saving}>Cancelar</button>
-            <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: saving ? 0.6 : 1 }} onClick={confirmar} disabled={saving}
+            <button style={{ ...SH.btn, ...SH.btnPrimary, opacity: (saving || (pideLotes && lotesCargando)) ? 0.6 : 1 }} onClick={confirmar} disabled={saving || (pideLotes && lotesCargando)}
               data-id="transferencias.btn.confirmar-parcial" data-rol="admin,tecnico,almacen">
               {saving ? 'Aplicando…' : (faltas === 0 ? `${labelAccion} completo` : `${labelAccion} parcial (${faltas} faltante${faltas > 1 ? 's' : ''})`)}
             </button>
